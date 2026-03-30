@@ -5,6 +5,7 @@ import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { ensureArray } from "../../../common/array/ensure-array";
 import { fireEvent } from "../../../common/dom/fire_event";
+import type { HASSDomEvent } from "../../../common/dom/fire_event";
 import type { DeviceRegistryEntry } from "../../../data/device/device_registry";
 import { getDeviceIntegrationLookup } from "../../../data/device/device_registry";
 import type { HaEntityPickerEntityFilterFunc } from "../../../data/entity/entity";
@@ -19,6 +20,9 @@ import type { HassDialog } from "../../../dialogs/make-dialog-manager";
 import type { HomeAssistant } from "../../../types";
 import type { HaDevicePickerDeviceFilterFunc } from "../../device/ha-device-picker";
 import "../../ha-adaptive-dialog";
+import "../../ha-alert";
+import "../../ha-button";
+import "../../ha-dialog-footer";
 import "../../ha-dialog-header";
 import "../../ha-icon-button";
 import "../../ha-icon-next";
@@ -39,10 +43,17 @@ class DialogTargetDetails extends LitElement implements HassDialog {
 
   @state() private _entitySourcesLoaded = false;
 
+  @state() private _excludedEntities = new Set<string>();
+
   private _deviceIntegrationLookup = memoizeOne(getDeviceIntegrationLookup);
+
+  private get _selectable(): boolean {
+    return !!this._params?.onEntitiesExcluded;
+  }
 
   public showDialog(params: TargetDetailsDialogParams): void {
     this._params = params;
+    this._excludedEntities = new Set(params.initialExcludedEntities);
     this._opened = true;
   }
 
@@ -56,6 +67,7 @@ class DialogTargetDetails extends LitElement implements HassDialog {
     this._params = undefined;
     this._entitySources = undefined;
     this._entitySourcesLoaded = false;
+    this._excludedEntities = new Set();
   }
 
   private _hasIntegration(selector: TargetSelector) {
@@ -174,6 +186,17 @@ class DialogTargetDetails extends LitElement implements HassDialog {
         )}
         @closed=${this._dialogClosed}
       >
+        ${
+          this._selectable
+            ? html`
+                <ha-alert alert-type="info">
+                  ${this.hass.localize(
+                  "ui.components.target-picker.selection_info"
+                )}
+                </ha-alert>
+              `
+            : nothing
+        }
         <div class="type-wrapper">
           <div class="type-label">
             ${this.hass.localize(
@@ -197,14 +220,63 @@ class DialogTargetDetails extends LitElement implements HassDialog {
                       .includeDomains=${includeDomains}
                       .includeDeviceClasses=${includeDeviceClasses}
                       .primaryEntitiesOnly=${primaryEntitiesOnly}
+                      .selectable=${this._selectable}
+                      .excludedEntities=${this._excludedEntities}
                       expand
+                      @toggle-entity-selection=${this._handleToggleEntity}
                     ></ha-target-picker-item-row>
                   `
             }
           </ha-list-base>
         </div>
+        ${
+          this._selectable
+            ? html`
+                <ha-dialog-footer slot="footer">
+                  <ha-button
+                    slot="secondaryAction"
+                    appearance="plain"
+                    @click=${this.closeDialog}
+                  >
+                    ${this.hass.localize("ui.common.cancel")}
+                  </ha-button>
+                  <ha-button
+                    slot="primaryAction"
+                    @click=${this._applySelection}
+                  >
+                    ${this.hass.localize(
+                    "ui.components.target-picker.apply_selection"
+                  )}
+                  </ha-button>
+                </ha-dialog-footer>
+              `
+            : nothing
+        }
       </ha-adaptive-dialog>
     `;
+  }
+
+  private _handleToggleEntity(
+    ev: HASSDomEvent<HASSDomEvents["toggle-entity-selection"]>
+  ) {
+    ev.stopPropagation();
+    const { entityId, selected } = ev.detail;
+    const newExcluded = new Set(this._excludedEntities);
+    if (selected) {
+      newExcluded.delete(entityId);
+    } else {
+      newExcluded.add(entityId);
+    }
+    this._excludedEntities = newExcluded;
+  }
+
+  private _applySelection() {
+    if (!this._params?.onEntitiesExcluded) {
+      return;
+    }
+
+    this._params.onEntitiesExcluded([...this._excludedEntities]);
+    this.closeDialog();
   }
 
   static styles = css`
@@ -223,6 +295,10 @@ class DialogTargetDetails extends LitElement implements HassDialog {
       display: flex;
       align-items: center;
       height: 20px;
+    }
+    ha-alert {
+      display: block;
+      margin-bottom: var(--ha-space-2);
     }
   `;
 }

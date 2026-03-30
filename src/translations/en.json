@@ -812,6 +812,9 @@
         "entities_count": "{count} {count, plural,\n one {entity}\n other {entities}\n}",
         "entities_count_filtered": "{count}/{total} {total, plural,\n one {entity}\n other {entities}\n}",
         "target_details": "Target details",
+        "apply_selection": "Apply",
+        "selection_info": "Uncheck entities to exclude them from this target.",
+        "excluded_count": "{count} excluded",
         "no_targets": "No targets",
         "no_target_found": "No target found for {term}",
         "type": {
