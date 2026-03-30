@@ -59,6 +59,7 @@ import type { HaDevicePickerDeviceFilterFunc } from "../device/ha-device-picker"
 import { floorDefaultIconPath } from "../ha-floor-icon";
 import "../ha-button";
 import "../ha-icon-button";
+import "../ha-checkbox";
 import "../ha-icon-next";
 import "../ha-state-icon";
 import "../ha-svg-icon";
@@ -85,6 +86,12 @@ export class HaTargetPickerItemRow extends LitElement {
 
   @property({ type: Boolean, attribute: "hide-context" })
   public hideContext = false;
+
+  @property({ type: Boolean })
+  public selectable = false;
+
+  @property({ attribute: false })
+  public excludedEntities?: Set<string>;
 
   @property({ attribute: false })
   public parentEntries?: ExtractFromTargetResultReferenced;
@@ -129,6 +136,8 @@ export class HaTargetPickerItemRow extends LitElement {
   @state() private _domainName?: string;
 
   @state() private _entries?: ExtractFromTargetResult;
+
+  @state() private _excludedEntityIds: string[] = [];
 
   @state()
   @consume({ context: labelsContext, subscribe: true })
@@ -283,6 +292,16 @@ export class HaTargetPickerItemRow extends LitElement {
                         ${this._entitiesLabel(entries)}
                       </ha-button>`
                 }
+                ${
+                  this._excludedEntityIds.length
+                    ? html`<span class="secondary excluded">
+                        ${this.hass.localize(
+                          "ui.components.target-picker.excluded_count",
+                          { count: this._excludedEntityIds.length }
+                        )}
+                      </span>`
+                    : nothing
+                }
               </div>
             `
           : nothing
@@ -306,17 +325,25 @@ export class HaTargetPickerItemRow extends LitElement {
           : nothing
       }
       ${
-        !this.expand && !this.subEntry
+        this.selectable && this.type === "entity"
           ? html`
-              <ha-icon-button
-                .path=${mdiClose}
+              <ha-checkbox
                 slot="end"
-                @click=${this._removeItem}
-              ></ha-icon-button>
+                .checked=${!this.excludedEntities?.has(this.itemId)}
+                @change=${this._toggleEntitySelection}
+              ></ha-checkbox>
             `
-          : this.subEntry && this.type === "entity"
-            ? html` <ha-icon-next slot="end"></ha-icon-next> `
-            : nothing
+          : !this.expand && !this.subEntry
+            ? html`
+                <ha-icon-button
+                  .path=${mdiClose}
+                  slot="end"
+                  @click=${this._removeItem}
+                ></ha-icon-button>
+              `
+            : this.subEntry && this.type === "entity"
+              ? html` <ha-icon-next slot="end"></ha-icon-next> `
+              : nothing
       }
     `;
 
@@ -420,6 +447,8 @@ export class HaTargetPickerItemRow extends LitElement {
             .itemId=${itemId}
             .parentEntries=${rowEntries?.[index]}
             .hideContext=${this.hideContext || this.type !== "label"}
+            .selectable=${this.selectable}
+            .excludedEntities=${this.excludedEntities}
             expand
           ></ha-target-picker-item-row>
         `
@@ -435,6 +464,8 @@ export class HaTargetPickerItemRow extends LitElement {
             .itemId=${itemId}
             .parentEntries=${deviceRowEntries?.[index]}
             .hideContext=${this.hideContext || this.type !== "label"}
+            .selectable=${this.selectable}
+            .excludedEntities=${this.excludedEntities}
             expand
           ></ha-target-picker-item-row>
         `
@@ -449,6 +480,8 @@ export class HaTargetPickerItemRow extends LitElement {
             type="entity"
             .itemId=${itemId}
             .hideContext=${this.hideContext || this.type !== "label"}
+            .selectable=${this.selectable}
+            .excludedEntities=${this.excludedEntities}
           ></ha-target-picker-item-row>
         `
       )}
@@ -699,6 +732,15 @@ export class HaTargetPickerItemRow extends LitElement {
     this._domainName = domainToName(this.hass.localize, domain);
   }
 
+  private _toggleEntitySelection(ev: Event) {
+    ev.stopPropagation();
+    const checked = (ev.target as HTMLInputElement).checked;
+    fireEvent(this, "toggle-entity-selection", {
+      entityId: this.itemId,
+      selected: checked,
+    });
+  }
+
   private _removeItem(ev: MouseEvent) {
     ev.stopPropagation();
     fireEvent(this, "remove-target-item", {
@@ -791,6 +833,10 @@ export class HaTargetPickerItemRow extends LitElement {
       includeDomains: this.includeDomains,
       includeDeviceClasses: this.includeDeviceClasses,
       primaryEntitiesOnly: this.primaryEntitiesOnly,
+      initialExcludedEntities: this._excludedEntityIds,
+      onEntitiesExcluded: (excludedEntityIds: string[]) => {
+        this._excludedEntityIds = excludedEntityIds;
+      },
     });
   }
 
@@ -870,6 +916,10 @@ export class HaTargetPickerItemRow extends LitElement {
         font-size: var(--ha-font-size-s);
         color: var(--secondary-text-color);
       }
+      .summary .excluded {
+        font-size: var(--ha-font-size-s);
+        color: var(--warning-color);
+      }
 
       .state {
         width: fit-content;
@@ -892,5 +942,8 @@ export class HaTargetPickerItemRow extends LitElement {
 declare global {
   interface HTMLElementTagNameMap {
     "ha-target-picker-item-row": HaTargetPickerItemRow;
+  }
+  interface HASSDomEvents {
+    "toggle-entity-selection": { entityId: string; selected: boolean };
   }
 }

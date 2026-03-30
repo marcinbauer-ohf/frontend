@@ -15,6 +15,8 @@ export interface TargetDetailsDialogParams {
   includeDomains?: string[];
   includeDeviceClasses?: string[];
   primaryEntitiesOnly?: boolean;
+  initialExcludedEntities?: string[];
+  onEntitiesExcluded?: (excludedEntityIds: string[]) => void;
 }
 
 export const loadTargetDetailsDialog = () => import("./dialog-target-details");
