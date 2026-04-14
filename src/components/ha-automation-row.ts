@@ -148,7 +148,7 @@ export class HaAutomationRow extends LitElement {
       transform: rotate(45deg);
     }
     .leading-icon-wrapper {
-      padding-top: var(--ha-space-3);
+      padding-top: var(--ha-automation-row-icon-padding-top, var(--ha-space-3));
     }
     ::slotted([slot="leading-icon"]) {
       color: var(--ha-color-on-neutral-quiet);

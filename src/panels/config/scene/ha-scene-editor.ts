@@ -2,6 +2,8 @@ import "@home-assistant/webawesome/dist/components/divider/divider";
 import { consume } from "@lit/context";
 
 import {
+  mdiCamera,
+  mdiCloseCircle,
   mdiCog,
   mdiContentDuplicate,
   mdiContentSave,
@@ -9,51 +11,45 @@ import {
   mdiDotsVertical,
   mdiEye,
   mdiInformationOutline,
-  mdiMotionPlayOutline,
   mdiPencil,
   mdiPlay,
   mdiPlaylistEdit,
   mdiTag,
 } from "@mdi/js";
-import type { HassEvent } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
-import memoizeOne from "memoize-one";
 import { transform } from "../../../common/decorators/transform";
 import { fireEvent } from "../../../common/dom/fire_event";
-import { computeDeviceNameDisplay } from "../../../common/entity/compute_device_name";
 import { computeDomain } from "../../../common/entity/compute_domain";
 import { computeStateName } from "../../../common/entity/compute_state_name";
 import { goBack, navigate } from "../../../common/navigate";
 import { computeRTL } from "../../../common/util/compute_rtl";
 import { promiseTimeout } from "../../../common/util/promise-timeout";
 import { afterNextRender } from "../../../common/util/render-status";
-import "../../../components/device/ha-device-picker";
-import "../../../components/entity/ha-entities-picker";
+import "../../../components/entity/ha-entity-picker";
 import "../../../components/ha-alert";
 import "../../../components/ha-button";
 import "../../../components/ha-card";
 import "../../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
+import "../../../components/ha-automation-row";
 import "../../../components/ha-icon-button";
-import "../../../components/ha-list";
+import "../../../components/ha-icon-button-group";
+import "../../../components/entity/state-badge";
 import "../../../components/ha-svg-icon";
 import { fullEntitiesContext } from "../../../data/context";
-import type { DeviceRegistryEntry } from "../../../data/device/device_registry";
 import type { EntityRegistryEntry } from "../../../data/entity/entity_registry";
 import { updateEntityRegistryEntry } from "../../../data/entity/entity_registry";
 import type {
   SceneConfig,
-  SceneEntities,
   SceneEntity,
   SceneMetaData,
 } from "../../../data/scene";
 import {
   activateScene,
-  applyScene,
   deleteScene,
   getSceneConfig,
   getSceneEditorInitData,
@@ -74,17 +70,10 @@ import type { HomeAssistant, Route } from "../../../types";
 import { showToast } from "../../../util/toast";
 import { showAutomationSaveTimeoutDialog } from "../automation/automation-save-timeout-dialog/show-dialog-automation-save-timeout";
 import { showAssignCategoryDialog } from "../category/show-dialog-assign-category";
-import "../ha-config-section";
 import {
   showSceneSaveDialog,
   type EntityRegistryUpdate,
 } from "./scene-save-dialog/show-dialog-scene-save";
-
-interface DeviceEntities {
-  id: string;
-  name: string;
-  entities: string[];
-}
 
 type DeviceEntitiesLookup = Record<string, string[]>;
 
@@ -136,17 +125,15 @@ export class HaSceneEditor extends PreventUnsavedMixin(
 
   @state() private _scene?: SceneEntity;
 
-  @state() private _mode: "review" | "live" | "yaml" = "review";
-
-  private _storedStates: SceneEntities = {};
-
-  private _unsubscribeEvents?: () => void;
+  @state() private _mode: "view" | "edit" | "yaml" = "view";
 
   private _deviceEntityLookup: DeviceEntitiesLookup = {};
 
-  private _activateContextId?: string;
-
   @state() private _saving = false;
+
+  @state() private _viewAlertDismissed = false;
+
+  @state() private _editAlertDismissed = false;
 
   private _entityRegistryUpdate?: EntityRegistryUpdate;
 
@@ -156,63 +143,13 @@ export class HaSceneEditor extends PreventUnsavedMixin(
     value: PromiseLike<EntityRegistryEntry> | EntityRegistryEntry
   ) => void;
 
-  private _getEntitiesDevices = memoizeOne(
-    (
-      entities: string[],
-      devices: string[],
-      deviceEntityLookup: DeviceEntitiesLookup,
-      deviceRegs: DeviceRegistryEntry[]
-    ) => {
-      const outputDevices: DeviceEntities[] = [];
-
-      if (devices.length) {
-        const deviceLookup: Record<string, DeviceRegistryEntry> = {};
-        for (const device of deviceRegs) {
-          deviceLookup[device.id] = device;
-        }
-
-        devices.forEach((deviceId) => {
-          const device = deviceLookup[deviceId];
-          const deviceEntities: string[] = deviceEntityLookup[deviceId] || [];
-          outputDevices.push({
-            name: computeDeviceNameDisplay(
-              device,
-              this.hass.localize,
-              this.hass.states,
-              this._deviceEntityLookup[device.id]
-            ),
-            id: device.id,
-            entities: deviceEntities,
-          });
-        });
-      }
-
-      const outputEntities: string[] = [];
-
-      entities.forEach((entity) => {
-        if (!outputDevices.find((device) => device.entities.includes(entity))) {
-          outputEntities.push(entity);
-        }
-      });
-
-      return { devices: outputDevices, entities: outputEntities };
-    }
-  );
-
   public connectedCallback() {
     super.connectedCallback();
-    if (!this.sceneId) {
-      this._mode = "live";
-      this._subscribeEvents();
-    }
+    this._mode = "edit"; // new scenes start in live edit so you can add entities
   }
 
   public disconnectedCallback() {
     super.disconnectedCallback();
-    if (this._unsubscribeEvents) {
-      this._unsubscribeEvents();
-      this._unsubscribeEvents = undefined;
-    }
   }
 
   protected render() {
@@ -241,7 +178,7 @@ export class HaSceneEditor extends PreventUnsavedMixin(
 
           <ha-dropdown-item
             value="apply"
-            .disabled=${!this.sceneId || this._mode === "live"}
+            .disabled=${!this.sceneId || this._mode === "edit"}
           >
             ${this.hass.localize("ui.panel.config.scene.picker.apply")}
             <ha-svg-icon slot="icon" .path=${mdiPlay}></ha-svg-icon>
@@ -306,19 +243,64 @@ export class HaSceneEditor extends PreventUnsavedMixin(
         </ha-dropdown>
         ${this._errors ? html` <div class="errors">${this._errors}</div> ` : ""}
         ${this._mode === "yaml" ? this._renderYamlMode() : this._renderUiMode()}
-        <ha-button
-          slot="fab"
-          size="large"
-          .disabled=${this._saving}
-          @click=${this._saveScene}
-          class=${classMap({
-            dirty: this._dirty || !this.sceneId,
-            saving: this._saving,
-          })}
-        >
-          <ha-svg-icon slot="start" .path=${mdiContentSave}></ha-svg-icon>
-          ${this.hass.localize("ui.panel.config.scene.editor.save")}
-        </ha-button>
+        <div class="mode-bar">
+          <ha-icon-button-group>
+            <button
+              class="mode-tab ${this._mode === "view" ? "active" : ""}"
+              @click=${this._setViewMode}
+            >
+              <ha-svg-icon .path=${mdiEye}></ha-svg-icon>
+              <span>Overview</span>
+            </button>
+            <button
+              class="mode-tab ${this._mode === "edit" ? "active" : ""}"
+              @click=${this._setEditMode}
+            >
+              <ha-svg-icon .path=${mdiPencil}></ha-svg-icon>
+              <span>Live edit</span>
+            </button>
+          </ha-icon-button-group>
+          <div
+            class=${classMap({
+              "mode-bar-live-actions": true,
+              active: this._mode === "edit",
+            })}
+          >
+            <div class="mode-bar-live-inner">
+              <div class="mode-bar-separator"></div>
+              <ha-button
+                size="small"
+                .disabled=${!this._entities.some(
+                  (id) => this._getEntityStatus(id) === "differs"
+                )}
+                @click=${this._captureAllStates}
+              >
+                <ha-svg-icon slot="start" .path=${mdiCamera}></ha-svg-icon>
+                Capture all
+              </ha-button>
+            </div>
+          </div>
+          <div class="mode-bar-separator"></div>
+          <ha-button
+            size="small"
+            .disabled=${!this._scene}
+            @click=${this._testScene}
+          >
+            <ha-svg-icon slot="start" .path=${mdiPlay}></ha-svg-icon>
+            Apply scene
+          </ha-button>
+          <div class="mode-bar-separator"></div>
+          <ha-button
+            .disabled=${this._saving ||
+            !this._config ||
+            (this._mode !== "edit" && !this._dirty && Boolean(this.sceneId))}
+            @click=${this._saveScene}
+            class=${classMap({ saving: this._saving })}
+          >
+            <ha-svg-icon slot="start" .path=${mdiContentSave}></ha-svg-icon>
+            ${this.hass.localize("ui.panel.config.scene.editor.save")}
+          </ha-button>
+        </div>
       </hass-subpage>
     `;
   }
@@ -335,222 +317,204 @@ export class HaSceneEditor extends PreventUnsavedMixin(
   }
 
   private _renderUiMode() {
-    const { devices, entities } = this._getEntitiesDevices(
-      this._entities,
-      this._devices,
-      this._deviceEntityLookup,
-      Object.values(this.hass.devices)
-    );
-    return html` <div
+    return html`<div
       id="root"
-      class=${classMap({
-        rtl: computeRTL(this.hass),
-      })}
+      class=${classMap({ rtl: computeRTL(this.hass) })}
     >
       ${this._config
-        ? html`
-            <div
-              class=${classMap({
-                container: true,
-                narrow: !this.isWide,
-              })}
-            >
-              <ha-alert
-                alert-type="info"
-                .narrow=${this.narrow}
-                .title=${this.hass.localize(
-                  `ui.panel.config.scene.editor.${this._mode === "live" ? "live_edit" : "review_mode"}`
-                )}
-              >
-                ${this.hass.localize(
-                  `ui.panel.config.scene.editor.${this._mode === "live" ? "live_edit_detail" : "review_mode_detail"}`
-                )}
-                <span slot="icon">
-                  <ha-svg-icon
-                    .path=${this._mode === "live"
-                      ? mdiMotionPlayOutline
-                      : mdiEye}
-                  ></ha-svg-icon>
-                </span>
-                <ha-button
-                  size="small"
-                  slot="action"
-                  @click=${this._toggleLiveMode}
-                >
-                  ${this.hass.localize(
-                    `ui.panel.config.scene.editor.${this._mode === "live" ? "switch_to_review_mode" : "live_edit"}`
-                  )}
-                </ha-button>
-              </ha-alert>
-            </div>
-
-            <ha-config-section vertical .isWide=${this.isWide}>
-              <div slot="header">
-                ${this.hass.localize(
-                  "ui.panel.config.scene.editor.devices.header"
-                )}
-              </div>
-              ${this._mode === "live" || devices.length === 0
-                ? html`<div slot="introduction">
-                    ${this.hass.localize(
-                      `ui.panel.config.scene.editor.devices.introduction${this._mode === "review" ? "_review" : ""}`
-                    )}
-                  </div>`
-                : nothing}
-              ${devices.map(
-                (device) => html`
-                  <ha-card outlined>
-                    <h1 class="card-header">
-                      ${device.name}
-                      <ha-icon-button
-                        .path=${mdiDelete}
-                        .label=${this.hass.localize(
-                          "ui.panel.config.scene.editor.devices.delete"
-                        )}
-                        .device=${device.id}
-                        @click=${this._deleteDevice}
-                      ></ha-icon-button>
-                    </h1>
-                    <ha-list>
-                      ${device.entities.map((entityId) => {
-                        const entityStateObj = this.hass.states[entityId];
-                        if (!entityStateObj) {
-                          return nothing;
-                        }
-                        return html`
-                          <ha-list-item
-                            hasMeta
-                            .graphic=${this._mode === "live"
-                              ? "icon"
-                              : undefined}
-                            .entityId=${entityId}
-                            @click=${this._mode === "live"
-                              ? this._showMoreInfo
-                              : undefined}
-                            .noninteractive=${this._mode === "review"}
-                          >
-                            ${this._mode === "live"
-                              ? html`
-                                  <state-badge
-                                    .hass=${this.hass}
-                                    .stateObj=${entityStateObj}
-                                    slot="graphic"
-                                  ></state-badge>
-                                `
-                              : nothing}
-                            ${computeStateName(entityStateObj)}
-                          </ha-list-item>
-                        `;
-                      })}
-                    </ha-list>
-                  </ha-card>
-                `
-              )}
-              ${this._mode === "live"
-                ? html`
-                    <ha-card
-                      outlined
-                      .header=${this.hass.localize(
-                        "ui.panel.config.scene.editor.devices.add"
-                      )}
-                    >
-                      <div class="card-content">
-                        <ha-device-picker
-                          @value-changed=${this._devicePicked}
-                          .hass=${this.hass}
-                          .label=${this.hass.localize(
-                            "ui.panel.config.scene.editor.devices.add"
-                          )}
-                        ></ha-device-picker>
-                      </div>
-                    </ha-card>
-                  `
-                : nothing}
-            </ha-config-section>
-
-            <ha-config-section vertical .isWide=${this.isWide}>
-              <div slot="header">
-                ${this.hass.localize(
-                  "ui.panel.config.scene.editor.entities.header"
-                )}
-              </div>
-              ${this._mode === "live" || entities.length === 0
-                ? html`<div slot="introduction">
-                    ${this.hass.localize(
-                      `ui.panel.config.scene.editor.entities.introduction${this._mode === "review" ? "_review" : ""}`
-                    )}
-                  </div>`
-                : nothing}
-              ${entities.length
-                ? html`
-                    <ha-card outlined class="entities">
-                      <ha-list>
-                        ${entities.map((entityId) => {
-                          const entityStateObj = this.hass.states[entityId];
-                          if (!entityStateObj) {
-                            return nothing;
-                          }
-                          return html`
-                            <ha-list-item
-                              class="entity"
-                              hasMeta
-                              .graphic=${this._mode === "live"
-                                ? "icon"
-                                : undefined}
-                              .entityId=${entityId}
-                              @click=${this._mode === "live"
-                                ? this._showMoreInfo
-                                : undefined}
-                              .noninteractive=${this._mode === "review"}
-                            >
-                              ${this._mode === "live"
-                                ? html` <state-badge
-                                    .hass=${this.hass}
-                                    .stateObj=${entityStateObj}
-                                    slot="graphic"
-                                  ></state-badge>`
-                                : nothing}
-                              ${computeStateName(entityStateObj)}
-                              <div slot="meta">
-                                <ha-icon-button
-                                  .path=${mdiDelete}
-                                  .entityId=${entityId}
-                                  .label=${this.hass.localize(
-                                    "ui.panel.config.scene.editor.entities.delete"
-                                  )}
-                                  @click=${this._deleteEntity}
-                                ></ha-icon-button>
-                              </div>
-                            </ha-list-item>
-                          `;
-                        })}
-                      </ha-list>
-                    </ha-card>
-                  `
-                : ""}
-              ${this._mode === "live"
-                ? html` <ha-card
-                    outlined
-                    header=${this.hass.localize(
-                      "ui.panel.config.scene.editor.entities.add"
-                    )}
-                  >
-                    <div class="card-content">
-                      <ha-entity-picker
-                        @value-changed=${this._entityPicked}
-                        .excludeDomains=${SCENE_IGNORED_DOMAINS}
-                        .hass=${this.hass}
-                        label=${this.hass.localize(
-                          "ui.panel.config.scene.editor.entities.add"
-                        )}
-                      ></ha-entity-picker>
-                    </div>
-                  </ha-card>`
-                : nothing}
-            </ha-config-section>
-          `
+        ? this._mode === "view"
+          ? this._renderViewMode()
+          : this._renderEditMode()
         : nothing}
     </div>`;
+  }
+
+  // Returns a synthetic state object with the scene's configured state/attributes
+  // merged onto the live entity, so state-badge reflects what the scene will set.
+  private _getConfiguredStateObj(entityId: string) {
+    const liveState = this.hass.states[entityId];
+    if (!liveState) {
+      return undefined;
+    }
+    const configState = this._config?.entities[entityId];
+    if (!configState) {
+      return liveState;
+    }
+    if (typeof configState === "string") {
+      return { ...liveState, state: configState };
+    }
+    const { state: configuredState, ...configAttrs } = configState;
+    return {
+      ...liveState,
+      state: configuredState ?? liveState.state,
+      attributes: { ...liveState.attributes, ...configAttrs },
+    };
+  }
+
+  private _renderEntityRow(
+    entityId: string,
+    options: {
+      showStatus?: boolean;
+      showCapture?: boolean;
+      showDelete?: boolean;
+    } = {}
+  ) {
+    const {
+      showStatus = false,
+      showCapture = false,
+      showDelete = true,
+    } = options;
+    const stateObj = this.hass.states[entityId];
+    if (!stateObj) {
+      return nothing;
+    }
+    // In view mode (showStatus=false) use configured state for the badge so it
+    // reflects what the scene will set, not what the device is doing right now.
+    const badgeStateObj = showStatus
+      ? stateObj
+      : (this._getConfiguredStateObj(entityId) ?? stateObj);
+    const stateLabel = this._getConfiguredStateLabel(entityId);
+    const status = showStatus ? this._getEntityStatus(entityId) : undefined;
+    return html`
+      <ha-card outlined>
+        <div class="row-shell">
+          <ha-automation-row
+            .entityId=${entityId}
+            @click=${this._handleRowClick}
+          >
+            <state-badge
+              slot="leading-icon"
+              .hass=${this.hass}
+              .stateObj=${badgeStateObj}
+            ></state-badge>
+            <h3 slot="header">
+              ${computeStateName(stateObj)}
+              ${stateLabel
+                ? html`<span class="state-description">${stateLabel}</span>`
+                : nothing}
+            </h3>
+            ${showCapture || showDelete
+              ? html`<ha-dropdown
+                  slot="icons"
+                  .entityId=${entityId}
+                  @click=${this._stopPropagation}
+                  @wa-select=${this._handleEntityMenuAction}
+                  placement="bottom-end"
+                  activatable
+                >
+                  <ha-icon-button
+                    slot="trigger"
+                    .label=${this.hass.localize("ui.common.menu")}
+                    .path=${mdiDotsVertical}
+                  ></ha-icon-button>
+                  ${showCapture
+                    ? html`<ha-dropdown-item
+                        value="capture"
+                        .disabled=${status === "matches"}
+                      >
+                        Capture current state
+                        <ha-svg-icon
+                          slot="icon"
+                          .path=${mdiCamera}
+                        ></ha-svg-icon>
+                      </ha-dropdown-item>`
+                    : nothing}
+                  ${showDelete
+                    ? html`<wa-divider></wa-divider>
+                        <ha-dropdown-item value="delete" class="warning">
+                          ${this.hass.localize(
+                            "ui.panel.config.scene.editor.entities.delete"
+                          )}
+                          <ha-svg-icon
+                            slot="icon"
+                            .path=${mdiDelete}
+                            class="warning"
+                          ></ha-svg-icon>
+                        </ha-dropdown-item>`
+                    : nothing}
+                </ha-dropdown>`
+              : nothing}
+          </ha-automation-row>
+          ${status && status !== "matches"
+            ? html`<span
+                class="testing-chip ${status === "differs" ? "error" : status}"
+              >
+                <ha-svg-icon .path=${mdiCloseCircle}></ha-svg-icon>
+                ${status === "differs" ? "Differs" : "Unavailable"}
+              </span>`
+            : nothing}
+        </div>
+      </ha-card>
+    `;
+  }
+
+  private _renderViewMode() {
+    return html`
+      <div class=${classMap({ container: true, narrow: !this.isWide })}>
+        ${this._viewAlertDismissed
+          ? nothing
+          : html`<ha-alert
+              alert-type="info"
+              dismissable
+              .narrow=${this.narrow}
+              .localize=${this.hass.localize}
+              title="Overview"
+              @alert-dismissed-clicked=${this._dismissViewAlert}
+            >
+              This is what the scene will set when activated. Switch to
+              <strong>Live edit</strong> to check if your home is in sync or
+              make changes.
+            </ha-alert>`}
+        <div class="header">
+          <h2 class="name">Scene devices and setup</h2>
+        </div>
+        <div class="rows">
+          ${this._entities.map((entityId) =>
+            this._renderEntityRow(entityId, { showDelete: false })
+          )}
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderEditMode() {
+    return html`
+      <div class=${classMap({ container: true, narrow: !this.isWide })}>
+        ${this._editAlertDismissed
+          ? nothing
+          : html`<ha-alert
+              alert-type="info"
+              dismissable
+              .narrow=${this.narrow}
+              .localize=${this.hass.localize}
+              title="Live edit"
+              @alert-dismissed-clicked=${this._dismissEditAlert}
+            >
+              The scene has been applied to your devices. Adjust them to the
+              state you want, then capture the changes.
+            </ha-alert>`}
+        <div class="header">
+          <h2 class="name">Scene devices and setup</h2>
+        </div>
+        <div class="rows">
+          ${this._entities.map((entityId) =>
+            this._renderEntityRow(entityId, {
+              showStatus: true,
+              showCapture: true,
+              showDelete: true,
+            })
+          )}
+          <div class="buttons">
+            <ha-entity-picker
+              add-button
+              .hass=${this.hass}
+              .excludeDomains=${SCENE_IGNORED_DOMAINS}
+              @value-changed=${this._entityPicked}
+            ></ha-entity-picker>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   protected willUpdate(changedProps: PropertyValues): void {
@@ -711,60 +675,32 @@ export class HaSceneEditor extends PreventUnsavedMixin(
       }
     }
     this._yamlErrors = undefined;
-    this._mode = "review";
+    this._mode = "view";
   }
 
   private _enterYamlMode() {
-    if (this._mode === "live") {
-      this._generateConfigFromLive();
-      if (this._unsubscribeEvents) {
-        this._unsubscribeEvents();
-        this._unsubscribeEvents = undefined;
-      }
-      applyScene(this.hass, this._storedStates);
-    }
     this._mode = "yaml";
   }
 
-  private async _toggleLiveMode() {
-    if (this._mode === "live") {
-      this._exitLiveMode();
-    } else {
-      await this._enterLiveMode();
+  private _dismissViewAlert() {
+    this._viewAlertDismissed = true;
+  }
+
+  private _dismissEditAlert() {
+    this._editAlertDismissed = true;
+  }
+
+  private _setViewMode() {
+    if (this._mode !== "view") {
+      this._mode = "view";
     }
   }
 
-  private async _enterLiveMode() {
-    if (this._dirty) {
-      const result = await showConfirmationDialog(this, {
-        text: this.hass.localize(
-          "ui.panel.config.scene.editor.enter_live_mode_unsaved"
-        ),
-        confirmText: this.hass!.localize(
-          "ui.panel.config.scene.editor.save_before_live"
-        ),
-        dismissText: this.hass!.localize("ui.common.cancel"),
-      });
-      if (!result) {
-        return;
-      }
-      await this._saveScene();
+  private _setEditMode() {
+    if (this._mode !== "edit") {
+      this._mode = "edit";
+      this._setScene();
     }
-
-    this._entities.forEach((entity) => this._storeState(entity));
-    this._mode = "live";
-    await this._setScene();
-    this._subscribeEvents();
-  }
-
-  private _exitLiveMode() {
-    this._generateConfigFromLive();
-    if (this._unsubscribeEvents) {
-      this._unsubscribeEvents();
-      this._unsubscribeEvents = undefined;
-    }
-    applyScene(this.hass, this._storedStates);
-    this._mode = "review";
   }
 
   private _yamlChanged(ev: CustomEvent) {
@@ -783,21 +719,52 @@ export class HaSceneEditor extends PreventUnsavedMixin(
     if (!this._scene) {
       return;
     }
-    const { context } = await activateScene(this.hass, this._scene.entity_id);
-    this._activateContextId = context.id;
+    await activateScene(this.hass, this._scene.entity_id);
   }
 
-  private async _subscribeEvents() {
-    this._unsubscribeEvents =
-      await this.hass!.connection.subscribeEvents<HassEvent>(
-        (event) => this._stateChanged(event),
-        "state_changed"
-      );
-  }
-
-  private _showMoreInfo(ev: Event) {
+  private _handleRowClick(ev: Event) {
     const entityId = (ev.currentTarget as any).entityId;
-    fireEvent(this, "hass-more-info", { entityId });
+    if (entityId) {
+      fireEvent(this, "hass-more-info", { entityId });
+    }
+  }
+
+  private _stopPropagation(ev: Event) {
+    ev.stopPropagation();
+  }
+
+  private _handleEntityMenuAction(ev: HaDropdownSelectEvent) {
+    const action = ev.detail?.item?.value;
+    const entityId = (ev.currentTarget as any).entityId;
+    if (!action || !entityId) {
+      return;
+    }
+    switch (action) {
+      case "capture": {
+        const currentState = this._getCurrentState(entityId);
+        if (currentState && this._config) {
+          this._config = {
+            ...this._config,
+            entities: { ...this._config.entities, [entityId]: currentState },
+          };
+          this._dirty = true;
+        }
+        break;
+      }
+      case "delete":
+        this._entities = this._entities.filter((id) => id !== entityId);
+        this._single_entities = this._single_entities.filter(
+          (id) => id !== entityId
+        );
+        if (this._config?.entities) {
+          delete this._config.entities[entityId];
+        }
+        if (this._config?.metadata) {
+          delete this._config.metadata[entityId];
+        }
+        this._dirty = true;
+        break;
+    }
   }
 
   private async _loadConfig() {
@@ -832,6 +799,7 @@ export class HaSceneEditor extends PreventUnsavedMixin(
 
     this._dirty = false;
     this._config = config;
+    this._mode = "view";
   }
 
   private _initEntities(config: SceneConfig) {
@@ -873,80 +841,21 @@ export class HaSceneEditor extends PreventUnsavedMixin(
   private _entityPicked(ev: CustomEvent) {
     const entityId = ev.detail.value;
     (ev.target as any).value = "";
-    if (this._entities.includes(entityId)) {
+    if (!entityId || this._entities.includes(entityId)) {
       return;
     }
     this._entities = [...this._entities, entityId];
     this._single_entities.push(entityId);
-    this._storeState(entityId);
-    this._dirty = true;
-  }
-
-  private _deleteEntity(ev: Event) {
-    ev.stopPropagation();
-    const deleteEntityId = (ev.target as any).entityId;
-    this._entities = this._entities.filter(
-      (entityId) => entityId !== deleteEntityId
-    );
-    this._single_entities = this._single_entities.filter(
-      (entityId) => entityId !== deleteEntityId
-    );
-    if (this._config!.entities) {
-      delete this._config!.entities[deleteEntityId];
-    }
-    if (this._config!.metadata) {
-      delete this._config!.metadata[deleteEntityId];
+    // Immediately commit the current state into the scene config so that
+    // saving in Edit mode produces a valid scene.
+    const currentState = this._getCurrentState(entityId);
+    if (currentState && this._config) {
+      this._config = {
+        ...this._config,
+        entities: { ...this._config.entities, [entityId]: currentState },
+      };
     }
     this._dirty = true;
-  }
-
-  private _pickDevice(device_id: string) {
-    if (this._devices.includes(device_id)) {
-      return;
-    }
-    this._devices = [...this._devices, device_id];
-    const deviceEntities = this._deviceEntityLookup[device_id];
-    if (!deviceEntities) {
-      return;
-    }
-    this._entities = [...this._entities, ...deviceEntities];
-    deviceEntities.forEach((entityId) => {
-      this._storeState(entityId);
-    });
-    this._dirty = true;
-  }
-
-  private _devicePicked(ev: CustomEvent) {
-    const device = ev.detail.value;
-    (ev.target as any).value = "";
-    this._pickDevice(device);
-  }
-
-  private _deleteDevice(ev: Event) {
-    const deviceId = (ev.target as any).device;
-    this._devices = this._devices.filter((device) => device !== deviceId);
-    const deviceEntities = this._deviceEntityLookup[deviceId];
-    if (!deviceEntities) {
-      return;
-    }
-    this._entities = this._entities.filter(
-      (entityId) => !deviceEntities.includes(entityId)
-    );
-    if (this._config!.entities) {
-      deviceEntities.forEach((entityId) => {
-        delete this._config!.entities[entityId];
-      });
-    }
-    this._dirty = true;
-  }
-
-  private _stateChanged(event: HassEvent) {
-    if (
-      event.context.id !== this._activateContextId &&
-      this._entities.includes(event.data.entity_id)
-    ) {
-      this._dirty = true;
-    }
   }
 
   private _backTapped = async (): Promise<void> => {
@@ -957,9 +866,6 @@ export class HaSceneEditor extends PreventUnsavedMixin(
   };
 
   private _goBack(): void {
-    if (this._mode === "live") {
-      applyScene(this.hass, this._storedStates);
-    }
     afterNextRender(() => goBack("/config"));
   }
 
@@ -984,9 +890,6 @@ export class HaSceneEditor extends PreventUnsavedMixin(
       return;
     }
     await deleteScene(this.hass, this.sceneId);
-    if (this._mode === "live") {
-      applyScene(this.hass, this._storedStates);
-    }
     goBack("/config");
   }
 
@@ -1023,6 +926,113 @@ export class HaSceneEditor extends PreventUnsavedMixin(
     }
   }
 
+  private _getConfiguredStateLabel(entityId: string): string {
+    const configState = this._config?.entities[entityId];
+    if (!configState) {
+      return "";
+    }
+    if (typeof configState === "string") {
+      return configState;
+    }
+
+    const parts: string[] = [];
+    const domain = computeDomain(entityId);
+
+    if (configState.state) {
+      parts.push(configState.state);
+    }
+
+    if (domain === "light" && configState.state === "on") {
+      if (configState.brightness !== undefined) {
+        parts.push(
+          `${Math.round((Number(configState.brightness) / 255) * 100)}%`
+        );
+      }
+      if (configState.color_temp_kelvin !== undefined) {
+        parts.push(`${configState.color_temp_kelvin}K`);
+      } else if (configState.color_temp !== undefined) {
+        parts.push(`${Math.round(1000000 / Number(configState.color_temp))}K`);
+      }
+    } else if (domain === "climate") {
+      if (configState.temperature !== undefined) {
+        parts.push(`${configState.temperature}°`);
+      }
+    } else if (domain === "cover") {
+      if (configState.current_position !== undefined) {
+        parts.push(`${configState.current_position}%`);
+      }
+    } else if (domain === "media_player") {
+      if (configState.volume_level !== undefined) {
+        parts.push(
+          `${Math.round(Number(configState.volume_level) * 100)}% vol`
+        );
+      }
+    } else if (domain === "fan") {
+      if (configState.percentage !== undefined) {
+        parts.push(`${configState.percentage}%`);
+      }
+    }
+
+    return parts.join(" · ");
+  }
+
+  private _getEntityStatus(
+    entityId: string
+  ): "matches" | "differs" | "unavailable" {
+    const currentState = this.hass.states[entityId];
+    if (!currentState || currentState.state === "unavailable") {
+      return "unavailable";
+    }
+    const configuredState = this._config?.entities[entityId];
+    if (!configuredState) {
+      return "differs";
+    }
+    const configStateStr =
+      typeof configuredState === "string"
+        ? configuredState
+        : configuredState.state;
+    if (currentState.state !== configStateStr) {
+      return "differs";
+    }
+    if (typeof configuredState === "object") {
+      for (const [key, value] of Object.entries(configuredState)) {
+        if (key === "state") {
+          continue;
+        }
+        if (String(currentState.attributes[key]) !== String(value)) {
+          return "differs";
+        }
+      }
+    }
+    return "matches";
+  }
+
+  private _captureAllStates() {
+    if (!this._config) {
+      return;
+    }
+    const entities = { ...this._config.entities };
+    for (const entityId of this._entities) {
+      const currentState = this._getCurrentState(entityId);
+      if (currentState) {
+        entities[entityId] = currentState;
+      }
+    }
+    this._config = {
+      ...this._config,
+      entities,
+      metadata: this._calculateMetaData(),
+    };
+    this._dirty = true;
+  }
+
+  private async _testScene() {
+    if (!this._scene) {
+      return;
+    }
+    await this._setScene();
+  }
+
   private _calculateMetaData(): SceneMetaData {
     const output: SceneMetaData = {};
 
@@ -1041,42 +1051,12 @@ export class HaSceneEditor extends PreventUnsavedMixin(
     return output;
   }
 
-  private _calculateStates(): SceneEntities {
-    const output: SceneEntities = {};
-    this._entities.forEach((entityId) => {
-      const entityState = this._getCurrentState(entityId);
-      if (entityState) {
-        output[entityId] = entityState;
-      }
-    });
-    return output;
-  }
-
-  private _storeState(entityId: string): void {
-    if (entityId in this._storedStates) {
-      return;
-    }
-    const entityState = this._getCurrentState(entityId);
-    if (!entityState) {
-      return;
-    }
-    this._storedStates[entityId] = entityState;
-  }
-
   private _getCurrentState(entityId: string) {
     const stateObj = this.hass.states[entityId];
     if (!stateObj) {
       return undefined;
     }
     return { ...stateObj.attributes, state: stateObj.state };
-  }
-
-  private _generateConfigFromLive() {
-    this._config = {
-      ...this._config!,
-      entities: this._calculateStates(),
-      metadata: this._calculateMetaData(),
-    };
   }
 
   private async _saveScene(): Promise<void> {
@@ -1087,8 +1067,28 @@ export class HaSceneEditor extends PreventUnsavedMixin(
       return;
     }
 
-    if (this._mode === "live") {
-      this._generateConfigFromLive();
+    // In UI mode, ensure config reflects the current entity list and metadata.
+    // This handles any entities whose state wasn't yet written (e.g. added
+    // while the entity was unavailable) and keeps entity_only flags in sync.
+    if (this._mode !== "yaml" && this._config) {
+      const syncedEntities = { ...this._config.entities };
+      for (const entityId of this._entities) {
+        if (!syncedEntities[entityId]) {
+          const currentState = this._getCurrentState(entityId);
+          if (currentState) {
+            syncedEntities[entityId] = currentState;
+          }
+        }
+      }
+      this._config = {
+        ...this._config,
+        entities: syncedEntities,
+        metadata: this._calculateMetaData(),
+      };
+    }
+
+    if (!this._config) {
+      return;
     }
 
     const isNewScene = !this.sceneId;
@@ -1114,60 +1114,72 @@ export class HaSceneEditor extends PreventUnsavedMixin(
     try {
       await saveScene(this.hass, id, this._config!);
       this._errors = undefined;
+      this._dirty = false;
 
       if (this._entityRegistryUpdate !== undefined) {
-        let entityId = this._scene?.entity_id;
+        try {
+          let entityId = this._scene?.entity_id;
 
-        // wait for scene to appear in entity registry when creating a new scene
-        if (entityRegPromise) {
-          try {
-            const scene = await promiseTimeout(5000, entityRegPromise);
-            entityId = scene.entity_id;
-          } catch (e) {
-            if (e instanceof Error && e.name === "TimeoutError") {
-              // Show the dialog and give user a chance to wait for the registry
-              // to respond.
-              await showAutomationSaveTimeoutDialog(this, {
-                savedPromise: entityRegPromise,
-                type: "scene",
-              });
-              try {
-                // We already gave the user a chance to wait once, so if they skipped
-                // the dialog and it's still not there just immediately timeout.
-                const scene = await promiseTimeout(0, entityRegPromise);
-                entityId = scene.entity_id;
-              } catch (e2) {
-                if (!(e2 instanceof Error && e2.name === "TimeoutError")) {
-                  throw e2;
+          // wait for scene to appear in entity registry when creating a new scene
+          if (entityRegPromise) {
+            try {
+              const scene = await promiseTimeout(5000, entityRegPromise);
+              entityId = scene.entity_id;
+            } catch (e) {
+              if (e instanceof Error && e.name === "TimeoutError") {
+                await showAutomationSaveTimeoutDialog(this, {
+                  savedPromise: entityRegPromise,
+                  type: "scene",
+                });
+                try {
+                  const scene = await promiseTimeout(0, entityRegPromise);
+                  entityId = scene.entity_id;
+                } catch (e2) {
+                  if (!(e2 instanceof Error && e2.name === "TimeoutError")) {
+                    throw e2;
+                  }
                 }
+              } else {
+                throw e;
               }
-            } else {
-              throw e;
             }
           }
-        }
 
-        if (entityId) {
-          await updateEntityRegistryEntry(this.hass, entityId, {
-            area_id: this._entityRegistryUpdate.area || null,
-            labels: this._entityRegistryUpdate.labels || [],
-            categories: {
-              scene: this._entityRegistryUpdate.category || null,
-            },
+          if (entityId) {
+            await updateEntityRegistryEntry(this.hass, entityId, {
+              area_id: this._entityRegistryUpdate.area || null,
+              labels: this._entityRegistryUpdate.labels || [],
+              categories: {
+                scene: this._entityRegistryUpdate.category || null,
+              },
+            });
+          }
+        } catch (err: any) {
+          // Registry update failed, but the scene itself was saved — don't
+          // block the user or mark the scene as dirty again.
+          showToast(this, {
+            message: err.body?.message || err.message || err.body,
           });
         }
       }
 
-      this._dirty = false;
+      this._entityRegistryUpdate = undefined;
+
       if (isNewScene) {
         navigate(`/config/scene/edit/${id}`, { replace: true });
+      } else {
+        showToast(this, {
+          message: this.hass.localize("ui.common.successfully_saved"),
+        });
       }
     } catch (err: any) {
-      this._errors = err.body?.message || err.message || err.body;
-      showToast(this, {
-        message: err.body?.message || err.message || err.body,
-      });
-      throw err;
+      const msg =
+        err.body?.message ||
+        err.message ||
+        (typeof err.body === "string" ? err.body : undefined) ||
+        this.hass.localize("ui.panel.config.areas.editor.unknown_error");
+      this._errors = msg;
+      showToast(this, { message: msg });
     } finally {
       this._saving = false;
       this._entityRegCreated = undefined;
@@ -1287,25 +1299,9 @@ export class HaSceneEditor extends PreventUnsavedMixin(
         span[slot="introduction"] a {
           color: var(--primary-color);
         }
-        ha-button[slot="fab"] {
-          position: relative;
-          bottom: calc(-80px - var(--safe-area-inset-bottom));
-          transition: bottom 0.3s;
-          --ha-button-box-shadow: var(--ha-box-shadow-l);
-        }
         ha-alert {
           display: block;
           margin-bottom: 24px;
-        }
-        ha-alert ha-button[slot="action"] {
-          width: max-content;
-          white-space: nowrap;
-        }
-        ha-button[slot="fab"].dirty {
-          bottom: 0;
-        }
-        ha-button[slot="fab"].saving {
-          opacity: var(--light-disabled-opacity);
         }
         ha-entity-picker {
           display: block;
@@ -1313,11 +1309,166 @@ export class HaSceneEditor extends PreventUnsavedMixin(
         }
         div[slot="meta"] {
           display: flex;
-          justify-content: center;
           align-items: center;
+          gap: var(--ha-space-1);
         }
         ha-list-item.entity {
           padding-right: 28px;
+        }
+        /* ── Section heading (matches automation editor style) ── */
+        .header {
+          display: flex;
+          align-items: center;
+        }
+        .header .name {
+          font-weight: var(--ha-font-weight-normal);
+          flex: 1;
+          margin-bottom: 8px;
+        }
+        /* ── Automation-style edit rows ──────────────────── */
+        .rows {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-4);
+          padding-top: var(--ha-space-4);
+        }
+        .rows ha-card {
+          margin-top: 0;
+          /* Override automation-row icon top padding so icon + text stay centred
+             in our single-line scene rows */
+          --ha-automation-row-icon-padding-top: 0;
+        }
+        .rows ha-automation-row h3 {
+          margin: 0;
+          font-size: var(--ha-font-size-m);
+          font-weight: var(--ha-font-weight-normal);
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+          flex-wrap: wrap;
+          /* Keep text vertically centred to match the icon */
+          padding-block: var(--ha-space-3);
+        }
+        .state-description {
+          color: var(--secondary-text-color);
+          font-size: var(--ha-font-size-s);
+          font-weight: var(--ha-font-weight-normal);
+        }
+        .buttons {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--ha-space-2);
+        }
+        /* ── Bottom mode bar ─────────────────────────────── */
+        .mode-bar {
+          position: fixed;
+          bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom));
+          left: 50%;
+          transform: translateX(-50%);
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+          padding: var(--ha-space-1) var(--ha-space-2);
+          border-radius: var(--ha-border-radius-4xl);
+          background: var(--card-background-color);
+          box-shadow: var(--ha-box-shadow-l);
+          z-index: 10;
+        }
+        .mode-bar-separator {
+          width: 1px;
+          height: 32px;
+          background: var(--divider-color);
+          margin: 0 var(--ha-space-1);
+          flex-shrink: 0;
+        }
+        /* Live-actions section — animates in/out as a unit */
+        .mode-bar-live-actions {
+          display: grid;
+          grid-template-columns: 0fr;
+          opacity: 0;
+          pointer-events: none;
+          transition:
+            grid-template-columns var(--ha-animation-duration-fast, 150ms) ease,
+            opacity var(--ha-animation-duration-fast, 150ms) ease;
+        }
+        .mode-bar-live-actions.active {
+          grid-template-columns: 1fr;
+          opacity: 1;
+          pointer-events: auto;
+        }
+        .mode-bar-live-inner {
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+          min-width: 0;
+        }
+        .mode-tab {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--ha-space-1);
+          padding: 0 var(--ha-space-3);
+          height: 48px;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          color: var(--secondary-text-color);
+          font-size: var(--ha-font-size-s);
+          font-family: inherit;
+          border-radius: var(--ha-border-radius-4xl);
+          white-space: nowrap;
+        }
+        .mode-tab ha-svg-icon {
+          --mdc-icon-size: 20px;
+        }
+        .mode-tab.active {
+          color: var(--primary-color);
+          background: rgba(var(--rgb-primary-color), 0.12);
+        }
+        /* ── Status chip (same pattern as ha-automation-condition-row) ── */
+        .row-shell {
+          position: relative;
+          overflow: visible;
+        }
+        .testing-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--ha-space-1);
+          min-height: 24px;
+          padding: 0 var(--ha-space-2);
+          border-radius: var(--ha-border-radius-pill);
+          font-size: var(--ha-font-size-s);
+          font-weight: var(--ha-font-weight-medium);
+          line-height: 1;
+          white-space: nowrap;
+          max-width: min(40vw, 170px);
+          position: absolute;
+          top: 12px;
+          inset-inline-end: 56px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          pointer-events: none;
+          z-index: 2;
+        }
+        .testing-chip ha-svg-icon {
+          --mdc-icon-size: 16px;
+          flex-shrink: 0;
+        }
+        .testing-chip.error {
+          background-color: var(--ha-color-fill-neutral-normal-resting);
+          color: var(--ha-color-on-neutral-normal);
+        }
+        .testing-chip.pass {
+          background-color: var(--ha-color-fill-success-quiet-resting);
+          color: var(--ha-color-on-success-quiet);
+        }
+        .testing-chip.unavailable {
+          background-color: var(--ha-color-fill-neutral-quiet-resting);
+          color: var(--ha-color-on-neutral-quiet);
+        }
+        /* Padding for content above mode bar */
+        #root {
+          padding-bottom: calc(80px + var(--safe-area-inset-bottom));
         }
       `,
     ];
