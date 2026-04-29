@@ -13,11 +13,15 @@ import {
   mdiPlay,
   mdiPlus,
   mdiRobotHappy,
+  mdiSortAlphabeticalAscending,
+  mdiSortAlphabeticalDescending,
   mdiTag,
   mdiTextureBox,
   mdiToggleSwitch,
   mdiToggleSwitchOffOutline,
   mdiTransitConnection,
+  mdiViewGrid,
+  mdiViewList,
 } from "@mdi/js";
 import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
@@ -65,7 +69,10 @@ import "../../../components/ha-sub-menu";
 import "../../../components/ha-svg-icon";
 import "../../../components/ha-tooltip";
 import { createAreaRegistryEntry } from "../../../data/area/area_registry";
-import type { AutomationEntity } from "../../../data/automation";
+import type {
+  AutomationEntity,
+  ManualAutomationConfig,
+} from "../../../data/automation";
 import {
   deleteAutomation,
   duplicateAutomation,
@@ -102,7 +109,9 @@ import {
   showAlertDialog,
   showConfirmationDialog,
 } from "../../../dialogs/generic/show-dialog-box";
+import "../../../layouts/hass-tabs-subpage";
 import "../../../layouts/hass-tabs-subpage-data-table";
+import "./ha-automation-card";
 import { SubscribeMixin } from "../../../mixins/subscribe-mixin";
 import { haStyle } from "../../../resources/styles";
 import type { HomeAssistant, Route, ServiceCallResponse } from "../../../types";
@@ -231,6 +240,48 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
   }
 
   private _openingOverflow = false;
+
+  @storage({ key: "automation-view-mode", state: true, subscribe: false })
+  private _viewMode: "table" | "cards" = "table";
+
+  @state() private _cardSortAsc = true;
+
+  @state() private _cardFilterAreas: string[] = [];
+
+  @state() private _cardFilterLabels: string[] = [];
+
+  @state() private _cardFilterCategories: string[] = [];
+
+  @state()
+  private _automationConfigs = new Map<string, ManualAutomationConfig | null>();
+
+  private _groupedAutomations = memoizeOne(
+    (
+      automations: AutomationItem[],
+      sortAsc: boolean,
+      unassignedLabel: string
+    ): { area: string; items: AutomationItem[] }[] => {
+      const groups = new Map<string, AutomationItem[]>();
+      for (const automation of automations) {
+        const key = automation.area ?? "";
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(automation);
+      }
+      return Array.from(groups.entries())
+        .sort(([a], [b]) => {
+          if (!a) return 1;
+          if (!b) return -1;
+          return a.localeCompare(b);
+        })
+        .map(([area, items]) => ({
+          area: area || unassignedLabel,
+          items: [...items].sort((a, b) => {
+            const cmp = a.name.localeCompare(b.name);
+            return sortAsc ? cmp : -cmp;
+          }),
+        }));
+    }
+  );
 
   private _automations = memoizeOne(
     (
@@ -421,6 +472,11 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
       this._labels,
       this._filteredEntityIds
     );
+
+    if (this._viewMode === "cards") {
+      return this._renderCardView(automations);
+    }
+
     return html`
       <hass-tabs-subpage-data-table
         .hass=${this.hass}
@@ -470,12 +526,20 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
         clickable
         class=${this.narrow ? "narrow" : ""}
       >
-        <ha-icon-button
-          slot="toolbar-icon"
-          .label=${this.hass.localize("ui.common.help")}
-          .path=${mdiHelpCircleOutline}
-          @click=${this._showHelp}
-        ></ha-icon-button>
+        <div slot="toolbar-icon" class="card-toolbar-icons">
+          <ha-icon-button
+            .label=${this.hass.localize(
+              "ui.panel.config.automation.picker.card_view"
+            )}
+            .path=${mdiViewGrid}
+            @click=${this._toggleViewMode}
+          ></ha-icon-button>
+          <ha-icon-button
+            .label=${this.hass.localize("ui.common.help")}
+            .path=${mdiHelpCircleOutline}
+            @click=${this._showHelp}
+          ></ha-icon-button>
+        </div>
         <ha-filter-floor-areas
           .hass=${this.hass}
           .type=${"automation"}
@@ -699,58 +763,7 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
           )}
         </ha-button>
       </hass-tabs-subpage-data-table>
-      <ha-dropdown
-        id="overflow-menu"
-        @wa-select=${this._handleOverflowAction}
-        @wa-after-show=${this._overflowMenuOpened}
-        @wa-after-hide=${this._overflowMenuClosed}
-      >
-        <ha-dropdown-item value="show_info">
-          <ha-svg-icon .path=${mdiInformationOutline} slot="icon"></ha-svg-icon>
-          ${this.hass.localize("ui.panel.config.automation.editor.show_info")}
-        </ha-dropdown-item>
-
-        <ha-dropdown-item value="show_settings">
-          <ha-svg-icon .path=${mdiCog} slot="icon"></ha-svg-icon>
-          ${this.hass.localize(
-            "ui.panel.config.automation.picker.show_settings"
-          )}
-        </ha-dropdown-item>
-        <ha-dropdown-item value="edit_category">
-          <ha-svg-icon .path=${mdiTag} slot="icon"></ha-svg-icon>
-          ${this.hass.localize(
-            `ui.panel.config.automation.picker.${this._overflowAutomation?.category ? "edit_category" : "assign_category"}`
-          )}
-        </ha-dropdown-item>
-        <ha-dropdown-item value="run_actions">
-          <ha-svg-icon .path=${mdiPlay} slot="icon"></ha-svg-icon>
-          ${this.hass.localize("ui.panel.config.automation.editor.run")}
-        </ha-dropdown-item>
-        <ha-dropdown-item value="show_trace">
-          <ha-svg-icon .path=${mdiTransitConnection} slot="icon"></ha-svg-icon>
-          ${this.hass.localize("ui.panel.config.automation.editor.show_trace")}
-        </ha-dropdown-item>
-        <wa-divider></wa-divider>
-        <ha-dropdown-item value="duplicate">
-          <ha-svg-icon .path=${mdiContentDuplicate} slot="icon"></ha-svg-icon>
-          ${this.hass.localize("ui.panel.config.automation.picker.duplicate")}
-        </ha-dropdown-item>
-        <ha-dropdown-item value="toggle">
-          <ha-svg-icon
-            .path=${this._overflowAutomation?.state === "off"
-              ? mdiToggleSwitch
-              : mdiToggleSwitchOffOutline}
-            slot="icon"
-          ></ha-svg-icon>
-          ${this._overflowAutomation?.state === "off"
-            ? this.hass.localize("ui.panel.config.automation.editor.enable")
-            : this.hass.localize("ui.panel.config.automation.editor.disable")}
-        </ha-dropdown-item>
-        <ha-dropdown-item value="delete" variant="danger">
-          <ha-svg-icon .path=${mdiDelete} slot="icon"></ha-svg-icon>
-          ${this.hass.localize("ui.panel.config.automation.picker.delete")}
-        </ha-dropdown-item>
-      </ha-dropdown>
+      ${this._renderOverflowMenu()}
     `;
   }
 
@@ -758,6 +771,12 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
     super.updated(changedProps);
     if (changedProps.has("_entityReg")) {
       this._applyFilters();
+    }
+    if (
+      this._viewMode === "cards" &&
+      (changedProps.has("automations") || changedProps.has("_viewMode"))
+    ) {
+      this._loadAutomationConfigs();
     }
   }
 
@@ -1430,6 +1449,377 @@ ${rejected
     }
   };
 
+  private _toggleViewMode() {
+    this._viewMode = this._viewMode === "cards" ? "table" : "cards";
+    if (this._viewMode === "cards") this._loadAutomationConfigs();
+  }
+
+  private _loadAutomationConfigs() {
+    for (const automation of this.automations) {
+      if (this._automationConfigs.has(automation.entity_id)) continue;
+      this._automationConfigs = new Map(this._automationConfigs).set(
+        automation.entity_id,
+        null
+      );
+      getAutomationStateConfig(this.hass, automation.entity_id)
+        .then(({ config }) => {
+          this._automationConfigs = new Map(this._automationConfigs).set(
+            automation.entity_id,
+            config as ManualAutomationConfig
+          );
+        })
+        .catch(() => {
+          // leave null — card shows skeleton
+        });
+    }
+  }
+
+  private _handleCardClick(ev: Event) {
+    const entityId = (ev.currentTarget as HTMLElement).dataset.entityId;
+    if (!entityId) return;
+    const automation = this.automations.find((a) => a.entity_id === entityId);
+    if (automation?.attributes.id) {
+      navigate(
+        `/config/automation/edit/${encodeURIComponent(automation.attributes.id)}`
+      );
+    } else {
+      navigate(`/config/automation/show/${encodeURIComponent(entityId)}`);
+    }
+  }
+
+  private _handleCardSort = (ev: CustomEvent) => {
+    const value = (ev.detail as any).item?.value ?? (ev.detail as any).value;
+    if (value === "asc" || value === "desc") {
+      this._cardSortAsc = value === "asc";
+    }
+  };
+
+  private _handleCardAreaChip = (ev: CustomEvent) => {
+    ev.preventDefault();
+    const area: string = (ev.detail as any).item.value;
+    this._cardFilterAreas = this._cardFilterAreas.includes(area)
+      ? this._cardFilterAreas.filter((a) => a !== area)
+      : [...this._cardFilterAreas, area];
+  };
+
+  private _handleCardLabelChip = (ev: CustomEvent) => {
+    ev.preventDefault();
+    const labelId: string = (ev.detail as any).item.value;
+    this._cardFilterLabels = this._cardFilterLabels.includes(labelId)
+      ? this._cardFilterLabels.filter((l) => l !== labelId)
+      : [...this._cardFilterLabels, labelId];
+  };
+
+  private _handleCardCategoryChip = (ev: CustomEvent) => {
+    ev.preventDefault();
+    const category: string = (ev.detail as any).item.value;
+    this._cardFilterCategories = this._cardFilterCategories.includes(category)
+      ? this._cardFilterCategories.filter((c) => c !== category)
+      : [...this._cardFilterCategories, category];
+  };
+
+  private _renderCardView(automations: AutomationItem[]): TemplateResult {
+    const availableAreas = [
+      ...new Set(automations.map((a) => a.area).filter(Boolean) as string[]),
+    ].sort((a, b) => a.localeCompare(b));
+
+    const availableLabelIds = new Set(
+      automations.flatMap((a) => a.label_entries.map((l) => l.label_id))
+    );
+    const availableLabels = this._labels.filter((l) =>
+      availableLabelIds.has(l.label_id)
+    );
+
+    const availableCategories = [
+      ...new Set(
+        automations.map((a) => a.category).filter(Boolean) as string[]
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+
+    let filtered = automations;
+    if (this._cardFilterAreas.length) {
+      filtered = filtered.filter(
+        (a) => a.area !== undefined && this._cardFilterAreas.includes(a.area)
+      );
+    }
+    if (this._cardFilterLabels.length) {
+      filtered = filtered.filter((a) =>
+        a.label_entries.some((l) => this._cardFilterLabels.includes(l.label_id))
+      );
+    }
+    if (this._cardFilterCategories.length) {
+      filtered = filtered.filter(
+        (a) =>
+          a.category !== undefined &&
+          this._cardFilterCategories.includes(a.category)
+      );
+    }
+
+    const groups = this._groupedAutomations(
+      filtered,
+      this._cardSortAsc,
+      this.hass.localize("ui.panel.config.automation.picker.unassigned")
+    );
+
+    const sortLabel = this._cardSortAsc
+      ? this.hass.localize("ui.panel.config.automation.picker.sort_a_z")
+      : this.hass.localize("ui.panel.config.automation.picker.sort_z_a");
+
+    const areaActive = this._cardFilterAreas.length > 0;
+    const labelActive = this._cardFilterLabels.length > 0;
+    const categoryActive = this._cardFilterCategories.length > 0;
+
+    return html`
+      <hass-tabs-subpage
+        .hass=${this.hass}
+        .narrow=${this.narrow}
+        .backPath=${this._searchParms.has("historyBack")
+          ? undefined
+          : "/config"}
+        .route=${this.route}
+        .tabs=${configSections.automations}
+        has-fab
+      >
+        <div slot="toolbar-icon" class="card-toolbar-icons">
+          <ha-icon-button
+            .label=${this.hass.localize(
+              "ui.panel.config.automation.picker.list_view"
+            )}
+            .path=${mdiViewList}
+            @click=${this._toggleViewMode}
+          ></ha-icon-button>
+          <ha-icon-button
+            .label=${this.hass.localize("ui.common.help")}
+            .path=${mdiHelpCircleOutline}
+            @click=${this._showHelp}
+          ></ha-icon-button>
+        </div>
+
+        <div class="card-view">
+          <div class="card-view-chips">
+            ${availableAreas.length
+              ? html`
+                  <ha-dropdown @wa-select=${this._handleCardAreaChip}>
+                    <button
+                      slot="trigger"
+                      class="filter-chip ${areaActive ? "active" : ""}"
+                    >
+                      <span
+                        >${this.hass.localize(
+                          "ui.panel.config.automation.picker.filter_areas"
+                        )}${areaActive
+                          ? ` · ${this._cardFilterAreas.length}`
+                          : ""}</span
+                      >
+                      <ha-svg-icon .path=${mdiMenuDown}></ha-svg-icon>
+                    </button>
+                    ${availableAreas.map(
+                      (area) => html`
+                        <ha-dropdown-item .value=${area}>
+                          <ha-checkbox
+                            slot="start"
+                            .checked=${this._cardFilterAreas.includes(area)}
+                            reducedTouchTarget
+                          ></ha-checkbox>
+                          ${area}
+                        </ha-dropdown-item>
+                      `
+                    )}
+                  </ha-dropdown>
+                `
+              : nothing}
+            ${availableLabels.length
+              ? html`
+                  <ha-dropdown @wa-select=${this._handleCardLabelChip}>
+                    <button
+                      slot="trigger"
+                      class="filter-chip ${labelActive ? "active" : ""}"
+                    >
+                      <span
+                        >${this.hass.localize(
+                          "ui.panel.config.automation.picker.filter_labels"
+                        )}${labelActive
+                          ? ` · ${this._cardFilterLabels.length}`
+                          : ""}</span
+                      >
+                      <ha-svg-icon .path=${mdiMenuDown}></ha-svg-icon>
+                    </button>
+                    ${availableLabels.map(
+                      (label) => html`
+                        <ha-dropdown-item .value=${label.label_id}>
+                          <ha-checkbox
+                            slot="start"
+                            .checked=${this._cardFilterLabels.includes(
+                              label.label_id
+                            )}
+                            reducedTouchTarget
+                          ></ha-checkbox>
+                          ${label.name}
+                        </ha-dropdown-item>
+                      `
+                    )}
+                  </ha-dropdown>
+                `
+              : nothing}
+            ${availableCategories.length
+              ? html`
+                  <ha-dropdown @wa-select=${this._handleCardCategoryChip}>
+                    <button
+                      slot="trigger"
+                      class="filter-chip ${categoryActive ? "active" : ""}"
+                    >
+                      <span
+                        >${this.hass.localize(
+                          "ui.panel.config.automation.picker.filter_categories"
+                        )}${categoryActive
+                          ? ` · ${this._cardFilterCategories.length}`
+                          : ""}</span
+                      >
+                      <ha-svg-icon .path=${mdiMenuDown}></ha-svg-icon>
+                    </button>
+                    ${availableCategories.map(
+                      (cat) => html`
+                        <ha-dropdown-item .value=${cat}>
+                          <ha-checkbox
+                            slot="start"
+                            .checked=${this._cardFilterCategories.includes(cat)}
+                            reducedTouchTarget
+                          ></ha-checkbox>
+                          ${cat}
+                        </ha-dropdown-item>
+                      `
+                    )}
+                  </ha-dropdown>
+                `
+              : nothing}
+            <ha-dropdown @wa-select=${this._handleCardSort}>
+              <button slot="trigger" class="filter-chip">
+                <span>${sortLabel}</span>
+                <ha-svg-icon
+                  .path=${this._cardSortAsc
+                    ? mdiSortAlphabeticalAscending
+                    : mdiSortAlphabeticalDescending}
+                ></ha-svg-icon>
+              </button>
+              <ha-dropdown-item value="asc">
+                ${this.hass.localize(
+                  "ui.panel.config.automation.picker.sort_a_z"
+                )}
+              </ha-dropdown-item>
+              <ha-dropdown-item value="desc">
+                ${this.hass.localize(
+                  "ui.panel.config.automation.picker.sort_z_a"
+                )}
+              </ha-dropdown-item>
+            </ha-dropdown>
+          </div>
+
+          ${groups.map(
+            ({ area, items }) => html`
+              <div class="card-group">
+                <div class="card-section-header">${area}</div>
+                <div class="card-grid">
+                  ${items.map(
+                    (automation) => html`
+                      <ha-automation-card
+                        .hass=${this.hass}
+                        .automation=${automation}
+                        .config=${this._automationConfigs.get(
+                          automation.entity_id
+                        )}
+                        data-entity-id=${automation.entity_id}
+                        @click=${this._handleCardClick}
+                      ></ha-automation-card>
+                    `
+                  )}
+                </div>
+              </div>
+            `
+          )}
+          ${!filtered.length
+            ? html`<div class="card-empty">
+                <ha-svg-icon .path=${mdiRobotHappy}></ha-svg-icon>
+                <h1>
+                  ${this.hass.localize(
+                    "ui.panel.config.automation.picker.empty_header"
+                  )}
+                </h1>
+                <p>
+                  ${this.hass.localize(
+                    "ui.panel.config.automation.picker.empty_text_1"
+                  )}
+                </p>
+              </div>`
+            : nothing}
+        </div>
+
+        <ha-button slot="fab" size="large" @click=${this._createNew}>
+          <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
+          ${this.hass.localize(
+            "ui.panel.config.automation.picker.add_automation"
+          )}
+        </ha-button>
+      </hass-tabs-subpage>
+      ${this._renderOverflowMenu()}
+    `;
+  }
+
+  private _renderOverflowMenu(): TemplateResult {
+    return html`
+      <ha-dropdown
+        id="overflow-menu"
+        @wa-select=${this._handleOverflowAction}
+        @wa-after-show=${this._overflowMenuOpened}
+        @wa-after-hide=${this._overflowMenuClosed}
+      >
+        <ha-dropdown-item value="show_info">
+          <ha-svg-icon .path=${mdiInformationOutline} slot="icon"></ha-svg-icon>
+          ${this.hass.localize("ui.panel.config.automation.editor.show_info")}
+        </ha-dropdown-item>
+        <ha-dropdown-item value="show_settings">
+          <ha-svg-icon .path=${mdiCog} slot="icon"></ha-svg-icon>
+          ${this.hass.localize(
+            "ui.panel.config.automation.picker.show_settings"
+          )}
+        </ha-dropdown-item>
+        <ha-dropdown-item value="edit_category">
+          <ha-svg-icon .path=${mdiTag} slot="icon"></ha-svg-icon>
+          ${this.hass.localize(
+            `ui.panel.config.automation.picker.${this._overflowAutomation?.category ? "edit_category" : "assign_category"}`
+          )}
+        </ha-dropdown-item>
+        <ha-dropdown-item value="run_actions">
+          <ha-svg-icon .path=${mdiPlay} slot="icon"></ha-svg-icon>
+          ${this.hass.localize("ui.panel.config.automation.editor.run")}
+        </ha-dropdown-item>
+        <ha-dropdown-item value="show_trace">
+          <ha-svg-icon .path=${mdiTransitConnection} slot="icon"></ha-svg-icon>
+          ${this.hass.localize("ui.panel.config.automation.editor.show_trace")}
+        </ha-dropdown-item>
+        <wa-divider></wa-divider>
+        <ha-dropdown-item value="duplicate">
+          <ha-svg-icon .path=${mdiContentDuplicate} slot="icon"></ha-svg-icon>
+          ${this.hass.localize("ui.panel.config.automation.picker.duplicate")}
+        </ha-dropdown-item>
+        <ha-dropdown-item value="toggle">
+          <ha-svg-icon
+            .path=${this._overflowAutomation?.state === "off"
+              ? mdiToggleSwitch
+              : mdiToggleSwitchOffOutline}
+            slot="icon"
+          ></ha-svg-icon>
+          ${this._overflowAutomation?.state === "off"
+            ? this.hass.localize("ui.panel.config.automation.editor.enable")
+            : this.hass.localize("ui.panel.config.automation.editor.disable")}
+        </ha-dropdown-item>
+        <ha-dropdown-item value="delete" variant="danger">
+          <ha-svg-icon .path=${mdiDelete} slot="icon"></ha-svg-icon>
+          ${this.hass.localize("ui.panel.config.automation.picker.delete")}
+        </ha-dropdown-item>
+      </ha-dropdown>
+    `;
+  }
+
   private _handleSortingChanged(ev: CustomEvent) {
     this._activeSorting = ev.detail;
   }
@@ -1480,6 +1870,97 @@ ${rejected
         }
         ha-dropdown ha-assist-chip {
           --md-assist-chip-trailing-space: 8px;
+        }
+
+        /* Toolbar wrapper — multiple icons in a row */
+        .card-toolbar-icons {
+          display: flex;
+          align-items: center;
+        }
+
+        /* Card view */
+        .card-view {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-6);
+          padding: var(--ha-space-4);
+        }
+        .card-view-chips {
+          display: flex;
+          gap: var(--ha-space-2);
+          flex-wrap: wrap;
+          position: sticky;
+          top: 0;
+          z-index: 1;
+          background: var(--primary-background-color);
+          padding-bottom: var(--ha-space-2);
+        }
+        .filter-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--ha-space-1);
+          padding: 0 var(--ha-space-1) 0 var(--ha-space-2);
+          min-height: 32px;
+          background: var(--card-background-color);
+          border: none;
+          border-radius: var(--ha-border-radius-full);
+          font-size: var(--ha-font-size-md);
+          color: var(--primary-text-color);
+          cursor: pointer;
+          font-family: var(--ha-font-family-body);
+        }
+        .filter-chip:hover {
+          background: color-mix(
+            in srgb,
+            var(--card-background-color),
+            var(--primary-color) 6%
+          );
+        }
+        .filter-chip.active {
+          background: color-mix(
+            in srgb,
+            var(--primary-color) 15%,
+            var(--card-background-color)
+          );
+          color: var(--primary-color);
+          font-weight: var(--ha-font-weight-semibold);
+        }
+        .filter-chip ha-svg-icon {
+          --mdc-icon-size: 20px;
+          color: var(--secondary-text-color);
+        }
+        .card-group {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-2);
+        }
+        .card-section-header {
+          padding: var(--ha-space-1) var(--ha-space-3);
+          font-size: var(--ha-font-size-md);
+          font-weight: var(--ha-font-weight-semibold);
+          color: var(--primary-text-color);
+          min-height: 28px;
+          display: flex;
+          align-items: center;
+        }
+        .card-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+          gap: var(--ha-space-2);
+        }
+        .card-empty {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          padding: var(--ha-space-8);
+          --mdc-icon-size: 80px;
+          color: var(--secondary-text-color);
+        }
+        .card-empty h1 {
+          font-size: var(--ha-font-size-3xl);
+          color: var(--primary-text-color);
+          margin: var(--ha-space-4) 0 var(--ha-space-2);
         }
       `,
     ];
