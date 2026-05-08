@@ -93,7 +93,10 @@ class DataEntryFlowDialog extends LitElement {
         );
       } catch (err: any) {
         this.closeDialog();
-        let message = err.message || err.body || "Unknown error";
+        const bodyMessage =
+          typeof err.body === "object" ? err.body?.message : err.body;
+        let message =
+          err.message || bodyMessage || err.error || "Unknown error";
         if (typeof message !== "string") {
           message = JSON.stringify(message);
         }
@@ -120,7 +123,10 @@ class DataEntryFlowDialog extends LitElement {
         );
       } catch (err: any) {
         this.closeDialog();
-        let message = err.message || err.body || "Unknown error";
+        const bodyMessage =
+          typeof err.body === "object" ? err.body?.message : err.body;
+        let message =
+          err.message || bodyMessage || err.error || "Unknown error";
         if (typeof message !== "string") {
           message = JSON.stringify(message);
         }
