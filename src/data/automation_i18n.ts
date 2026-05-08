@@ -27,6 +27,7 @@ import type {
   LegacyTrigger,
   Trigger,
 } from "./automation";
+import { flattenTriggers } from "./automation";
 import { getConditionDomain, getConditionObjectId } from "./condition";
 import type {
   DeviceCondition,
@@ -896,14 +897,16 @@ export const describeCondition = (
   condition: Condition,
   hass: HomeAssistant,
   entityRegistry: EntityRegistryEntry[],
-  ignoreAlias = false
+  ignoreAlias = false,
+  triggers?: Trigger[]
 ): string => {
   try {
     const description = tryDescribeCondition(
       condition,
       hass,
       entityRegistry,
-      ignoreAlias
+      ignoreAlias,
+      triggers
     );
     if (typeof description !== "string") {
       throw new Error(String(description));
@@ -925,7 +928,8 @@ const tryDescribeCondition = (
   condition: Condition,
   hass: HomeAssistant,
   entityRegistry: EntityRegistryEntry[],
-  ignoreAlias = false
+  ignoreAlias = false,
+  triggers?: Trigger[]
 ) => {
   if (typeof condition === "string" && hasTemplate(condition)) {
     return hass.localize(
@@ -955,7 +959,8 @@ const tryDescribeCondition = (
   const description = describeLegacyCondition(
     condition as LegacyCondition,
     hass,
-    entityRegistry
+    entityRegistry,
+    triggers
   );
 
   if (description) {
@@ -981,7 +986,8 @@ const tryDescribeCondition = (
 const describeLegacyCondition = (
   condition: LegacyCondition,
   hass: HomeAssistant,
-  entityRegistry: EntityRegistryEntry[]
+  entityRegistry: EntityRegistryEntry[],
+  triggers?: Trigger[]
 ) => {
   if (condition.condition === "or") {
     const conditions = ensureArray(condition.conditions);
@@ -1358,14 +1364,21 @@ const describeLegacyCondition = (
   }
 
   if (condition.condition === "trigger" && condition.id != null) {
+    const ids = ensureArray(condition.id).map((id) => id.toString());
+    const labels =
+      triggers && triggers.length
+        ? ids.map((id) => {
+            const match = flattenTriggers(triggers).find(
+              (t) => "id" in t && t.id === id
+            );
+            return match
+              ? describeTrigger(match, hass, entityRegistry, true)
+              : id;
+          })
+        : ids;
     return hass.localize(
       `${conditionsTranslationBaseKey}.trigger.description.full`,
-      {
-        id: formatListWithOrs(
-          hass.locale,
-          ensureArray(condition.id).map((id) => id.toString())
-        ),
-      }
+      { id: formatListWithOrs(hass.locale, labels) }
     );
   }
 

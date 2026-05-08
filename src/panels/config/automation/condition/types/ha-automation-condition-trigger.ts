@@ -1,25 +1,32 @@
+import { consume } from "@lit/context";
 import type { UnsubscribeFunc } from "home-assistant-js-websocket";
-import { html, LitElement } from "lit";
+import { css, html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators";
-import memoizeOne from "memoize-one";
 import { ensureArray } from "../../../../../common/array/ensure-array";
 import { fireEvent } from "../../../../../common/dom/fire_event";
-import "../../../../../components/ha-form/ha-form";
-import type { SchemaUnion } from "../../../../../components/ha-form/types";
-import "../../../../../components/ha-select";
+import "../../../../../components/ha-checkbox";
 import {
   flattenTriggers,
   type AutomationConfig,
   type Trigger,
   type TriggerCondition,
 } from "../../../../../data/automation";
+import { describeTrigger } from "../../../../../data/automation_i18n";
+import { fullEntitiesContext } from "../../../../../data/context";
+import type { EntityRegistryEntry } from "../../../../../data/entity/entity_registry";
 import type { HomeAssistant } from "../../../../../types";
 
-const getTriggersIds = (triggers: Trigger[]): string[] => {
-  const triggerIds = flattenTriggers(triggers)
-    .map((t) => ("id" in t ? t.id : undefined))
-    .filter(Boolean) as string[];
-  return Array.from(new Set(triggerIds));
+const getTriggersWithIds = (
+  triggers: Trigger[]
+): { id: string; trigger: Trigger }[] => {
+  const seen = new Set<string>();
+  return flattenTriggers(triggers)
+    .flatMap((t) => ("id" in t && t.id ? [{ id: t.id, trigger: t }] : []))
+    .filter(({ id }) => {
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
 };
 
 @customElement("ha-automation-condition-trigger")
@@ -30,7 +37,11 @@ export class HaTriggerCondition extends LitElement {
 
   @property({ type: Boolean }) public disabled = false;
 
-  @state() private _triggerIds: string[] = [];
+  @state() private _triggers: { id: string; trigger: Trigger }[] = [];
+
+  @state()
+  @consume({ context: fullEntitiesContext, subscribe: true })
+  _entityReg: EntityRegistryEntry[] = [];
 
   private _unsub?: UnsubscribeFunc;
 
@@ -40,22 +51,6 @@ export class HaTriggerCondition extends LitElement {
       id: "",
     };
   }
-
-  private _schema = memoizeOne(
-    (triggerIds: string[]) =>
-      [
-        {
-          name: "id",
-          selector: {
-            select: {
-              multiple: true,
-              options: triggerIds,
-            },
-          },
-          required: true,
-        },
-      ] as const
-  );
 
   connectedCallback() {
     super.connectedCallback();
@@ -72,58 +67,57 @@ export class HaTriggerCondition extends LitElement {
   }
 
   protected render() {
-    if (!this._triggerIds.length) {
+    if (!this._triggers.length) {
       return this.hass.localize(
         "ui.panel.config.automation.editor.conditions.type.trigger.no_triggers"
       );
     }
 
-    const schema = this._schema(this._triggerIds);
+    const selected = new Set(ensureArray(this.condition.id).filter(Boolean));
 
     return html`
-      <ha-form
-        .schema=${schema}
-        .data=${this.condition}
-        .hass=${this.hass}
-        .disabled=${this.disabled}
-        .computeLabel=${this._computeLabelCallback}
-        @value-changed=${this._valueChanged}
-      ></ha-form>
+      ${this._triggers.map(
+        ({ id, trigger }) => html`
+          <ha-checkbox
+            .value=${id}
+            .checked=${selected.has(id)}
+            .disabled=${this.disabled}
+            @change=${this._checkboxChanged}
+          >
+            ${describeTrigger(trigger, this.hass, this._entityReg, true)}
+          </ha-checkbox>
+        `
+      )}
     `;
   }
 
-  private _computeLabelCallback = (
-    schema: SchemaUnion<ReturnType<typeof this._schema>>
-  ): string =>
-    this.hass.localize(
-      `ui.panel.config.automation.editor.conditions.type.trigger.${schema.name}`
-    );
-
   private _automationUpdated(config?: AutomationConfig) {
-    this._triggerIds = config?.triggers
-      ? getTriggersIds(ensureArray(config.triggers))
+    this._triggers = config?.triggers
+      ? getTriggersWithIds(ensureArray(config.triggers))
       : [];
   }
 
-  private _valueChanged(ev: CustomEvent): void {
+  private _checkboxChanged(ev: Event) {
     ev.stopPropagation();
-    const newValue = ev.detail.value;
+    const checkbox = ev.target as HTMLInputElement;
+    const id = checkbox.value;
+    const checked = checkbox.checked;
 
-    if (typeof newValue.id === "string") {
-      if (!this._triggerIds.some((id) => id === newValue.id)) {
-        newValue.id = "";
-      }
-    } else if (Array.isArray(newValue.id)) {
-      newValue.id = newValue.id.filter((_id) =>
-        this._triggerIds.some((id) => id === _id)
-      );
-      if (!newValue.id.length) {
-        newValue.id = "";
-      }
-    }
+    const current = ensureArray(this.condition.id).filter(Boolean);
+    const next = checked ? [...current, id] : current.filter((v) => v !== id);
 
-    fireEvent(this, "value-changed", { value: newValue });
+    fireEvent(this, "value-changed", {
+      value: { ...this.condition, id: next.length ? next : "" },
+    });
   }
+
+  static styles = css`
+    :host {
+      display: flex;
+      flex-direction: column;
+      gap: var(--ha-space-3);
+    }
+  `;
 }
 
 declare global {

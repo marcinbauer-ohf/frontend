@@ -119,7 +119,7 @@ export class HaCheckbox extends WaCheckbox {
         }
 
         #hint {
-          font-size: var(--ha-font-size-xs);
+          font-size: var(--ha-font-size-s);
           color: var(--ha-color-text-secondary);
         }
 

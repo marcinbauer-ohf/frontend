@@ -5541,7 +5541,8 @@
                   "id": "Trigger",
                   "description": {
                     "picker": "Tests if the automation has been triggered by a specific trigger.",
-                    "full": "If triggered by {id}"
+                    "full": "If triggered by {id}",
+                    "if_triggered_by": "If triggered by"
                   }
                 },
                 "zone": {
@@ -5755,6 +5756,7 @@
                   "alias": "Option name",
                   "delete_confirm_title": "Remove option?",
                   "option_description_additional": " {numberOfAdditionalConditions, plural,\n one {and 1 more condition}\n other {and {numberOfAdditionalConditions} more conditions}}",
+                  "option_summary": "{conditions, plural,\n one {1 condition}\n other {{conditions} conditions}\n}, {actions, plural,\n one {1 action}\n other {{actions} actions}\n}",
                   "conditions": "Conditions",
                   "no_conditions": "[%key:ui::panel::config::devices::automation::conditions::no_conditions%]",
                   "sequence": "Actions",

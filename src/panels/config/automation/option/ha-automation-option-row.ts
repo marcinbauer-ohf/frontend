@@ -30,7 +30,6 @@ import type {
   Condition,
   OptionSidebarConfig,
 } from "../../../../data/automation";
-import { describeCondition } from "../../../../data/automation_i18n";
 import { fullEntitiesContext } from "../../../../data/context";
 import type { EntityRegistryEntry } from "../../../../data/entity/entity_registry";
 import type { Action, Option } from "../../../../data/script";
@@ -103,26 +102,18 @@ export default class HaAutomationOptionRow extends LitElement {
     this._expanded = ev.detail.expanded;
   }
 
-  private _getDescription() {
-    const conditions = ensureArray<Condition | string>(this.option!.conditions);
-    if (!conditions || conditions.length === 0) {
-      return this.hass.localize(
-        "ui.panel.config.automation.editor.actions.type.choose.no_conditions"
-      );
-    }
-    let str = "";
-    if (typeof conditions[0] === "string") {
-      str += conditions[0];
-    } else {
-      str += describeCondition(conditions[0], this.hass, this._entityReg);
-    }
-    if (conditions.length > 1) {
-      str += this.hass.localize(
-        "ui.panel.config.automation.editor.actions.type.choose.option_description_additional",
-        { numberOfAdditionalConditions: conditions.length - 1 }
-      );
-    }
-    return str;
+  private _getSummary(): string {
+    const conditions = ensureArray<Condition | string>(
+      this.option!.conditions
+    ).filter(Boolean);
+    const actions = ensureArray(this.option!.sequence).filter(Boolean);
+    return this.hass.localize(
+      "ui.panel.config.automation.editor.actions.type.choose.option_summary",
+      {
+        conditions: conditions.length,
+        actions: actions.length,
+      }
+    );
   }
 
   private _renderOverflowLabel(label: string, shortcut?: TemplateResult) {
@@ -146,7 +137,7 @@ export default class HaAutomationOptionRow extends LitElement {
           ? `${this.hass.localize(
               "ui.panel.config.automation.editor.actions.type.choose.option",
               { number: this.index + 1 }
-            )}: ${this.option.alias || (this._expanded ? "" : this._getDescription())}`
+            )}: ${this.option.alias || (this._expanded ? "" : this._getSummary())}`
           : this.hass.localize(
               "ui.panel.config.automation.editor.actions.type.choose.default"
             )}
@@ -407,7 +398,7 @@ export default class HaAutomationOptionRow extends LitElement {
         "ui.panel.config.automation.editor.actions.type.choose.alias"
       ),
       inputType: "string",
-      placeholder: capitalizeFirstLetter(this._getDescription()),
+      placeholder: capitalizeFirstLetter(this._getSummary()),
       defaultValue: this.option!.alias,
       confirmText: this.hass.localize("ui.common.submit"),
     });

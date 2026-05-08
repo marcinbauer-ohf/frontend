@@ -17,10 +17,13 @@ import {
   mdiStopCircleOutline,
 } from "@mdi/js";
 import deepClone from "deep-clone-simple";
-import type { HassServiceTarget } from "home-assistant-js-websocket";
+import type {
+  HassServiceTarget,
+  UnsubscribeFunc,
+} from "home-assistant-js-websocket";
 import { dump } from "js-yaml";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
-import { LitElement, html, nothing } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import memoizeOne from "memoize-one";
@@ -42,14 +45,25 @@ import type { HaDropdownSelectEvent } from "../../../../components/ha-dropdown";
 import "../../../../components/ha-dropdown-item";
 import "../../../../components/ha-expansion-panel";
 import "../../../../components/ha-icon-button";
+import "../../../../components/ha-trigger-icon";
 import type {
   AutomationClipboard,
+  AutomationConfig,
   Condition,
   ConditionSidebarConfig,
   PlatformCondition,
+  Trigger,
+  TriggerCondition,
 } from "../../../../data/automation";
-import { isCondition, testCondition } from "../../../../data/automation";
-import { describeCondition } from "../../../../data/automation_i18n";
+import {
+  flattenTriggers,
+  isCondition,
+  testCondition,
+} from "../../../../data/automation";
+import {
+  describeCondition,
+  describeTrigger,
+} from "../../../../data/automation_i18n";
 import type { ConditionDescriptions } from "../../../../data/condition";
 import { CONDITION_BUILDING_BLOCKS } from "../../../../data/condition";
 import {
@@ -69,7 +83,6 @@ import { isMac } from "../../../../util/is_mac";
 import { showEditorToast } from "../editor-toast";
 import "../ha-automation-editor-warning";
 import { overflowStyles, rowStyles } from "../styles";
-import "../target/ha-automation-row-targets";
 import "./ha-automation-condition-editor";
 import type HaAutomationConditionEditor from "./ha-automation-condition-editor";
 import "./types/ha-automation-condition-and";
@@ -143,6 +156,10 @@ export default class HaAutomationConditionRow extends LitElement {
   @consume({ context: fullEntitiesContext, subscribe: true })
   _entityReg: EntityRegistryEntry[] = [];
 
+  @state() private _triggers: Trigger[] = [];
+
+  private _configUnsub?: UnsubscribeFunc;
+
   @query("ha-automation-condition-editor")
   public conditionEditor?: HaAutomationConditionEditor;
 
@@ -187,9 +204,20 @@ export default class HaAutomationConditionRow extends LitElement {
         .condition=${this.condition.condition}
       ></ha-condition-icon>
       <h3 slot="header">
-        ${capitalizeFirstLetter(
-          describeCondition(this.condition, this.hass, this._entityReg)
-        )}
+        ${this.condition.condition === "trigger"
+          ? html`${this.hass.localize(
+                "ui.panel.config.automation.editor.conditions.type.trigger.description.if_triggered_by"
+              )}
+              ${this._renderTriggerChips()}`
+          : capitalizeFirstLetter(
+              describeCondition(
+                this.condition,
+                this.hass,
+                this._entityReg,
+                false,
+                this._triggers
+              )
+            )}
         ${target !== undefined || (descriptionHasTarget && !this._isNew)
           ? this._renderTargets(target, descriptionHasTarget && !this._isNew)
           : nothing}
@@ -504,6 +532,29 @@ export default class HaAutomationConditionRow extends LitElement {
     `;
   }
 
+  private _renderTriggerChips() {
+    const ids = ensureArray((this.condition as TriggerCondition).id).filter(
+      Boolean
+    );
+    return ids.map((id) => {
+      const trigger = this._triggers.find((t) => "id" in t && t.id === id);
+      const triggerType =
+        trigger && "trigger" in trigger ? trigger.trigger : undefined;
+      const label = trigger
+        ? describeTrigger(trigger, this.hass, this._entityReg, true)
+        : id;
+      return html`<span class="trigger-chip">
+        ${triggerType
+          ? html`<ha-trigger-icon
+              .hass=${this.hass}
+              .trigger=${triggerType}
+            ></ha-trigger-icon>`
+          : nothing}
+        <span class="trigger-chip-label">${label}</span>
+      </span>`;
+    });
+  }
+
   private _renderTargets = memoizeOne(
     (target?: HassServiceTarget, targetRequired = false) =>
       html`<ha-automation-row-targets
@@ -528,11 +579,25 @@ export default class HaAutomationConditionRow extends LitElement {
     }
   }
 
+  public connectedCallback() {
+    super.connectedCallback();
+    const details = {
+      callback: (config?: AutomationConfig) => {
+        this._triggers = config?.triggers
+          ? flattenTriggers(ensureArray(config.triggers))
+          : [];
+      },
+    };
+    fireEvent(this, "subscribe-automation-config", details);
+    this._configUnsub = (details as any).unsub;
+  }
+
   public disconnectedCallback() {
     super.disconnectedCallback();
     if (this._testingTimeout !== undefined) {
       clearTimeout(this._testingTimeout);
     }
+    this._configUnsub?.();
   }
 
   private _onValueChange(event: CustomEvent) {
@@ -675,7 +740,7 @@ export default class HaAutomationConditionRow extends LitElement {
       ),
       inputType: "string",
       placeholder: capitalizeFirstLetter(
-        describeCondition(this.condition, this.hass, this._entityReg, true)
+        describeCondition(this.condition, this.hass, this._entityReg, true, this._triggers)
       ),
       defaultValue: this.condition.alias,
       confirmText: this.hass.localize("ui.common.submit"),
@@ -942,7 +1007,35 @@ export default class HaAutomationConditionRow extends LitElement {
   }
 
   static get styles(): CSSResultGroup {
-    return [rowStyles, overflowStyles];
+    return [
+      rowStyles,
+      overflowStyles,
+      css`
+        .trigger-chip {
+          display: inline-flex;
+          gap: var(--ha-space-1);
+          justify-content: center;
+          align-items: center;
+          border-radius: var(--ha-border-radius-md);
+          background: var(--ha-color-fill-neutral-normal-resting);
+          padding: 0 var(--ha-space-2) 0 var(--ha-space-1);
+          color: var(--ha-color-on-neutral-normal);
+          border: var(--ha-border-width-sm) solid
+            var(--ha-color-border-neutral-quiet);
+          height: 32px;
+          overflow: hidden;
+        }
+        .trigger-chip-label {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .trigger-chip ha-trigger-icon {
+          display: flex;
+          padding: var(--ha-space-1) 0;
+        }
+      `,
+    ];
   }
 }
 
