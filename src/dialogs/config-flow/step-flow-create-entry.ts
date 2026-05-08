@@ -196,7 +196,10 @@ class StepFlowCreateEntry extends LitElement {
         <ha-button @click=${this._flowDone}
           >${localize(
             `ui.panel.config.integrations.config_flow.${
-              !this.devices.length || Object.keys(this._deviceUpdate).length
+              !this.devices.length ||
+              Object.values(this._deviceUpdate).some(
+                (update) => update.name || update.area
+              )
                 ? "finish"
                 : "finish_skip"
             }`
