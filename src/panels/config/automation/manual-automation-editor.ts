@@ -1,3 +1,4 @@
+import { mdiCallSplit, mdiLightningBolt, mdiPlay } from "@mdi/js";
 import type { HassEntity } from "home-assistant-js-websocket";
 import { load } from "js-yaml";
 import type { CSSResultGroup } from "lit";
@@ -19,6 +20,7 @@ import { fireEvent } from "../../../common/dom/fire_event";
 import "../../../components/ha-button";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-markdown";
+import "../../../components/ha-svg-icon";
 import type {
   AutomationConfig,
   Condition,
@@ -87,11 +89,14 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
         </h2>
       </div>
       ${!ensureArray(this.config.triggers)?.length
-        ? html`<p>
-            ${this.hass.localize(
-              "ui.panel.config.automation.editor.triggers.description"
-            )}
-          </p>`
+        ? html`<div class="empty-state">
+            <ha-svg-icon .path=${mdiLightningBolt}></ha-svg-icon>
+            <span
+              >${this.hass.localize(
+                "ui.panel.config.automation.editor.triggers.description"
+              )}</span
+            >
+          </div>`
         : nothing}
 
       <ha-automation-trigger
@@ -116,18 +121,17 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
           ${this.hass.localize(
             "ui.panel.config.automation.editor.conditions.header"
           )}
-          <span class="small"
-            >(${this.hass.localize("ui.common.optional")})</span
-          >
         </h2>
       </div>
       ${!ensureArray(this.config.conditions)?.length
-        ? html`<p>
-            ${this.hass.localize(
-              "ui.panel.config.automation.editor.conditions.description",
-              { user: this.hass.user?.name || "Alice" }
-            )}
-          </p>`
+        ? html`<div class="empty-state">
+            <ha-svg-icon .path=${mdiCallSplit}></ha-svg-icon>
+            <span
+              >${this.hass.localize(
+                "ui.panel.config.automation.editor.conditions.description"
+              )}</span
+            >
+          </div>`
         : nothing}
 
       <ha-automation-condition
@@ -155,11 +159,14 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
         </h2>
       </div>
       ${!ensureArray(this.config.actions)?.length
-        ? html`<p>
-            ${this.hass.localize(
-              "ui.panel.config.automation.editor.actions.description"
-            )}
-          </p>`
+        ? html`<div class="empty-state">
+            <ha-svg-icon .path=${mdiPlay}></ha-svg-icon>
+            <span
+              >${this.hass.localize(
+                "ui.panel.config.automation.editor.actions.description"
+              )}</span
+            >
+          </div>`
         : nothing}
 
       <ha-automation-action
@@ -415,8 +422,25 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
       saveFabStyles,
       manualEditorStyles,
       css`
-        p {
-          margin-top: 0;
+        .empty-state {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+          min-height: 52px;
+          padding: 0 var(--ha-space-3);
+          /* border: 1px dashed var(--ha-color-border-neutral-quiet); */
+          border-radius: var(--ha-border-radius-xl);
+          background: var(--ha-color-surface-low);
+          color: var(--ha-color-text-secondary);
+          font-size: var(--ha-font-size-m);
+          box-sizing: border-box;
+          margin-bottom: var(--ha-space-4);
+        }
+        .empty-state ha-svg-icon {
+          flex-shrink: 0;
+          width: 20px;
+          height: 20px;
+          opacity: 0.6;
         }
         .header {
           display: flex;
@@ -429,11 +453,6 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
           font-weight: var(--ha-font-weight-normal);
           flex: 1;
           margin-bottom: 8px;
-        }
-        .header .small {
-          font-size: small;
-          font-weight: var(--ha-font-weight-normal);
-          line-height: 0;
         }
 
         .description {
