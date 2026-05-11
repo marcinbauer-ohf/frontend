@@ -541,7 +541,7 @@ export default class HaAutomationConditionRow extends LitElement {
       const triggerType =
         trigger && "trigger" in trigger ? trigger.trigger : undefined;
       const label = trigger
-        ? describeTrigger(trigger, this.hass, this._entityReg, true)
+        ? describeTrigger(trigger, this.hass, this._entityReg)
         : id;
       return html`<span class="trigger-chip">
         ${triggerType
@@ -550,6 +550,7 @@ export default class HaAutomationConditionRow extends LitElement {
               .trigger=${triggerType}
             ></ha-trigger-icon>`
           : nothing}
+        <span class="trigger-id-chip">${id}</span>
         <span class="trigger-chip-label">${label}</span>
       </span>`;
     });

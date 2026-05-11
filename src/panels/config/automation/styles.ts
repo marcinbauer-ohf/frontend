@@ -55,6 +55,19 @@ export const rowStyles = css`
     top: var(--ha-space-6);
     box-shadow: var(--ha-box-shadow-s);
   }
+  .trigger-id-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--ha-space-2);
+    height: 20px;
+    border-radius: var(--ha-border-radius-pill);
+    background: var(--ha-color-fill-neutral-quiet-resting);
+    border: 1px solid var(--ha-color-border-neutral-quiet);
+    color: var(--ha-color-text-secondary);
+    font-size: var(--ha-font-size-xs);
+    font-weight: var(--ha-font-weight-medium);
+    flex-shrink: 0;
+  }
 `;
 
 export const editorStyles = css`

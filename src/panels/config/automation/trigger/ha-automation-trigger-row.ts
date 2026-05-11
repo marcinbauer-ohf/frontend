@@ -227,6 +227,9 @@ export default class HaAutomationTriggerRow extends LitElement {
             .trigger=${(this.trigger as Exclude<Trigger, TriggerList>).trigger}
           ></ha-trigger-icon>`}
       <h3 slot="header">
+        ${"id" in this.trigger && this.trigger.id
+          ? html`<span class="trigger-id-chip">${this.trigger.id}</span>`
+          : nothing}
         ${describeTrigger(this.trigger, this.hass, this._entityReg)}
         ${target !== undefined || (descriptionHasTarget && !this._isNew)
           ? this._renderTargets(target, descriptionHasTarget && !this._isNew)

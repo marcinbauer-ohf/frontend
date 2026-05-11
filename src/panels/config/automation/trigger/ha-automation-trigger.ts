@@ -14,6 +14,7 @@ import "../../../../components/ha-button";
 import "../../../../components/ha-sortable";
 import "../../../../components/ha-svg-icon";
 import {
+  flattenTriggers,
   getValueFromDynamic,
   isDynamic,
   type Trigger,
@@ -32,6 +33,15 @@ import { AutomationSortableListMixin } from "../ha-automation-sortable-list-mixi
 import { automationRowsStyles } from "../styles";
 import "./ha-automation-trigger-row";
 import type HaAutomationTriggerRow from "./ha-automation-trigger-row";
+
+const getNextTriggerId = (triggers: Trigger[]): string => {
+  const existing = new Set(
+    flattenTriggers(triggers).flatMap((t) => ("id" in t && t.id ? [t.id] : []))
+  );
+  let n = 0;
+  while (existing.has(String(n))) n++;
+  return String(n);
+};
 
 @customElement("ha-automation-trigger")
 export default class HaAutomationTrigger extends AutomationSortableListMixin<Trigger>(
@@ -208,14 +218,11 @@ export default class HaAutomationTrigger extends AutomationSortableListMixin<Tri
   }
 
   private _addTrigger = (value: string, target?: HassServiceTarget) => {
-    let triggers: Trigger[];
+    let newTrigger: Trigger;
     if (value === PASTE_VALUE) {
-      triggers = this.triggers.concat(deepClone(this._clipboard!.trigger!));
+      newTrigger = deepClone(this._clipboard!.trigger!);
     } else if (isDynamic(value)) {
-      triggers = this.triggers.concat({
-        trigger: getValueFromDynamic(value),
-        target,
-      });
+      newTrigger = { trigger: getValueFromDynamic(value), target } as Trigger;
     } else {
       const trigger = value as Exclude<Trigger, TriggerList>["trigger"];
       const elClass = customElements.get(
@@ -223,14 +230,42 @@ export default class HaAutomationTrigger extends AutomationSortableListMixin<Tri
       ) as CustomElementConstructor & {
         defaultConfig: Trigger;
       };
-      triggers = this.triggers.concat({
+      newTrigger = {
         ...elClass.defaultConfig,
         ...(target?.entity_id ? { entity_id: target.entity_id } : {}),
-      });
+      };
+    }
+    const existingIds = new Set(
+      flattenTriggers(this.triggers).flatMap((t) =>
+        "id" in t && t.id ? [t.id] : []
+      )
+    );
+    if (
+      !("id" in newTrigger) ||
+      !newTrigger.id ||
+      existingIds.has(newTrigger.id as string)
+    ) {
+      (newTrigger as unknown as { id: string }).id = getNextTriggerId(
+        this.triggers
+      );
     }
     this.focusLastItemOnChange = true;
-    fireEvent(this, "value-changed", { value: triggers });
+    fireEvent(this, "value-changed", {
+      value: this.triggers.concat(newTrigger),
+    });
   };
+
+  protected override duplicateItem(ev: CustomEvent) {
+    ev.stopPropagation();
+    const index = (ev.target as any).index;
+    const clone = deepClone(this.triggers[index]);
+    (clone as unknown as { id: string }).id = getNextTriggerId(this.triggers);
+    this.focusLastItemOnChange = true;
+    fireEvent(this, "value-changed", {
+      // @ts-expect-error Requires library bump to ES2023
+      value: this.triggers.toSpliced(index + 1, 0, clone),
+    });
+  }
 
   protected updated(changedProps: PropertyValues<this>) {
     super.updated(changedProps);

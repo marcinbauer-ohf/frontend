@@ -42,7 +42,7 @@ export default class HaAutomationTriggerEditor extends LitElement {
 
     const yamlMode = this.yamlMode || !this.uiSupported;
 
-    const showId = "id" in this.trigger || this.showId;
+    const showId = this.showId;
 
     return html`
       <div

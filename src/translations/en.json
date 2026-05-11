@@ -5537,8 +5537,7 @@
                 },
                 "trigger": {
                   "label": "Triggered by",
-                  "no_triggers": "There are no triggers with ID's set in this automation. Edit a trigger and give it a Trigger ID name.",
-                  "id": "Trigger",
+                  "no_triggers": "No triggers found. Triggers added through the editor are automatically assigned an ID.",
                   "description": {
                     "picker": "Tests if the automation has been triggered by a specific trigger.",
                     "full": "If triggered by {id}",

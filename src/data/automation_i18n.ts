@@ -1372,7 +1372,7 @@ const describeLegacyCondition = (
               (t) => "id" in t && t.id === id
             );
             return match
-              ? describeTrigger(match, hass, entityRegistry, true)
+              ? describeTrigger(match, hass, entityRegistry)
               : id;
           })
         : ids;

@@ -1,5 +1,6 @@
 import { consume } from "@lit/context";
 import type { UnsubscribeFunc } from "home-assistant-js-websocket";
+import type { CSSResultGroup } from "lit";
 import { css, html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { ensureArray } from "../../../../../common/array/ensure-array";
@@ -15,6 +16,7 @@ import { describeTrigger } from "../../../../../data/automation_i18n";
 import { fullEntitiesContext } from "../../../../../data/context";
 import type { EntityRegistryEntry } from "../../../../../data/entity/entity_registry";
 import type { HomeAssistant } from "../../../../../types";
+import { rowStyles } from "../../styles";
 
 const getTriggersWithIds = (
   triggers: Trigger[]
@@ -84,7 +86,8 @@ export class HaTriggerCondition extends LitElement {
             .disabled=${this.disabled}
             @change=${this._checkboxChanged}
           >
-            ${describeTrigger(trigger, this.hass, this._entityReg, true)}
+            <span class="trigger-id-chip">${id}</span>
+            ${describeTrigger(trigger, this.hass, this._entityReg)}
           </ha-checkbox>
         `
       )}
@@ -111,13 +114,18 @@ export class HaTriggerCondition extends LitElement {
     });
   }
 
-  static styles = css`
-    :host {
-      display: flex;
-      flex-direction: column;
-      gap: var(--ha-space-3);
-    }
-  `;
+  static get styles(): CSSResultGroup {
+    return [
+      rowStyles,
+      css`
+        :host {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-3);
+        }
+      `,
+    ];
+  }
 }
 
 declare global {

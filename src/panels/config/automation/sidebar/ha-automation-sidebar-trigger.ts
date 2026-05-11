@@ -16,7 +16,9 @@ import type { PropertyValues } from "lit";
 import { html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { keyed } from "lit/directives/keyed";
+import { capitalizeFirstLetter } from "../../../../common/string/capitalize-first-letter";
 import { fireEvent } from "../../../../common/dom/fire_event";
+import { showPromptDialog } from "../../../../dialogs/generic/show-dialog-box";
 import { handleStructError } from "../../../../common/structs/handle-errors";
 import "../../../../components/ha-dropdown-item";
 import type {
@@ -53,8 +55,6 @@ export default class HaAutomationSidebarTrigger extends LitElement {
   @property({ type: Number, attribute: "sidebar-key" })
   public sidebarKey?: number;
 
-  @state() private _requestShowId = false;
-
   @state() private _warnings?: string[];
 
   @query(".sidebar-editor")
@@ -62,7 +62,6 @@ export default class HaAutomationSidebarTrigger extends LitElement {
 
   protected willUpdate(changedProperties: PropertyValues<this>) {
     if (changedProperties.has("config")) {
-      this._requestShowId = false;
       this._warnings = undefined;
       if (this.config) {
         this.yamlMode = this.config.yamlMode;
@@ -126,9 +125,7 @@ export default class HaAutomationSidebarTrigger extends LitElement {
           </div>
         </ha-dropdown-item>
 
-        ${!this.yamlMode &&
-        !("id" in this.config.config) &&
-        !this._requestShowId
+        ${!this.yamlMode
           ? html`<ha-dropdown-item
               slot="menu-items"
               value="show_id"
@@ -314,7 +311,6 @@ export default class HaAutomationSidebarTrigger extends LitElement {
             @value-changed=${this._valueChangedSidebar}
             @yaml-changed=${this._yamlChangedSidebar}
             .uiSupported=${this.config.uiSupported}
-            .showId=${this._requestShowId}
             .yamlMode=${this.yamlMode}
             .disabled=${this.disabled}
             @ui-mode-not-available=${this._handleUiModeNotAvailable}
@@ -357,8 +353,33 @@ export default class HaAutomationSidebarTrigger extends LitElement {
     fireEvent(this, "toggle-yaml-mode");
   };
 
-  private _showTriggerId = () => {
-    this._requestShowId = true;
+  private _editTriggerId = async () => {
+    if (isTriggerList(this.config.config)) return;
+    const id = await showPromptDialog(this, {
+      title: this.hass.localize(
+        "ui.panel.config.automation.editor.triggers.edit_id"
+      ),
+      inputLabel: this.hass.localize(
+        "ui.panel.config.automation.editor.triggers.id"
+      ),
+      inputType: "string",
+      defaultValue: ("id" in this.config.config && this.config.config.id) || "",
+      placeholder: capitalizeFirstLetter(
+        this.hass.localize("ui.panel.config.automation.editor.triggers.id")
+      ),
+      confirmText: this.hass.localize("ui.common.save"),
+    });
+    if (id === null) return;
+    const value = { ...this.config.config };
+    if (!id) {
+      delete (value as Record<string, unknown>).id;
+    } else {
+      (value as Record<string, unknown>).id = id;
+    }
+    this.config?.save?.(value);
+    fireEvent(this, "value-changed", {
+      value: { ...this.config, config: value },
+    });
   };
 
   private _handleDropdownSelect(ev: HaDropdownSelectEvent) {
@@ -373,7 +394,7 @@ export default class HaAutomationSidebarTrigger extends LitElement {
         this.config.rename();
         break;
       case "show_id":
-        this._showTriggerId();
+        this._editTriggerId();
         break;
       case "duplicate":
         this.config.duplicate();
