@@ -1,4 +1,3 @@
-import { mdiCallSplit, mdiLightningBolt, mdiPlay } from "@mdi/js";
 import type { HassEntity } from "home-assistant-js-websocket";
 import { load } from "js-yaml";
 import type { CSSResultGroup } from "lit";
@@ -20,7 +19,6 @@ import { fireEvent } from "../../../common/dom/fire_event";
 import "../../../components/ha-button";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-markdown";
-import "../../../components/ha-svg-icon";
 import type {
   AutomationConfig,
   Condition,
@@ -90,12 +88,9 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
       </div>
       ${!ensureArray(this.config.triggers)?.length
         ? html`<div class="empty-state">
-            <ha-svg-icon .path=${mdiLightningBolt}></ha-svg-icon>
-            <span
-              >${this.hass.localize(
-                "ui.panel.config.automation.editor.triggers.description"
-              )}</span
-            >
+            ${this.hass.localize(
+              "ui.panel.config.automation.editor.triggers.description"
+            )}
           </div>`
         : nothing}
 
@@ -125,12 +120,9 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
       </div>
       ${!ensureArray(this.config.conditions)?.length
         ? html`<div class="empty-state">
-            <ha-svg-icon .path=${mdiCallSplit}></ha-svg-icon>
-            <span
-              >${this.hass.localize(
-                "ui.panel.config.automation.editor.conditions.description"
-              )}</span
-            >
+            ${this.hass.localize(
+              "ui.panel.config.automation.editor.conditions.description"
+            )}
           </div>`
         : nothing}
 
@@ -160,12 +152,9 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
       </div>
       ${!ensureArray(this.config.actions)?.length
         ? html`<div class="empty-state">
-            <ha-svg-icon .path=${mdiPlay}></ha-svg-icon>
-            <span
-              >${this.hass.localize(
-                "ui.panel.config.automation.editor.actions.description"
-              )}</span
-            >
+            ${this.hass.localize(
+              "ui.panel.config.automation.editor.actions.description"
+            )}
           </div>`
         : nothing}
 
@@ -425,7 +414,6 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
         .empty-state {
           display: flex;
           align-items: center;
-          gap: var(--ha-space-2);
           min-height: 52px;
           padding: 0 var(--ha-space-3);
           /* border: 1px dashed var(--ha-color-border-neutral-quiet); */
@@ -435,12 +423,6 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
           font-size: var(--ha-font-size-m);
           box-sizing: border-box;
           margin-bottom: var(--ha-space-4);
-        }
-        .empty-state ha-svg-icon {
-          flex-shrink: 0;
-          width: 20px;
-          height: 20px;
-          opacity: 0.6;
         }
         .header {
           display: flex;

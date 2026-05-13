@@ -5123,7 +5123,7 @@
             "triggers": {
               "name": "Triggers",
               "header": "When",
-              "description": "A change triggers this automation...",
+              "description": "Triggers start this automation when something happens.",
               "learn_more": "Learn more about triggers",
               "triggered": "Triggered",
               "add": "Add trigger",
@@ -5394,7 +5394,7 @@
             "conditions": {
               "name": "Conditions",
               "header": "And if",
-              "description": "...and a condition is met...",
+              "description": "Conditions filter when this automation runs (optional).",
               "learn_more": "Learn more about conditions",
               "add": "Add condition",
               "empty_search": {
@@ -5573,8 +5573,8 @@
             },
             "actions": {
               "name": "Actions",
-              "header": "Then do",
-              "description": "...then run an action",
+              "header": "Then",
+              "description": "Actions run each time this automation triggers.",
               "learn_more": "Learn more about actions",
               "add": "Add action",
               "empty_search": {
