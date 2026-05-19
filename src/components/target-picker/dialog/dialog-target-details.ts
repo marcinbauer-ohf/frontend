@@ -186,17 +186,6 @@ class DialogTargetDetails extends LitElement implements HassDialog {
         )}
         @closed=${this._dialogClosed}
       >
-        ${
-          this._selectable
-            ? html`
-                <ha-alert alert-type="info">
-                  ${this.hass.localize(
-                  "ui.components.target-picker.selection_info"
-                )}
-                </ha-alert>
-              `
-            : nothing
-        }
         <div class="type-wrapper">
           <div class="type-label">
             ${this.hass.localize(
@@ -245,8 +234,8 @@ class DialogTargetDetails extends LitElement implements HassDialog {
                     @click=${this._applySelection}
                   >
                     ${this.hass.localize(
-                    "ui.components.target-picker.apply_selection"
-                  )}
+                      "ui.components.target-picker.apply_selection"
+                    )}
                   </ha-button>
                 </ha-dialog-footer>
               `

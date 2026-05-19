@@ -175,6 +175,13 @@ export class HaTargetPickerItemRow extends LitElement {
 
     const replaceable = !this.subEntry && !this.expand;
 
+    const excludedCount =
+      this.selectable && entries
+        ? entries.referenced_entities.filter((id) =>
+            this.excludedEntities?.has(id)
+          ).length
+        : this._excludedEntityIds.length;
+
     const content = html`
       <div class="icon" slot="start">
         ${
@@ -254,7 +261,7 @@ export class HaTargetPickerItemRow extends LitElement {
                 ${
                   this.expand || !entries.referenced_entities.length
                     ? html`<span class="main">
-                        ${this._entitiesLabel(entries)}
+                        ${this._entitiesLabel(entries, excludedCount)}
                       </span>`
                     : html`<ha-button
                         appearance="filled"
@@ -262,15 +269,15 @@ export class HaTargetPickerItemRow extends LitElement {
                         size="xs"
                         @click=${this._openDetails}
                       >
-                        ${this._entitiesLabel(entries)}
+                        ${this._entitiesLabel(entries, excludedCount)}
                       </ha-button>`
                 }
                 ${
-                  this._excludedEntityIds.length
+                  excludedCount
                     ? html`<span class="secondary excluded">
                         ${this.hass.localize(
                           "ui.components.target-picker.excluded_count",
-                          { count: this._excludedEntityIds.length }
+                          { count: excludedCount }
                         )}
                       </span>`
                     : nothing
@@ -318,13 +325,13 @@ export class HaTargetPickerItemRow extends LitElement {
               ? html`
                   <ha-svg-icon
                     .path=${
-                    computeRTL(
-                      this.hass.language,
-                      this.hass.translationMetadata.translations
-                    )
-                      ? mdiChevronLeft
-                      : mdiChevronRight
-                  }
+                      computeRTL(
+                        this.hass.language,
+                        this.hass.translationMetadata.translations
+                      )
+                        ? mdiChevronLeft
+                        : mdiChevronRight
+                    }
                     slot="end"
                   ></ha-svg-icon>
                 `
@@ -334,7 +341,10 @@ export class HaTargetPickerItemRow extends LitElement {
 
     let item: TemplateResult;
 
-    if (replaceable || (this.subEntry && this.type === "entity")) {
+    if (
+      replaceable ||
+      (this.subEntry && this.type === "entity" && !this.selectable)
+    ) {
       item = html`
         <ha-list-item-button
           class=${classMap({
@@ -384,8 +394,13 @@ export class HaTargetPickerItemRow extends LitElement {
     };
   }
 
-  private _entitiesLabel(entries: ExtractFromTargetResultReferenced): string {
-    const { count, total } = this._entityCounts(entries);
+  private _entitiesLabel(
+    entries: ExtractFromTargetResultReferenced,
+    excludedCount = 0
+  ): string {
+    const { count: rawCount, total: rawTotal } = this._entityCounts(entries);
+    const count = rawCount - excludedCount;
+    const total = rawTotal - excludedCount;
     return this.activeFilter
       ? this.hass.localize(
           "ui.components.target-picker.entities_count_filtered",
@@ -982,10 +997,6 @@ export class HaTargetPickerItemRow extends LitElement {
       .summary .secondary {
         font-size: var(--ha-font-size-s);
         color: var(--secondary-text-color);
-      }
-      .summary .excluded {
-        font-size: var(--ha-font-size-s);
-        color: var(--warning-color);
       }
 
       .state {
