@@ -1,4 +1,4 @@
-import { mdiDragHorizontalVariant, mdiPlus } from "@mdi/js";
+import { mdiPlus } from "@mdi/js";
 import deepClone from "deep-clone-simple";
 import type {
   HassServiceTarget,
@@ -9,7 +9,6 @@ import { html, LitElement, nothing } from "lit";
 import { customElement, property, queryAll, state } from "lit/decorators";
 import { repeat } from "lit/directives/repeat";
 import { fireEvent } from "../../../../common/dom/fire_event";
-import { stopPropagation } from "../../../../common/dom/stop_propagation";
 import "../../../../components/ha-button";
 import "../../../../components/ha-sortable";
 import "../../../../components/ha-svg-icon";
@@ -200,8 +199,8 @@ export default class HaAutomationCondition extends AutomationSortableListMixin<C
     }
     return html`
       <ha-sortable
-        handle-selector=".handle"
         draggable-selector="ha-automation-condition-row"
+        .options=${{ delay: 200, delayOnTouchOnly: true }}
         .disabled=${this.disabled}
         group="conditions"
         invert-swap
@@ -237,24 +236,6 @@ export default class HaAutomationCondition extends AutomationSortableListMixin<C
                 .sortSelected=${this.rowSortSelected === idx}
                 @stop-sort-selection=${this.stopSortSelection}
               >
-                ${!this.disabled
-                  ? html`
-                      <div
-                        tabindex="0"
-                        class="handle ${this.rowSortSelected === idx
-                          ? "active"
-                          : ""}"
-                        slot="icons"
-                        @keydown=${this.handleDragKeydown}
-                        @click=${stopPropagation}
-                        .index=${idx}
-                      >
-                        <ha-svg-icon
-                          .path=${mdiDragHorizontalVariant}
-                        ></ha-svg-icon>
-                      </div>
-                    `
-                  : nothing}
               </ha-automation-condition-row>
             `
           )}

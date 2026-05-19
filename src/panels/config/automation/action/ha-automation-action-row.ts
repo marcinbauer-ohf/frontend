@@ -1158,6 +1158,17 @@ export default class HaAutomationActionRow extends LitElement {
     rowStyles,
     overflowStyles,
     css`
+      @media (hover: hover) {
+        ha-dropdown {
+          opacity: 0;
+          transition: opacity var(--ha-animation-duration-fast);
+        }
+        :host(:hover) ha-dropdown,
+        :host(:focus-within) ha-dropdown,
+        :host([sort-selected]) ha-dropdown {
+          opacity: 1;
+        }
+      }
       ha-svg-icon#svg-icon {
         --icon-primary-color: var(--ha-color-fill-neutral-loud-active);
       }

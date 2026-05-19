@@ -1,15 +1,14 @@
-import { mdiDragHorizontalVariant, mdiPlus } from "@mdi/js";
+import { mdiPlus } from "@mdi/js";
 import deepClone from "deep-clone-simple";
 import type {
   HassServiceTarget,
   UnsubscribeFunc,
 } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
-import { html, LitElement, nothing } from "lit";
+import { html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { repeat } from "lit/directives/repeat";
 import { fireEvent } from "../../../../common/dom/fire_event";
-import { stopPropagation } from "../../../../common/dom/stop_propagation";
 import "../../../../components/ha-button";
 import "../../../../components/ha-sortable";
 import "../../../../components/ha-svg-icon";
@@ -115,8 +114,8 @@ export default class HaAutomationTrigger extends AutomationSortableListMixin<Tri
   protected render() {
     return html`
       <ha-sortable
-        handle-selector=".handle"
         draggable-selector="ha-automation-trigger-row"
+        .options=${{ delay: 200, delayOnTouchOnly: true }}
         .disabled=${this.disabled}
         group="triggers"
         invert-swap
@@ -150,24 +149,6 @@ export default class HaAutomationTrigger extends AutomationSortableListMixin<Tri
                 .sortSelected=${this.rowSortSelected === idx}
                 @stop-sort-selection=${this.stopSortSelection}
               >
-                ${!this.disabled
-                  ? html`
-                      <div
-                        tabindex="0"
-                        class="handle ${this.rowSortSelected === idx
-                          ? "active"
-                          : ""}"
-                        slot="icons"
-                        @keydown=${this.handleDragKeydown}
-                        @click=${stopPropagation}
-                        .index=${idx}
-                      >
-                        <ha-svg-icon
-                          .path=${mdiDragHorizontalVariant}
-                        ></ha-svg-icon>
-                      </div>
-                    `
-                  : nothing}
               </ha-automation-trigger-row>
             `
           )}

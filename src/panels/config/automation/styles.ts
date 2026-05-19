@@ -19,8 +19,7 @@ export const rowStyles = css`
     align-items: center;
     flex-wrap: wrap;
     gap: var(--ha-space-2);
-    padding: var(--ha-space-2) 0;
-    min-height: 32px;
+    min-height: 48px;
     max-width: 100%;
   }
 
@@ -208,24 +207,6 @@ export const automationRowsStyles = css`
   ha-automation-action-row {
     display: block;
     scroll-margin-top: 48px;
-  }
-  .handle {
-    padding: 4px;
-    cursor: move; /* fallback if grab cursor is unsupported */
-    cursor: grab;
-    border-radius: var(--ha-border-radius-pill);
-  }
-  .handle:focus {
-    outline: var(--wa-focus-ring);
-    background: var(--ha-color-fill-neutral-quiet-resting);
-  }
-  .handle.active {
-    outline: var(--wa-focus-ring);
-    background: var(--ha-color-fill-neutral-normal-active);
-  }
-  .handle ha-svg-icon {
-    pointer-events: none;
-    height: 24px;
   }
   .buttons {
     display: flex;

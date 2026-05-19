@@ -537,6 +537,17 @@ export default class HaAutomationOptionRow extends LitElement {
         h4.top {
           margin-top: 0;
         }
+        @media (hover: hover) {
+          ha-dropdown {
+            opacity: 0;
+            transition: opacity var(--ha-animation-duration-fast);
+          }
+          :host(:hover) ha-dropdown,
+          :host(:focus-within) ha-dropdown,
+          :host([sort-selected]) ha-dropdown {
+            opacity: 1;
+          }
+        }
       `,
     ];
   }

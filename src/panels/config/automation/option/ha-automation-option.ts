@@ -1,10 +1,9 @@
-import { mdiDragHorizontalVariant, mdiPlus } from "@mdi/js";
+import { mdiPlus } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, queryAll } from "lit/decorators";
 import { repeat } from "lit/directives/repeat";
 import { fireEvent } from "../../../../common/dom/fire_event";
-import { stopPropagation } from "../../../../common/dom/stop_propagation";
 import "../../../../components/ha-button";
 import "../../../../components/ha-sortable";
 import "../../../../components/ha-svg-icon";
@@ -37,8 +36,8 @@ export default class HaAutomationOption extends AutomationSortableListMixin<Opti
   protected render() {
     return html`
       <ha-sortable
-        handle-selector=".handle"
         draggable-selector="ha-automation-option-row"
+        .options=${{ delay: 200, delayOnTouchOnly: true }}
         .disabled=${this.disabled}
         group="options"
         invert-swap
@@ -68,24 +67,6 @@ export default class HaAutomationOption extends AutomationSortableListMixin<Opti
                 .sortSelected=${this.rowSortSelected === idx}
                 @stop-sort-selection=${this.stopSortSelection}
               >
-                ${!this.disabled
-                  ? html`
-                      <div
-                        tabindex="0"
-                        class="handle ${this.rowSortSelected === idx
-                          ? "active"
-                          : ""}"
-                        slot="icons"
-                        @keydown=${this.handleDragKeydown}
-                        @click=${stopPropagation}
-                        .index=${idx}
-                      >
-                        <ha-svg-icon
-                          .path=${mdiDragHorizontalVariant}
-                        ></ha-svg-icon>
-                      </div>
-                    `
-                  : nothing}
               </ha-automation-option-row>
             `
           )}

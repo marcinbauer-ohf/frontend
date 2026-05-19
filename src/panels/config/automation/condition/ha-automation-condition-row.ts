@@ -23,7 +23,7 @@ import type {
 } from "home-assistant-js-websocket";
 import { dump } from "js-yaml";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
-import { LitElement, html, nothing } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import memoizeOne from "memoize-one";
@@ -1056,7 +1056,23 @@ export default class HaAutomationConditionRow extends LitElement {
   }
 
   static get styles(): CSSResultGroup {
-    return [rowStyles, overflowStyles];
+    return [
+      rowStyles,
+      overflowStyles,
+      css`
+        @media (hover: hover) {
+          ha-dropdown {
+            opacity: 0;
+            transition: opacity var(--ha-animation-duration-fast);
+          }
+          :host(:hover) ha-dropdown,
+          :host(:focus-within) ha-dropdown,
+          :host([sort-selected]) ha-dropdown {
+            opacity: 1;
+          }
+        }
+      `,
+    ];
   }
 }
 

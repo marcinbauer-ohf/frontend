@@ -135,6 +135,12 @@ export class HaAutomationRow extends LitElement {
       overflow: hidden;
       outline: none;
       border-radius: var(--ha-card-border-radius, var(--ha-border-radius-lg));
+      user-select: none;
+    }
+    @media (hover: hover) {
+      .row {
+        cursor: grab;
+      }
     }
     .row:focus {
       outline: var(--wa-focus-ring);
@@ -187,7 +193,6 @@ export class HaAutomationRow extends LitElement {
       flex: 1;
       min-width: 0;
       overflow-wrap: anywhere;
-      margin: 0 var(--ha-space-3);
     }
     ::slotted([slot="header"]) {
       overflow-wrap: anywhere;
