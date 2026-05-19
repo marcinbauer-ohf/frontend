@@ -20,6 +20,7 @@ import {
   mdiPlusCircleMultipleOutline,
   mdiRenameBox,
   mdiStopCircleOutline,
+  mdiSwapHorizontal,
 } from "@mdi/js";
 import deepClone from "deep-clone-simple";
 import type { HassServiceTarget } from "home-assistant-js-websocket";
@@ -78,6 +79,15 @@ import type {
   ServiceAction,
 } from "../../../../data/script";
 import { getActionType, isAction } from "../../../../data/script";
+import {
+  DYNAMIC_PREFIX,
+  isDynamic,
+  getValueFromDynamic,
+} from "../../../../data/automation";
+import {
+  showAddAutomationElementDialog,
+  PASTE_VALUE,
+} from "../show-add-automation-element-dialog";
 import { describeAction } from "../../../../data/script_i18n";
 import type { TargetSelector } from "../../../../data/selector";
 import { callExecuteScript } from "../../../../data/service";
@@ -424,6 +434,14 @@ export default class HaAutomationActionRow extends LitElement {
           <ha-svg-icon slot="icon" .path=${mdiPlay}></ha-svg-icon>
           ${this._renderOverflowLabel(
             this.hass.localize("ui.panel.config.automation.editor.actions.run")
+          )}
+        </ha-dropdown-item>
+        <ha-dropdown-item value="replace" .disabled=${this.disabled}>
+          <ha-svg-icon slot="icon" .path=${mdiSwapHorizontal}></ha-svg-icon>
+          ${this._renderOverflowLabel(
+            this.hass.localize(
+              "ui.panel.config.automation.editor.actions.replace"
+            )
           )}
         </ha-dropdown-item>
         <ha-dropdown-item value="rename" .disabled=${this.disabled}>
@@ -935,6 +953,64 @@ export default class HaAutomationActionRow extends LitElement {
     });
   };
 
+  private _onReplace = () => {
+    if (this._selected) {
+      fireEvent(this, "close-sidebar");
+    }
+    const actionService = (this.action as ServiceAction).action;
+    const originalDomain = actionService
+      ? computeDomain(actionService)
+      : undefined;
+    const originalTarget = (this.action as ServiceAction).target;
+    const actionType = getAutomationActionType(this.action);
+    const isBlock =
+      actionType !== "action" &&
+      ([...ACTION_BUILDING_BLOCKS, ...ACTION_COMBINED_BLOCKS] as string[]).some(
+        (b) => b === actionType
+      );
+    const initialGroup = originalDomain
+      ? `${DYNAMIC_PREFIX}${originalDomain}`
+      : undefined;
+    showAddAutomationElementDialog(this, {
+      type: "action",
+      clipboardItem: getAutomationActionType(this._clipboard?.action),
+      initialGroup,
+      initialTab: !initialGroup && isBlock ? "blocks" : undefined,
+      add: (key) => {
+        let newAction: Action;
+        if (key === PASTE_VALUE) {
+          newAction = deepClone(this._clipboard!.action!);
+        } else if (isDynamic(key)) {
+          const newService = getValueFromDynamic(key);
+          const sameDomain = computeDomain(newService) === originalDomain;
+          newAction = {
+            action: newService,
+            metadata: {},
+            ...(sameDomain && originalTarget ? { target: originalTarget } : {}),
+          } as Action;
+        } else {
+          const elClass = customElements.get(
+            `ha-automation-action-${key}`
+          ) as CustomElementConstructor & { defaultConfig: Action };
+          newAction = elClass
+            ? { ...elClass.defaultConfig }
+            : ({ [key]: {} } as Action);
+        }
+        fireEvent(this, "value-changed", { value: newAction });
+        showEditorToast(this, {
+          message: this.hass.localize("ui.common.successfully_replaced"),
+          duration: 4000,
+          action: {
+            text: this.hass.localize("ui.common.undo"),
+            action: () => {
+              fireEvent(window, "undo-change");
+            },
+          },
+        });
+      },
+    });
+  };
+
   private _onDelete = () => {
     fireEvent(this, "value-changed", { value: null });
     if (this._selected) {
@@ -1147,6 +1223,7 @@ export default class HaAutomationActionRow extends LitElement {
           this.focus();
         }
       },
+      replace: this._onReplace,
       rename: () => {
         this._renameAction();
       },
@@ -1248,6 +1325,9 @@ export default class HaAutomationActionRow extends LitElement {
         break;
       case "edit_note":
         this._editNoteAction();
+        break;
+      case "replace":
+        this._onReplace();
         break;
       case "duplicate":
         this._duplicateAction();

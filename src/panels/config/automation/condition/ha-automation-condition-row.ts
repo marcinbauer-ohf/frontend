@@ -17,6 +17,7 @@ import {
   mdiPlusCircleMultipleOutline,
   mdiRenameBox,
   mdiStopCircleOutline,
+  mdiSwapHorizontal,
 } from "@mdi/js";
 import deepClone from "deep-clone-simple";
 import type { HassServiceTarget } from "home-assistant-js-websocket";
@@ -54,10 +55,23 @@ import type {
   ConditionSidebarConfig,
   PlatformCondition,
 } from "../../../../data/automation";
-import { isCondition, testCondition } from "../../../../data/automation";
+import {
+  DYNAMIC_PREFIX,
+  isDynamic,
+  getValueFromDynamic,
+  isCondition,
+  testCondition,
+} from "../../../../data/automation";
+import {
+  showAddAutomationElementDialog,
+  PASTE_VALUE,
+} from "../show-add-automation-element-dialog";
 import { describeCondition } from "../../../../data/automation_i18n";
 import type { ConditionDescriptions } from "../../../../data/condition";
-import { CONDITION_BUILDING_BLOCKS } from "../../../../data/condition";
+import {
+  CONDITION_BUILDING_BLOCKS,
+  getConditionDomain,
+} from "../../../../data/condition";
 import {
   validateConfig,
   type InvalidConfig,
@@ -293,6 +307,15 @@ export default class HaAutomationConditionRow extends LitElement {
             )
           )}
         </ha-dropdown-item>
+        <ha-dropdown-item value="replace" .disabled=${this.disabled}>
+          <ha-svg-icon slot="icon" .path=${mdiSwapHorizontal}></ha-svg-icon>
+          ${this._renderOverflowLabel(
+            this.hass.localize(
+              "ui.panel.config.automation.editor.conditions.replace"
+            )
+          )}
+        </ha-dropdown-item>
+
         <ha-dropdown-item value="rename" .disabled=${this.disabled}>
           <ha-svg-icon slot="icon" .path=${mdiRenameBox}></ha-svg-icon>
           ${this._renderOverflowLabel(
@@ -666,6 +689,55 @@ export default class HaAutomationConditionRow extends LitElement {
     }
   };
 
+  private _onReplace = () => {
+    if (this._selected) {
+      fireEvent(this, "close-sidebar");
+    }
+    const conditionType = (this.condition as PlatformCondition).condition;
+    const originalDomain = conditionType
+      ? getConditionDomain(conditionType)
+      : undefined;
+    const originalTarget = (this.condition as PlatformCondition).target;
+    const initialGroup = originalDomain
+      ? `${DYNAMIC_PREFIX}${originalDomain}`
+      : undefined;
+    showAddAutomationElementDialog(this, {
+      type: "condition",
+      clipboardItem: this._clipboard?.condition?.condition,
+      initialGroup,
+      add: (key) => {
+        let newCondition: Condition;
+        if (key === PASTE_VALUE) {
+          newCondition = deepClone(this._clipboard!.condition!);
+        } else if (isDynamic(key)) {
+          const newConditionType = getValueFromDynamic(key);
+          const sameDomain =
+            getConditionDomain(newConditionType) === originalDomain;
+          newCondition = {
+            condition: newConditionType,
+            ...(sameDomain && originalTarget ? { target: originalTarget } : {}),
+          } as any;
+        } else {
+          const elClass = customElements.get(
+            `ha-automation-condition-${key}`
+          ) as CustomElementConstructor & { defaultConfig: Condition };
+          newCondition = { ...elClass.defaultConfig };
+        }
+        fireEvent(this, "value-changed", { value: newCondition });
+        showEditorToast(this, {
+          message: this.hass.localize("ui.common.successfully_replaced"),
+          duration: 4000,
+          action: {
+            text: this.hass.localize("ui.common.undo"),
+            action: () => {
+              fireEvent(window, "undo-change");
+            },
+          },
+        });
+      },
+    });
+  };
+
   private _onDelete = () => {
     fireEvent(this, "value-changed", { value: null });
     if (this._selected) {
@@ -971,6 +1043,7 @@ export default class HaAutomationConditionRow extends LitElement {
           this.focus();
         }
       },
+      replace: this._onReplace,
       rename: () => {
         this._renameCondition();
       },
@@ -1048,6 +1121,9 @@ export default class HaAutomationConditionRow extends LitElement {
         break;
       case "edit_note":
         this._editNoteCondition();
+        break;
+      case "replace":
+        this._onReplace();
         break;
       case "duplicate":
         this._duplicateCondition();

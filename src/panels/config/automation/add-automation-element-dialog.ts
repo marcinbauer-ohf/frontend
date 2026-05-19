@@ -334,6 +334,19 @@ class DialogAddAutomationElement
       getConditionIcons(this.hass.connection, this.hass.config);
     }
 
+    if (params.initialGroup) {
+      this._selectedGroup = params.initialGroup;
+      this._selectedCollectionIndex = 0;
+      this._tab = "groups";
+    } else if (params.initialTarget) {
+      this._selectedTarget =
+        params.initialTarget as unknown as SingleHassServiceTarget;
+      this._tab = "targets";
+      this._getItemsByTarget();
+    } else if (params.initialTab) {
+      this._tab = params.initialTab;
+    }
+
     window.addEventListener("resize", this._updateNarrow);
     this._updateNarrow();
 

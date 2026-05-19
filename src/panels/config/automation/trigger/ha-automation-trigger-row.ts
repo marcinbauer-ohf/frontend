@@ -16,11 +16,13 @@ import {
   mdiPlusCircleMultipleOutline,
   mdiRenameBox,
   mdiStopCircleOutline,
+  mdiSwapHorizontal,
 } from "@mdi/js";
 import type {
   HassServiceTarget,
   UnsubscribeFunc,
 } from "home-assistant-js-websocket";
+import deepClone from "deep-clone-simple";
 import { dump } from "js-yaml";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { LitElement, html, nothing } from "lit";
@@ -56,7 +58,17 @@ import type {
   TriggerList,
   TriggerSidebarConfig,
 } from "../../../../data/automation";
-import { isTrigger, subscribeTrigger } from "../../../../data/automation";
+import {
+  DYNAMIC_PREFIX,
+  isDynamic,
+  getValueFromDynamic,
+  isTrigger,
+  subscribeTrigger,
+} from "../../../../data/automation";
+import {
+  showAddAutomationElementDialog,
+  PASTE_VALUE,
+} from "../show-add-automation-element-dialog";
 import { describeTrigger } from "../../../../data/automation_i18n";
 import { validateConfig } from "../../../../data/config";
 import { fullEntitiesContext } from "../../../../data/context";
@@ -64,7 +76,10 @@ import type { DeviceTrigger } from "../../../../data/device/device_automation";
 import type { EntityRegistryEntry } from "../../../../data/entity/entity_registry";
 import type { TargetSelector } from "../../../../data/selector";
 import type { TriggerDescriptions } from "../../../../data/trigger";
-import { isTriggerList } from "../../../../data/trigger";
+import {
+  getTriggerDomain,
+  isTriggerList,
+} from "../../../../data/trigger";
 import {
   showAlertDialog,
   showPromptDialog,
@@ -307,6 +322,18 @@ export default class HaAutomationTriggerRow extends LitElement {
           .label=${this.hass.localize("ui.common.menu")}
           .path=${mdiDotsVertical}
         ></ha-icon-button>
+        <ha-dropdown-item
+          value="replace"
+          .disabled=${this.disabled || type === "list"}
+        >
+          <ha-svg-icon slot="icon" .path=${mdiSwapHorizontal}></ha-svg-icon>
+          ${this._renderOverflowLabel(
+            this.hass.localize(
+              "ui.panel.config.automation.editor.triggers.replace"
+            )
+          )}
+        </ha-dropdown-item>
+
         <ha-dropdown-item
           value="rename"
           .disabled=${this.disabled || type === "list"}
@@ -735,6 +762,7 @@ export default class HaAutomationTriggerRow extends LitElement {
           this.focus();
         }
       },
+      replace: this._onReplace,
       rename: () => {
         this._renameTrigger();
       },
@@ -781,6 +809,60 @@ export default class HaAutomationTriggerRow extends LitElement {
 
     copyToClipboard(dump(this.trigger));
   }
+
+  private _onReplace = () => {
+    if (isTriggerList(this.trigger)) return;
+    if (this._selected) {
+      fireEvent(this, "close-sidebar");
+    }
+    const triggerType = (this.trigger as PlatformTrigger).trigger;
+    const originalDomain = triggerType
+      ? getTriggerDomain(triggerType)
+      : undefined;
+    const originalTarget = (this.trigger as PlatformTrigger).target;
+    const initialGroup = originalDomain
+      ? `${DYNAMIC_PREFIX}${originalDomain}`
+      : undefined;
+    showAddAutomationElementDialog(this, {
+      type: "trigger",
+      clipboardItem: !this._clipboard?.trigger
+        ? undefined
+        : isTriggerList(this._clipboard.trigger)
+          ? "list"
+          : this._clipboard.trigger.trigger,
+      initialGroup,
+      add: (key) => {
+        let newTrigger: Trigger;
+        if (key === PASTE_VALUE) {
+          newTrigger = deepClone(this._clipboard!.trigger!);
+        } else if (isDynamic(key)) {
+          const newTriggerType = getValueFromDynamic(key);
+          const sameDomain =
+            getTriggerDomain(newTriggerType) === originalDomain;
+          newTrigger = {
+            trigger: newTriggerType,
+            ...(sameDomain && originalTarget ? { target: originalTarget } : {}),
+          };
+        } else {
+          const elClass = customElements.get(
+            `ha-automation-trigger-${key}`
+          ) as CustomElementConstructor & { defaultConfig: Trigger };
+          newTrigger = { ...elClass.defaultConfig };
+        }
+        fireEvent(this, "value-changed", { value: newTrigger });
+        showEditorToast(this, {
+          message: this.hass.localize("ui.common.successfully_replaced"),
+          duration: 4000,
+          action: {
+            text: this.hass.localize("ui.common.undo"),
+            action: () => {
+              fireEvent(window, "undo-change");
+            },
+          },
+        });
+      },
+    });
+  };
 
   private _onDelete = () => {
     fireEvent(this, "value-changed", { value: null });
@@ -1029,6 +1111,9 @@ export default class HaAutomationTriggerRow extends LitElement {
         break;
       case "edit_note":
         this._editNoteTrigger();
+        break;
+      case "replace":
+        this._onReplace();
         break;
       case "duplicate":
         this._duplicateTrigger();
