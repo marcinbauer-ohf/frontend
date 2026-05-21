@@ -1,3 +1,4 @@
+import { mdiInformation } from "@mdi/js";
 import { css, html, LitElement } from "lit";
 import { classMap } from "lit/directives/class-map";
 import {
@@ -12,6 +13,7 @@ import { styleMap } from "lit/directives/style-map";
 import { fireEvent } from "../common/dom/fire_event";
 import { popoverSupported } from "../common/feature-detect/support-popover";
 import { nextRender } from "../common/util/render-status";
+import "./ha-svg-icon";
 
 export type ToastCloseReason =
   | "dismiss"
@@ -45,6 +47,10 @@ export class HaToast extends LitElement {
 
   @state() private _visible = false;
 
+  @state() private _expanded = false;
+
+  @state() private _hiding = false;
+
   private _dismissTimer?: ReturnType<typeof setTimeout>;
 
   private _closeReason: ToastCloseReason = "programmatic";
@@ -67,6 +73,8 @@ export class HaToast extends LitElement {
 
     const transitionId = ++this._transitionId;
 
+    this._hiding = false;
+    this._expanded = false;
     this._active = true;
     await this.updateComplete;
 
@@ -89,6 +97,8 @@ export class HaToast extends LitElement {
       return;
     }
 
+    // Expand text after icon fade-in completes
+    this._expanded = true;
     this._setDismissTimer();
   }
 
@@ -103,7 +113,9 @@ export class HaToast extends LitElement {
     const transitionId = ++this._transitionId;
     const wasVisible = this._visible;
 
+    // Scale-out exit: keep text expanded while fading + scaling
     this._visible = false;
+    this._hiding = true;
     await this.updateComplete;
 
     if (wasVisible) {
@@ -114,6 +126,8 @@ export class HaToast extends LitElement {
       return;
     }
 
+    this._hiding = false;
+    this._expanded = false;
     this._hideToastPopover();
     this._active = false;
     await this.updateComplete;
@@ -189,6 +203,8 @@ export class HaToast extends LitElement {
           toast: true,
           active: this._active,
           visible: this._visible,
+          expanded: this._expanded,
+          hiding: this._hiding,
         })}
         style=${styleMap({
           "--ha-toast-bottom-offset": `${this.bottomOffset}px`,
@@ -197,7 +213,10 @@ export class HaToast extends LitElement {
         aria-live="polite"
         popover=${ifDefined(popoverSupported ? "manual" : undefined)}
       >
-        <span class="message">${this.labelText}</span>
+        <ha-svg-icon class="icon" .path=${mdiInformation}></ha-svg-icon>
+        <div class="message-wrapper">
+          <span class="message">${this.labelText}</span>
+        </div>
         <div class=${classMap({ actions: true, "has-action": hasAction })}>
           <slot name="action"></slot>
           <slot name="dismiss"></slot>
@@ -209,12 +228,12 @@ export class HaToast extends LitElement {
   static override styles = css`
     .toast {
       position: fixed;
-      inset-block-start: auto;
-      inset-inline-end: auto;
-      inset-block-end: calc(
-        var(--safe-area-inset-bottom, 0px) + var(--ha-space-4) +
+      inset-block-start: calc(
+        var(--safe-area-inset-top, 0px) + var(--ha-space-4) +
           var(--ha-toast-bottom-offset, 0px)
       );
+      inset-block-end: auto;
+      inset-inline-end: auto;
       inset-inline-start: 50%;
       margin: 0;
       width: max-content;
@@ -222,38 +241,71 @@ export class HaToast extends LitElement {
       border: none;
       overflow: hidden;
       box-sizing: border-box;
-      min-width: min(350px, calc(var(--safe-width) - var(--ha-space-4)));
       max-width: min(650px, var(--safe-width));
       min-height: 48px;
       display: flex;
       align-items: center;
       gap: var(--ha-space-2);
       padding: var(--ha-space-3) var(--ha-space-4);
-      color: var(--ha-color-on-neutral-loud);
-      background-color: var(--ha-color-neutral-10);
-      border-radius: var(--ha-border-radius-sm);
+      color: var(--primary-text-color);
+      background-color: var(--card-background-color);
+      border-radius: var(--ha-border-radius-lg);
       box-shadow: var(--wa-shadow-l);
       opacity: 0;
       transform: translate(
-        calc(-50% * var(--scale-direction)),
-        var(--ha-space-2)
-      );
+          calc(-50% * var(--scale-direction)),
+          calc(-1 * var(--ha-space-1))
+        )
+        scale(1);
       transition:
-        opacity var(--ha-animation-duration-fast, 150ms) ease,
-        transform var(--ha-animation-duration-fast, 150ms) ease;
+        opacity var(--ha-animation-duration-slow, 350ms) ease,
+        transform var(--ha-animation-duration-slow, 350ms) ease;
     }
 
     .toast.visible {
       opacity: 1;
-      transform: translate(calc(-50% * var(--scale-direction)), 0);
+      transform: translate(calc(-50% * var(--scale-direction)), 0) scale(1);
+    }
+
+    .toast.hiding {
+      opacity: 0;
+      transform: translate(calc(-50% * var(--scale-direction)), 0) scale(0.95);
+      transition:
+        opacity var(--ha-animation-duration-slow, 350ms) ease,
+        transform var(--ha-animation-duration-slow, 350ms) ease;
     }
 
     .toast:not(.active) {
       display: none;
     }
 
+    .icon {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      color: var(--primary-color);
+    }
+
+    .message-wrapper {
+      overflow: hidden;
+      max-width: 0;
+      opacity: 0;
+      white-space: nowrap;
+      margin-inline-start: calc(-1 * var(--ha-space-2));
+      transition:
+        max-width var(--ha-animation-duration-slow, 350ms) ease,
+        opacity var(--ha-animation-duration-slow, 350ms) ease,
+        margin-inline-start var(--ha-animation-duration-slow, 350ms) ease;
+    }
+
+    .toast.expanded .message-wrapper {
+      max-width: 600px;
+      opacity: 1;
+      margin-inline-start: 0;
+    }
+
     .message {
-      flex: 1;
+      display: block;
       min-width: 0;
     }
 
@@ -261,7 +313,7 @@ export class HaToast extends LitElement {
       display: flex;
       align-items: center;
       gap: var(--ha-space-2);
-      color: var(--ha-color-on-neutral-loud);
+      color: var(--primary-text-color);
     }
 
     .actions:not(.has-action) {
