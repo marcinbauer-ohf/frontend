@@ -228,11 +228,11 @@ export class HaToast extends LitElement {
   static override styles = css`
     .toast {
       position: fixed;
-      inset-block-start: calc(
-        var(--safe-area-inset-top, 0px) + var(--ha-space-4) +
+      inset-block-start: auto;
+      inset-block-end: calc(
+        var(--safe-area-inset-bottom, 0px) + var(--ha-space-4) +
           var(--ha-toast-bottom-offset, 0px)
       );
-      inset-block-end: auto;
       inset-inline-end: auto;
       inset-inline-start: 50%;
       margin: 0;
@@ -242,11 +242,11 @@ export class HaToast extends LitElement {
       overflow: hidden;
       box-sizing: border-box;
       max-width: min(650px, var(--safe-width));
-      min-height: 48px;
+      height: 48px;
       display: flex;
       align-items: center;
       gap: var(--ha-space-2);
-      padding: var(--ha-space-3) var(--ha-space-4);
+      padding: 0 var(--ha-space-4);
       color: var(--primary-text-color);
       background-color: var(--card-background-color);
       border-radius: var(--ha-border-radius-lg);
@@ -254,7 +254,7 @@ export class HaToast extends LitElement {
       opacity: 0;
       transform: translate(
           calc(-50% * var(--scale-direction)),
-          calc(-1 * var(--ha-space-1))
+          var(--ha-space-1)
         )
         scale(1);
       transition:

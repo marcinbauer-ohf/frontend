@@ -27,6 +27,8 @@ export class DemoHaToast extends LitElement {
 
   @state() private _timeout = 4000;
 
+  @state() private _reducedMotion = false;
+
   private _show() {
     this._toast.labelText = MESSAGES[this._messageIndex % MESSAGES.length];
     this._toast.timeoutMs = this._timeout;
@@ -52,6 +54,10 @@ export class DemoHaToast extends LitElement {
 
   private _handleTimeoutChange(e: Event) {
     this._timeout = Number((e.target as HTMLInputElement).value);
+  }
+
+  private _handleReducedMotionChange(e: Event) {
+    this._reducedMotion = (e.target as HTMLInputElement).checked;
   }
 
   private _handleMessageClick(e: Event) {
@@ -111,6 +117,14 @@ export class DemoHaToast extends LitElement {
                   @change=${this._handleTimeoutChange}
                 />
               </label>
+              <label>
+                <input
+                  type="checkbox"
+                  .checked=${this._reducedMotion}
+                  @change=${this._handleReducedMotionChange}
+                />
+                Reduced motion
+              </label>
             </div>
 
             <div class="messages">
@@ -133,7 +147,14 @@ export class DemoHaToast extends LitElement {
         </div>
       </ha-card>
 
-      <ha-toast id="demo-toast" label-text="Settings saved" timeout-ms="4000">
+      <ha-toast
+        id="demo-toast"
+        label-text="Settings saved"
+        timeout-ms="4000"
+        style=${this._reducedMotion
+          ? "--ha-animation-duration-fast: 0ms; --ha-animation-duration-normal: 0ms; --ha-animation-duration-slow: 0ms;"
+          : ""}
+      >
         ${this._showAction
           ? html`
               <ha-button
