@@ -1,5 +1,6 @@
 import { TZDate } from "@date-fns/tz";
 import type { HassConfig, HassEntity } from "home-assistant-js-websocket";
+import type { HTMLTemplateResult } from "lit";
 import { ensureArray } from "../common/array/ensure-array";
 import {
   formatDurationDigital,
@@ -44,6 +45,24 @@ const triggerTranslationBaseKey =
   "ui.panel.config.automation.editor.triggers.type";
 const conditionsTranslationBaseKey =
   "ui.panel.config.automation.editor.conditions.type";
+
+export interface DescribeOptions {
+  // When set, config values are wrapped (e.g. in a highlighted span) so they can
+  // be rendered inline. When absent, values stay plain strings and the describe
+  // functions return a plain string as before.
+  wrapValue?: (value: string | number) => HTMLTemplateResult;
+}
+
+// Returns a helper that wraps a leaf config value when wrapValue is set, and
+// passes it through untouched (incl. nullish/empty) otherwise.
+export const makeWrap =
+  (options?: DescribeOptions) =>
+  (
+    value: string | number | null | undefined
+  ): string | number | HTMLTemplateResult | null | undefined =>
+    options?.wrapValue && value != null && value !== ""
+      ? options.wrapValue(value)
+      : value;
 
 const describeDuration = (
   locale: FrontendLocaleData,
@@ -111,19 +130,25 @@ export const describeTrigger = (
   trigger: Trigger,
   hass: HomeAssistant,
   entityRegistry: EntityRegistryEntry[],
-  ignoreAlias = false
+  ignoreAlias = false,
+  options?: DescribeOptions
 ): string => {
   try {
     const description = tryDescribeTrigger(
       trigger,
       hass,
       entityRegistry,
-      ignoreAlias
+      ignoreAlias,
+      options
     );
-    if (typeof description !== "string") {
+    if (
+      options?.wrapValue ? description == null : typeof description !== "string"
+    ) {
       throw new Error(String(description));
     }
-    return description;
+    // In rich mode `description` may be a renderable parts array; localize lies
+    // about its return type (see localize.ts), so we keep the string cast.
+    return description as string;
   } catch (error: any) {
     // eslint-disable-next-line no-console
     console.error(error);
@@ -140,7 +165,8 @@ const tryDescribeTrigger = (
   trigger: Trigger,
   hass: HomeAssistant,
   entityRegistry: EntityRegistryEntry[],
-  ignoreAlias = false
+  ignoreAlias = false,
+  options?: DescribeOptions
 ) => {
   if (isTriggerList(trigger)) {
     const triggers = ensureArray(trigger.triggers);
@@ -163,7 +189,8 @@ const tryDescribeTrigger = (
   const description = describeLegacyTrigger(
     trigger as LegacyTrigger,
     hass,
-    entityRegistry
+    entityRegistry,
+    options
   );
 
   if (description) {
@@ -187,8 +214,11 @@ const tryDescribeTrigger = (
 const describeLegacyTrigger = (
   trigger: LegacyTrigger,
   hass: HomeAssistant,
-  entityRegistry: EntityRegistryEntry[]
+  entityRegistry: EntityRegistryEntry[],
+  options?: DescribeOptions
 ) => {
+  const w = makeWrap(options);
+
   // Event Trigger
   if (trigger.trigger === "event" && trigger.event_type) {
     const eventTypes: string[] = [];
@@ -204,7 +234,7 @@ const describeLegacyTrigger = (
     const eventTypesString = formatListWithOrs(hass.locale, eventTypes);
     return hass.localize(
       `${triggerTranslationBaseKey}.event.description.full`,
-      { eventTypes: eventTypesString }
+      { eventTypes: w(eventTypesString) }
     );
   }
 
@@ -259,12 +289,12 @@ const describeLegacyTrigger = (
       return hass.localize(
         `${triggerTranslationBaseKey}.numeric_state.description.above-below`,
         {
-          attribute: attribute,
-          entity: formatListWithOrs(hass.locale, entities),
+          attribute: w(attribute),
+          entity: w(formatListWithOrs(hass.locale, entities)),
           numberOfEntities: entities.length,
-          above: formatNumericLimitValue(hass, trigger.above),
-          below: formatNumericLimitValue(hass, trigger.below),
-          duration: duration,
+          above: w(formatNumericLimitValue(hass, trigger.above)),
+          below: w(formatNumericLimitValue(hass, trigger.below)),
+          duration: w(duration),
         }
       );
     }
@@ -272,11 +302,11 @@ const describeLegacyTrigger = (
       return hass.localize(
         `${triggerTranslationBaseKey}.numeric_state.description.above`,
         {
-          attribute: attribute,
-          entity: formatListWithOrs(hass.locale, entities),
+          attribute: w(attribute),
+          entity: w(formatListWithOrs(hass.locale, entities)),
           numberOfEntities: entities.length,
-          above: formatNumericLimitValue(hass, trigger.above),
-          duration: duration,
+          above: w(formatNumericLimitValue(hass, trigger.above)),
+          duration: w(duration),
         }
       );
     }
@@ -284,11 +314,11 @@ const describeLegacyTrigger = (
       return hass.localize(
         `${triggerTranslationBaseKey}.numeric_state.description.below`,
         {
-          attribute: attribute,
-          entity: formatListWithOrs(hass.locale, entities),
+          attribute: w(attribute),
+          entity: w(formatListWithOrs(hass.locale, entities)),
           numberOfEntities: entities.length,
-          below: formatNumericLimitValue(hass, trigger.below),
-          duration: duration,
+          below: w(formatNumericLimitValue(hass, trigger.below)),
+          duration: w(duration),
         }
       );
     }
@@ -408,15 +438,15 @@ const describeLegacyTrigger = (
       `${triggerTranslationBaseKey}.state.description.full`,
       {
         hasAttribute: attribute !== "" ? "true" : "false",
-        attribute: attribute,
+        attribute: w(attribute),
         hasEntity: entities.length !== 0 ? "true" : "false",
-        entity: formatListWithOrs(hass.locale, entities),
+        entity: w(formatListWithOrs(hass.locale, entities)),
         fromChoice: fromChoice,
-        fromString: fromString,
+        fromString: w(fromString),
         toChoice: toChoice,
-        toString: toString,
+        toString: w(toString),
         hasDuration: duration !== "" ? "true" : "false",
-        duration: duration,
+        duration: w(duration),
       }
     );
   }
@@ -438,7 +468,7 @@ const describeLegacyTrigger = (
       trigger.event === "sunset"
         ? `${triggerTranslationBaseKey}.sun.description.sets`
         : `${triggerTranslationBaseKey}.sun.description.rises`,
-      { hasDuration: duration !== "" ? "true" : "false", duration: duration }
+      { hasDuration: duration !== "" ? "true" : "false", duration: w(duration) }
     );
   }
 
@@ -452,7 +482,7 @@ const describeLegacyTrigger = (
     return entity
       ? hass.localize(
           `${triggerTranslationBaseKey}.tag.description.known_tag`,
-          { tag_name: computeStateName(entity) }
+          { tag_name: w(computeStateName(entity)) }
         )
       : hass.localize(`${triggerTranslationBaseKey}.tag.description.full`);
   }
@@ -490,9 +520,9 @@ const describeLegacyTrigger = (
     }
 
     return hass.localize(`${triggerTranslationBaseKey}.time.description.full`, {
-      time: formatListWithOrs(hass.locale, result),
+      time: w(formatListWithOrs(hass.locale, result)),
       hasWeekdays: weekdays.length > 0 ? "true" : "false",
-      weekdays: formatListWithOrs(hass.locale, weekdays),
+      weekdays: w(formatListWithOrs(hass.locale, weekdays)),
     });
   }
 
@@ -709,9 +739,9 @@ const describeLegacyTrigger = (
     }
 
     return hass.localize(`${triggerTranslationBaseKey}.zone.description.full`, {
-      entity: formatListWithOrs(hass.locale, entities),
+      entity: w(formatListWithOrs(hass.locale, entities)),
       event: trigger.event.toString(),
-      zone: formatListWithOrs(hass.locale, zones),
+      zone: w(formatListWithOrs(hass.locale, zones)),
       numberOfZones: zones.length,
     });
   }
@@ -747,9 +777,9 @@ const describeLegacyTrigger = (
     return hass.localize(
       `${triggerTranslationBaseKey}.geo_location.description.full`,
       {
-        source: formatListWithOrs(hass.locale, sources),
+        source: w(formatListWithOrs(hass.locale, sources)),
         event: trigger.event.toString(),
-        zone: formatListWithOrs(hass.locale, zones),
+        zone: w(formatListWithOrs(hass.locale, zones)),
         numberOfZones: zones.length,
       }
     );
@@ -769,7 +799,7 @@ const describeLegacyTrigger = (
 
     return hass.localize(
       `${triggerTranslationBaseKey}.template.description.full`,
-      { hasDuration: duration !== "" ? "true" : "false", duration: duration }
+      { hasDuration: duration !== "" ? "true" : "false", duration: w(duration) }
     );
   }
 
@@ -794,14 +824,14 @@ const describeLegacyTrigger = (
       return hass.localize(
         `${triggerTranslationBaseKey}.conversation.description.single`,
         {
-          sentence: commands[0],
+          sentence: w(commands[0]),
         }
       );
     }
     return hass.localize(
       `${triggerTranslationBaseKey}.conversation.description.multiple`,
       {
-        sentence: commands[0],
+        sentence: w(commands[0]),
         count: commands.length - 1,
       }
     );
@@ -863,9 +893,9 @@ const describeLegacyTrigger = (
       {
         eventChoice: trigger.event,
         offsetChoice: offsetChoice,
-        offset: offset,
+        offset: w(offset),
         hasCalendar: trigger.entity_id ? "true" : "false",
-        calendar: calendarEntity,
+        calendar: w(calendarEntity),
       }
     );
   }
@@ -897,19 +927,23 @@ export const describeCondition = (
   condition: Condition,
   hass: HomeAssistant,
   entityRegistry: EntityRegistryEntry[],
-  ignoreAlias = false
+  ignoreAlias = false,
+  options?: DescribeOptions
 ): string => {
   try {
     const description = tryDescribeCondition(
       condition,
       hass,
       entityRegistry,
-      ignoreAlias
+      ignoreAlias,
+      options
     );
-    if (typeof description !== "string") {
+    if (
+      options?.wrapValue ? description == null : typeof description !== "string"
+    ) {
       throw new Error(String(description));
     }
-    return description;
+    return description as string;
   } catch (error: any) {
     // eslint-disable-next-line no-console
     console.error(error);
@@ -926,7 +960,8 @@ const tryDescribeCondition = (
   condition: Condition,
   hass: HomeAssistant,
   entityRegistry: EntityRegistryEntry[],
-  ignoreAlias = false
+  ignoreAlias = false,
+  options?: DescribeOptions
 ) => {
   if (typeof condition === "string" && hasTemplate(condition)) {
     return hass.localize(
@@ -956,7 +991,8 @@ const tryDescribeCondition = (
   const description = describeLegacyCondition(
     condition as LegacyCondition,
     hass,
-    entityRegistry
+    entityRegistry,
+    options
   );
 
   if (description) {
@@ -982,8 +1018,11 @@ const tryDescribeCondition = (
 const describeLegacyCondition = (
   condition: LegacyCondition,
   hass: HomeAssistant,
-  entityRegistry: EntityRegistryEntry[]
+  entityRegistry: EntityRegistryEntry[],
+  options?: DescribeOptions
 ) => {
+  const w = makeWrap(options);
+
   if (condition.condition === "or") {
     const conditions = ensureArray(condition.conditions);
 
@@ -1122,16 +1161,17 @@ const describeLegacyCondition = (
       `${conditionsTranslationBaseKey}.state.description.full`,
       {
         hasAttribute: attribute !== "" ? "true" : "false",
-        attribute: attribute,
+        attribute: w(attribute),
         numberOfEntities: entities.length,
-        entities:
+        entities: w(
           condition.match === "any"
             ? formatListWithOrs(hass.locale, entities)
-            : formatListWithAnds(hass.locale, entities),
+            : formatListWithAnds(hass.locale, entities)
+        ),
         numberOfStates: states.length,
-        states: formatListWithOrs(hass.locale, states),
+        states: w(formatListWithOrs(hass.locale, states)),
         hasDuration: duration !== "" ? "true" : "false",
-        duration: duration,
+        duration: w(duration),
       }
     );
   }
@@ -1162,11 +1202,11 @@ const describeLegacyCondition = (
       return hass.localize(
         `${conditionsTranslationBaseKey}.numeric_state.description.above-below`,
         {
-          attribute,
-          entity,
+          attribute: w(attribute),
+          entity: w(entity),
           numberOfEntities: entity_ids.length,
-          above: formatNumericLimitValue(hass, condition.above),
-          below: formatNumericLimitValue(hass, condition.below),
+          above: w(formatNumericLimitValue(hass, condition.above)),
+          below: w(formatNumericLimitValue(hass, condition.below)),
         }
       );
     }
@@ -1174,10 +1214,10 @@ const describeLegacyCondition = (
       return hass.localize(
         `${conditionsTranslationBaseKey}.numeric_state.description.above`,
         {
-          attribute,
-          entity,
+          attribute: w(attribute),
+          entity: w(entity),
           numberOfEntities: entity_ids.length,
-          above: formatNumericLimitValue(hass, condition.above),
+          above: w(formatNumericLimitValue(hass, condition.above)),
         }
       );
     }
@@ -1185,10 +1225,10 @@ const describeLegacyCondition = (
       return hass.localize(
         `${conditionsTranslationBaseKey}.numeric_state.description.below`,
         {
-          attribute,
-          entity,
+          attribute: w(attribute),
+          entity: w(entity),
           numberOfEntities: entity_ids.length,
-          below: formatNumericLimitValue(hass, condition.below),
+          below: w(formatNumericLimitValue(hass, condition.below)),
         }
       );
     }
@@ -1256,9 +1296,9 @@ const describeLegacyCondition = (
           hasTime: hasTime,
           hasTimeAndDay: (after || before) && validWeekdays ? "true" : "false",
           hasDay: validWeekdays ? "true" : "false",
-          time_before: before,
-          time_after: after,
-          day: formatListWithOrs(hass.locale, localizedDays),
+          time_before: w(before),
+          time_after: w(after),
+          day: w(formatListWithOrs(hass.locale, localizedDays)),
         }
       );
     }
@@ -1278,10 +1318,10 @@ const describeLegacyCondition = (
       {
         afterChoice: condition.after ?? "other",
         afterOffsetChoice: afterDuration !== "" ? "offset" : "other",
-        afterOffset: afterDuration,
+        afterOffset: w(afterDuration),
         beforeChoice: condition.before ?? "other",
         beforeOffsetChoice: beforeDuration !== "" ? "offset" : "other",
-        beforeOffset: beforeDuration,
+        beforeOffset: w(beforeDuration),
       }
     );
   }
@@ -1326,9 +1366,9 @@ const describeLegacyCondition = (
     return hass.localize(
       `${conditionsTranslationBaseKey}.zone.description.full`,
       {
-        entity: entitiesString,
+        entity: w(entitiesString),
         numberOfEntities: entities.length,
-        zone: zonesString,
+        zone: w(zonesString),
         numberOfZones: zones.length,
       }
     );
@@ -1363,9 +1403,11 @@ const describeLegacyCondition = (
     return hass.localize(
       `${conditionsTranslationBaseKey}.trigger.description.full`,
       {
-        id: formatListWithOrs(
-          hass.locale,
-          ensureArray(condition.id).map((id) => id.toString())
+        id: w(
+          formatListWithOrs(
+            hass.locale,
+            ensureArray(condition.id).map((id) => id.toString())
+          )
         ),
       }
     );

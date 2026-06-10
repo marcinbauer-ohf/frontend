@@ -35,6 +35,7 @@ import { fireEvent } from "../../../../common/dom/fire_event";
 import { preventDefaultStopPropagation } from "../../../../common/dom/prevent_default_stop_propagation";
 import { stopPropagation } from "../../../../common/dom/stop_propagation";
 import { capitalizeFirstLetter } from "../../../../common/string/capitalize-first-letter";
+import type { LocalizeKeys } from "../../../../common/translations/localize";
 import { truncateWithEllipsis } from "../../../../common/string/truncate-with-ellipsis";
 import { handleStructError } from "../../../../common/structs/handle-errors";
 import { copyToClipboard } from "../../../../common/util/copy-clipboard";
@@ -105,6 +106,10 @@ export interface ConditionElement extends LitElement {
   expandAll?: () => void;
   collapseAll?: () => void;
 }
+
+// Wraps a config value so it renders highlighted inline in the description.
+const highlightValue = (value: string | number) =>
+  html`<span class="description-value">${value}</span>`;
 
 @customElement("ha-automation-condition-row")
 export default class HaAutomationConditionRow extends LitElement {
@@ -234,9 +239,18 @@ export default class HaAutomationConditionRow extends LitElement {
           >`
         : nothing}
       <h3 slot="header">
-        ${capitalizeFirstLetter(
-          describeCondition(this.condition, this.hass, this._entityReg)
-        )}
+        <span class="description"
+          >${describeCondition(
+            this.condition,
+            this.hass,
+            this._entityReg,
+            false,
+            {
+              wrapValue: highlightValue,
+            }
+          )}</span
+        >
+        ${this._renderBehavior()}
         ${target !== undefined || (descriptionHasTarget && !this._isNew)
           ? this._renderTargets(
               target,
@@ -576,6 +590,19 @@ export default class HaAutomationConditionRow extends LitElement {
           ></ha-automation-condition-editor>`
         : nothing}
     `;
+  }
+
+  private _renderBehavior() {
+    const behavior = (this.condition as { options?: Record<string, unknown> })
+      .options?.behavior as string | undefined;
+    if (!behavior) {
+      return nothing;
+    }
+    return html`<span class="description-value"
+      >${this.hass.localize(
+        `ui.components.selectors.automation_behavior.condition.options.${behavior}.label` as LocalizeKeys
+      )}</span
+    >`;
   }
 
   private _renderTargets = memoizeOne(

@@ -6,7 +6,11 @@ import { formatListWithAnds } from "../common/string/format-list";
 import { isTemplate } from "../common/string/has-template";
 import type { HomeAssistant } from "../types";
 import type { Condition } from "./automation";
-import { describeCondition } from "./automation_i18n";
+import {
+  describeCondition,
+  makeWrap,
+  type DescribeOptions,
+} from "./automation_i18n";
 import { localizeDeviceAutomationAction } from "./device/device_automation";
 import type { EntityRegistryEntry } from "./entity/entity_registry";
 import { domainToName } from "./integration";
@@ -48,7 +52,8 @@ export const describeAction = <T extends ActionType>(
   action: ActionTypes[T],
   actionType?: T,
   ignoreAlias = false,
-  manifests?: DomainManifestLookup
+  manifests?: DomainManifestLookup,
+  options?: DescribeOptions
 ): string => {
   try {
     const description = tryDescribeAction(
@@ -57,12 +62,15 @@ export const describeAction = <T extends ActionType>(
       action,
       actionType,
       ignoreAlias,
-      manifests
+      manifests,
+      options
     );
-    if (typeof description !== "string") {
+    if (
+      options?.wrapValue ? description == null : typeof description !== "string"
+    ) {
       throw new Error(String(description));
     }
-    return description;
+    return description as string;
   } catch (error: any) {
     // eslint-disable-next-line no-console
     console.error(error);
@@ -80,8 +88,11 @@ const tryDescribeAction = <T extends ActionType>(
   action: ActionTypes[T],
   actionType?: T,
   ignoreAlias = false,
-  manifests?: DomainManifestLookup
+  manifests?: DomainManifestLookup,
+  options?: DescribeOptions
 ): string => {
+  const w = makeWrap(options);
+
   if (action.alias && !ignoreAlias) {
     return action.alias;
   }
@@ -137,11 +148,13 @@ const tryDescribeAction = <T extends ActionType>(
       return hass.localize(
         `${actionTranslationBaseKey}.service.description.service_based_on_name_no_targets`,
         {
-          name: service
-            ? shouldShowDomainPrefix(domain, manifests)
-              ? `${domainToName(hass.localize, domain)}: ${service}`
-              : service
-            : config.action,
+          name: w(
+            service
+              ? shouldShowDomainPrefix(domain, manifests)
+                ? `${domainToName(hass.localize, domain)}: ${service}`
+                : service
+              : config.action
+          ),
         }
       );
     }
@@ -158,7 +171,7 @@ const tryDescribeAction = <T extends ActionType>(
       duration = hass.localize(
         `${actionTranslationBaseKey}.delay.description.duration_string`,
         {
-          string: secondsToDuration(config.delay)!,
+          string: w(secondsToDuration(config.delay)!),
         }
       );
     } else if (typeof config.delay === "string") {
@@ -169,18 +182,19 @@ const tryDescribeAction = <T extends ActionType>(
         : hass.localize(
             `${actionTranslationBaseKey}.delay.description.duration_string`,
             {
-              string:
+              string: w(
                 config.delay ||
-                hass.localize(
-                  `${actionTranslationBaseKey}.delay.description.duration_unknown`
-                ),
+                  hass.localize(
+                    `${actionTranslationBaseKey}.delay.description.duration_unknown`
+                  )
+              ),
             }
           );
     } else if (config.delay) {
       duration = hass.localize(
         `${actionTranslationBaseKey}.delay.description.duration_string`,
         {
-          string: formatNumericDuration(hass.locale, config.delay),
+          string: w(formatNumericDuration(hass.locale, config.delay)),
         }
       );
     } else {
@@ -218,7 +232,9 @@ const tryDescribeAction = <T extends ActionType>(
     return hass.localize(
       `${actionTranslationBaseKey}.variables.description.full`,
       {
-        names: formatListWithAnds(hass.locale, Object.keys(config.variables)),
+        names: w(
+          formatListWithAnds(hass.locale, Object.keys(config.variables))
+        ),
       }
     );
   }
@@ -236,7 +252,7 @@ const tryDescribeAction = <T extends ActionType>(
       );
     }
     return hass.localize(`${actionTranslationBaseKey}.event.description.full`, {
-      name: config.event,
+      name: w(config.event),
     });
   }
 
@@ -250,7 +266,7 @@ const tryDescribeAction = <T extends ActionType>(
     const config = action as StopAction;
     return hass.localize(`${actionTranslationBaseKey}.stop.description.full`, {
       hasReason: config.stop !== undefined ? "true" : "false",
-      reason: config.stop,
+      reason: w(config.stop),
     });
   }
 
@@ -309,7 +325,7 @@ const tryDescribeAction = <T extends ActionType>(
       );
       chosenAction = hass.localize(
         `${actionTranslationBaseKey}.repeat.description.for_each`,
-        { items: formatListWithAnds(hass.locale, items) }
+        { items: w(formatListWithAnds(hass.locale, items)) }
       );
     }
     return hass.localize(
@@ -352,7 +368,7 @@ const tryDescribeAction = <T extends ActionType>(
     return hass.localize(
       `${actionTranslationBaseKey}.device_id.description.perform_device_action`,
       {
-        device: stateObj ? computeStateName(stateObj) : config.entity_id,
+        device: w(stateObj ? computeStateName(stateObj) : config.entity_id),
       }
     );
   }
@@ -384,7 +400,7 @@ const tryDescribeAction = <T extends ActionType>(
     }
     return hass.localize(
       `${actionTranslationBaseKey}.set_conversation_response.description.full`,
-      { response: config.set_conversation_response }
+      { response: w(config.set_conversation_response) }
     );
   }
 

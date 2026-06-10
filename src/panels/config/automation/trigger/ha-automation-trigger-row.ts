@@ -31,8 +31,10 @@ import { storage } from "../../../../common/decorators/storage";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import { preventDefaultStopPropagation } from "../../../../common/dom/prevent_default_stop_propagation";
 import { stopPropagation } from "../../../../common/dom/stop_propagation";
+import { computeStateName } from "../../../../common/entity/compute_state_name";
 import { capitalizeFirstLetter } from "../../../../common/string/capitalize-first-letter";
 import { truncateWithEllipsis } from "../../../../common/string/truncate-with-ellipsis";
+import type { LocalizeKeys } from "../../../../common/translations/localize";
 import { handleStructError } from "../../../../common/structs/handle-errors";
 import { copyToClipboard } from "../../../../common/util/copy-clipboard";
 import { debounce } from "../../../../common/util/debounce";
@@ -62,8 +64,11 @@ import { validateConfig } from "../../../../data/config";
 import { fullEntitiesContext } from "../../../../data/context";
 import type { DeviceTrigger } from "../../../../data/device/device_automation";
 import type { EntityRegistryEntry } from "../../../../data/entity/entity_registry";
-import type { TargetSelector } from "../../../../data/selector";
-import type { TriggerDescriptions } from "../../../../data/trigger";
+import type { SelectOption, TargetSelector } from "../../../../data/selector";
+import type {
+  TriggerDescription,
+  TriggerDescriptions,
+} from "../../../../data/trigger";
 import { isTriggerList } from "../../../../data/trigger";
 import {
   showAlertDialog,
@@ -98,6 +103,24 @@ import "./types/ha-automation-trigger-zone";
 
 export interface TriggerElement extends LitElement {
   trigger: Trigger;
+}
+
+// Wraps a config value so it renders highlighted inline in the description.
+const highlightValue = (value: string | number) =>
+  html`<span class="description-value">${value}</span>`;
+
+// Shape of a `numeric_threshold` selector value (see ha-selector-numeric-threshold).
+interface ThresholdEntry {
+  active_choice?: string;
+  number?: number;
+  entity?: string;
+  unit_of_measurement?: string;
+}
+interface ThresholdValue {
+  type: "above" | "below" | "between" | "outside" | "any";
+  value?: ThresholdEntry;
+  value_min?: ThresholdEntry;
+  value_max?: ThresholdEntry;
 }
 
 export const handleChangeEvent = (element: TriggerElement, ev: CustomEvent) => {
@@ -244,7 +267,12 @@ export default class HaAutomationTriggerRow extends LitElement {
             .trigger=${(this.trigger as Exclude<Trigger, TriggerList>).trigger}
           ></ha-trigger-icon>`}
       <h3 slot="header">
-        ${describeTrigger(this.trigger, this.hass, this._entityReg)}
+        <span class="description"
+          >${describeTrigger(this.trigger, this.hass, this._entityReg, false, {
+            wrapValue: highlightValue,
+          })}</span
+        >
+        ${this._renderPlatformValues()} ${this._renderBehavior()}
         ${target !== undefined || (descriptionHasTarget && !this._isNew)
           ? this._renderTargets(
               target,
@@ -553,6 +581,125 @@ export default class HaAutomationTriggerRow extends LitElement {
             `}
       </ha-card>
     `;
+  }
+
+  // Renders the user-entered field values of a "purpose" platform trigger
+  // (e.g. the "above 1000 ppm" threshold), which the localized name alone does
+  // not convey. The behavior field is rendered separately by _renderBehavior.
+  private _renderPlatformValues() {
+    if (this._getType(this.trigger, this.triggerDescriptions) !== "platform") {
+      return nothing;
+    }
+    const trigger = this.trigger as PlatformTrigger;
+    const fields = this.triggerDescriptions[trigger.trigger]?.fields;
+    const options = trigger.options;
+    if (!fields || !options) {
+      return nothing;
+    }
+    const parts: TemplateResult[] = [];
+    for (const [fieldName, field] of Object.entries(fields)) {
+      if (field.selector && "automation_behavior" in field.selector) {
+        continue;
+      }
+      const value = options[fieldName];
+      if (value === undefined || value === null || value === "") {
+        continue;
+      }
+      const formatted = this._formatFieldValue(field, value);
+      if (formatted === undefined) {
+        continue;
+      }
+      parts.push(html`<span class="description-value">${formatted}</span>`);
+    }
+    return parts.length ? parts : nothing;
+  }
+
+  private _formatFieldValue(
+    field: TriggerDescription["fields"][string],
+    value: unknown
+  ): string | undefined {
+    const selector = field.selector;
+    if (!selector) {
+      return undefined;
+    }
+    if ("numeric_threshold" in selector) {
+      if (typeof value !== "object") {
+        return undefined;
+      }
+      return this._formatThreshold(
+        selector.numeric_threshold?.mode ?? "crossed",
+        value as ThresholdValue
+      );
+    }
+    if ("number" in selector) {
+      const unit = selector.number?.unit_of_measurement;
+      return unit ? `${value} ${unit}` : String(value);
+    }
+    if ("select" in selector) {
+      const options = selector.select?.options;
+      if (options && options.length && typeof options[0] === "object") {
+        const found = (options as readonly SelectOption[]).find(
+          (option) => option.value === value
+        );
+        return found?.label ?? String(value);
+      }
+      return String(value);
+    }
+    if ("text" in selector || "template" in selector) {
+      return typeof value === "string" ? value : undefined;
+    }
+    // Skip booleans, objects and other selectors that don't read well inline.
+    return undefined;
+  }
+
+  private _formatThreshold(mode: string, value: ThresholdValue): string {
+    const typeLabel = this.hass.localize(
+      `ui.components.selectors.numeric_threshold.${mode}.${value.type}` as LocalizeKeys
+    );
+    const formatEntry = (entry?: ThresholdEntry): string => {
+      if (!entry) {
+        return "";
+      }
+      if (entry.active_choice === "entity") {
+        return entry.entity
+          ? this.hass.states[entry.entity]
+            ? computeStateName(this.hass.states[entry.entity])
+            : entry.entity
+          : "";
+      }
+      if (entry.number === undefined) {
+        return "";
+      }
+      return entry.unit_of_measurement
+        ? `${entry.number} ${entry.unit_of_measurement}`
+        : `${entry.number}`;
+    };
+    if (value.type === "any") {
+      return typeLabel;
+    }
+    if (value.type === "above" || value.type === "below") {
+      const formatted = formatEntry(value.value);
+      return formatted ? `${typeLabel} ${formatted}` : typeLabel;
+    }
+    const low = formatEntry(value.value_min);
+    const high = formatEntry(value.value_max);
+    return low && high ? `${typeLabel} ${low} – ${high}` : typeLabel;
+  }
+
+  private _renderBehavior() {
+    if (isTriggerList(this.trigger)) {
+      return nothing;
+    }
+    const behavior = (this.trigger as Exclude<Trigger, TriggerList>).options
+      ?.behavior as string | undefined;
+    if (!behavior) {
+      return nothing;
+    }
+    return html`<span class="description-value"
+      >${this.hass.localize(
+        `ui.components.selectors.automation_behavior.trigger.options.${behavior}.label` as LocalizeKeys
+      )}</span
+    >`;
   }
 
   private _renderTargets = memoizeOne(

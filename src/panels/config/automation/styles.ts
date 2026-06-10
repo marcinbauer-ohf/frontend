@@ -23,6 +23,18 @@ export const rowStyles = css`
     min-height: 32px;
     max-width: 100%;
   }
+  h3 .description {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  /* Highlight config values rendered inline in the description sentence */
+  h3 .description-value {
+    color: var(--ha-color-text-link);
+  }
+  /* Capitalize the first letter without mutating the (now rich) description */
+  h3 .description::first-letter {
+    text-transform: uppercase;
+  }
 
   ha-card {
     transition: outline 0.2s;

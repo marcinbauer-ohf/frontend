@@ -130,6 +130,10 @@ export interface ActionElement extends LitElement {
   collapseAll?: () => void;
 }
 
+// Wraps a config value so it renders highlighted inline in the description.
+const highlightValue = (value: string | number) =>
+  html`<span class="description-value">${value}</span>`;
+
 export const handleChangeEvent = (element: ActionElement, ev: CustomEvent) => {
   ev.stopPropagation();
   const name = (ev.target as any)?.name;
@@ -320,16 +324,17 @@ export default class HaAutomationActionRow extends LitElement {
             ></ha-svg-icon>
           `}
       <h3 slot="header">
-        ${capitalizeFirstLetter(
-          describeAction(
+        <span class="description"
+          >${describeAction(
             this.hass,
             this._entityReg,
             this.action,
             undefined,
             false,
-            this._manifests
-          )
-        )}
+            this._manifests,
+            { wrapValue: highlightValue }
+          )}</span
+        >
         ${target !== undefined || (actionHasTarget && !this._isNew)
           ? this._renderTargets(
               target,
