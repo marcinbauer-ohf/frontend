@@ -118,7 +118,6 @@ import {
   getLabelsTableColumn,
   getModifiedAtTableColumn,
 } from "../common/data-table-columns";
-import { configSections } from "../ha-panel-config";
 import type { Helper } from "../helpers/const";
 import { isHelperDomain } from "../helpers/const";
 import "../integrations/ha-integration-overflow-menu";
@@ -823,7 +822,7 @@ export class HaConfigEntities extends LitElement {
           ? undefined
           : "/config"}
         .route=${this.route}
-        .tabs=${configSections.devices}
+        .tabs=${[{ path: "/config/entities", translationKey: "ui.panel.config.entities.caption" }]}
         .columns=${this._columns(this.hass.localize, filteredEntities)}
         .data=${filteredEntities}
         .searchLabel=${this.hass.localize(

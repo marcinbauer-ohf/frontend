@@ -30,15 +30,27 @@ class HaConfigNavigation extends LitElement {
   }
 
   protected render(): TemplateResult {
+    const resolveName = (key?: string) =>
+      !key
+        ? ""
+        : key.includes(".")
+          ? this.hass.localize(key as any)
+          : this.hass.localize(
+              `ui.panel.config.dashboard.${key}.main` as any
+            );
+
+    const resolveSecondary = (key?: string) =>
+      !key || key.includes(".")
+        ? ""
+        : this.hass.localize(
+            `ui.panel.config.dashboard.${key}.secondary` as any
+          );
+
     const pages = filterNavigationPages(this.hass, this.pages, {
       hasBluetoothConfigEntries: this._hasBluetoothConfigEntries,
     }).map((page) => ({
       ...page,
-      name:
-        page.name ||
-        this.hass.localize(
-          `ui.panel.config.dashboard.${page.translationKey}.main`
-        ),
+      name: page.name || resolveName(page.translationKey),
       description:
         page.component === "cloud" && (page.info as CloudStatus)
           ? page.info.logged_in
@@ -53,12 +65,7 @@ class HaConfigNavigation extends LitElement {
                   )}
                 `
           : `
-                ${
-                  page.description ||
-                  this.hass.localize(
-                    `ui.panel.config.dashboard.${page.translationKey}.secondary`
-                  )
-                }
+                ${page.description || resolveSecondary(page.translationKey)}
               `,
     }));
     return html`

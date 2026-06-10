@@ -37,7 +37,6 @@ import { haStyle } from "../../../resources/styles";
 import { DefaultPrimaryColor } from "../../../resources/theme/color/color.globals";
 import type { HomeAssistant, Route } from "../../../types";
 import { hardwareBrandsUrl } from "../../../util/brands-url";
-import { hardwareTabs } from "./ha-config-hardware";
 
 const DATASAMPLES = 60;
 
@@ -248,7 +247,7 @@ class HaConfigHardwareOverview extends SubscribeMixin(LitElement) {
         back-path="/config/system"
         .hass=${this.hass}
         .route=${this.route}
-        .tabs=${hardwareTabs(this.hass)}
+        .tabs=${[{ path: "/config/hardware/overview", translationKey: "ui.panel.config.hardware.caption" }]}
       >
         ${isComponentLoaded(this.hass.config, "hassio")
           ? html`

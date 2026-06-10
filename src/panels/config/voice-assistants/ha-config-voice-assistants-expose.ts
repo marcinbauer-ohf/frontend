@@ -59,7 +59,6 @@ import {
 } from "./expose/assistants-table-column";
 import { getAvailableAssistants } from "./expose/available-assistants";
 import "./expose/expose-assistant-icon";
-import { voiceAssistantTabs } from "./ha-config-voice-assistants";
 import { showExposeEntityDialog } from "./show-dialog-expose-entity";
 import { showVoiceSettingsDialog } from "./show-dialog-voice-settings";
 
@@ -496,7 +495,7 @@ export class VoiceAssistantsExpose extends LitElement {
           ? undefined
           : "/config"}
         .route=${this.route}
-        .tabs=${voiceAssistantTabs}
+        .tabs=${[{ path: "/config/voice-assistants/expose", translationKey: "ui.panel.config.voice_assistants.expose.caption" }]}
         .columns=${this._columns(
           this.narrow,
           this._availableAssistants,

@@ -108,7 +108,6 @@ import {
   getLabelsTableColumn,
   renderRelativeTimeColumn,
 } from "../common/data-table-columns";
-import { configSections } from "../ha-panel-config";
 import { showLabelDetailDialog } from "../labels/show-dialog-label-detail";
 import {
   getAssistantsSortableKey,
@@ -463,7 +462,7 @@ class HaSceneDashboard extends SubscribeMixin(LitElement) {
           ? undefined
           : "/config"}
         .route=${this.route}
-        .tabs=${configSections.automations}
+        .tabs=${[{ path: "/config/scene", translationKey: "ui.panel.config.scene.caption" }]}
         .searchLabel=${this.hass.localize(
           "ui.panel.config.scene.picker.search",
           { number: scenes.length }

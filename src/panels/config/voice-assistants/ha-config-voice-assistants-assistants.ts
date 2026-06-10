@@ -12,7 +12,6 @@ import "./assist-pref";
 import "./cloud-alexa-pref";
 import "./cloud-discover";
 import "./cloud-google-pref";
-import { voiceAssistantTabs } from "./ha-config-voice-assistants";
 
 @customElement("ha-config-voice-assistants-assistants")
 export class HaConfigVoiceAssistantsAssistants extends LitElement {
@@ -39,7 +38,7 @@ export class HaConfigVoiceAssistantsAssistants extends LitElement {
         .hass=${this.hass}
         back-path="/config"
         .route=${this.route}
-        .tabs=${voiceAssistantTabs}
+        .tabs=${[{ path: "/config/voice-assistants/assistants", translationKey: "ui.panel.config.voice_assistants.assistants.caption" }]}
       >
         <div class="content">
           ${isComponentLoaded(this.hass.config, "assist_pipeline")

@@ -65,7 +65,6 @@ import { loadLovelaceResources } from "../../../lovelace/common/load-resources";
 import { loadDashboardStrategyWithCreateSuggestions } from "../../../lovelace/strategies/get-strategy";
 import type { NewDashboardSelection } from "../../dashboard/show-dialog-new-dashboard";
 import { showNewDashboardDialog } from "../../dashboard/show-dialog-new-dashboard";
-import { lovelaceTabs } from "../ha-config-lovelace";
 import { showDashboardConfigureStrategyDialog } from "./show-dialog-lovelace-dashboard-configure-strategy";
 import { showDashboardDetailDialog } from "./show-dialog-lovelace-dashboard-detail";
 import { showPanelDetailDialog } from "./show-dialog-panel-detail";
@@ -398,7 +397,7 @@ export class HaConfigLovelaceDashboards extends LitElement {
         .narrow=${this.narrow}
         back-path="/config"
         .route=${this.route}
-        .tabs=${lovelaceTabs}
+        .tabs=${[{ path: "/config/lovelace/dashboards", translationKey: "ui.panel.config.lovelace.caption" }]}
         .columns=${this._columns(
           this.narrow,
           this.hass.language,

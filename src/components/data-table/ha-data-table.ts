@@ -1130,7 +1130,7 @@ export class HaDataTable extends LitElement {
 
         .mdc-data-table__row {
           display: flex;
-          height: var(--data-table-row-height, 52px);
+          height: var(--data-table-row-height, 44px);
           width: var(--table-row-width, 100%);
         }
 
@@ -1368,7 +1368,7 @@ export class HaDataTable extends LitElement {
 
         .group-header {
           padding-top: 12px;
-          height: var(--data-table-row-height, 52px);
+          height: var(--data-table-row-height, 44px);
           padding-left: 12px;
           padding-inline-start: 12px;
           padding-inline-end: initial;

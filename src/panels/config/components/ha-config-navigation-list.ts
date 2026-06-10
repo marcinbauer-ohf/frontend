@@ -31,24 +31,15 @@ class HaConfigNavigationList extends LitElement {
               .href=${externalApp ? undefined : page.path}
               @click=${externalApp ? this._handleExternalApp : undefined}
             >
-              <div
+              <ha-svg-icon
                 slot="start"
-                class=${page.iconColor ? "icon-background" : ""}
-                .style="background-color: ${page.iconColor || "undefined"}"
-              >
-                <ha-svg-icon
-                  .path=${page.iconPath}
-                  .secondaryPath=${page.iconSecondaryPath}
-                  .viewBox=${page.iconViewBox}
-                ></ha-svg-icon>
-              </div>
+                .path=${page.iconPath}
+                .secondaryPath=${page.iconSecondaryPath}
+                .viewBox=${page.iconViewBox}
+                style=${page.iconColor ? `color: ${page.iconColor}` : ""}
+              ></ha-svg-icon>
               <span slot="headline">${page.name}</span>
-              ${this.hasSecondary
-                ? html`<span slot="supporting-text">${page.description}</span>`
-                : ""}
-              ${!this.narrow
-                ? html`<ha-icon-next slot="end"></ha-icon-next>`
-                : ""}
+              <ha-icon-next slot="end"></ha-icon-next>
             </ha-list-item-button>
           `;
         })}
@@ -61,21 +52,18 @@ class HaConfigNavigationList extends LitElement {
   }
 
   static styles: CSSResultGroup = css`
-    ha-svg-icon,
+    ha-svg-icon {
+      height: 24px;
+      width: 24px;
+      display: block;
+      flex-shrink: 0;
+    }
     ha-icon-next {
       color: var(--secondary-text-color);
       height: 24px;
       width: 24px;
       display: block;
-    }
-    ha-svg-icon {
-      padding: 8px;
-    }
-    .icon-background {
-      border-radius: var(--ha-border-radius-circle);
-    }
-    .icon-background ha-svg-icon {
-      color: #fff;
+      flex-shrink: 0;
     }
   `;
 }

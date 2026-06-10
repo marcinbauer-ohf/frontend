@@ -2724,6 +2724,51 @@
           "insteon": {
             "main": "Insteon",
             "secondary": "Dual-mesh home automation"
+          },
+          "search": "Search settings",
+          "core": {
+            "main": "Home information",
+            "secondary": "Name, location, and regional settings"
+          },
+          "updates": {
+            "main": "Updates",
+            "secondary": "Manage updates of Home Assistant, apps, and devices"
+          },
+          "repairs": {
+            "main": "Repairs",
+            "secondary": "Find and fix issues with your Home Assistant instance"
+          },
+          "logs": {
+            "main": "Logs",
+            "secondary": "View and search logs to diagnose issues"
+          },
+          "analytics": {
+            "main": "Analytics",
+            "secondary": "Help improve Home Assistant by sharing data"
+          },
+          "ai_tasks": {
+            "main": "AI tasks",
+            "secondary": "Configure AI suggestions and task preferences"
+          },
+          "labs": {
+            "main": "Labs",
+            "secondary": "Preview new and experimental features"
+          },
+          "network": {
+            "main": "Network",
+            "secondary": "Configure network and remote access settings"
+          },
+          "storage": {
+            "main": "Storage",
+            "secondary": "Manage data and storage usage"
+          },
+          "hardware": {
+            "main": "Hardware",
+            "secondary": "Configure your hub and connected hardware"
+          },
+          "interface": {
+            "main": "Interface & voice",
+            "secondary": "Dashboards, apps, and voice assistants"
           }
         },
         "common": {

@@ -1,5 +1,4 @@
 import "@home-assistant/webawesome/dist/components/divider/divider";
-import { ResizeController } from "@lit-labs/observers/resize-controller";
 import {
   mdiArrowDown,
   mdiArrowUp,
@@ -29,11 +28,12 @@ import type {
 } from "../components/data-table/ha-data-table";
 import { showDataTableSettingsDialog } from "../components/data-table/show-dialog-data-table-settings";
 import "../components/ha-button";
-import "../components/ha-dialog";
+import "../components/ha-adaptive-dialog";
 import "../components/ha-dialog-footer";
 import "../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../components/ha-dropdown";
 import "../components/ha-dropdown-item";
+import "../components/ha-card";
 import "../components/ha-icon-button";
 import "../components/ha-svg-icon";
 import "../components/input/ha-input-search";
@@ -202,10 +202,6 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
     };
   }
 
-  private _showPaneController = new ResizeController(this, {
-    callback: (entries) => entries[0]?.contentRect.width > 750,
-  });
-
   public clearSelection() {
     this._dataTable.clearSelection();
   }
@@ -235,7 +231,6 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
 
   protected render(): TemplateResult {
     const localize = this.localizeFunc || this.hass.localize;
-    const showPane = this._showPaneController.value ?? !this.narrow;
     const filterButton = this.hasFilters
       ? html`<div class="relative">
           <ha-assist-chip
@@ -397,93 +392,8 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
         .route=${this.route}
         .tabs=${this.tabs}
         .mainPage=${this.mainPage}
-        .pane=${showPane && this.showFilters}
         @sorting-changed=${this._sortingChanged}
       >
-        ${this._selectMode
-          ? html`<div class="selection-bar" slot="toolbar">
-              <div class="selection-controls">
-                <ha-icon-button
-                  .path=${mdiClose}
-                  @click=${this._disableSelectMode}
-                  .label=${localize(
-                    "ui.components.subpage-data-table.exit_selection_mode"
-                  )}
-                ></ha-icon-button>
-                <ha-dropdown @wa-select=${this._handleSelect}>
-                  <ha-assist-chip
-                    .label=${localize(
-                      "ui.components.subpage-data-table.select"
-                    )}
-                    slot="trigger"
-                  >
-                    <ha-svg-icon
-                      slot="icon"
-                      .path=${mdiFormatListChecks}
-                    ></ha-svg-icon>
-                    <ha-svg-icon
-                      slot="trailing-icon"
-                      .path=${mdiMenuDown}
-                    ></ha-svg-icon
-                  ></ha-assist-chip>
-                  <ha-dropdown-item value="all">
-                    ${localize("ui.components.subpage-data-table.select_all")}
-                  </ha-dropdown-item>
-                  <ha-dropdown-item value="none">
-                    ${localize("ui.components.subpage-data-table.select_none")}
-                  </ha-dropdown-item>
-                  <wa-divider></wa-divider>
-                  <ha-dropdown-item value="disable_select_mode">
-                    ${localize(
-                      "ui.components.subpage-data-table.exit_selection_mode"
-                    )}
-                  </ha-dropdown-item>
-                </ha-dropdown>
-                ${this.selected !== undefined
-                  ? html`<p>
-                      ${localize("ui.components.subpage-data-table.selected", {
-                        selected: this.selected || "0",
-                      })}
-                    </p>`
-                  : nothing}
-              </div>
-              <div class="center-vertical">
-                <slot name="selection-bar"></slot>
-              </div>
-            </div>`
-          : nothing}
-        ${this.showFilters
-          ? !showPane
-            ? nothing
-            : html`<div class="pane" slot="pane">
-                <div class="table-header">
-                  <ha-assist-chip
-                    .label=${localize(
-                      "ui.components.subpage-data-table.filters"
-                    )}
-                    active
-                    @click=${this._toggleFilters}
-                  >
-                    <ha-svg-icon
-                      slot="icon"
-                      .path=${mdiFilterVariant}
-                    ></ha-svg-icon>
-                  </ha-assist-chip>
-                  ${this.filters
-                    ? html`<ha-icon-button
-                        .path=${mdiFilterVariantRemove}
-                        @click=${this._clearFilters}
-                        .label=${localize(
-                          "ui.components.subpage-data-table.clear_filter"
-                        )}
-                      ></ha-icon-button>`
-                    : nothing}
-                </div>
-                <div class="pane-content">
-                  <slot name="filter-pane"></slot>
-                </div>
-              </div>`
-          : nothing}
         ${this.empty
           ? html`<div class="center">
               <slot name="empty">${this.noDataText}</slot>
@@ -491,77 +401,227 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
           : html`<div slot="toolbar-icon">
                 <slot name="toolbar-icon"></slot>
               </div>
-              ${this.narrow
-                ? html`
-                    <div slot="header">
-                      <slot name="header">
-                        <div class="search-toolbar">${searchBar}</div>
-                      </slot>
-                    </div>
-                  `
-                : ""}
-              <ha-data-table
-                .narrow=${this.narrow}
-                .columns=${this.columns}
-                .data=${this.data}
-                .noDataText=${this.noDataText}
-                .filter=${this.filter}
-                .selectable=${this._selectMode}
-                .id=${this.id}
-                .clickable=${this.clickable}
-                .appendRow=${this.appendRow}
-                .sortColumn=${this._sortColumn}
-                .sortDirection=${this._sortDirection}
-                .groupColumn=${this._groupColumn}
-                .groupOrder=${this.groupOrder}
-                .initialCollapsedGroups=${this.initialCollapsedGroups}
-                .columnOrder=${this.columnOrder}
-                .hiddenColumns=${this.hiddenColumns}
-              >
-                ${!this.narrow
-                  ? html`
-                      <div slot="header">
-                        <slot name="top-header"></slot>
-                        <slot name="header">
-                          <div class="table-header">
-                            ${this.hasFilters && !this.showFilters
-                              ? html`${filterButton}`
-                              : nothing}${selectModeBtn}${searchBar}${groupByMenu}${sortByMenu}${settingsButton}
+              <div class="page-content">
+                <div class="table-layout">
+                <ha-card>
+                  <ha-data-table
+                    .narrow=${this.narrow}
+                    .columns=${this.columns}
+                    .data=${this.data}
+                    .noDataText=${this.noDataText}
+                    .filter=${this.filter}
+                    .selectable=${this._selectMode}
+                    .id=${this.id}
+                    .clickable=${this.clickable}
+                    .appendRow=${this.appendRow}
+                    .sortColumn=${this._sortColumn}
+                    .sortDirection=${this._sortDirection}
+                    .groupColumn=${this._groupColumn}
+                    .groupOrder=${this.groupOrder}
+                    .initialCollapsedGroups=${this.initialCollapsedGroups}
+                    .columnOrder=${this.columnOrder}
+                    .hiddenColumns=${this.hiddenColumns}
+                  >
+                    ${!this.narrow
+                      ? html`
+                          <div slot="header">
+                            <slot name="top-header"></slot>
+                            <slot name="header">
+                              ${this._selectMode
+                                ? html`<div class="table-header selection-bar">
+                                    <div class="selection-controls">
+                                      <ha-icon-button
+                                        .path=${mdiClose}
+                                        @click=${this._disableSelectMode}
+                                        .label=${localize(
+                                          "ui.components.subpage-data-table.exit_selection_mode"
+                                        )}
+                                      ></ha-icon-button>
+                                      <ha-dropdown
+                                        @wa-select=${this._handleSelect}
+                                      >
+                                        <ha-assist-chip
+                                          .label=${localize(
+                                            "ui.components.subpage-data-table.select"
+                                          )}
+                                          slot="trigger"
+                                        >
+                                          <ha-svg-icon
+                                            slot="icon"
+                                            .path=${mdiFormatListChecks}
+                                          ></ha-svg-icon>
+                                          <ha-svg-icon
+                                            slot="trailing-icon"
+                                            .path=${mdiMenuDown}
+                                          ></ha-svg-icon
+                                        ></ha-assist-chip>
+                                        <ha-dropdown-item value="all">
+                                          ${localize(
+                                            "ui.components.subpage-data-table.select_all"
+                                          )}
+                                        </ha-dropdown-item>
+                                        <ha-dropdown-item value="none">
+                                          ${localize(
+                                            "ui.components.subpage-data-table.select_none"
+                                          )}
+                                        </ha-dropdown-item>
+                                        <wa-divider></wa-divider>
+                                        <ha-dropdown-item
+                                          value="disable_select_mode"
+                                        >
+                                          ${localize(
+                                            "ui.components.subpage-data-table.exit_selection_mode"
+                                          )}
+                                        </ha-dropdown-item>
+                                      </ha-dropdown>
+                                      ${this.selected !== undefined
+                                        ? html`<p>
+                                            ${localize(
+                                              "ui.components.subpage-data-table.selected",
+                                              {
+                                                selected: this.selected || "0",
+                                              }
+                                            )}
+                                          </p>`
+                                        : nothing}
+                                    </div>
+                                    <div class="center-vertical">
+                                      <slot name="selection-bar"></slot>
+                                    </div>
+                                  </div>`
+                                : html`<div class="table-header">
+                                    ${searchBar}${sortByMenu}${groupByMenu}${selectModeBtn}${this.hasFilters && !this.showFilters
+                                      ? html`${filterButton}`
+                                      : nothing}${settingsButton}
+                                  </div>`}
+                            </slot>
                           </div>
-                        </slot>
+                        `
+                      : html`
+                          <div slot="header">
+                            <slot name="top-header"></slot>
+                            <slot name="header">
+                              <div class="table-header">
+                                ${searchBar}
+                              </div>
+                            </slot>
+                          </div>
+                          <div slot="header-row" class="narrow-header-row">
+                            ${this._selectMode
+                              ? html`
+                                  <ha-icon-button
+                                    .path=${mdiClose}
+                                    @click=${this._disableSelectMode}
+                                    .label=${localize(
+                                      "ui.components.subpage-data-table.exit_selection_mode"
+                                    )}
+                                  ></ha-icon-button>
+                                  <ha-dropdown @wa-select=${this._handleSelect}>
+                                    <ha-assist-chip
+                                      .label=${localize(
+                                        "ui.components.subpage-data-table.select"
+                                      )}
+                                      slot="trigger"
+                                    >
+                                      <ha-svg-icon
+                                        slot="icon"
+                                        .path=${mdiFormatListChecks}
+                                      ></ha-svg-icon>
+                                      <ha-svg-icon
+                                        slot="trailing-icon"
+                                        .path=${mdiMenuDown}
+                                      ></ha-svg-icon
+                                    ></ha-assist-chip>
+                                    <ha-dropdown-item value="all">
+                                      ${localize(
+                                        "ui.components.subpage-data-table.select_all"
+                                      )}
+                                    </ha-dropdown-item>
+                                    <ha-dropdown-item value="none">
+                                      ${localize(
+                                        "ui.components.subpage-data-table.select_none"
+                                      )}
+                                    </ha-dropdown-item>
+                                    <wa-divider></wa-divider>
+                                    <ha-dropdown-item value="disable_select_mode">
+                                      ${localize(
+                                        "ui.components.subpage-data-table.exit_selection_mode"
+                                      )}
+                                    </ha-dropdown-item>
+                                  </ha-dropdown>
+                                  ${this.selected !== undefined
+                                    ? html`<p>
+                                        ${localize(
+                                          "ui.components.subpage-data-table.selected",
+                                          { selected: this.selected || "0" }
+                                        )}
+                                      </p>`
+                                    : nothing}
+                                  <div class="flex"></div>
+                                  <slot name="selection-bar"></slot>
+                                `
+                              : html`
+                                  ${sortByMenu}${groupByMenu}
+                                  <div class="flex"></div>
+                                  ${selectModeBtn}${this.hasFilters && !this.showFilters
+                                    ? html`${filterButton}`
+                                    : nothing}${settingsButton}
+                                `}
+                          </div>
+                        `}
+                  </ha-data-table>
+                </ha-card>
+                ${!this.narrow && this.showFilters
+                  ? html`<div class="filter-sidebar">
+                      <div class="filter-sidebar-header">
+                        <div class="filter-sidebar-title">
+                          <ha-svg-icon
+                            .path=${mdiFilterVariant}
+                          ></ha-svg-icon>
+                          ${localize(
+                            "ui.components.subpage-data-table.filters"
+                          )}
+                          ${this.filters
+                            ? html`<div class="filter-count">
+                                ${this.filters}
+                              </div>`
+                            : nothing}
+                        </div>
+                        <div class="filter-sidebar-actions">
+                          ${this.filters
+                            ? html`<ha-icon-button
+                                .path=${mdiFilterVariantRemove}
+                                @click=${this._clearFilters}
+                                .label=${localize(
+                                  "ui.components.subpage-data-table.clear_filter"
+                                )}
+                              ></ha-icon-button>`
+                            : nothing}
+                          <ha-icon-button
+                            .path=${mdiClose}
+                            @click=${this._closeFilters}
+                            .label=${localize(
+                              "ui.components.subpage-data-table.close_filter"
+                            )}
+                          ></ha-icon-button>
+                        </div>
                       </div>
-                    `
-                  : html`
-                      <div slot="header">
-                        <slot name="top-header"></slot>
+                      <div class="filter-sidebar-content">
+                        <slot name="filter-pane"></slot>
                       </div>
-                      <div slot="header-row" class="narrow-header-row">
-                        ${this.hasFilters && !this.showFilters
-                          ? html`${filterButton}`
-                          : nothing}
-                        ${selectModeBtn}
-                        <div class="flex"></div>
-                        ${groupByMenu}${sortByMenu}${settingsButton}
-                      </div>
-                    `}
-              </ha-data-table>`}
+                    </div>`
+                  : nothing}
+                </div>
+              </div>`}
         <div slot="fab"><slot name="fab"></slot></div>
       </hass-tabs-subpage>
-      ${this.showFilters && !showPane
-        ? html`<ha-dialog
+      ${this.showFilters && this.narrow
+        ? html`<ha-adaptive-dialog
             .open=${true}
-            width="full"
             header-title=${localize("ui.components.subpage-data-table.filters")}
             @closed=${this._closeFilters}
+            style="--dialog-content-padding: 0"
           >
-            <ha-icon-button
-              slot="headerNavigationIcon"
-              .path=${mdiClose}
-              @click=${this._closeFilters}
-              .label=${localize(
-                "ui.components.subpage-data-table.close_filter"
-              )}
-            ></ha-icon-button>
             ${this.filters
               ? html`<ha-icon-button
                   slot="headerActionItems"
@@ -572,9 +632,7 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
                   )}
                 ></ha-icon-button>`
               : nothing}
-            <div class="filter-dialog-content">
-              <slot name="filter-pane"></slot>
-            </div>
+            <slot name="filter-pane"></slot>
             <ha-dialog-footer slot="footer">
               <ha-button slot="primaryAction" @click=${this._closeFilters}>
                 ${localize("ui.components.subpage-data-table.show_results", {
@@ -582,7 +640,7 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
                 })}
               </ha-button>
             </ha-dialog-footer>
-          </ha-dialog>`
+          </ha-adaptive-dialog>`
         : nothing}
     `;
   }
@@ -730,16 +788,103 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
       --data-table-border-width: 0;
       --data-table-empty-row-height: var(--safe-area-inset-bottom, 0px);
     }
-    :host(:not([narrow])) ha-data-table,
-    .pane {
+    .page-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: var(--ha-space-4);
+      box-sizing: border-box;
+      background: var(--secondary-background-color);
+      width: 100%;
+    }
+    :host([narrow]) .page-content {
+      padding: var(--ha-space-2);
+      align-items: stretch;
+    }
+    .table-layout {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: row;
+      gap: var(--ha-space-4);
+      width: 100%;
+      max-width: var(--ha-automation-editor-width, 1540px);
+    }
+    :host(:not([narrow])) ha-card {
+      flex: 1;
+      min-width: 0;
       height: calc(
-        100vh -
-          1px - var(--header-height, 0px) - var(
+        100vh - 1px - var(--header-height, 0px) - var(
             --safe-area-inset-top,
             0px
-          ) - var(--safe-area-inset-bottom, 0px)
+          ) - var(--safe-area-inset-bottom, 0px) - calc(
+            var(--ha-space-4) * 2
+          )
       );
-      display: block;
+      overflow: hidden;
+    }
+    :host([narrow]) ha-card {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .filter-sidebar {
+      flex: 0 0 320px;
+      height: calc(
+        100vh - 1px - var(--header-height, 0px) - var(
+            --safe-area-inset-top,
+            0px
+          ) - var(--safe-area-inset-bottom, 0px) - calc(
+            var(--ha-space-4) * 2
+          )
+      );
+      background: var(--ha-card-background, var(--card-background-color, white));
+      border-radius: var(--ha-card-border-radius, var(--ha-border-radius-lg));
+      border: 1px solid var(--ha-card-border-color, var(--divider-color));
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .filter-sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+      padding: 0 var(--ha-space-2) 0 var(--ha-space-4);
+      border-bottom: 1px solid var(--divider-color);
+      box-sizing: border-box;
+      flex-shrink: 0;
+    }
+    .filter-sidebar-title {
+      display: flex;
+      align-items: center;
+      gap: var(--ha-space-2);
+      font-size: var(--ha-font-size-m);
+      font-weight: var(--ha-font-weight-medium);
+    }
+    .filter-sidebar-actions {
+      display: flex;
+      align-items: center;
+    }
+    .filter-count {
+      min-width: 18px;
+      height: 18px;
+      border-radius: var(--ha-border-radius-circle);
+      background-color: var(--primary-color);
+      color: var(--text-primary-color);
+      font-size: var(--ha-font-size-xs);
+      font-weight: var(--ha-font-weight-medium);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+      box-sizing: border-box;
+    }
+    .filter-sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
     }
     /* Last content row should keep the same padding above the fab as the fab
        has to the bottom (16px standard fab bottom padding) + the safe-area inset. */
@@ -759,23 +904,17 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
       --data-table-empty-row-height: calc(48px + 28px * 2);
     }
 
-    .pane-content {
-      height: calc(
-        100vh -
-          1px - var(--header-height, 0px) - var(--header-height, 0px) - var(
-            --safe-area-inset-top,
-            0px
-          ) - var(--safe-area-inset-bottom, 0px)
-      );
-      display: flex;
-      flex-direction: column;
-    }
-
     :host([narrow]) hass-tabs-subpage {
       --main-title-margin: 0;
     }
     :host([narrow]) {
       --expansion-panel-summary-padding: 0 16px;
+    }
+    :host([narrow]) .table-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--ha-card-background, var(--card-background-color, white));
     }
     .table-header {
       display: flex;
@@ -787,16 +926,10 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
       padding: 0 16px;
       gap: var(--ha-space-4);
       box-sizing: border-box;
-      background: var(--primary-background-color);
       border-bottom: 1px solid var(--divider-color);
     }
     ha-input-search {
       flex: 1;
-    }
-    .search-toolbar {
-      display: flex;
-      align-items: center;
-      color: var(--secondary-text-color);
     }
     .filters {
       --mdc-text-field-fill-color: var(--input-fill-color);
@@ -881,17 +1014,16 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
       margin-left: -16px;
     }
 
+    .table-header.selection-bar {
+      background: rgba(var(--rgb-primary-color), 0.06);
+    }
+
     .selection-bar {
-      background: rgba(var(--rgb-primary-color), 0.1);
-      width: 100%;
-      height: 100%;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 8px 12px;
-      box-sizing: border-box;
+      width: 100%;
       font-size: var(--ha-font-size-m);
-      --ha-assist-chip-container-color: var(--card-background-color);
     }
 
     .selection-controls {
@@ -924,22 +1056,6 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
     .select-mode-chip {
       --md-assist-chip-icon-label-space: 0;
       --md-assist-chip-trailing-space: 8px;
-    }
-
-    ha-dialog {
-      --dialog-content-padding: 0;
-    }
-
-    .filter-dialog-content {
-      height: calc(
-        100vh -
-          70px - var(--header-height, 0px) - var(
-            --safe-area-inset-top,
-            0px
-          ) - var(--safe-area-inset-bottom, 0px)
-      );
-      display: flex;
-      flex-direction: column;
     }
 
     ha-dropdown ha-assist-chip {

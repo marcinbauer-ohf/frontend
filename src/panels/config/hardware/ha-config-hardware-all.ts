@@ -19,7 +19,6 @@ import { fetchHassioHardwareInfo } from "../../../data/hassio/hardware";
 import { showAlertDialog } from "../../../dialogs/generic/show-dialog-box";
 import "../../../layouts/hass-tabs-subpage-data-table";
 import type { HomeAssistant, Route } from "../../../types";
-import { hardwareTabs } from "./ha-config-hardware";
 
 interface HardwareDeviceRow extends HardwareDevice {
   id: string;
@@ -95,7 +94,7 @@ class HaConfigHardwareAll extends LitElement {
         .narrow=${this.narrow}
         back-path="/config/system"
         .route=${this.route}
-        .tabs=${hardwareTabs(this.hass)}
+        .tabs=${[{ path: "/config/hardware/all", translationKey: "ui.panel.config.hardware.caption" }]}
         clickable
         .columns=${this._columns(this.hass.localize)}
         .data=${this._hardware ? this._data(this._hardware) : []}

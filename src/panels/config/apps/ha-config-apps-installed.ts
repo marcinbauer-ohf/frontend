@@ -1,6 +1,6 @@
 import {
   mdiAlertDecagramOutline,
-  mdiArrowUpBoldCircle,
+  mdiAlertCircle,
   mdiArrowUpBoldCircleOutline,
   mdiFlask,
   mdiPuzzle,
@@ -8,16 +8,18 @@ import {
   mdiStorePlus,
 } from "@mdi/js";
 import type { CSSResultGroup, TemplateResult } from "lit";
-import { css, html, LitElement } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
+import { storage } from "../../../common/decorators/storage";
 import { navigate } from "../../../common/navigate";
-import { caseInsensitiveStringCompare } from "../../../common/string/compare";
+import type {
+  DataTableColumnContainer,
+  SortingChangedEvent,
+} from "../../../components/data-table/ha-data-table";
 import "../../../components/ha-button";
-import "../../../components/ha-card";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-svg-icon";
-import "../../../components/input/ha-input-search";
 import type {
   HassioAddonInfo,
   HassioAddonsInfo,
@@ -30,12 +32,21 @@ import { extractApiErrorMessage } from "../../../data/hassio/common";
 import { showAlertDialog } from "../../../dialogs/generic/show-dialog-box";
 import "../../../layouts/hass-error-screen";
 import "../../../layouts/hass-loading-screen";
-import "../../../layouts/hass-subpage";
+import "../../../layouts/hass-tabs-subpage-data-table";
 import type { HomeAssistant, Route } from "../../../types";
-import { getAppDisplayName } from "./common/app";
-import "./components/supervisor-apps-card-content";
-import type { AppTag } from "./components/supervisor-apps-card-content";
-import { supervisorAppsStyle } from "./resources/supervisor-apps-style";
+
+interface AppTableRow {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  version: string;
+  version_latest: string;
+  state: string;
+  stage: string;
+  update_available: boolean;
+  has_icon: boolean;
+}
 
 @customElement("ha-config-apps-installed")
 export class HaConfigAppsInstalled extends LitElement {
@@ -43,46 +54,224 @@ export class HaConfigAppsInstalled extends LitElement {
 
   @property({ type: Boolean }) public narrow = false;
 
+  @property({ attribute: "is-wide", type: Boolean }) public isWide = false;
+
   @property({ attribute: false }) public route!: Route;
 
   @state() private _addonInfo?: HassioAddonsInfo;
 
-  @state() private _filter?: string;
-
   @state() private _error?: string;
+
+  @state()
+  @storage({
+    storage: "sessionStorage",
+    key: "apps-table-search",
+    state: true,
+    subscribe: false,
+  })
+  private _filter = "";
+
+  @storage({ key: "apps-table-sort", state: false, subscribe: false })
+  private _activeSorting?: SortingChangedEvent;
+
+  @storage({
+    key: "apps-table-column-order",
+    state: false,
+    subscribe: false,
+  })
+  private _activeColumnOrder?: string[];
+
+  @storage({
+    key: "apps-table-hidden-columns",
+    state: false,
+    subscribe: false,
+  })
+  private _activeHiddenColumns?: string[];
 
   protected firstUpdated() {
     this._loadData();
   }
 
+  private _handleIconError(e: Event) {
+    (e.target as HTMLImageElement).style.display = "none";
+  }
+
+  private _columns = memoizeOne(
+    (localize: HomeAssistant["localize"]): DataTableColumnContainer<AppTableRow> => ({
+      icon: {
+        title: "",
+        label: localize("ui.panel.config.devices.data_table.icon"),
+        type: "icon",
+        moveable: false,
+        showNarrow: true,
+        template: (row) =>
+          row.has_icon
+            ? html`<img
+                alt=""
+                src=${`/api/hassio/addons/${row.slug}/icon`}
+                @error=${this._handleIconError}
+              />`
+            : html`<ha-svg-icon .path=${mdiPuzzle}></ha-svg-icon>`,
+      },
+      name: {
+        title: localize("ui.panel.config.apps.caption"),
+        main: true,
+        sortable: true,
+        filterable: true,
+        direction: "asc",
+        flex: 2,
+        minWidth: "150px",
+      },
+      description: {
+        title: localize("ui.panel.config.info.caption"),
+        sortable: false,
+        filterable: true,
+        minWidth: "180px",
+        flex: 3,
+      },
+      version: {
+        title: localize("ui.panel.config.dashboard.updates.main"),
+        sortable: true,
+        minWidth: "80px",
+        template: (row) =>
+          row.update_available
+            ? html`<span
+                >${row.version}
+                <span class="version-latest">→ ${row.version_latest}</span></span
+              >`
+            : html`${row.version}`,
+      },
+      state: {
+        title: localize("ui.panel.config.integrations.attention"),
+        sortable: true,
+        minWidth: "110px",
+        template: (row): TemplateResult | typeof nothing => {
+          if (!row.state || row.state === "started") return nothing;
+          if (row.state === "error") {
+            return html`<ha-svg-icon
+              class="state state-error"
+              .path=${mdiAlertCircle}
+            ></ha-svg-icon>`;
+          }
+          if (row.state === "startup") {
+            return html`<span class="state state-startup"
+              >${localize(
+                "ui.panel.config.apps.installed.app_stopped" as any
+              )}</span
+            >`;
+          }
+          return html`<span class="state state-stopped"
+            >${localize(
+              "ui.panel.config.apps.installed.app_stopped" as any
+            )}</span
+          >`;
+        },
+      },
+      stage: {
+        title: localize("ui.panel.config.integrations.description"),
+        sortable: true,
+        groupable: true,
+        minWidth: "110px",
+        template: (row): TemplateResult | typeof nothing => {
+          if (row.stage === "stable") return nothing;
+          if (row.stage === "experimental") {
+            return html`<span class="stage stage-experimental"
+              ><ha-svg-icon .path=${mdiFlask}></ha-svg-icon>
+              ${localize(
+                `ui.panel.config.apps.dashboard.capability.stages.experimental` as any
+              )}</span
+            >`;
+          }
+          return html`<span class="stage stage-deprecated"
+            ><ha-svg-icon .path=${mdiAlertDecagramOutline}></ha-svg-icon>
+            ${localize(
+              `ui.panel.config.apps.dashboard.capability.stages.deprecated` as any
+            )}</span
+          >`;
+        },
+      },
+      update_available: {
+        title: localize("ui.panel.config.apps.state.update_available"),
+        sortable: true,
+        type: "icon",
+        minWidth: "80px",
+        template: (row) =>
+          row.update_available
+            ? html`<ha-svg-icon
+                class="update-icon"
+                .path=${mdiArrowUpBoldCircleOutline}
+                .title=${localize(
+                  "ui.panel.config.apps.state.update_available"
+                )}
+              ></ha-svg-icon>`
+            : nothing,
+      },
+    })
+  );
+
+  private _tableData = memoizeOne(
+    (addons: HassioAddonInfo[]): AppTableRow[] =>
+      addons.map((addon) => ({
+        id: addon.slug,
+        slug: addon.slug,
+        name: addon.name,
+        description: addon.description,
+        version: addon.version,
+        version_latest: addon.version_latest,
+        state: addon.state ?? "",
+        stage: addon.stage,
+        update_available: addon.update_available,
+        has_icon: addon.icon,
+      }))
+  );
+
   protected render(): TemplateResult {
     if (this._error) {
-      return html`
-        <hass-error-screen
-          .hass=${this.hass}
-          .error=${this._error}
-        ></hass-error-screen>
-      `;
+      return html`<hass-error-screen
+        .hass=${this.hass}
+        .error=${this._error}
+      ></hass-error-screen>`;
     }
 
     if (!this._addonInfo) {
-      return html`
-        <hass-loading-screen
-          .hass=${this.hass}
-          .narrow=${this.narrow}
-        ></hass-loading-screen>
-      `;
-    }
-
-    const addons = this._getAddons(this._addonInfo.addons, this._filter);
-
-    return html`
-      <hass-subpage
+      return html`<hass-loading-screen
         .hass=${this.hass}
         .narrow=${this.narrow}
+      ></hass-loading-screen>`;
+    }
+
+    return html`
+      <hass-tabs-subpage-data-table
+        .hass=${this.hass}
+        .narrow=${this.narrow}
+        .isWide=${this.isWide}
         .route=${this.route}
         back-path="/config"
-        .header=${this.hass.localize("ui.panel.config.apps.caption")}
+        .tabs=${[
+          {
+            path: "/config/apps",
+            translationKey: "ui.panel.config.apps.caption",
+          },
+        ]}
+        has-fab
+        .columns=${this._columns(this.hass.localize)}
+        .data=${this._tableData(this._addonInfo.addons)}
+        .filter=${this._filter}
+        .initialSorting=${this._activeSorting}
+        .columnOrder=${this._activeColumnOrder}
+        .hiddenColumns=${this._activeHiddenColumns}
+        .searchLabel=${this.hass.localize(
+          "ui.panel.config.apps.installed.search"
+        )}
+        .noDataText=${this.hass.localize(
+          "ui.panel.config.apps.installed.no_apps"
+        )}
+        clickable
+        .id=${"id"}
+        @row-click=${this._handleRowClick}
+        @search-changed=${this._handleSearchChange}
+        @sorting-changed=${this._handleSortingChanged}
+        @columns-changed=${this._handleColumnsChanged}
       >
         <ha-icon-button
           slot="toolbar-icon"
@@ -92,98 +281,30 @@ export class HaConfigAppsInstalled extends LitElement {
             "ui.panel.config.apps.store.check_updates"
           )}
         ></ha-icon-button>
-        <div class="search">
-          <ha-input-search
-            appearance="outlined"
-            .value=${this._filter}
-            @input=${this._handleSearchChange}
-          >
-          </ha-input-search>
-        </div>
-        <div class="content">
-          ${addons.length === 0
-            ? html`
-                <ha-card outlined>
-                  <div class="card-content">
-                    <button class="link" @click=${this._openStore}>
-                      ${this.hass.localize(
-                        "ui.panel.config.apps.installed.no_apps"
-                      )}
-                    </button>
-                  </div>
-                </ha-card>
-              `
-            : addons.map(
-                (addon) => html`
-                  <ha-card
-                    role="button"
-                    tabindex="0"
-                    outlined
-                    .addon=${addon}
-                    @click=${this._addonTapped}
-                    aria-label=${getAppDisplayName(addon.name, addon.stage)}
-                  >
-                    <div class="card-content">
-                      <supervisor-apps-card-content
-                        .hass=${this.hass}
-                        .title=${addon.name}
-                        .stage=${addon.stage}
-                        .description=${addon.description}
-                        available
-                        .tags=${this._getAppTags(addon)}
-                        .state=${addon.state}
-                        .icon=${addon.update_available
-                          ? mdiArrowUpBoldCircle
-                          : mdiPuzzle}
-                        .iconTitle=${addon.state !== "started"
-                          ? this.hass.localize(
-                              "ui.panel.config.apps.installed.app_stopped"
-                            )
-                          : addon.update_available
-                            ? this.hass.localize(
-                                "ui.panel.config.apps.installed.app_update_available"
-                              )
-                            : this.hass.localize(
-                                "ui.panel.config.apps.installed.app_running"
-                              )}
-                        .iconImage=${addon.icon
-                          ? `/api/hassio/addons/${addon.slug}/icon`
-                          : undefined}
-                      ></supervisor-apps-card-content>
-                    </div>
-                  </ha-card>
-                `
-              )}
-        </div>
 
-        <ha-button size="large" href="/config/apps/available">
+        <ha-button slot="fab" size="large" href="/config/apps/available">
           <ha-svg-icon slot="start" .path=${mdiStorePlus}></ha-svg-icon>
           ${this.hass.localize("ui.panel.config.apps.installed.add_app")}
         </ha-button>
-      </hass-subpage>
+      </hass-tabs-subpage-data-table>
     `;
   }
 
-  private _getAddons = memoizeOne(
-    (addons: HassioAddonInfo[], filter?: string) => {
-      let filteredAddons = addons;
-      if (filter) {
-        const lowerCaseFilter = filter.toLowerCase();
-        filteredAddons = addons.filter(
-          (addon) =>
-            addon.name.toLowerCase().includes(lowerCaseFilter) ||
-            addon.description.toLowerCase().includes(lowerCaseFilter) ||
-            addon.slug.toLowerCase().includes(lowerCaseFilter)
-        );
-      }
-      return filteredAddons.sort((a, b) =>
-        caseInsensitiveStringCompare(a.name, b.name, this.hass.locale.language)
-      );
-    }
-  );
+  private _handleRowClick(ev: CustomEvent) {
+    navigate(`/config/app/${ev.detail.id}/info`);
+  }
 
-  private _handleSearchChange(ev: InputEvent) {
-    this._filter = (ev.target as HTMLInputElement).value;
+  private _handleSearchChange(ev: CustomEvent) {
+    this._filter = ev.detail.value ?? "";
+  }
+
+  private _handleSortingChanged(ev: CustomEvent) {
+    this._activeSorting = ev.detail;
+  }
+
+  private _handleColumnsChanged(ev: CustomEvent) {
+    this._activeColumnOrder = ev.detail.columnOrder;
+    this._activeHiddenColumns = ev.detail.hiddenColumns;
   }
 
   private async _loadData(): Promise<void> {
@@ -191,7 +312,8 @@ export class HaConfigAppsInstalled extends LitElement {
       this._addonInfo = await fetchHassioAddonsInfo(this.hass);
     } catch (err: any) {
       this._error =
-        err.message || this.hass.localize("ui.panel.config.apps.error_loading");
+        err.message ||
+        this.hass.localize("ui.panel.config.apps.error_loading");
     }
   }
 
@@ -199,115 +321,55 @@ export class HaConfigAppsInstalled extends LitElement {
     try {
       await reloadHassioAddons(this.hass);
     } catch (err) {
-      showAlertDialog(this, {
-        text: extractApiErrorMessage(err),
-      });
+      showAlertDialog(this, { text: extractApiErrorMessage(err) });
     } finally {
       this._loadData();
     }
   }
 
-  private _addonTapped(ev: Event): void {
-    const addon = (ev.currentTarget as any).addon as HassioAddonInfo;
-    navigate(`/config/app/${addon.slug}/info`);
-  }
-
-  private _openStore(): void {
-    navigate("/config/apps/available");
-  }
-
-  private _getAppTags(addon: HassioAddonInfo): AppTag[] {
-    const labels: AppTag[] = [];
-
-    if (addon.update_available) {
-      labels.push({
-        label: this.hass.localize(
-          `ui.panel.config.apps.state.update_available`
-        ),
-        variant: "brand",
-        iconPath: mdiArrowUpBoldCircleOutline,
-      });
-    }
-    if (addon.stage !== "stable") {
-      labels.push({
-        label: this.hass.localize(
-          `ui.panel.config.apps.dashboard.capability.stages.${addon.stage}`
-        ),
-        variant: addon.stage === "experimental" ? "warning" : "danger",
-        iconPath:
-          addon.stage === "experimental" ? mdiFlask : mdiAlertDecagramOutline,
-      });
+  static styles: CSSResultGroup = css`
+    hass-tabs-subpage-data-table {
+      --data-table-row-height: 60px;
     }
 
-    return labels;
-  }
+    ha-svg-icon {
+      color: var(--secondary-text-color);
+    }
 
-  static styles: CSSResultGroup = [
-    supervisorAppsStyle,
-    css`
-      :host {
-        display: block;
-        height: 100%;
-        background-color: var(--primary-background-color);
-      }
+    .state-error {
+      color: var(--error-color);
+    }
 
-      ha-card {
-        cursor: pointer;
-        overflow: hidden;
-      }
+    .state-startup,
+    .state-stopped {
+      color: var(--warning-color);
+      font-size: var(--ha-font-size-s);
+    }
 
-      ha-card:hover {
-        background-color: var(--ha-color-fill-neutral-quiet-resting);
-      }
+    .stage {
+      display: flex;
+      align-items: center;
+      gap: var(--ha-space-1);
+      font-size: var(--ha-font-size-s);
+    }
 
-      .search {
-        position: sticky;
-        top: 0;
-        z-index: 2;
-      }
+    .stage-experimental {
+      color: var(--warning-color);
+    }
 
-      ha-input-search {
-        padding: var(--ha-space-3) var(--ha-space-2);
-        background: var(--sidebar-background-color);
-        border-bottom: 1px solid var(--divider-color);
-      }
+    .stage-deprecated {
+      color: var(--error-color);
+    }
 
-      .content {
-        padding: var(--ha-space-4);
-        margin-bottom: var(--ha-space-18);
-        gap: var(--ha-space-4);
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(336px, 100%), 1fr));
-      }
+    .update-icon {
+      color: var(--primary-color);
+    }
 
-      .card-content {
-        padding: var(--ha-space-4) var(--ha-space-4) var(--ha-space-2);
-      }
-
-      button.link {
-        color: var(--primary-color);
-        background: none;
-        border: none;
-        padding: 0;
-        font: inherit;
-        text-align: left;
-        text-decoration: underline;
-        cursor: pointer;
-      }
-
-      ha-button[size="large"] {
-        position: fixed;
-        right: calc(var(--ha-space-4) + var(--safe-area-inset-right));
-        bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom));
-        inset-inline-end: calc(
-          var(--ha-space-4) + var(--safe-area-inset-right)
-        );
-        inset-inline-start: initial;
-        z-index: 1;
-        --ha-button-box-shadow: var(--ha-box-shadow-l);
-      }
-    `,
-  ];
+    .version-latest {
+      color: var(--primary-color);
+      font-size: var(--ha-font-size-s);
+    }
+  `;
 }
 
 declare global {

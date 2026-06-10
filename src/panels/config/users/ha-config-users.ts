@@ -23,7 +23,6 @@ import {
 import { showConfirmationDialog } from "../../../dialogs/generic/show-dialog-box";
 import "../../../layouts/hass-tabs-subpage-data-table";
 import type { HomeAssistant, Route } from "../../../types";
-import { configSections } from "../ha-panel-config";
 import { showAddUserDialog } from "./show-dialog-add-user";
 import { showUserDetailDialog } from "./show-dialog-user-detail";
 import { storage } from "../../../common/decorators/storage";
@@ -177,7 +176,7 @@ export class HaConfigUsers extends LitElement {
         .narrow=${this.narrow}
         .route=${this.route}
         back-path="/config"
-        .tabs=${configSections.persons}
+        .tabs=${[{ path: "/config/users", translationKey: "ui.panel.config.users.caption" }]}
         .columns=${this._columns(this.narrow, this.hass.localize)}
         .data=${this._userData(this._users, this.hass.localize)}
         .columnOrder=${this._activeColumnOrder}

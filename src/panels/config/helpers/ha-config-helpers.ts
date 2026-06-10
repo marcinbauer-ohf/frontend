@@ -122,7 +122,6 @@ import {
   getEntityIdTableColumn,
   getLabelsTableColumn,
 } from "../common/data-table-columns";
-import { configSections } from "../ha-panel-config";
 import { renderConfigEntryError } from "../integrations/ha-config-integration-page";
 import "../integrations/ha-integration-overflow-menu";
 import { showLabelDetailDialog } from "../labels/show-dialog-label-detail";
@@ -628,7 +627,7 @@ export class HaConfigHelpers extends SubscribeMixin(LitElement) {
           ? undefined
           : "/config"}
         .route=${this.route}
-        .tabs=${configSections.devices}
+        .tabs=${[{ path: "/config/helpers", translationKey: "ui.panel.config.helpers.caption" }]}
         .searchLabel=${this.hass.localize(
           "ui.panel.config.helpers.picker.search",
           { number: helpers.length }

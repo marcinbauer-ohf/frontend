@@ -122,7 +122,7 @@ class HaConfigEnergy extends LitElement {
           ? undefined
           : "/config/lovelace/dashboards"}
         .route=${this.route}
-        .tabs=${TABS}
+        .tabs=${[{ path: "/config/energy", translationKey: "ui.panel.config.energy.caption" }]}
       >
         <ha-icon-button
           slot="toolbar-icon"

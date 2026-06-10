@@ -14,6 +14,7 @@ import {
   removeSearchParam,
 } from "../../common/url/search-params";
 import "../../components/date-picker/ha-date-range-picker";
+import "../../components/ha-card";
 import "../../components/ha-icon-button";
 import "../../components/ha-icon-button-arrow-prev";
 import "../../components/ha-menu-button";
@@ -23,7 +24,7 @@ import type { HaEntityPickerEntityFilterFunc } from "../../data/entity/entity";
 import { filterLogbookCompatibleEntities } from "../../data/logbook";
 import { resolveEntityIDs } from "../../data/selector";
 import { getSensorNumericDeviceClasses } from "../../data/sensor";
-import { haStyle } from "../../resources/styles";
+import { haStyle, haStyleScrollbar } from "../../resources/styles";
 import type { HomeAssistant } from "../../types";
 import "./ha-logbook";
 
@@ -84,38 +85,42 @@ export class HaPanelLogbook extends LitElement {
               ></ha-menu-button>
             `}
         <div slot="title">${this.hass.localize("panel.logbook")}</div>
-        <ha-icon-button
-          slot="actionItems"
-          @click=${this._refreshLogbook}
-          .path=${mdiRefresh}
-          .label=${this.hass!.localize("ui.common.refresh")}
-        ></ha-icon-button>
 
-        <div class="content">
-          <div class="filters">
-            <ha-date-range-picker
-              .startDate=${this._time.range[0]}
-              .endDate=${this._time.range[1]}
-              @value-changed=${this._dateRangeChanged}
-              time-picker
-            ></ha-date-range-picker>
+        <div class="page-content">
+          <div class="page-layout">
+            <ha-card>
+              <div class="card-toolbar">
+                <ha-date-range-picker
+                  .startDate=${this._time.range[0]}
+                  .endDate=${this._time.range[1]}
+                  @value-changed=${this._dateRangeChanged}
+                  time-picker
+                ></ha-date-range-picker>
 
-            <ha-target-picker
-              .hass=${this.hass}
-              .entityFilter=${this._filterFunc}
-              .value=${this._targetPickerValue}
-              add-on-top
-              @value-changed=${this._targetsChanged}
-              compact
-            ></ha-target-picker>
+                <ha-target-picker
+                  .hass=${this.hass}
+                  .entityFilter=${this._filterFunc}
+                  .value=${this._targetPickerValue}
+                  add-on-top
+                  @value-changed=${this._targetsChanged}
+                  compact
+                ></ha-target-picker>
+
+                <ha-icon-button
+                  @click=${this._refreshLogbook}
+                  .path=${mdiRefresh}
+                  .label=${this.hass!.localize("ui.common.refresh")}
+                ></ha-icon-button>
+              </div>
+
+              <ha-logbook
+                .hass=${this.hass}
+                .time=${this._time}
+                .entityIds=${this._getEntityIds()}
+                virtualize
+              ></ha-logbook>
+            </ha-card>
           </div>
-
-          <ha-logbook
-            .hass=${this.hass}
-            .time=${this._time}
-            .entityIds=${this._getEntityIds()}
-            virtualize
-          ></ha-logbook>
         </div>
       </ha-top-app-bar-fixed>
     `;
@@ -230,7 +235,6 @@ export class HaPanelLogbook extends LitElement {
         : this._time.range[0];
       const endDate = endDateStr ? new Date(endDateStr) : this._time.range[1];
 
-      // Only set if date has changed.
       if (
         startDate.getTime() !== this._time.range[0].getTime() ||
         endDate.getTime() !== this._time.range[1].getTime()
@@ -300,22 +304,86 @@ export class HaPanelLogbook extends LitElement {
   static get styles() {
     return [
       haStyle,
+      haStyleScrollbar,
       css`
         :host {
           --ha-generic-picker-max-width: 400px;
         }
 
-        .content {
+        .page-content {
+          height: calc(
+            100vh - 1px - var(--header-height, 0px) -
+              var(--safe-area-inset-top, 0px) -
+              var(--safe-area-inset-bottom, 0px)
+          );
           display: flex;
           flex-direction: column;
+          align-items: center;
+          padding: var(--ha-space-4);
+          box-sizing: border-box;
+          background: var(--secondary-background-color);
+          width: 100%;
+          overflow: hidden;
+        }
+
+        :host([narrow]) .page-content {
+          padding: var(--ha-space-2);
+        }
+
+        .page-layout {
+          flex: 1;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          width: 100%;
+          max-width: var(--ha-automation-editor-width, 1540px);
+        }
+
+        ha-card {
+          flex: 1;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
           height: calc(
-            100vh - var(--header-height, 0px) - var(
-                --safe-area-inset-top,
-                0px
-              ) - var(--safe-area-inset-bottom, 0px)
+            100vh - 1px - var(--header-height, 0px) -
+              var(--safe-area-inset-top, 0px) -
+              var(--safe-area-inset-bottom, 0px) - calc(var(--ha-space-4) * 2)
           );
-          overflow-x: hidden;
-          padding: 0 0 16px;
+        }
+
+        :host([narrow]) ha-card {
+          height: auto;
+        }
+
+        .card-toolbar {
+          display: flex;
+          align-items: center;
+          padding: var(--ha-space-2) var(--ha-space-2) var(--ha-space-2)
+            var(--ha-space-4);
+          gap: var(--ha-space-2);
+          border-bottom: 1px solid var(--divider-color);
+          flex-shrink: 0;
+          flex-wrap: wrap;
+        }
+
+        ha-date-range-picker {
+          direction: var(--direction);
+          max-width: 100%;
+        }
+
+        :host([narrow]) ha-date-range-picker {
+          width: 100%;
+        }
+
+        ha-target-picker {
+          flex: 1;
+          max-width: 100%;
+          min-width: 0;
+        }
+
+        ha-icon-button {
+          flex-shrink: 0;
         }
 
         ha-logbook {
@@ -323,49 +391,14 @@ export class HaPanelLogbook extends LitElement {
           min-height: 0;
         }
 
-        ha-date-range-picker {
-          margin-right: 16px;
-          margin-inline-end: 16px;
-          margin-inline-start: initial;
-          max-width: 100%;
-          direction: var(--direction);
+        :host([narrow]) .card-toolbar {
+          flex-direction: column;
+          align-items: stretch;
+          padding: var(--ha-space-2);
         }
 
-        @media all and (max-width: 870px) {
-          ha-date-range-picker {
-            width: 100%;
-          }
-
-          .filters {
-            flex-direction: column;
-          }
-        }
-
-        :host([narrow]) ha-date-range-picker {
-          margin-right: 0;
-          margin-inline-end: 0;
-          margin-inline-start: initial;
-          direction: var(--direction);
-          margin-bottom: 8px;
-        }
-
-        .content {
-          overflow-x: hidden;
-        }
-
-        .filters {
-          display: flex;
-          padding: 16px 16px 0;
-        }
-
-        :host([narrow]) .filters {
-          flex-wrap: wrap;
-        }
-
-        ha-target-picker {
-          flex: 1;
-          max-width: 100%;
-          min-width: 0;
+        :host([narrow]) .card-toolbar ha-icon-button {
+          align-self: flex-end;
         }
       `,
     ];
