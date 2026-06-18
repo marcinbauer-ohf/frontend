@@ -26,6 +26,7 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { UndoRedoController } from "../../../common/controllers/undo-redo-controller";
+import type { HASSDomEvent } from "../../../common/dom/fire_event";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { goBack, navigate } from "../../../common/navigate";
 import { promiseTimeout } from "../../../common/util/promise-timeout";
@@ -48,6 +49,7 @@ import type {
 import {
   automationConfigContext,
   deleteAutomation,
+  editingTriggerConditionContext,
   fetchAutomationFileConfig,
   getAutomationEditorInitData,
   getAutomationStateConfig,
@@ -126,6 +128,25 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
   @state()
   protected config?: AutomationConfig;
 
+  @provide({ context: editingTriggerConditionContext })
+  @state()
+  protected editingTriggerCondition = false;
+
+  // Number of mounted "Triggered by" condition editors. Trigger position
+  // labels are shown while at least one is open.
+  private _triggerConditionEditors = 0;
+
+  private _handleTriggerConditionEditing = (
+    ev: HASSDomEvent<{ editing: boolean }>
+  ) => {
+    ev.stopPropagation();
+    this._triggerConditionEditors = Math.max(
+      0,
+      this._triggerConditionEditors + (ev.detail.editing ? 1 : -1)
+    );
+    this.editingTriggerCondition = this._triggerConditionEditors > 0;
+  };
+
   private _newAutomationId?: string;
 
   protected domainHooks: EditorDomainHooks<AutomationConfig> = {
@@ -182,6 +203,8 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
         .backCallback=${this.backTapped}
         .header=${this.config.alias ||
         this.hass.localize("ui.panel.config.automation.editor.default_name")}
+        @trigger-condition-editing-changed=${this
+          ._handleTriggerConditionEditing}
       >
         ${this.mode === "gui" && !this.narrow
           ? html`<ha-icon-button

@@ -97,13 +97,13 @@ export class HaTriggerCondition extends LitElement {
         (info) => html`
           <ha-list-item-option
             .value=${info.id}
-            .selected=${selectedIds.includes(info.id)}
+            .selected=${selectedIds.map(String).includes(info.id)}
             appearance="checkbox"
           >
             <div class="option" slot="headline">
               <ha-trigger-id-chip
                 id=${`trigger-${info.id}`}
-                .triggerId=${info.id}
+                .position=${info.position}
               >
               </ha-trigger-id-chip>
               ${info.label}

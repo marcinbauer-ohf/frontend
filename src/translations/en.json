@@ -5162,11 +5162,6 @@
                 "global": "No triggers and targets found for {term}",
                 "item": "No triggers found for {term}"
               },
-              "id": "Trigger ID",
-              "optional": "Optional",
-              "add_id": "Add trigger ID",
-              "edit_id": "Edit trigger ID",
-              "id_description": "Use trigger IDs in a Triggered by condition to run different actions depending on which trigger started the automation.",
               "duplicate": "[%key:ui::common::duplicate%]",
               "re_order": "Re-order",
               "rename": "Rename",

@@ -11,7 +11,6 @@ import {
   mdiContentPaste,
   mdiDelete,
   mdiDotsVertical,
-  mdiIdentifier,
   mdiPlayCircleOutline,
   mdiPlaylistEdit,
   mdiPlusCircleMultipleOutline,
@@ -53,12 +52,19 @@ import "../../../../components/ha-tooltip";
 import { TRIGGER_ICONS } from "../../../../components/ha-trigger-icon";
 import type {
   AutomationClipboard,
+  AutomationConfig,
   PlatformTrigger,
   Trigger,
   TriggerList,
   TriggerSidebarConfig,
 } from "../../../../data/automation";
-import { isTrigger, subscribeTrigger } from "../../../../data/automation";
+import {
+  automationConfigContext,
+  editingTriggerConditionContext,
+  flattenTriggers,
+  isTrigger,
+  subscribeTrigger,
+} from "../../../../data/automation";
 import { describeTrigger } from "../../../../data/automation_i18n";
 import { validateConfig } from "../../../../data/config";
 import { fullEntitiesContext } from "../../../../data/context";
@@ -80,7 +86,6 @@ import { overflowStyles, rowStyles } from "../styles";
 import "../target/ha-automation-row-targets";
 import "./ha-automation-trigger-editor";
 import type HaAutomationTriggerEditor from "./ha-automation-trigger-editor";
-import { showEditTriggerIdDialog } from "./show-edit-trigger-id";
 import "./types/ha-automation-trigger-calendar";
 import "./types/ha-automation-trigger-conversation";
 import "./types/ha-automation-trigger-device";
@@ -182,6 +187,30 @@ export default class HaAutomationTriggerRow extends LitElement {
   @consume({ context: fullEntitiesContext, subscribe: true })
   _entityReg: EntityRegistryEntry[] = [];
 
+  @state()
+  @consume({ context: automationConfigContext, subscribe: true })
+  _automationConfig?: AutomationConfig;
+
+  @state()
+  @consume({ context: editingTriggerConditionContext, subscribe: true })
+  _editingTriggerCondition = false;
+
+  // 1-based position of this trigger among all triggers, used as its visible
+  // label. The stable ID is hidden; users reference triggers by position.
+  private get _triggerPosition(): number | undefined {
+    if (isTriggerList(this.trigger)) {
+      return undefined;
+    }
+    const id = (this.trigger as Exclude<Trigger, TriggerList>).id;
+    if (!id) {
+      return undefined;
+    }
+    const index = flattenTriggers(this._automationConfig?.triggers).findIndex(
+      (t) => t.id === id
+    );
+    return index === -1 ? undefined : index + 1;
+  }
+
   get selected() {
     return this._selected;
   }
@@ -248,11 +277,11 @@ export default class HaAutomationTriggerRow extends LitElement {
             .trigger=${(this.trigger as Exclude<Trigger, TriggerList>).trigger}
           ></ha-trigger-icon>`}
       <h3 slot="header">
-        ${type !== "list" && (this.trigger as Exclude<Trigger, TriggerList>).id
+        ${this._editingTriggerCondition && this._triggerPosition !== undefined
           ? html`<ha-trigger-id-chip
               id="trigger-id-chip"
               slot="leading-icon"
-              .triggerId=${(this.trigger as Exclude<Trigger, TriggerList>).id}
+              .position=${this._triggerPosition}
             >
             </ha-trigger-id-chip>`
           : nothing}
@@ -331,17 +360,6 @@ export default class HaAutomationTriggerRow extends LitElement {
                   `ui.panel.config.automation.editor.comment.${(this.trigger as Exclude<Trigger, TriggerList>).comment ? "edit" : "add"}`
                 )
               )}
-            </ha-dropdown-item>`
-          : nothing}
-        ${type !== "list"
-          ? html`<ha-dropdown-item value="edit_id" .disabled=${this.disabled}>
-              <ha-svg-icon slot="icon" .path=${mdiIdentifier}></ha-svg-icon>
-              <div class="overflow-label">
-                ${this.hass.localize(
-                  `ui.panel.config.automation.editor.triggers.${"id" in this.trigger ? "edit" : "add"}_id`
-                )}
-                <span class="shortcut-placeholder ${isMac ? "mac" : ""}"></span>
-              </div>
             </ha-dropdown-item>`
           : nothing}
         <wa-divider></wa-divider>
@@ -717,7 +735,6 @@ export default class HaAutomationTriggerRow extends LitElement {
           this.focus();
         }
       },
-      editId: this._editTriggerId,
       rename: () => {
         this._renameTrigger();
       },
@@ -828,34 +845,6 @@ export default class HaAutomationTriggerRow extends LitElement {
       `,
     });
   }
-
-  private _editTriggerId = () => {
-    if (isTriggerList(this.trigger)) {
-      return;
-    }
-    const trigger = this.trigger as Exclude<Trigger, TriggerList>;
-    showEditTriggerIdDialog(this, {
-      id: trigger.id,
-      onUpdate: (newId) => {
-        if (newId === (trigger.id ?? undefined)) {
-          return;
-        }
-        const value: Trigger = { ...trigger };
-        if (newId) {
-          value.id = newId;
-        } else {
-          delete value.id;
-        }
-        fireEvent(this, "value-changed", {
-          value,
-        });
-
-        if (this._selected && this.optionsInSidebar) {
-          this.openSidebar(value); // refresh sidebar
-        }
-      },
-    });
-  };
 
   private _renameTrigger = async (): Promise<void> => {
     if (isTriggerList(this.trigger)) return;
@@ -1040,9 +1029,6 @@ export default class HaAutomationTriggerRow extends LitElement {
         break;
       case "edit_comment":
         this._editCommentTrigger();
-        break;
-      case "edit_id":
-        this._editTriggerId();
         break;
       case "duplicate":
         this._duplicateTrigger();

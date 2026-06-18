@@ -4,30 +4,25 @@ import { customElement, property } from "lit/decorators";
 import "../../../components/ha-svg-icon";
 
 /**
- * Home Assistant trigger ID chip component
+ * Home Assistant trigger chip component
  *
  * @element ha-trigger-id-chip
  * @extends {LitElement}
  *
  * @summary
- * A small chip that displays an automation trigger ID prefixed with a hash icon.
+ * A small chip that labels a trigger by its position, prefixed with a hash icon.
+ * Trigger IDs are auto-generated and hidden; the position is what users see.
  *
- * @slot start - Optional content rendered before the hash icon (usually an icon).
- *
- * @attr {string} trigger-id - The trigger ID to display.
- * @attr {boolean} warning - Renders the chip with warning colors.
+ * @attr {number} position - The 1-based position of the trigger to display.
  */
 @customElement("ha-trigger-id-chip")
 export class HaTriggerIdChip extends LitElement {
-  @property({ attribute: "trigger-id" }) public triggerId!: string;
-
-  @property({ type: Boolean, reflect: true }) public warning = false;
+  @property({ type: Number }) public position!: number;
 
   protected render() {
     return html`
-      <slot name="start"></slot>
       <ha-svg-icon .path=${mdiPound}></ha-svg-icon>
-      <span>${this.triggerId}</span>
+      <span>${this.position}</span>
     `;
   }
 
@@ -46,11 +41,6 @@ export class HaTriggerIdChip extends LitElement {
       font-weight: var(--ha-font-weight-medium);
       line-height: 20px;
       height: 20px;
-    }
-    :host([warning]) {
-      border-color: var(--ha-color-border-warning-normal);
-      color: var(--ha-color-on-warning-normal);
-      background-color: var(--ha-color-fill-warning-quiet-resting);
     }
   `;
 }

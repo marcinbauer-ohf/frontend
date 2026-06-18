@@ -64,6 +64,7 @@ import type {
 } from "../../../../data/automation";
 import {
   automationConfigContext,
+  editingTriggerConditionContext,
   isCondition,
   subscribeCondition,
   testCondition,
@@ -163,11 +164,21 @@ export default class HaAutomationConditionRow extends LitElement {
 
   @state() private _selected = false;
 
+  @state() private _expanded = false;
+
   @state() private _liveTestResult: LiveTestState = "unknown";
+
+  // Tracks the last value broadcast via "trigger-condition-editing-changed",
+  // so we only fire on real changes.
+  private _triggerEditingSignalled = false;
 
   @state()
   @consume({ context: automationConfigContext, subscribe: true })
   private _automationConfig?: AutomationConfig;
+
+  @state()
+  @consume({ context: editingTriggerConditionContext, subscribe: true })
+  private _editingTriggerCondition = false;
 
   @state()
   @consume({ context: fullEntitiesContext, subscribe: true })
@@ -613,33 +624,52 @@ export default class HaAutomationConditionRow extends LitElement {
       this._entityReg
     );
     const infoById = new Map(triggerInfos.map((info) => [info.id, info]));
+    const editing = this._editingTriggerCondition;
     return html`${prefix}
     ${ids
-      .filter((id) => infoById.get(id))
+      .filter((id) => infoById.get(String(id)))
       .map((id) => {
-        const info = infoById.get(id)!;
+        const info = infoById.get(String(id))!;
+        const compact = ids.length >= 4;
+        const anchorId = `trigger-${id}`;
 
-        const triggerIcon = html`<ha-trigger-icon
-          .slot=${ids.length < 4 ? "start" : ""}
-          .hass=${this.hass}
-          .trigger=${info.triggerType}
-        ></ha-trigger-icon>`;
+        const triggerIcon = (slot: string) =>
+          html`<ha-trigger-icon
+            .slot=${slot}
+            .hass=${this.hass}
+            .trigger=${info.triggerType}
+          ></ha-trigger-icon>`;
+
+        // The #N position chip is only shown while a "Triggered by" condition
+        // is being edited; otherwise the trigger is shown by its description.
+        const chip = editing
+          ? html`<ha-trigger-id-chip id=${anchorId} .position=${info.position}>
+            </ha-trigger-id-chip>`
+          : nothing;
+
+        if (compact) {
+          // 4+ triggers: a single compact anchor (the chip while editing, the
+          // trigger icon otherwise) with the full description in a tooltip.
+          return html`
+            <div class="trigger">
+              ${editing
+                ? chip
+                : html`<ha-trigger-icon
+                    id=${anchorId}
+                    .hass=${this.hass}
+                    .trigger=${info.triggerType}
+                  ></ha-trigger-icon>`}
+              <ha-tooltip .for=${anchorId}>
+                <div>${triggerIcon("")}${info.label}</div>
+              </ha-tooltip>
+            </div>
+          `;
+        }
 
         return html`
           <div class="trigger">
-            ${ids.length < 4 ? triggerIcon : nothing}
-            <ha-trigger-id-chip id=${`trigger-${id}`} .triggerId=${id}>
-            </ha-trigger-id-chip>
-            ${ids.length < 4
-              ? html`<span>${info.label}</span>`
-              : html`<ha-tooltip .for=${`trigger-${id}`}></ha-tooltip>`}
-            ${ids.length >= 4
-              ? html`<ha-tooltip .for=${`trigger-${id}`}>
-                  ${ids.length >= 4
-                    ? html`<div>${triggerIcon}${info.label}</div>`
-                    : nothing}
-                </ha-tooltip>`
-              : nothing}
+            ${triggerIcon("start")}${chip}
+            <span>${info.label}</span>
           </div>
         `;
       })}`;
@@ -688,6 +718,7 @@ export default class HaAutomationConditionRow extends LitElement {
       this._resetSubscription();
       this._debounceSubscribeCondition();
     }
+    this._updateTriggerEditingSignal();
   }
 
   public disconnectedCallback() {
@@ -697,6 +728,10 @@ export default class HaAutomationConditionRow extends LitElement {
       clearTimeout(this._testingTimeout);
     }
     this._resetSubscription();
+    if (this._triggerEditingSignalled) {
+      this._triggerEditingSignalled = false;
+      fireEvent(this, "trigger-condition-editing-changed", { editing: false });
+    }
   }
 
   private _resetSubscription() {
@@ -1060,8 +1095,26 @@ export default class HaAutomationConditionRow extends LitElement {
   }
 
   private _expansionPanelChanged(ev: CustomEvent) {
+    this._expanded = ev.detail.expanded;
     if (!ev.detail.expanded) {
       this._isNew = false;
+    }
+  }
+
+  // A "Triggered by" condition is being edited when its editor is open: in
+  // sidebar mode that means the row is selected, inline it means expanded.
+  private get _isEditingTriggerCondition(): boolean {
+    return (
+      this.condition.condition === "trigger" &&
+      (this.optionsInSidebar ? this._selected : this._expanded)
+    );
+  }
+
+  private _updateTriggerEditingSignal() {
+    const editing = this._isEditingTriggerCondition;
+    if (editing !== this._triggerEditingSignalled) {
+      this._triggerEditingSignalled = editing;
+      fireEvent(this, "trigger-condition-editing-changed", { editing });
     }
   }
 
@@ -1214,5 +1267,8 @@ export default class HaAutomationConditionRow extends LitElement {
 declare global {
   interface HTMLElementTagNameMap {
     "ha-automation-condition-row": HaAutomationConditionRow;
+  }
+  interface HASSDomEvents {
+    "trigger-condition-editing-changed": { editing: boolean };
   }
 }

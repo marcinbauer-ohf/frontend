@@ -455,6 +455,7 @@ export const migrateAutomationConfig = <
 
   if (config.triggers) {
     config.triggers = migrateAutomationTrigger(config.triggers);
+    ensureTriggerIds(config.triggers);
   }
 
   if (config.actions) {
@@ -487,6 +488,31 @@ export const migrateAutomationTrigger = (
     delete trigger.platform;
   }
   return trigger;
+};
+
+// Trigger IDs are auto-generated, hidden from the user, and stable for the
+// lifetime of a trigger. They are numeric strings that never get reused, so a
+// "Triggered by" condition keeps pointing at the same trigger across reorders
+// and deletions.
+//
+// `ensureTriggerIds` assigns a stable ID (max existing numeric ID + 1) to every
+// trigger that doesn't have one yet, mutating the triggers in place. Triggers
+// that already carry an ID keep it, so existing references stay valid.
+export const ensureTriggerIds = (triggers: Trigger | Trigger[]): void => {
+  const flat = flattenTriggers(triggers);
+  let max = 0;
+  for (const t of flat) {
+    const num = Number(t.id);
+    if (t.id && Number.isInteger(num) && num > max) {
+      max = num;
+    }
+  }
+  for (const t of flat) {
+    if (!t.id) {
+      max += 1;
+      t.id = String(max);
+    }
+  }
 };
 
 export const flattenTriggers = (
@@ -615,7 +641,6 @@ export interface BaseSidebarConfig {
 
 export interface TriggerSidebarConfig extends BaseSidebarConfig {
   save: (value: Trigger) => void;
-  editId: () => void;
   rename: () => void;
   disable: () => void;
   duplicate: () => void;
@@ -703,3 +728,10 @@ export interface ShowAutomationEditorParams {
 export const automationConfigContext = createContext<
   AutomationConfig | undefined
 >("automationConfig");
+
+// True while a "Triggered by" condition is being edited. Trigger position
+// labels (the #N chips) are only meaningful in that context, so they stay
+// hidden everywhere else.
+export const editingTriggerConditionContext = createContext<boolean>(
+  "editingTriggerCondition"
+);

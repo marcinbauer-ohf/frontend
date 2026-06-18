@@ -1,4 +1,5 @@
 import "@home-assistant/webawesome/dist/components/divider/divider";
+import { consume } from "@lit/context";
 import {
   mdiAppleKeyboardCommand,
   mdiCommentEditOutline,
@@ -6,7 +7,6 @@ import {
   mdiContentCut,
   mdiContentPaste,
   mdiDelete,
-  mdiIdentifier,
   mdiPlayCircleOutline,
   mdiPlaylistEdit,
   mdiPlusCircleMultipleOutline,
@@ -24,10 +24,16 @@ import "../../../../components/ha-dropdown-item";
 import "../../../../components/ha-svg-icon";
 import "../../../../components/ha-tooltip";
 import type {
+  AutomationConfig,
   LegacyTrigger,
   Trigger,
   TriggerList,
   TriggerSidebarConfig,
+} from "../../../../data/automation";
+import {
+  automationConfigContext,
+  editingTriggerConditionContext,
+  flattenTriggers,
 } from "../../../../data/automation";
 import {
   getTriggerDomain,
@@ -62,8 +68,31 @@ export default class HaAutomationSidebarTrigger extends LitElement {
 
   @state() private _warnings?: string[];
 
+  @state()
+  @consume({ context: automationConfigContext, subscribe: true })
+  _automationConfig?: AutomationConfig;
+
+  @state()
+  @consume({ context: editingTriggerConditionContext, subscribe: true })
+  _editingTriggerCondition = false;
+
   @query(".sidebar-editor")
   public editor?: HaAutomationTriggerEditor;
+
+  // 1-based position of this trigger among all triggers, shown as its label.
+  private get _triggerPosition(): number | undefined {
+    if (isTriggerList(this.config.config)) {
+      return undefined;
+    }
+    const id = (this.config.config as Exclude<Trigger, TriggerList>).id;
+    if (!id) {
+      return undefined;
+    }
+    const index = flattenTriggers(this._automationConfig?.triggers).findIndex(
+      (t) => t.id === id
+    );
+    return index === -1 ? undefined : index + 1;
+  }
 
   protected willUpdate(changedProperties: PropertyValues<this>) {
     if (changedProperties.has("config")) {
@@ -113,12 +142,10 @@ export default class HaAutomationSidebarTrigger extends LitElement {
         <span slot="title">${title}</span>
         <div slot="subtitle" class="subtitle">
           ${subtitle}
-          ${"id" in this.config.config
+          ${this._editingTriggerCondition && this._triggerPosition !== undefined
             ? html`<ha-trigger-id-chip
                 id="trigger-id-chip"
-                .triggerId=${(
-                  this.config.config as Exclude<Trigger, TriggerList>
-                ).id}
+                .position=${this._triggerPosition}
               >
               </ha-trigger-id-chip>`
             : nothing}
@@ -152,21 +179,6 @@ export default class HaAutomationSidebarTrigger extends LitElement {
               <div class="overflow-label">
                 ${this.hass.localize(
                   `ui.panel.config.automation.editor.comment.${(this.config.config as Exclude<Trigger, TriggerList>).comment ? "edit" : "add"}`
-                )}
-                <span class="shortcut-placeholder ${isMac ? "mac" : ""}"></span>
-              </div>
-            </ha-dropdown-item>`
-          : nothing}
-        ${type !== "list"
-          ? html` <ha-dropdown-item
-              slot="menu-items"
-              value="edit_id"
-              .disabled=${this.disabled || type === "list"}
-            >
-              <ha-svg-icon slot="icon" .path=${mdiIdentifier}></ha-svg-icon>
-              <div class="overflow-label">
-                ${this.hass.localize(
-                  `ui.panel.config.automation.editor.triggers.${"id" in this.config.config ? "edit" : "add"}_id`
                 )}
                 <span class="shortcut-placeholder ${isMac ? "mac" : ""}"></span>
               </div>
@@ -406,9 +418,6 @@ export default class HaAutomationSidebarTrigger extends LitElement {
         break;
       case "edit_comment":
         this.config.editComment();
-        break;
-      case "edit_id":
-        this.config.editId();
         break;
       case "duplicate":
         this.config.duplicate();

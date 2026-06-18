@@ -110,9 +110,10 @@ const formatNumericLimitValue = (
 
 export interface TriggerInfo {
   id: string;
+  // 1-based position of the trigger among all triggers; shown as its label.
+  position: number;
   label: string;
   triggerType: string;
-  count: number;
 }
 
 export const getTriggerInfos = (
@@ -123,19 +124,19 @@ export const getTriggerInfos = (
   if (!triggers) {
     return [];
   }
-  const map = new Map<string, TriggerInfo>();
-  for (const t of flattenTriggers(triggers)) {
-    if (isTriggerList(t) || !t.id || map.get(t.id)) {
-      continue;
+  const infos: TriggerInfo[] = [];
+  flattenTriggers(triggers).forEach((t, index) => {
+    if (!t.id) {
+      return;
     }
-    map.set(t.id, {
+    infos.push({
       id: t.id,
+      position: index + 1,
       label: describeTrigger(t, hass, entityRegistry),
       triggerType: t.trigger,
-      count: 1,
     });
-  }
-  return Array.from(map.values());
+  });
+  return infos;
 };
 
 export const describeTrigger = (
