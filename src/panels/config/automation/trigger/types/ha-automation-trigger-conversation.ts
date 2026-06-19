@@ -135,11 +135,13 @@ export class HaConversationTrigger
     if (
       !(await showConfirmationDialog(this, {
         title: this.hass.localize(
-          "ui.panel.config.automation.editor.triggers.type.conversation.delete"
+          "ui.panel.config.automation.editor.triggers.type.conversation.confirm_delete_title"
         ),
         text: this.hass.localize(
           "ui.panel.config.automation.editor.triggers.type.conversation.confirm_delete"
         ),
+        confirmText: this.hass.localize("ui.common.delete"),
+        dismissText: this.hass.localize("ui.common.cancel"),
         destructive: true,
       }))
     ) {

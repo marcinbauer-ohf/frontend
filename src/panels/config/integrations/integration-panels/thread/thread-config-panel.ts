@@ -634,11 +634,11 @@ export class ThreadConfigPanel extends SubscribeMixin(LitElement) {
     const dataset = (ev.currentTarget as any).networkDataset as ThreadDataSet;
     const confirm = await showConfirmationDialog(this, {
       title: this.hass.localize(
-        "ui.panel.config.thread.confirm_delete_dataset",
-        { name: dataset.network_name }
+        "ui.panel.config.thread.confirm_delete_dataset"
       ),
       text: this.hass.localize(
-        "ui.panel.config.thread.confirm_delete_dataset_text"
+        "ui.panel.config.thread.confirm_delete_dataset_text",
+        { name: dataset.network_name }
       ),
       destructive: true,
       confirmText: this.hass.localize("ui.common.delete"),

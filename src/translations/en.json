@@ -1928,8 +1928,8 @@
           "enabled_restart_confirm": "Restart Home Assistant to finish enabling the entities",
           "hidden_explanation": "Hidden entities will not be included in auto-populated dashboards or when their area, device or label is referenced. Their history is still tracked and you can still interact with them with actions.",
           "delete": "Delete",
-          "confirm_delete_title": "Delete entity",
-          "confirm_delete": "Deleting \"{entity_name}\" is an irreversible action. Are you sure you want to continue?",
+          "confirm_delete_title": "Delete entity?",
+          "confirm_delete": "''{entity_name}'' will be permanently deleted.",
           "confirm_delete_related": "This entity is part of {items}. If you delete it, you will need to update those manually.",
           "confirm_delete_count": {
             "automation": "{count} {count, plural,\n  one {automation}\n  other {automations}\n}",
@@ -3088,7 +3088,7 @@
           "introduction": "Labels can help you organize your areas, devices, and entities. They can be used to filter in the UI, or use them as a target in automations.",
           "introduction2": "Go to the area, device, or entity you want to add a label to, and press the edit button to assign labels to them.",
           "confirm_remove_title": "Remove label?",
-          "confirm_remove": "Are you sure you want to remove label {label}? It will be removed from all areas, devices, and entities."
+          "confirm_remove": "''{label}'' will be removed from all areas, devices, and entities."
         },
         "areas": {
           "caption": "Areas",
@@ -3124,7 +3124,7 @@
               "edit_floor": "Edit floor",
               "delete_floor": "Delete floor",
               "confirm_delete": "Delete floor?",
-              "confirm_delete_text": "Deleting the floor will unassign all areas from it."
+              "confirm_delete_text": "This floor will be permanently deleted. Its areas will be unassigned."
             },
             "area_reorder_failed": "Failed to reorder areas",
             "area_move_failed": "Failed to move area",
@@ -3163,8 +3163,8 @@
             "related_entities_section": "Related sensors"
           },
           "delete": {
-            "confirmation_title": "Delete {name}?",
-            "confirmation_text": "This area will be permanently deleted and all devices belonging to this area will become unassigned."
+            "confirmation_title": "Delete area?",
+            "confirmation_text": "''{name}'' will be permanently deleted. All devices in it will become unassigned."
           }
         },
         "backup": {
@@ -3212,12 +3212,12 @@
               }
             },
             "delete_selected": {
-              "title": "Delete selected backups",
+              "title": "Delete selected backups?",
               "text": "These backups will be permanently deleted.",
               "failed": "Failed to delete selected backups"
             },
             "delete": {
-              "title": "Delete backup",
+              "title": "Delete backup?",
               "text": "This backup will be permanently deleted.",
               "failed": "Failed to delete backup"
             },
@@ -3743,7 +3743,7 @@
           "never_scanned": "Never scanned",
           "create_automation": "Create automation",
           "confirm_delete_title": "Delete tag?",
-          "confirm_delete": "The tag ''{tag}'' will be permanently deleted.",
+          "confirm_delete": "''{tag}'' will be permanently deleted.",
           "automation_title": "Tag {name} is scanned",
           "qr_code_image": "QR code for tag {name}",
           "headers": {
@@ -4330,7 +4330,7 @@
             "search": "Search {number} {number, plural,\n  one {helper}\n  other {helpers}\n}",
             "error_information": "Error information",
             "delete_confirm_title": "Delete helper?",
-            "delete_confirm_text": "Are you sure you want to delete {name}?",
+            "delete_confirm_text": "''{name}'' will be permanently deleted.",
             "delete_failed": "Failed to delete helper",
             "no_category_support": "You can't assign a category to this helper",
             "no_category_entity_reg": "To assign a category to a helper it needs to have a unique ID."
@@ -4580,8 +4580,8 @@
                 "built_in": "Built-in"
               }
             },
-            "confirm_delete_title": "Delete {dashboard_title}?",
-            "confirm_delete_text": "This dashboard will be permanently deleted.",
+            "confirm_delete_title": "Delete dashboard?",
+            "confirm_delete_text": "''{dashboard_title}'' will be permanently deleted.",
             "cant_edit_yaml": "Dashboards created in YAML cannot be edited from the UI. Change them in configuration.yaml.",
             "cant_edit_lovelace": "The Overview dashboard title and icon cannot be changed. You can create a new dashboard to get more customization options.",
             "detail": {
@@ -4964,7 +4964,7 @@
             "show_settings": "Settings",
             "delete": "[%key:ui::common::delete%]",
             "delete_confirm_title": "Delete automation?",
-            "delete_confirm_text": "{name} will be permanently deleted.",
+            "delete_confirm_text": "''{name}'' will be permanently deleted.",
             "duplicate": "[%key:ui::common::duplicate%]",
             "disabled": "Disabled",
             "state": "State",
@@ -5315,7 +5315,8 @@
                   "no_punctuation": "You should not use punctuation in your sentence",
                   "add_sentence": "Add sentence",
                   "delete": "Delete sentence",
-                  "confirm_delete": "Are you sure you want to delete this sentence?",
+                  "confirm_delete_title": "Delete sentence?",
+                  "confirm_delete": "This sentence will be permanently deleted.",
                   "description": {
                     "picker": "Triggers when Assist matches a sentence from a voice assistant.",
                     "empty": "When a sentence is said",
@@ -5987,7 +5988,7 @@
             "blueprint_in_use_text": "Please remove all below {type} that use this blueprint before deleting it. {list}",
             "blueprint_in_use_view": "view {type}",
             "confirm_delete_title": "Delete blueprint?",
-            "confirm_delete_text": "{name} will be permanently deleted.",
+            "confirm_delete_text": "''{name}'' will be permanently deleted.",
             "add_blueprint": "Import blueprint",
             "no_blueprints": "[%key:ui::panel::config::automation::editor::blueprint::no_blueprints%]",
             "create_automation": "Create automation",
@@ -6124,7 +6125,7 @@
             "load_error_not_deletable": "Only scripts in scripts.yaml can be deleted.",
             "load_error_unknown": "Error loading script ({err_no}).",
             "delete_confirm_title": "Delete script?",
-            "delete_confirm_text": "{name} will be permanently deleted.",
+            "delete_confirm_text": "''{name}'' will be permanently deleted.",
             "sequence": "Sequence",
             "sequence_sentence": "The sequence of actions of this script.",
             "link_available_actions": "Learn more about available actions",
@@ -6164,7 +6165,7 @@
             "delete_scene": "Delete scene",
             "delete": "[%key:ui::common::delete%]",
             "delete_confirm_title": "Delete scene?",
-            "delete_confirm_text": "{name} will be permanently deleted.",
+            "delete_confirm_text": "''{name}'' will be permanently deleted.",
             "duplicate_scene": "Duplicate scene",
             "duplicate": "[%key:ui::common::duplicate%]",
             "headers": {
@@ -6675,8 +6676,8 @@
           "no_persons_created_yet": "Looks like you have not added any people yet.",
           "create_person": "Create person",
           "add_person": "Add person",
-          "confirm_delete_title": "Delete {name}?",
-          "confirm_delete_text": "This person will be permanently deleted and all devices belonging to this person will become unassigned.",
+          "confirm_delete_title": "Delete person?",
+          "confirm_delete_text": "''{name}'' will be permanently deleted. All devices belonging to this person will become unassigned.",
           "person_not_found_title": "Person not found",
           "person_not_found": "We couldn't find the person you were trying to edit.",
           "detail": {
@@ -6692,7 +6693,7 @@
             "device_tracker_pick": "Pick device to track",
             "delete": "Delete",
             "update": "Update",
-            "confirm_delete_user_title": "Delete user account",
+            "confirm_delete_user_title": "Delete user account?",
             "confirm_delete_user_text": "The user account for ''{name}'' will be permanently deleted. You can still track the user, but the person will no longer be able to log in.",
             "allow_login": "Allow login",
             "allow_login_description": "Allow access using username and password.",
@@ -6712,7 +6713,8 @@
           "introduction": "Zones allow you to specify certain regions on Earth. When a person is within a zone, the state will take the name from the zone. Zones can also be used as a trigger or condition inside automation setups.",
           "no_zones_created_yet": "Looks like you have not created any zones yet.",
           "create_zone": "Create zone",
-          "confirm_delete": "Are you sure you want to delete this zone?",
+          "confirm_delete": "Delete zone?",
+          "confirm_delete_text": "This zone will be permanently deleted.",
           "can_not_edit": "Unable to edit zone",
           "configured_in_yaml": "Zones configured via configuration.yaml cannot be edited via the UI.",
           "detail": {
@@ -6986,8 +6988,8 @@
             "system_generated": "System user",
             "system_generated_read_only_users": "System users cannot be updated.",
             "unnamed_user": "Unnamed user",
-            "confirm_user_deletion_title": "Delete {name}?",
-            "confirm_user_deletion_text": "This user will be permanently deleted."
+            "confirm_user_deletion_title": "Delete user?",
+            "confirm_user_deletion_text": "''{name}'' will be permanently deleted."
           },
           "add_user": {
             "caption": "Add user",
@@ -7043,7 +7045,7 @@
             },
             "remove_selected": {
               "button": "Delete selected",
-              "confirm_title": "Do you want to delete {number} {number, plural,\n  one {credential}\n  other {credentials}\n}?",
+              "confirm_title": "Delete {number} {number, plural,\n  one {credential}\n  other {credentials}\n}?",
               "confirm_text": "Application credentials in use by an integration may not be deleted.",
               "error_title": "Deleting application credentials failed"
             },
@@ -7184,8 +7186,8 @@
           "confirm_set_dataset_border_router": "Reconfigure border router?",
           "confirm_set_dataset_border_router_text": "Home Assistant will join an existing Thread network. Any devices that are currently joined on this Home Assistant Thread network will need to be re-joined.",
           "otbr_config_failed": "Failed to configure the border router",
-          "confirm_delete_dataset": "Delete {name} dataset?",
-          "confirm_delete_dataset_text": "This network will be removed from Home Assistant.",
+          "confirm_delete_dataset": "Delete dataset?",
+          "confirm_delete_dataset_text": "The ''{name}'' network will be removed from Home Assistant.",
           "no_border_routers": "No border routers found",
           "no_preferred_router": "No preferred border router defined",
           "border_routers": "{count} border {count, plural,\n  one {router}\n  other {routers}\n}",
@@ -8151,7 +8153,7 @@
             "title": "Connected fabrics",
             "fabrics": "Manage the fabrics that have access to this device.",
             "remove_fabric_confirm_header": "Remove {fabric} fabric from device?",
-            "remove_fabric_confirm_text": "Are you sure you want to remove {fabric} from the device? You will not be able to control/access the device from that ecosystem/fabric after this action!",
+            "remove_fabric_confirm_text": "You will no longer be able to control or access the device from the {fabric} ecosystem.",
             "remove_fabric_failed_header": "Remove {fabric} fabric failed",
             "remove_fabric_failed_text": "The action did not succeed, check the logs for more information."
           },
@@ -8847,7 +8849,7 @@
         },
         "views": {
           "unnamed_view": "Unnamed view",
-          "delete_title": "Delete view",
+          "delete_title": "Delete view?",
           "delete_named_view_only": "''{name}'' view will be deleted.",
           "delete_unnamed_view_only": "This view will be deleted.",
           "delete_named_view_cards": "''{name}'' view and all its cards will be deleted.",
@@ -8963,7 +8965,6 @@
               }
             },
             "edit": "Edit view",
-            "delete": "Delete view",
             "move_left": "Move view left",
             "move_right": "Move view right",
             "tab_settings": "Settings",
@@ -9162,7 +9163,7 @@
             "imported_cards_description": "These cards are imported from another view. They will only be displayed in edit mode. Move them into sections to display them in your view."
           },
           "delete_section": {
-            "title": "Delete section",
+            "title": "Delete section?",
             "text": "This section and all its cards will be deleted."
           },
           "edit_section": {
@@ -10741,7 +10742,7 @@
           "confirm_delete_text": "The refresh token for ''{name}'' will be permanently deleted. This associated device will not have access anymore.",
           "delete_all_tokens": "Delete all tokens",
           "confirm_delete_all_title": "Delete all refresh tokens?",
-          "confirm_delete_all": "Are you sure you want to delete all refresh tokens? These associated devices will not have access anymore. Your current session and long-lived access tokens will not be deleted.",
+          "confirm_delete_all": "These associated devices will no longer have access. Your current session and long-lived access tokens will not be deleted.",
           "delete_failed": "Failed to delete the refresh token.",
           "current_token_tooltip": "Unable to delete current refresh token"
         },
@@ -10751,7 +10752,7 @@
           "learn_auth_requests": "Learn how to make authenticated requests.",
           "created": "Created {date}",
           "confirm_delete_title": "Delete long-lived access token?",
-          "confirm_delete_text": "Are you sure you want to delete the long-lived access token for {name}?",
+          "confirm_delete_text": "''{name}'' will be permanently deleted.",
           "delete_failed": "Failed to delete the access token.",
           "create": "Create token",
           "created_title": "Token created: {name}",

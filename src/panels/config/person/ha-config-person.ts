@@ -245,11 +245,11 @@ export class HaConfigPerson extends LitElement {
         if (
           !(await showConfirmationDialog(this, {
             title: this.hass!.localize(
-              "ui.panel.config.person.confirm_delete_title",
-              { name: entry!.name }
+              "ui.panel.config.person.confirm_delete_title"
             ),
             text: this.hass!.localize(
-              "ui.panel.config.person.confirm_delete_text"
+              "ui.panel.config.person.confirm_delete_text",
+              { name: entry!.name }
             ),
             dismissText: this.hass!.localize("ui.common.cancel"),
             confirmText: this.hass!.localize("ui.common.delete"),

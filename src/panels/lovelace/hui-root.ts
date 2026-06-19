@@ -1003,11 +1003,11 @@ class HUIRoot extends LitElement {
         deleteDashboard: async () => {
           const confirm = await showConfirmationDialog(this, {
             title: this.hass!.localize(
-              "ui.panel.config.lovelace.dashboards.confirm_delete_title",
-              { dashboard_title: dashboard!.title }
+              "ui.panel.config.lovelace.dashboards.confirm_delete_title"
             ),
             text: this.hass!.localize(
-              "ui.panel.config.lovelace.dashboards.confirm_delete_text"
+              "ui.panel.config.lovelace.dashboards.confirm_delete_text",
+              { dashboard_title: dashboard!.title }
             ),
             confirmText: this.hass!.localize("ui.common.delete"),
             destructive: true,
@@ -1048,11 +1048,11 @@ class HUIRoot extends LitElement {
       removeDashboard: async () => {
         const confirm = await showConfirmationDialog(this, {
           title: this.hass!.localize(
-            "ui.panel.config.lovelace.dashboards.confirm_delete_title",
-            { dashboard_title: dashboard!.title }
+            "ui.panel.config.lovelace.dashboards.confirm_delete_title"
           ),
           text: this.hass!.localize(
-            "ui.panel.config.lovelace.dashboards.confirm_delete_text"
+            "ui.panel.config.lovelace.dashboards.confirm_delete_text",
+            { dashboard_title: dashboard!.title }
           ),
           confirmText: this.hass!.localize("ui.common.delete"),
           destructive: true,

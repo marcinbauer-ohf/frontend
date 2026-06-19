@@ -116,6 +116,7 @@ class DialogMatterManageFabrics extends LitElement {
         "ui.panel.config.matter.manage_fabrics.remove_fabric_confirm_text",
         { fabric: fabricName }
       ),
+      confirmText: this.hass.localize("ui.common.remove"),
       warning: true,
     });
 

@@ -524,11 +524,11 @@ class DialogAreaDetail
 
     const confirmed = await showConfirmationDialog(this, {
       title: this.hass.localize(
-        "ui.panel.config.areas.delete.confirmation_title",
-        { name: this._params.entry.name }
+        "ui.panel.config.areas.delete.confirmation_title"
       ),
       text: this.hass.localize(
-        "ui.panel.config.areas.delete.confirmation_text"
+        "ui.panel.config.areas.delete.confirmation_text",
+        { name: this._params.entry.name }
       ),
       dismissText: this.hass.localize("ui.common.cancel"),
       confirmText: this.hass.localize("ui.common.delete"),
