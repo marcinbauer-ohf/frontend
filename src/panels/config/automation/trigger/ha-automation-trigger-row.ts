@@ -11,6 +11,7 @@ import {
   mdiContentPaste,
   mdiDelete,
   mdiDotsVertical,
+  mdiFlash,
   mdiPlayCircleOutline,
   mdiPlaylistEdit,
   mdiPlusCircleMultipleOutline,
@@ -81,7 +82,6 @@ import type { HomeAssistant } from "../../../../types";
 import { isMac } from "../../../../util/is_mac";
 import { showEditorToast } from "../editor-toast";
 import "../ha-automation-editor-warning";
-import "../ha-trigger-id-chip";
 import { overflowStyles, rowStyles } from "../styles";
 import "../target/ha-automation-row-targets";
 import "./ha-automation-trigger-editor";
@@ -195,8 +195,8 @@ export default class HaAutomationTriggerRow extends LitElement {
   @consume({ context: editingTriggerConditionContext, subscribe: true })
   _editingTriggerCondition = false;
 
-  // 1-based position of this trigger among all triggers, used as its visible
-  // label. The stable ID is hidden; users reference triggers by position.
+  // 1-based position of this trigger among all triggers, shown as an index
+  // label while a "Triggered by" condition is being edited.
   private get _triggerPosition(): number | undefined {
     if (isTriggerList(this.trigger)) {
       return undefined;
@@ -278,12 +278,15 @@ export default class HaAutomationTriggerRow extends LitElement {
           ></ha-trigger-icon>`}
       <h3 slot="header">
         ${this._editingTriggerCondition && this._triggerPosition !== undefined
-          ? html`<ha-trigger-id-chip
-              id="trigger-id-chip"
-              slot="leading-icon"
-              .position=${this._triggerPosition}
-            >
-            </ha-trigger-id-chip>`
+          ? html`<span class="trigger-index" id="trigger-index">
+                <ha-svg-icon .path=${mdiFlash}></ha-svg-icon>${this
+                  ._triggerPosition}
+              </span>
+              <ha-tooltip for="trigger-index">
+                ${this.hass.localize(
+                  "ui.panel.config.automation.editor.triggers.id_tooltip"
+                )}
+              </ha-tooltip>`
           : nothing}
         ${describeTrigger(this.trigger, this.hass, this._entityReg)}
         ${target !== undefined || (descriptionHasTarget && !this._isNew)

@@ -729,9 +729,8 @@ export const automationConfigContext = createContext<
   AutomationConfig | undefined
 >("automationConfig");
 
-// True while a "Triggered by" condition is being edited. Trigger position
-// labels (the #N chips) are only meaningful in that context, so they stay
-// hidden everywhere else.
+// True while a "Triggered by" condition is being edited. Trigger index labels
+// are only shown in that context, so users can map a trigger to its position.
 export const editingTriggerConditionContext = createContext<boolean>(
   "editingTriggerCondition"
 );

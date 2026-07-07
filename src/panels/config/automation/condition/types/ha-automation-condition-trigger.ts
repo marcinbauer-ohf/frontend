@@ -1,4 +1,5 @@
 import { consume } from "@lit/context";
+import { mdiFlash } from "@mdi/js";
 import { css, html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
@@ -7,6 +8,9 @@ import { fireEvent } from "../../../../../common/dom/fire_event";
 import "../../../../../components/ha-alert";
 import "../../../../../components/ha-form/ha-form";
 import "../../../../../components/ha-select";
+import "../../../../../components/ha-svg-icon";
+import "../../../../../components/ha-tooltip";
+import "../../../../../components/ha-trigger-icon";
 import "../../../../../components/item/ha-list-item-option";
 import type { HaListItemOption } from "../../../../../components/item/ha-list-item-option";
 import "../../../../../components/list/ha-list-selectable";
@@ -24,7 +28,6 @@ import {
 import { fullEntitiesContext } from "../../../../../data/context";
 import type { EntityRegistryEntry } from "../../../../../data/entity/entity_registry";
 import type { HomeAssistant } from "../../../../../types";
-import "../../ha-trigger-id-chip";
 
 @customElement("ha-automation-condition-trigger")
 export class HaTriggerCondition extends LitElement {
@@ -100,14 +103,22 @@ export class HaTriggerCondition extends LitElement {
             .selected=${selectedIds.map(String).includes(info.id)}
             appearance="checkbox"
           >
-            <div class="option" slot="headline">
-              <ha-trigger-id-chip
-                id=${`trigger-${info.id}`}
-                .position=${info.position}
-              >
-              </ha-trigger-id-chip>
+            <ha-trigger-icon
+              slot="start"
+              .hass=${this.hass}
+              .trigger=${info.triggerType}
+            ></ha-trigger-icon>
+            <span slot="headline" class="option">
+              <span class="trigger-index" id=${`trigger-index-${info.id}`}>
+                <ha-svg-icon .path=${mdiFlash}></ha-svg-icon>${info.position}
+              </span>
+              <ha-tooltip for=${`trigger-index-${info.id}`}>
+                ${this.hass.localize(
+                  "ui.panel.config.automation.editor.triggers.id_tooltip"
+                )}
+              </ha-tooltip>
               ${info.label}
-            </div>
+            </span>
           </ha-list-item-option>
         `
       )}
@@ -157,8 +168,22 @@ export class HaTriggerCondition extends LitElement {
     .option {
       display: flex;
       align-items: center;
+      gap: var(--ha-space-2);
+    }
+    .trigger-index {
+      display: inline-flex;
+      align-items: center;
       gap: var(--ha-space-1);
+      flex: none;
+      padding: 0 var(--ha-space-1);
+      border-radius: var(--ha-border-radius-md);
+      border: var(--ha-border-width-md) dotted
+        var(--ha-color-border-neutral-normal);
+      background-color: transparent;
       color: var(--ha-color-on-neutral-normal);
+      font-size: var(--ha-font-size-s);
+      font-weight: var(--ha-font-weight-medium);
+      --mdc-icon-size: 18px;
     }
   `;
 }

@@ -5162,6 +5162,7 @@
                 "global": "No triggers and targets found for {term}",
                 "item": "No triggers found for {term}"
               },
+              "id_tooltip": "Trigger ID used for the triggered by condition",
               "duplicate": "[%key:ui::common::duplicate%]",
               "re_order": "Re-order",
               "rename": "Rename",

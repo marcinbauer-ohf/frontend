@@ -22,7 +22,6 @@ import {
   type Trigger,
   type TriggerList,
 } from "../../../../data/automation";
-import { subscribeLabFeature } from "../../../../data/labs";
 import type { TriggerDescriptions } from "../../../../data/trigger";
 import { isTriggerList, subscribeTriggers } from "../../../../data/trigger";
 import { SubscribeMixin } from "../../../../mixins/subscribe-mixin";
@@ -50,9 +49,6 @@ export default class HaAutomationTrigger extends AutomationSortableListMixin<Tri
   @property({ type: Boolean, attribute: false }) public editorDirty = false;
 
   @state() private _triggerDescriptions: TriggerDescriptions = {};
-
-  // @ts-ignore
-  @state() private _newTriggersAndConditions = false;
 
   private _unsub?: Promise<UnsubscribeFunc>;
 
@@ -116,19 +112,6 @@ export default class HaAutomationTrigger extends AutomationSortableListMixin<Tri
     this._unsubscribe();
   }
 
-  protected hassSubscribe() {
-    return [
-      subscribeLabFeature(
-        this.hass!.connection,
-        "automation",
-        "new_triggers_conditions",
-        (feature) => {
-          this._newTriggersAndConditions = feature.enabled;
-        }
-      ),
-    ];
-  }
-
   private _subscribeDescriptions() {
     this._unsubscribe();
     this._triggerDescriptions = {};
@@ -147,16 +130,10 @@ export default class HaAutomationTrigger extends AutomationSortableListMixin<Tri
     }
   }
 
-  protected willUpdate(changedProperties: PropertyValues): void {
-    super.willUpdate(changedProperties);
-    if (changedProperties.has("_newTriggersAndConditions")) {
-      this._subscribeDescriptions();
-    }
-  }
-
   protected firstUpdated(changedProps: PropertyValues<this>) {
     super.firstUpdated(changedProps);
     this.hass.loadBackendTranslation("triggers");
+    this._subscribeDescriptions();
   }
 
   protected render() {

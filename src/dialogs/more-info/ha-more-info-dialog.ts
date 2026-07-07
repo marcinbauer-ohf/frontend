@@ -58,7 +58,6 @@ import {
   getExtendedEntityRegistryEntry,
   updateEntityRegistryEntry,
 } from "../../data/entity/entity_registry";
-import { subscribeLabFeature } from "../../data/labs";
 import type { ItemType } from "../../data/search";
 import { SearchableDomains } from "../../data/search";
 import { getSensorNumericDeviceClasses } from "../../data/sensor";
@@ -161,8 +160,6 @@ export class MoreInfoDialog extends SubscribeMixin(
 
   @state() private _sensorNumericDeviceClasses?: string[] = [];
 
-  @state() private _newTriggersAndConditions = false;
-
   protected scrollFadeThreshold = 24;
 
   protected get scrollableElement(): HTMLElement | null {
@@ -261,24 +258,7 @@ export class MoreInfoDialog extends SubscribeMixin(
   }
 
   private _shouldShowAddEntityTo(): boolean {
-    // When new_triggers_conditions labs feature is promoted, this whole check can be removed.
-    return (
-      this._newTriggersAndConditions ||
-      !!this.hass.auth.external?.config.hasEntityAddTo
-    );
-  }
-
-  protected hassSubscribe() {
-    return [
-      subscribeLabFeature(
-        this.hass.connection,
-        "automation",
-        "new_triggers_conditions",
-        (feature) => {
-          this._newTriggersAndConditions = feature.enabled;
-        }
-      ),
-    ];
+    return true;
   }
 
   private _getDeviceId(): string | null {

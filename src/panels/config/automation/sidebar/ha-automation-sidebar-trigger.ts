@@ -1,5 +1,4 @@
 import "@home-assistant/webawesome/dist/components/divider/divider";
-import { consume } from "@lit/context";
 import {
   mdiAppleKeyboardCommand,
   mdiCommentEditOutline,
@@ -24,16 +23,10 @@ import "../../../../components/ha-dropdown-item";
 import "../../../../components/ha-svg-icon";
 import "../../../../components/ha-tooltip";
 import type {
-  AutomationConfig,
   LegacyTrigger,
   Trigger,
   TriggerList,
   TriggerSidebarConfig,
-} from "../../../../data/automation";
-import {
-  automationConfigContext,
-  editingTriggerConditionContext,
-  flattenTriggers,
 } from "../../../../data/automation";
 import {
   getTriggerDomain,
@@ -43,7 +36,6 @@ import {
 import type { HomeAssistant } from "../../../../types";
 import { isMac } from "../../../../util/is_mac";
 import "../ha-automation-comment";
-import "../ha-trigger-id-chip";
 import { overflowStyles, sidebarEditorStyles } from "../styles";
 import "../trigger/ha-automation-trigger-editor";
 import type HaAutomationTriggerEditor from "../trigger/ha-automation-trigger-editor";
@@ -68,31 +60,8 @@ export default class HaAutomationSidebarTrigger extends LitElement {
 
   @state() private _warnings?: string[];
 
-  @state()
-  @consume({ context: automationConfigContext, subscribe: true })
-  _automationConfig?: AutomationConfig;
-
-  @state()
-  @consume({ context: editingTriggerConditionContext, subscribe: true })
-  _editingTriggerCondition = false;
-
   @query(".sidebar-editor")
   public editor?: HaAutomationTriggerEditor;
-
-  // 1-based position of this trigger among all triggers, shown as its label.
-  private get _triggerPosition(): number | undefined {
-    if (isTriggerList(this.config.config)) {
-      return undefined;
-    }
-    const id = (this.config.config as Exclude<Trigger, TriggerList>).id;
-    if (!id) {
-      return undefined;
-    }
-    const index = flattenTriggers(this._automationConfig?.triggers).findIndex(
-      (t) => t.id === id
-    );
-    return index === -1 ? undefined : index + 1;
-  }
 
   protected willUpdate(changedProperties: PropertyValues<this>) {
     if (changedProperties.has("config")) {
@@ -142,13 +111,6 @@ export default class HaAutomationSidebarTrigger extends LitElement {
         <span slot="title">${title}</span>
         <div slot="subtitle" class="subtitle">
           ${subtitle}
-          ${this._editingTriggerCondition && this._triggerPosition !== undefined
-            ? html`<ha-trigger-id-chip
-                id="trigger-id-chip"
-                .position=${this._triggerPosition}
-              >
-              </ha-trigger-id-chip>`
-            : nothing}
           ${rowDisabled
             ? `(${this.hass.localize("ui.panel.config.automation.editor.actions.disabled")})`
             : nothing}

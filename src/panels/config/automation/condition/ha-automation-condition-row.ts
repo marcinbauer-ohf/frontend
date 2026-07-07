@@ -11,6 +11,7 @@ import {
   mdiContentPaste,
   mdiDelete,
   mdiDotsVertical,
+  mdiFlash,
   mdiFlask,
   mdiPlayCircleOutline,
   mdiPlaylistEdit,
@@ -19,10 +20,7 @@ import {
   mdiStopCircleOutline,
 } from "@mdi/js";
 import deepClone from "deep-clone-simple";
-import type {
-  HassServiceTarget,
-  UnsubscribeFunc,
-} from "home-assistant-js-websocket";
+import type { HassServiceTarget } from "home-assistant-js-websocket";
 import { dump } from "js-yaml";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { LitElement, css, html, nothing } from "lit";
@@ -38,12 +36,10 @@ import { capitalizeFirstLetter } from "../../../../common/string/capitalize-firs
 import { truncateWithEllipsis } from "../../../../common/string/truncate-with-ellipsis";
 import { handleStructError } from "../../../../common/structs/handle-errors";
 import { copyToClipboard } from "../../../../common/util/copy-clipboard";
-import { debounce } from "../../../../common/util/debounce";
+import "../../../../components/automation/ha-automation-condition-live-test";
 import "../../../../components/automation/ha-automation-row";
 import type { HaAutomationRow } from "../../../../components/automation/ha-automation-row";
 import "../../../../components/automation/ha-automation-row-event-chip";
-import "../../../../components/automation/ha-automation-row-live-test";
-import type { LiveTestState } from "../../../../components/automation/ha-automation-row-live-test";
 import "../../../../components/ha-alert";
 import "../../../../components/ha-card";
 import "../../../../components/ha-condition-icon";
@@ -66,7 +62,6 @@ import {
   automationConfigContext,
   editingTriggerConditionContext,
   isCondition,
-  subscribeCondition,
   testCondition,
 } from "../../../../data/automation";
 import {
@@ -92,7 +87,6 @@ import type { HomeAssistant } from "../../../../types";
 import { isMac } from "../../../../util/is_mac";
 import { showEditorToast } from "../editor-toast";
 import "../ha-automation-editor-warning";
-import "../ha-trigger-id-chip";
 import { overflowStyles, rowStyles } from "../styles";
 import "../target/ha-automation-row-targets";
 import "./ha-automation-condition-editor";
@@ -166,8 +160,6 @@ export default class HaAutomationConditionRow extends LitElement {
 
   @state() private _expanded = false;
 
-  @state() private _liveTestResult: LiveTestState = "unknown";
-
   // Tracks the last value broadcast via "trigger-condition-editing-changed",
   // so we only fire on real changes.
   private _triggerEditingSignalled = false;
@@ -191,8 +183,6 @@ export default class HaAutomationConditionRow extends LitElement {
   private _automationRowElement?: HaAutomationRow;
 
   private _testingTimeout?: number;
-
-  private _conditionUnsub?: Promise<UnsubscribeFunc>;
 
   get selected() {
     return this._selected;
@@ -232,11 +222,28 @@ export default class HaAutomationConditionRow extends LitElement {
     );
 
     return html`
-      <ha-condition-icon
-        slot="leading-icon"
-        .hass=${this.hass}
-        .condition=${this.condition.condition}
-      ></ha-condition-icon>
+      ${this.optionsInSidebar && this.condition.condition !== "trigger"
+        ? html`<ha-automation-condition-live-test
+            id="condition-icon"
+            slot="leading-icon"
+            .hass=${this.hass}
+            .condition=${this.condition}
+          >
+            <ha-condition-icon
+              .hass=${this.hass}
+              .condition=${this.condition.condition}
+            ></ha-condition-icon>
+          </ha-automation-condition-live-test>`
+        : html`<div
+            id="condition-icon"
+            class="icon-badge-wrapper"
+            slot="leading-icon"
+          >
+            <ha-condition-icon
+              .hass=${this.hass}
+              .condition=${this.condition.condition}
+            ></ha-condition-icon>
+          </div>`}
       <h3 slot="header">
         ${this.condition.condition === "trigger"
           ? this._renderTriggerConditionDescription(
@@ -556,16 +563,7 @@ export default class HaAutomationConditionRow extends LitElement {
               @click=${this._toggleSidebar}
               @toggle-collapsed=${this._toggleCollapse}
               >${this._renderRow()}
-              <ha-automation-row-live-test
-                slot="icons"
-                .state=${this.condition.condition !== "trigger"
-                  ? this._liveTestResult
-                  : "unknown"}
-                .label=${this.hass.localize(
-                  `ui.panel.config.automation.editor.conditions.live_test_state.${this.condition.condition !== "trigger" ? this._liveTestResult : "unknown"}`
-                )}
-              ></ha-automation-row-live-test
-            ></ha-automation-row>`
+            </ha-automation-row>`
           : html`
               <ha-expansion-panel
                 left-chevron
@@ -624,51 +622,31 @@ export default class HaAutomationConditionRow extends LitElement {
       this._entityReg
     );
     const infoById = new Map(triggerInfos.map((info) => [info.id, info]));
-    const editing = this._editingTriggerCondition;
     return html`${prefix}
     ${ids
       .filter((id) => infoById.get(String(id)))
       .map((id) => {
         const info = infoById.get(String(id))!;
-        const compact = ids.length >= 4;
-        const anchorId = `trigger-${id}`;
-
-        const triggerIcon = (slot: string) =>
-          html`<ha-trigger-icon
-            .slot=${slot}
-            .hass=${this.hass}
-            .trigger=${info.triggerType}
-          ></ha-trigger-icon>`;
-
-        // The #N position chip is only shown while a "Triggered by" condition
-        // is being edited; otherwise the trigger is shown by its description.
-        const chip = editing
-          ? html`<ha-trigger-id-chip id=${anchorId} .position=${info.position}>
-            </ha-trigger-id-chip>`
-          : nothing;
-
-        if (compact) {
-          // 4+ triggers: a single compact anchor (the chip while editing, the
-          // trigger icon otherwise) with the full description in a tooltip.
-          return html`
-            <div class="trigger">
-              ${editing
-                ? chip
-                : html`<ha-trigger-icon
-                    id=${anchorId}
-                    .hass=${this.hass}
-                    .trigger=${info.triggerType}
-                  ></ha-trigger-icon>`}
-              <ha-tooltip .for=${anchorId}>
-                <div>${triggerIcon("")}${info.label}</div>
-              </ha-tooltip>
-            </div>
-          `;
-        }
-
+        // Mirror the trigger row: the trigger's own icon, then (only while a
+        // "Triggered by" block is being edited) the position index label
+        // (bolt + number), then the trigger label.
         return html`
           <div class="trigger">
-            ${triggerIcon("start")}${chip}
+            <ha-trigger-icon
+              .hass=${this.hass}
+              .trigger=${info.triggerType}
+            ></ha-trigger-icon>
+            ${this._editingTriggerCondition
+              ? html`<span class="trigger-index" id=${`trigger-index-${id}`}>
+                    <ha-svg-icon .path=${mdiFlash}></ha-svg-icon
+                    >${info.position}
+                  </span>
+                  <ha-tooltip for=${`trigger-index-${id}`}>
+                    ${this.hass.localize(
+                      "ui.panel.config.automation.editor.triggers.id_tooltip"
+                    )}
+                  </ha-tooltip>`
+              : nothing}
             <span>${info.label}</span>
           </div>
         `;
@@ -689,11 +667,6 @@ export default class HaAutomationConditionRow extends LitElement {
       ></ha-automation-row-targets>`
   );
 
-  public connectedCallback(): void {
-    super.connectedCallback();
-    this._subscribeCondition();
-  }
-
   protected firstUpdated(changedProperties: PropertyValues<this>): void {
     super.firstUpdated(changedProperties);
 
@@ -709,75 +682,38 @@ export default class HaAutomationConditionRow extends LitElement {
     }
   }
 
-  protected override updated(changedProps: PropertyValues<this>): void {
-    super.updated(changedProps);
-    if (
-      changedProps.has("condition") &&
-      changedProps.get("condition") !== undefined
-    ) {
-      this._resetSubscription();
-      this._debounceSubscribeCondition();
-    }
+  protected updated() {
     this._updateTriggerEditingSignal();
+  }
+
+  // A "Triggered by" condition is being edited when its editor is open: in
+  // sidebar mode that means the row is selected, inline it means expanded.
+  private get _isEditingTriggerCondition(): boolean {
+    return (
+      this.condition.condition === "trigger" &&
+      (this.optionsInSidebar ? this._selected : this._expanded)
+    );
+  }
+
+  // Broadcasts whether a "Triggered by" condition is being edited, so trigger
+  // index labels only appear while one is.
+  private _updateTriggerEditingSignal() {
+    const editing = this._isEditingTriggerCondition;
+    if (editing !== this._triggerEditingSignalled) {
+      this._triggerEditingSignalled = editing;
+      fireEvent(this, "trigger-condition-editing-changed", { editing });
+    }
   }
 
   public disconnectedCallback() {
     super.disconnectedCallback();
-    this._debounceSubscribeCondition.cancel();
     if (this._testingTimeout !== undefined) {
       clearTimeout(this._testingTimeout);
     }
-    this._resetSubscription();
     if (this._triggerEditingSignalled) {
       this._triggerEditingSignalled = false;
       fireEvent(this, "trigger-condition-editing-changed", { editing: false });
     }
-  }
-
-  private _resetSubscription() {
-    this._liveTestResult = "unknown";
-    if (this._conditionUnsub) {
-      this._conditionUnsub.then((unsub) => unsub());
-      this._conditionUnsub = undefined;
-    }
-  }
-
-  private _debounceSubscribeCondition = debounce(
-    () => this._subscribeCondition(),
-    500
-  );
-
-  private async _subscribeCondition() {
-    this._resetSubscription();
-
-    if (!this.condition) {
-      return;
-    }
-
-    const conditionUnsub = subscribeCondition(
-      this.hass.connection,
-      (result) => {
-        if (result.error) {
-          this._handleLiveTestError(result.error);
-        } else {
-          this._liveTestResult = result.result ? "pass" : "fail";
-        }
-      },
-      this.condition
-    );
-    conditionUnsub.catch((err: any) => {
-      this._handleLiveTestError(err);
-      if (this._conditionUnsub === conditionUnsub) {
-        this._conditionUnsub = undefined;
-      }
-    });
-    this._conditionUnsub = conditionUnsub;
-  }
-
-  private _handleLiveTestError(error: any) {
-    const invalid =
-      typeof error !== "string" && error.code === "invalid_format";
-    this._liveTestResult = invalid ? "invalid" : "unknown";
   }
 
   private _onValueChange(event: CustomEvent) {
@@ -1101,23 +1037,6 @@ export default class HaAutomationConditionRow extends LitElement {
     }
   }
 
-  // A "Triggered by" condition is being edited when its editor is open: in
-  // sidebar mode that means the row is selected, inline it means expanded.
-  private get _isEditingTriggerCondition(): boolean {
-    return (
-      this.condition.condition === "trigger" &&
-      (this.optionsInSidebar ? this._selected : this._expanded)
-    );
-  }
-
-  private _updateTriggerEditingSignal() {
-    const editing = this._isEditingTriggerCondition;
-    if (editing !== this._triggerEditingSignalled) {
-      this._triggerEditingSignalled = editing;
-      fireEvent(this, "trigger-condition-editing-changed", { editing });
-    }
-  }
-
   public openSidebar(condition?: Condition): void {
     const sidebarCondition = condition || this.condition;
     fireEvent(this, "open-sidebar", {
@@ -1251,9 +1170,12 @@ export default class HaAutomationConditionRow extends LitElement {
           gap: var(--ha-space-2);
           background-color: var(--ha-color-fill-neutral-normal-resting);
           border-radius: var(--ha-border-radius-md);
-          padding-inline: var(--ha-space-2);
+          padding: var(--ha-space-1) var(--ha-space-2);
           color: var(--ha-color-on-neutral-normal);
-          height: 32px;
+          min-height: 32px;
+        }
+        .trigger ha-trigger-icon {
+          flex: none;
         }
         .trigger.warning {
           background-color: var(--ha-color-fill-warning-normal-resting);

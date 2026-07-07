@@ -101,7 +101,6 @@ import {
   fetchIntegrationManifests,
 } from "../../../data/integration";
 import type { LabelRegistryEntry } from "../../../data/label/label_registry";
-import { subscribeLabFeature } from "../../../data/labs";
 import { filterSelectorEntities } from "../../../data/selector";
 import {
   TARGET_SEPARATOR,
@@ -235,8 +234,6 @@ class DialogAddAutomationElement
 
   @state() private _loadItemsError = false;
 
-  @state() private _newTriggersAndConditions = false;
-
   @state() private _openedFromQuery = false;
 
   @state() private _conditionDescriptions: ConditionDescriptions = {};
@@ -260,8 +257,6 @@ class DialogAddAutomationElement
 
   private _unsub?: Promise<UnsubscribeFunc>;
 
-  private _unsubscribeLabFeatures?: Promise<UnsubscribeFunc>;
-
   private _configEntryLookup: Record<string, ConfigEntry> = {};
 
   private _closing = false;
@@ -276,10 +271,6 @@ class DialogAddAutomationElement
       changedProps.get("hass")?.states !== this.hass.states
     ) {
       this._calculateUsedDomains();
-    }
-
-    if (changedProps.has("_newTriggersAndConditions")) {
-      this._subscribeDescriptions();
     }
   }
 
@@ -335,24 +326,6 @@ class DialogAddAutomationElement
     this._fetchManifests();
     this._calculateUsedDomains();
 
-    this._unsubscribeLabFeatures = subscribeLabFeature(
-      this.hass.connection,
-      "automation",
-      "new_triggers_conditions",
-      (feature) => {
-        this._newTriggersAndConditions = feature.enabled;
-        this._tab = this._newTriggersAndConditions ? "targets" : "groups";
-        if (
-          queryTarget &&
-          this._newTriggersAndConditions &&
-          !this._selectedTarget
-        ) {
-          this._selectedTarget = queryTarget;
-          this._getItemsByTarget();
-        }
-      }
-    );
-
     if (!queryTarget) {
       // add initial dialog view state to history
       mainWindow.history.pushState(
@@ -382,11 +355,7 @@ class DialogAddAutomationElement
     // prevent view mode switch when resizing window
     this._bottomSheetMode = this._narrow;
 
-    if (
-      queryTarget &&
-      this._newTriggersAndConditions &&
-      !this._selectedTarget
-    ) {
+    if (queryTarget && !this._selectedTarget) {
       this._selectedTarget = queryTarget;
       this._tab = "targets";
       this._getItemsByTarget();
@@ -447,7 +416,7 @@ class DialogAddAutomationElement
     this._selectedCollectionIndex = undefined;
     this._selectedGroup = undefined;
     this._selectedTarget = undefined;
-    this._tab = this._newTriggersAndConditions ? "targets" : "groups";
+    this._tab = "targets";
     this._filter = "";
     this._manifests = undefined;
     this._domains = undefined;
@@ -600,10 +569,6 @@ class DialogAddAutomationElement
       this._unsub.then((unsub) => unsub());
       this._unsub = undefined;
     }
-    if (this._unsubscribeLabFeatures) {
-      this._unsubscribeLabFeatures.then((unsub) => unsub());
-      this._unsubscribeLabFeatures = undefined;
-    }
   }
 
   // #endregion lifecycle
@@ -663,20 +628,17 @@ class DialogAddAutomationElement
     const tabButtons = [
       {
         label: this.hass.localize(
+          "ui.panel.config.automation.editor.tabs.target"
+        ),
+        value: "targets",
+      },
+      {
+        label: this.hass.localize(
           "ui.panel.config.automation.editor.tabs.type"
         ),
         value: "groups",
       },
     ];
-
-    if (this._newTriggersAndConditions) {
-      tabButtons.unshift({
-        label: this.hass.localize(
-          "ui.panel.config.automation.editor.tabs.target"
-        ),
-        value: "targets",
-      });
-    }
 
     if (this._params?.type !== "trigger") {
       tabButtons.push({
@@ -760,7 +722,6 @@ class DialogAddAutomationElement
                 this._manifests
               )}
               .convertToItem=${this._convertToItem}
-              .newTriggersAndConditions=${this._newTriggersAndConditions}
               @search-element-picked=${this._searchItemSelected}
             >
             </ha-automation-add-search>`

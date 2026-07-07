@@ -132,8 +132,8 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
   @state()
   protected editingTriggerCondition = false;
 
-  // Number of mounted "Triggered by" condition editors. Trigger position
-  // labels are shown while at least one is open.
+  // Number of open "Triggered by" condition editors. Trigger index labels are
+  // shown while at least one is open.
   private _triggerConditionEditors = 0;
 
   private _handleTriggerConditionEditing = (

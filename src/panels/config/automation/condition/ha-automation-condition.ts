@@ -23,7 +23,6 @@ import {
   CONDITION_BUILDING_BLOCKS,
   subscribeConditions,
 } from "../../../../data/condition";
-import { subscribeLabFeature } from "../../../../data/labs";
 import { SubscribeMixin } from "../../../../mixins/subscribe-mixin";
 import { EDITOR_SAVE_FAB_TOAST_BOTTOM_OFFSET } from "../editor-toast";
 import {
@@ -53,9 +52,6 @@ export default class HaAutomationCondition extends AutomationSortableListMixin<C
   @queryAll("ha-automation-condition-row")
   private _conditionRowElements?: HaAutomationConditionRow[];
 
-  // @ts-ignore
-  @state() private _newTriggersAndConditions = false;
-
   private _unsub?: Promise<UnsubscribeFunc>;
 
   private _openedAddDialogFromQuery = false;
@@ -77,19 +73,6 @@ export default class HaAutomationCondition extends AutomationSortableListMixin<C
     this._unsubscribe();
   }
 
-  protected hassSubscribe() {
-    return [
-      subscribeLabFeature(
-        this.hass!.connection,
-        "automation",
-        "new_triggers_conditions",
-        (feature) => {
-          this._newTriggersAndConditions = feature.enabled;
-        }
-      ),
-    ];
-  }
-
   private _subscribeDescriptions() {
     this._unsubscribe();
     this._conditionDescriptions = {};
@@ -108,16 +91,10 @@ export default class HaAutomationCondition extends AutomationSortableListMixin<C
     }
   }
 
-  protected willUpdate(changedProperties: PropertyValues): void {
-    super.willUpdate(changedProperties);
-    if (changedProperties.has("_newTriggersAndConditions")) {
-      this._subscribeDescriptions();
-    }
-  }
-
   protected firstUpdated(changedProps: PropertyValues<this>) {
     super.firstUpdated(changedProps);
     this.hass.loadBackendTranslation("conditions");
+    this._subscribeDescriptions();
   }
 
   protected updated(changedProperties: PropertyValues<this>) {
