@@ -1,4 +1,5 @@
 import { consume } from "@lit/context";
+import { mdiAlertOutline } from "@mdi/js";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
@@ -7,6 +8,7 @@ import { fireEvent } from "../../../../../common/dom/fire_event";
 import "../../../../../components/ha-alert";
 import "../../../../../components/ha-form/ha-form";
 import "../../../../../components/ha-select";
+import "../../../../../components/ha-svg-icon";
 import "../../../../../components/ha-tooltip";
 import "../../../../../components/ha-trigger-icon";
 import "../../../../../components/item/ha-list-item-option";
@@ -82,17 +84,16 @@ export class HaTriggerCondition extends LitElement {
       `;
     }
 
-    const seenIds = new Set<string>();
-    const hasDuplicateIds = triggerInfos.some((info) => {
-      if (seenIds.has(info.id)) {
-        return true;
-      }
-      seenIds.add(info.id);
-      return false;
+    const idCounts = new Map<string, number>();
+    triggerInfos.forEach((info) => {
+      idCounts.set(info.id, (idCounts.get(info.id) ?? 0) + 1);
     });
+    const duplicatedIds = new Set(
+      [...idCounts.entries()].filter(([, count]) => count > 1).map(([id]) => id)
+    );
 
     return html`
-      ${hasDuplicateIds
+      ${duplicatedIds.size
         ? html`
             <ha-alert alert-type="warning">
               ${this.hass.localize(
@@ -102,14 +103,15 @@ export class HaTriggerCondition extends LitElement {
           `
         : nothing}
       <ha-list-selectable @ha-list-selected=${this._valueChanged} multi>
-        ${this._renderOptions(selectedIds, triggerInfos)}
+        ${this._renderOptions(selectedIds, triggerInfos, duplicatedIds)}
       </ha-list-selectable>
     `;
   }
 
   private _renderOptions(
     selectedIds: (string | number)[],
-    triggerInfos: TriggerInfo[]
+    triggerInfos: TriggerInfo[],
+    duplicatedIds: Set<string>
   ) {
     return html`
       ${triggerInfos.map(
@@ -120,10 +122,10 @@ export class HaTriggerCondition extends LitElement {
             appearance="checkbox"
           >
             <span slot="headline" class="option">
-              <span class="trigger-index" id=${`trigger-index-${info.id}`}
+              <span class="trigger-index" id=${`trigger-index-${info.position}`}
                 >${info.position}</span
               >
-              <ha-tooltip for=${`trigger-index-${info.id}`}>
+              <ha-tooltip for=${`trigger-index-${info.position}`}>
                 ${this.hass.localize(
                   "ui.panel.config.automation.editor.triggers.index_tooltip"
                 )}
@@ -132,6 +134,12 @@ export class HaTriggerCondition extends LitElement {
                 .hass=${this.hass}
                 .trigger=${info.triggerType}
               ></ha-trigger-icon>
+              ${duplicatedIds.has(info.id)
+                ? html`<span class="duplicate-id">
+                    <ha-svg-icon .path=${mdiAlertOutline}></ha-svg-icon
+                    >${info.id}
+                  </span>`
+                : nothing}
               ${info.label}
             </span>
           </ha-list-item-option>
@@ -187,6 +195,21 @@ export class HaTriggerCondition extends LitElement {
     }
     .option ha-trigger-icon {
       flex: none;
+    }
+    .duplicate-id {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--ha-space-1);
+      flex: none;
+      height: var(--ha-space-6);
+      padding: 0 var(--ha-space-2);
+      border-radius: var(--ha-border-radius-pill);
+      background-color: var(--ha-color-fill-warning-normal-resting);
+      color: var(--ha-color-on-warning-normal);
+      font-size: var(--ha-font-size-s);
+      font-weight: var(--ha-font-weight-medium);
+      --mdc-icon-size: 16px;
     }
     .trigger-index {
       display: inline-flex;
