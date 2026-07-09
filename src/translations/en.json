@@ -5162,7 +5162,7 @@
                 "global": "No triggers and targets found for {term}",
                 "item": "No triggers found for {term}"
               },
-              "id_tooltip": "Trigger ID used for the triggered by condition",
+              "index_tooltip": "Position of this trigger, used to reference it in the Triggered by condition",
               "duplicate": "[%key:ui::common::duplicate%]",
               "re_order": "Re-order",
               "rename": "Rename",
@@ -5589,6 +5589,7 @@
                 "trigger": {
                   "label": "Triggered by",
                   "no_triggers": "There are no triggers with ID's set in this automation. Edit a trigger and give it a Trigger ID name.",
+                  "duplicate_ids": "Some triggers share the same trigger ID. Avoid reusing a trigger ID to group triggers and select multiple triggers here instead.",
                   "id": "Trigger",
                   "description": {
                     "picker": "Tests if the automation has been triggered by a specific trigger.",

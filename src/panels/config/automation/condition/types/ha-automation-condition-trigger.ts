@@ -1,6 +1,5 @@
 import { consume } from "@lit/context";
-import { mdiFlash } from "@mdi/js";
-import { css, html, LitElement } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { ensureArray } from "../../../../../common/array/ensure-array";
@@ -8,7 +7,6 @@ import { fireEvent } from "../../../../../common/dom/fire_event";
 import "../../../../../components/ha-alert";
 import "../../../../../components/ha-form/ha-form";
 import "../../../../../components/ha-select";
-import "../../../../../components/ha-svg-icon";
 import "../../../../../components/ha-tooltip";
 import "../../../../../components/ha-trigger-icon";
 import "../../../../../components/item/ha-list-item-option";
@@ -84,7 +82,25 @@ export class HaTriggerCondition extends LitElement {
       `;
     }
 
+    const seenIds = new Set<string>();
+    const hasDuplicateIds = triggerInfos.some((info) => {
+      if (seenIds.has(info.id)) {
+        return true;
+      }
+      seenIds.add(info.id);
+      return false;
+    });
+
     return html`
+      ${hasDuplicateIds
+        ? html`
+            <ha-alert alert-type="warning">
+              ${this.hass.localize(
+                "ui.panel.config.automation.editor.conditions.type.trigger.duplicate_ids"
+              )}
+            </ha-alert>
+          `
+        : nothing}
       <ha-list-selectable @ha-list-selected=${this._valueChanged} multi>
         ${this._renderOptions(selectedIds, triggerInfos)}
       </ha-list-selectable>
@@ -103,20 +119,19 @@ export class HaTriggerCondition extends LitElement {
             .selected=${selectedIds.map(String).includes(info.id)}
             appearance="checkbox"
           >
-            <ha-trigger-icon
-              slot="start"
-              .hass=${this.hass}
-              .trigger=${info.triggerType}
-            ></ha-trigger-icon>
             <span slot="headline" class="option">
-              <span class="trigger-index" id=${`trigger-index-${info.id}`}>
-                <ha-svg-icon .path=${mdiFlash}></ha-svg-icon>${info.position}
-              </span>
+              <span class="trigger-index" id=${`trigger-index-${info.id}`}
+                >${info.position}</span
+              >
               <ha-tooltip for=${`trigger-index-${info.id}`}>
                 ${this.hass.localize(
-                  "ui.panel.config.automation.editor.triggers.id_tooltip"
+                  "ui.panel.config.automation.editor.triggers.index_tooltip"
                 )}
               </ha-tooltip>
+              <ha-trigger-icon
+                .hass=${this.hass}
+                .trigger=${info.triggerType}
+              ></ha-trigger-icon>
               ${info.label}
             </span>
           </ha-list-item-option>
@@ -170,20 +185,25 @@ export class HaTriggerCondition extends LitElement {
       align-items: center;
       gap: var(--ha-space-2);
     }
+    .option ha-trigger-icon {
+      flex: none;
+    }
     .trigger-index {
       display: inline-flex;
       align-items: center;
-      gap: var(--ha-space-1);
+      justify-content: center;
       flex: none;
+      box-sizing: border-box;
+      height: var(--ha-space-6);
+      min-width: var(--ha-space-6);
       padding: 0 var(--ha-space-1);
-      border-radius: var(--ha-border-radius-md);
+      border-radius: var(--ha-border-radius-pill);
       border: var(--ha-border-width-md) dotted
         var(--ha-color-border-neutral-normal);
       background-color: transparent;
       color: var(--ha-color-on-neutral-normal);
       font-size: var(--ha-font-size-s);
       font-weight: var(--ha-font-weight-medium);
-      --mdc-icon-size: 18px;
     }
   `;
 }

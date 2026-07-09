@@ -11,7 +11,6 @@ import {
   mdiContentPaste,
   mdiDelete,
   mdiDotsVertical,
-  mdiFlash,
   mdiFlask,
   mdiPlayCircleOutline,
   mdiPlaylistEdit,
@@ -621,36 +620,35 @@ export default class HaAutomationConditionRow extends LitElement {
       this.hass,
       this._entityReg
     );
-    const infoById = new Map(triggerInfos.map((info) => [info.id, info]));
+    const selectedIds = new Set(ids.map(String));
+    // Match by id against every trigger, so legacy automations where several
+    // triggers share the same id render one chip per matching trigger.
     return html`${prefix}
-    ${ids
-      .filter((id) => infoById.get(String(id)))
-      .map((id) => {
-        const info = infoById.get(String(id))!;
-        // Mirror the trigger row: the trigger's own icon, then (only while a
-        // "Triggered by" block is being edited) the position index label
-        // (bolt + number), then the trigger label.
-        return html`
+    ${triggerInfos
+      .filter((info) => selectedIds.has(info.id))
+      .map(
+        (info) => html`
           <div class="trigger">
+            ${this._editingTriggerCondition
+              ? html`<span
+                    class="trigger-index"
+                    id=${`trigger-index-${info.position}`}
+                    >${info.position}</span
+                  >
+                  <ha-tooltip for=${`trigger-index-${info.position}`}>
+                    ${this.hass.localize(
+                      "ui.panel.config.automation.editor.triggers.index_tooltip"
+                    )}
+                  </ha-tooltip>`
+              : nothing}
             <ha-trigger-icon
               .hass=${this.hass}
               .trigger=${info.triggerType}
             ></ha-trigger-icon>
-            ${this._editingTriggerCondition
-              ? html`<span class="trigger-index" id=${`trigger-index-${id}`}>
-                    <ha-svg-icon .path=${mdiFlash}></ha-svg-icon
-                    >${info.position}
-                  </span>
-                  <ha-tooltip for=${`trigger-index-${id}`}>
-                    ${this.hass.localize(
-                      "ui.panel.config.automation.editor.triggers.id_tooltip"
-                    )}
-                  </ha-tooltip>`
-              : nothing}
             <span>${info.label}</span>
           </div>
-        `;
-      })}`;
+        `
+      )}`;
   }
 
   private _renderTargets = memoizeOne(
@@ -1172,10 +1170,11 @@ export default class HaAutomationConditionRow extends LitElement {
           border-radius: var(--ha-border-radius-md);
           padding: var(--ha-space-1) var(--ha-space-2);
           color: var(--ha-color-on-neutral-normal);
-          min-height: 32px;
         }
-        .trigger ha-trigger-icon {
+        .trigger ha-trigger-icon,
+        .trigger .trigger-index {
           flex: none;
+          align-self: flex-start;
         }
         .trigger.warning {
           background-color: var(--ha-color-fill-warning-normal-resting);

@@ -11,7 +11,6 @@ import {
   mdiContentPaste,
   mdiDelete,
   mdiDotsVertical,
-  mdiFlash,
   mdiPlayCircleOutline,
   mdiPlaylistEdit,
   mdiPlusCircleMultipleOutline,
@@ -205,9 +204,13 @@ export default class HaAutomationTriggerRow extends LitElement {
     if (!id) {
       return undefined;
     }
-    const index = flattenTriggers(this._automationConfig?.triggers).findIndex(
-      (t) => t.id === id
-    );
+    const flattened = flattenTriggers(this._automationConfig?.triggers);
+    // Prefer object identity so duplicate IDs still get distinct positions;
+    // fall back to id match when the reference isn't in the config.
+    let index = flattened.indexOf(this.trigger);
+    if (index === -1) {
+      index = flattened.findIndex((t) => t.id === id);
+    }
     return index === -1 ? undefined : index + 1;
   }
 
@@ -276,18 +279,17 @@ export default class HaAutomationTriggerRow extends LitElement {
             .hass=${this.hass}
             .trigger=${(this.trigger as Exclude<Trigger, TriggerList>).trigger}
           ></ha-trigger-icon>`}
+      ${this._editingTriggerCondition && this._triggerPosition !== undefined
+        ? html`<span class="trigger-index" slot="lead" id="trigger-index"
+              >${this._triggerPosition}</span
+            >
+            <ha-tooltip slot="lead" for="trigger-index">
+              ${this.hass.localize(
+                "ui.panel.config.automation.editor.triggers.index_tooltip"
+              )}
+            </ha-tooltip>`
+        : nothing}
       <h3 slot="header">
-        ${this._editingTriggerCondition && this._triggerPosition !== undefined
-          ? html`<span class="trigger-index" id="trigger-index">
-                <ha-svg-icon .path=${mdiFlash}></ha-svg-icon>${this
-                  ._triggerPosition}
-              </span>
-              <ha-tooltip for="trigger-index">
-                ${this.hass.localize(
-                  "ui.panel.config.automation.editor.triggers.id_tooltip"
-                )}
-              </ha-tooltip>`
-          : nothing}
         ${describeTrigger(this.trigger, this.hass, this._entityReg)}
         ${target !== undefined || (descriptionHasTarget && !this._isNew)
           ? this._renderTargets(
