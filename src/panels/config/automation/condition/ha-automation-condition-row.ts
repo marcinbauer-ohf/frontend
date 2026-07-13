@@ -16,6 +16,7 @@ import {
   mdiPlaylistEdit,
   mdiPlusCircleMultipleOutline,
   mdiRenameBox,
+  mdiLinkVariantOff,
   mdiStopCircleOutline,
 } from "@mdi/js";
 import deepClone from "deep-clone-simple";
@@ -66,6 +67,7 @@ import {
 import {
   describeCondition,
   getTriggerInfos,
+  mergeStaleTriggers,
 } from "../../../../data/automation_i18n";
 import type { ConditionDescriptions } from "../../../../data/condition";
 import { CONDITION_BUILDING_BLOCKS } from "../../../../data/condition";
@@ -621,34 +623,52 @@ export default class HaAutomationConditionRow extends LitElement {
       this._entityReg
     );
     const selectedIds = new Set(ids.map(String));
+    const availableIds = new Set(triggerInfos.map((info) => info.id));
+    // Selected ids that no longer match any existing trigger (deleted trigger).
+    const staleIds = [
+      ...new Set(ids.map(String).filter((id) => id && !availableIds.has(id))),
+    ];
     // Match by id against every trigger, so legacy automations where several
-    // triggers share the same id render one chip per matching trigger.
+    // triggers share the same id render one chip per matching trigger. Missing
+    // entries are interleaved by id so each keeps its deleted trigger's slot.
+    const selectedInfos = triggerInfos.filter((info) =>
+      selectedIds.has(info.id)
+    );
     return html`${prefix}
-    ${triggerInfos
-      .filter((info) => selectedIds.has(info.id))
-      .map(
-        (info) => html`
-          <div class="trigger">
-            ${this._editingTriggerCondition
-              ? html`<span
-                    class="trigger-index"
-                    id=${`trigger-index-${info.position}`}
-                    >${info.position}</span
-                  >
-                  <ha-tooltip for=${`trigger-index-${info.position}`}>
-                    ${this.hass.localize(
-                      "ui.panel.config.automation.editor.triggers.index_tooltip"
-                    )}
-                  </ha-tooltip>`
-              : nothing}
-            <ha-trigger-icon
-              .hass=${this.hass}
-              .trigger=${info.triggerType}
-            ></ha-trigger-icon>
-            <span>${info.label}</span>
-          </div>
-        `
-      )}`;
+    ${mergeStaleTriggers(selectedInfos, staleIds).map((entry) =>
+      "missing" in entry
+        ? html`
+            <div class="trigger warning">
+              <ha-svg-icon .path=${mdiLinkVariantOff}></ha-svg-icon>
+              <span>
+                ${this.hass.localize(
+                  "ui.panel.config.automation.editor.conditions.type.trigger.missing_trigger"
+                )}
+              </span>
+            </div>
+          `
+        : html`
+            <div class="trigger">
+              ${this._editingTriggerCondition
+                ? html`<span
+                      class="trigger-index"
+                      id=${`trigger-index-${entry.info.position}`}
+                      >${entry.info.position}</span
+                    >
+                    <ha-tooltip for=${`trigger-index-${entry.info.position}`}>
+                      ${this.hass.localize(
+                        "ui.panel.config.automation.editor.triggers.index_tooltip"
+                      )}
+                    </ha-tooltip>`
+                : nothing}
+              <ha-trigger-icon
+                .hass=${this.hass}
+                .trigger=${entry.info.triggerType}
+              ></ha-trigger-icon>
+              <span>${entry.info.label}</span>
+            </div>
+          `
+    )}`;
   }
 
   private _renderTargets = memoizeOne(

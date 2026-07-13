@@ -54,6 +54,7 @@ import {
   getAutomationEditorInitData,
   getAutomationStateConfig,
   normalizeAutomationConfig,
+  resolveDuplicateTriggerIds,
   saveAutomationConfig,
   showAutomationEditor,
   triggerAutomationActions,
@@ -147,6 +148,21 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
     this.editingTriggerCondition = this._triggerConditionEditors > 0;
   };
 
+  private _handleFixDuplicateTriggerIds = (ev: HASSDomEvent<undefined>) => {
+    ev.stopPropagation();
+    if (!this.config || this.readOnly) {
+      return;
+    }
+    const newConfig = resolveDuplicateTriggerIds(this.config);
+    if (newConfig === this.config) {
+      return;
+    }
+    this._undoRedoController.commit(this.config);
+    this.config = newConfig;
+    this.dirty = true;
+    this.errors = undefined;
+  };
+
   private _newAutomationId?: string;
 
   protected domainHooks: EditorDomainHooks<AutomationConfig> = {
@@ -205,6 +221,7 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
         this.hass.localize("ui.panel.config.automation.editor.default_name")}
         @trigger-condition-editing-changed=${this
           ._handleTriggerConditionEditing}
+        @fix-duplicate-trigger-ids=${this._handleFixDuplicateTriggerIds}
       >
         ${this.mode === "gui" && !this.narrow
           ? html`<ha-icon-button

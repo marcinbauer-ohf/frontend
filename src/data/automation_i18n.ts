@@ -116,6 +116,33 @@ export interface TriggerInfo {
   triggerType: string;
 }
 
+export type MergedTriggerEntry = { info: TriggerInfo } | { missing: string };
+
+// Interleaves stale (deleted-trigger) ids among existing triggers by numeric
+// id, so a missing entry keeps the slot its trigger held (ids are assigned
+// incrementally, so numeric order matches creation/position order). Non-numeric
+// or higher-than-all stale ids fall through to the end.
+export const mergeStaleTriggers = (
+  triggerInfos: TriggerInfo[],
+  staleIds: string[]
+): MergedTriggerEntry[] => {
+  const remaining = [...staleIds].sort((a, b) => Number(a) - Number(b));
+  const merged: MergedTriggerEntry[] = [];
+  triggerInfos.forEach((info) => {
+    const infoNum = Number(info.id);
+    while (
+      remaining.length &&
+      Number.isInteger(infoNum) &&
+      Number(remaining[0]) < infoNum
+    ) {
+      merged.push({ missing: remaining.shift()! });
+    }
+    merged.push({ info });
+  });
+  remaining.forEach((id) => merged.push({ missing: id }));
+  return merged;
+};
+
 export const getTriggerInfos = (
   triggers: Trigger[] | undefined,
   hass: HomeAssistant,

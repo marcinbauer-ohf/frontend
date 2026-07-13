@@ -5590,6 +5590,11 @@
                   "label": "Triggered by",
                   "no_triggers": "There are no triggers with ID's set in this automation. Edit a trigger and give it a Trigger ID name.",
                   "duplicate_ids": "Some triggers share the same trigger ID. Avoid reusing a trigger ID to group triggers and select multiple triggers here instead.",
+                  "fix_duplicate_ids": "Fix",
+                  "fix_duplicate_ids_title": "Assign unique trigger IDs?",
+                  "fix_duplicate_ids_text": "Each trigger sharing an ID gets a unique one, and conditions using it are updated to match. Your automation keeps working the same.",
+                  "deleted_trigger": "This condition references a trigger that no longer exists. Uncheck it to clear it.",
+                  "missing_trigger": "Missing trigger",
                   "id": "Trigger",
                   "description": {
                     "picker": "Tests if the automation has been triggered by a specific trigger.",
