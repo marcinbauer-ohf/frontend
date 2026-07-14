@@ -39,6 +39,11 @@ export class StateHistoryChartTimeline extends LitElement {
 
   @property({ attribute: "show-names", type: Boolean }) public showNames = true;
 
+  // Render each row's name inside the plot (above its bar) instead of in a
+  // left-hand category-label column. Opt-in; used by the history panel.
+  @property({ attribute: "inside-labels", type: Boolean })
+  public insideLabels = false;
+
   @property({ attribute: "click-for-more-info", type: Boolean })
   public clickForMoreInfo = true;
 
@@ -68,7 +73,7 @@ export class StateHistoryChartTimeline extends LitElement {
       <ha-chart-base
         .hass=${this.hass}
         .options=${this._chartOptions}
-        .height=${`${this.data.length * 30 + 30}px`}
+        .height=${`${this.data.length * (this.insideLabels ? 54 : 30) + 30}px`}
         .data=${this._chartData as HaECSeries}
         small-controls
         @chart-click=${this._handleChartClick}
@@ -194,9 +199,11 @@ export class StateHistoryChartTimeline extends LitElement {
     const narrow = this.narrow;
     const showNames = this.chunked || this.showNames;
     const maxInternalLabelWidth = narrow ? 105 : 185;
-    const labelWidth = showNames
-      ? Math.max(this.paddingYAxis, this._yWidth)
-      : 0;
+    const insideLabels = this.insideLabels;
+    const labelWidth =
+      showNames && !insideLabels
+        ? Math.max(this.paddingYAxis, this._yWidth)
+        : 0;
     const labelMargin = 5;
     const rtl = computeRTL(
       this.hass.language,
@@ -225,34 +232,51 @@ export class StateHistoryChartTimeline extends LitElement {
         axisLine: {
           show: false,
         },
-        axisLabel: {
-          show: showNames,
-          width: labelWidth,
-          overflow: "truncate",
-          margin: labelMargin,
-          formatter: (id: string) => {
-            const label = this._chartData.find((d) => d.id === id)
-              ?.name as string;
-            const width = label
-              ? Math.min(
-                  measureTextWidth(label, 12) + labelMargin,
-                  maxInternalLabelWidth
-                )
-              : 0;
-            if (width > this._yWidth) {
-              this._yWidth = width;
-              fireEvent(this, "y-width-changed", {
-                value: this._yWidth,
-                chartIndex: this.chartIndex,
-              });
+        axisLabel: insideLabels
+          ? {
+              // Draw the name inside the plot, above each row's bar, so it does
+              // not take up a left-hand column. The extra row height (see chart
+              // height above) spaces the rows so a name does not overlap the
+              // previous row's bar.
+              show: showNames,
+              inside: true,
+              margin: 0,
+              padding: [0, 0, 14, rtl ? 0 : 2],
+              align: rtl ? "right" : "left",
+              verticalAlign: "bottom",
+              formatter: (id: string) =>
+                (this._chartData.find((d) => d.id === id)?.name as string) ??
+                "",
+              hideOverlap: true,
             }
-            return label;
-          },
-          hideOverlap: true,
-        },
+          : {
+              show: showNames,
+              width: labelWidth,
+              overflow: "truncate",
+              margin: labelMargin,
+              formatter: (id: string) => {
+                const label = this._chartData.find((d) => d.id === id)
+                  ?.name as string;
+                const width = label
+                  ? Math.min(
+                      measureTextWidth(label, 12) + labelMargin,
+                      maxInternalLabelWidth
+                    )
+                  : 0;
+                if (width > this._yWidth) {
+                  this._yWidth = width;
+                  fireEvent(this, "y-width-changed", {
+                    value: this._yWidth,
+                    chartIndex: this.chartIndex,
+                  });
+                }
+                return label;
+              },
+              hideOverlap: true,
+            },
       },
       grid: {
-        top: 10,
+        top: insideLabels ? 20 : 10,
         bottom: 30,
         left: rtl ? 1 : labelWidth,
         right: rtl ? labelWidth : 1,

@@ -1,8 +1,12 @@
 import {
+  mdiChartBoxOutline,
+  mdiClose,
   mdiDotsVertical,
   mdiDownload,
-  mdiFilterRemove,
+  mdiFilterVariant,
+  mdiFilterVariantRemove,
   mdiImagePlus,
+  mdiPlaylistPlus,
 } from "@mdi/js";
 import { differenceInHours } from "date-fns";
 import type {
@@ -10,9 +14,10 @@ import type {
   UnsubscribeFunc,
 } from "home-assistant-js-websocket/dist/types";
 import type { PropertyValues } from "lit";
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
+import { ensureArray } from "../../common/array/ensure-array";
 import { storage } from "../../common/decorators/storage";
 import { computeDomain } from "../../common/entity/compute_domain";
 import { navigate } from "../../common/navigate";
@@ -29,14 +34,26 @@ import {
 import { MIN_TIME_BETWEEN_UPDATES } from "../../components/chart/ha-chart-base";
 import "../../components/chart/state-history-charts";
 import type { StateHistoryCharts } from "../../components/chart/state-history-charts";
+import "../../components/chips/ha-assist-chip";
 import "../../components/date-picker/ha-date-range-picker";
+import "../../components/ha-adaptive-dialog";
+import "../../components/ha-button";
+import "../../components/ha-card";
+import "../../components/ha-dialog-footer";
 import "../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
 import "../../components/ha-dropdown-item";
+import "../../components/ha-filter-device-classes";
+import "../../components/ha-filter-domains";
+import "../../components/ha-filter-integrations";
 import "../../components/ha-icon-button";
 import "../../components/ha-spinner";
+import "../../components/ha-svg-icon";
 import "../../components/ha-target-picker";
 import "../../components/ha-top-app-bar-fixed";
+import type { DataTableFilters } from "../../data/data_table_filters";
+import type { EntitySources } from "../../data/entity/entity_sources";
+import { fetchEntitySourcesWithCache } from "../../data/entity/entity_sources";
 import type { HistoryResult } from "../../data/history";
 import {
   computeHistory,
@@ -77,6 +94,16 @@ class HaPanelHistory extends LitElement {
   private _storedTargetPickerValue?: HassServiceTarget;
 
   @state() private _isLoading = false;
+
+  @state() private _showTargets = false;
+
+  @state() private _showFilters = false;
+
+  @state() private _filters: DataTableFilters = {};
+
+  @state() private _expandedFilter?: string;
+
+  @state() private _entitySources?: EntitySources;
 
   @state() private _stateHistory?: HistoryResult;
 
@@ -120,6 +147,100 @@ class HaPanelHistory extends LitElement {
 
   protected render() {
     const entitiesSelected = this._getEntityIds().length > 0;
+    const targetCount = this._getTargetCount();
+    const filterCount = this._getFilterCount();
+
+    const toolbar = html`
+      <div class="toolbar">
+        <div class="relative">
+          <ha-assist-chip
+            .active=${this._showTargets}
+            .disabled=${this._isLoading}
+            .label=${this.hass.localize("ui.panel.history.targets")}
+            @click=${this._toggleTargets}
+          >
+            <ha-svg-icon slot="icon" .path=${mdiPlaylistPlus}></ha-svg-icon>
+          </ha-assist-chip>
+          ${
+            targetCount > 0
+              ? html`<div class="badge">${targetCount}</div>`
+              : nothing
+          }
+        </div>
+        <div class="relative">
+          <ha-assist-chip
+            .active=${this._showFilters}
+            .disabled=${this._isLoading}
+            .label=${this.hass.localize("ui.panel.history.filters")}
+            @click=${this._toggleFilters}
+          >
+            <ha-svg-icon slot="icon" .path=${mdiFilterVariant}></ha-svg-icon>
+          </ha-assist-chip>
+          ${
+            filterCount > 0
+              ? html`<div class="badge">${filterCount}</div>`
+              : nothing
+          }
+        </div>
+        <ha-date-range-picker
+          chip
+          ?disabled=${this._isLoading}
+          .startDate=${this._startDate}
+          .endDate=${this._endDate}
+          extended-presets
+          time-picker
+          @value-changed=${this._dateRangeChanged}
+        ></ha-date-range-picker>
+      </div>
+    `;
+
+    const main = html`
+      <div class="main">
+        ${
+          !this.narrow && this._showTargets
+            ? this._renderTargetsPane(targetCount)
+            : nothing
+        }
+        ${
+          !this.narrow && this._showFilters
+            ? this._renderFiltersPane(filterCount)
+            : nothing
+        }
+        <div class="results-content ha-scrollbar">
+          ${
+            this._isLoading
+              ? html`<div class="progress-wrapper">
+                  <ha-spinner></ha-spinner>
+                </div>`
+              : !entitiesSelected
+                ? html`<div class="start-search">
+                    <div class="start-search-content">
+                      <ha-svg-icon
+                        .path=${mdiChartBoxOutline}
+                        class="start-search-icon"
+                      ></ha-svg-icon>
+                      <p>
+                        ${this.hass.localize("ui.panel.history.start_search")}
+                      </p>
+                    </div>
+                  </div>`
+                : html`
+                    <state-history-charts
+                      .hass=${this.hass}
+                      .historyData=${this._mungedStateHistory}
+                      .startTime=${this._startDate}
+                      .endTime=${this._endDate}
+                      .narrow=${this.narrow}
+                      inside-labels
+                      sync-charts
+                    >
+                    </state-history-charts>
+                  `
+          }
+        </div>
+      </div>
+    `;
+
     return html`
       <ha-top-app-bar-fixed
         .narrow=${this.narrow}
@@ -128,19 +249,6 @@ class HaPanelHistory extends LitElement {
         <h1 class="page-title" slot="title">
           ${this.hass.localize("panel.history")}
         </h1>
-        ${
-          entitiesSelected
-            ? html`
-                <ha-icon-button
-                  slot="actionItems"
-                  @click=${this._removeAll}
-                  .disabled=${this._isLoading}
-                  .path=${mdiFilterRemove}
-                  .label=${this.hass.localize("ui.panel.history.remove_all")}
-                ></ha-icon-button>
-              `
-            : ""
-        }
         <ha-dropdown slot="actionItems" @wa-select=${this._handleMenuAction}>
           <ha-icon-button
             slot="trigger"
@@ -159,48 +267,179 @@ class HaPanelHistory extends LitElement {
           </ha-dropdown-item>
         </ha-dropdown>
 
-        <div class="flex content ha-scrollbar">
-          <div class="filters">
-            <ha-date-range-picker
-              ?disabled=${this._isLoading}
-              .startDate=${this._startDate}
-              .endDate=${this._endDate}
-              extended-presets
-              time-picker
-              @value-changed=${this._dateRangeChanged}
-            ></ha-date-range-picker>
-            <ha-target-picker
-              .hass=${this.hass}
-              .value=${this._targetPickerValue}
-              .disabled=${this._isLoading}
-              add-on-top
-              @value-changed=${this._targetsChanged}
-              compact
-            ></ha-target-picker>
-          </div>
+        <div class="content">
           ${
-            this._isLoading
-              ? html`<div class="progress-wrapper">
-                  <ha-spinner></ha-spinner>
-                </div>`
-              : !entitiesSelected
-                ? html`<div class="start-search">
-                    ${this.hass.localize("ui.panel.history.start_search")}
-                  </div>`
-                : html`
-                    <state-history-charts
-                      .hass=${this.hass}
-                      .historyData=${this._mungedStateHistory}
-                      .startTime=${this._startDate}
-                      .endTime=${this._endDate}
-                      .narrow=${this.narrow}
-                      sync-charts
-                    >
-                    </state-history-charts>
-                  `
+            this.narrow
+              ? html`${toolbar}${main}`
+              : html`<ha-card class="results">${toolbar}${main}</ha-card>`
           }
         </div>
       </ha-top-app-bar-fixed>
+      ${
+        this.narrow && this._showTargets
+          ? html`<ha-adaptive-dialog
+              open
+              flexcontent
+              header-title=${this.hass.localize("ui.panel.history.targets")}
+              @closed=${this._closeTargets}
+              @opened=${this._openTargetsSearch}
+            >
+              ${
+                targetCount > 0
+                  ? html`<ha-icon-button
+                      slot="headerActionItems"
+                      .path=${mdiFilterVariantRemove}
+                      @click=${this._removeAll}
+                      .disabled=${this._isLoading}
+                      .label=${this.hass.localize("ui.panel.history.remove_all")}
+                    ></ha-icon-button>`
+                  : nothing
+              }
+              <div class="filter-dialog-content">
+                ${this._renderTargetPicker()}
+              </div>
+              <ha-dialog-footer slot="footer">
+                <ha-button slot="primaryAction" @click=${this._closeTargets}>
+                  ${this.hass.localize(
+                    "ui.components.subpage-data-table.show_results",
+                    { number: this._getEntityIds().length }
+                  )}
+                </ha-button>
+              </ha-dialog-footer>
+            </ha-adaptive-dialog>`
+          : nothing
+      }
+      ${
+        this.narrow && this._showFilters
+          ? html`<ha-adaptive-dialog
+              open
+              flexcontent
+              header-title=${this.hass.localize("ui.panel.history.filters")}
+              @closed=${this._closeFilters}
+            >
+              ${
+                filterCount > 0
+                  ? html`<ha-icon-button
+                      slot="headerActionItems"
+                      .path=${mdiFilterVariantRemove}
+                      @click=${this._clearFilters}
+                      .label=${this.hass.localize(
+                        "ui.components.subpage-data-table.clear_filter"
+                      )}
+                    ></ha-icon-button>`
+                  : nothing
+              }
+              <div class="filter-dialog-content">${this._renderFilters()}</div>
+              <ha-dialog-footer slot="footer">
+                <ha-button slot="primaryAction" @click=${this._closeFilters}>
+                  ${this.hass.localize(
+                    "ui.components.subpage-data-table.show_results",
+                    { number: this._getEntityIds().length }
+                  )}
+                </ha-button>
+              </ha-dialog-footer>
+            </ha-adaptive-dialog>`
+          : nothing
+      }
+    `;
+  }
+
+  private _renderTargetsPane(targetCount: number) {
+    return html`<div class="pane">
+      <div class="table-header">
+        <ha-icon-button
+          .path=${mdiClose}
+          @click=${this._toggleTargets}
+          .label=${this.hass.localize("ui.common.close")}
+        ></ha-icon-button>
+        <span class="pane-title"
+          >${this.hass.localize("ui.panel.history.targets")}</span
+        >
+        ${
+          targetCount > 0
+            ? html`<ha-icon-button
+                .path=${mdiFilterVariantRemove}
+                @click=${this._removeAll}
+                .disabled=${this._isLoading}
+                .label=${this.hass.localize("ui.panel.history.remove_all")}
+              ></ha-icon-button>`
+            : nothing
+        }
+      </div>
+      <div class="pane-content ha-scrollbar">${this._renderTargetPicker()}</div>
+    </div>`;
+  }
+
+  private _renderFiltersPane(filterCount: number) {
+    return html`<div class="pane">
+      <div class="table-header">
+        <ha-icon-button
+          .path=${mdiClose}
+          @click=${this._toggleFilters}
+          .label=${this.hass.localize("ui.common.close")}
+        ></ha-icon-button>
+        <span class="pane-title"
+          >${this.hass.localize("ui.panel.history.filters")}</span
+        >
+        ${
+          filterCount > 0
+            ? html`<ha-icon-button
+                .path=${mdiFilterVariantRemove}
+                @click=${this._clearFilters}
+                .label=${this.hass.localize(
+                  "ui.components.subpage-data-table.clear_filter"
+                )}
+              ></ha-icon-button>`
+            : nothing
+        }
+      </div>
+      <div class="pane-content ha-scrollbar">${this._renderFilters()}</div>
+    </div>`;
+  }
+
+  private _renderTargetPicker() {
+    return html`
+      ${
+        this._getTargetCount() === 0
+          ? html`<div class="empty-state">
+              ${this.hass.localize("ui.panel.history.no_targets")}
+            </div>`
+          : nothing
+      }
+      <ha-target-picker
+        class=${this._getTargetCount() === 0 ? "no-top-pad" : ""}
+        .hass=${this.hass}
+        .value=${this._targetPickerValue}
+        .disabled=${this._isLoading}
+        @value-changed=${this._targetsChanged}
+      ></ha-target-picker>
+    `;
+  }
+
+  private _renderFilters() {
+    return html`
+      <ha-filter-domains
+        .value=${this._filters["ha-filter-domains"]?.value}
+        .expanded=${this._expandedFilter === "ha-filter-domains"}
+        .narrow=${this.narrow}
+        @data-table-filter-changed=${this._filterChanged}
+        @expanded-changed=${this._filterExpanded}
+      ></ha-filter-domains>
+      <ha-filter-device-classes
+        .label=${this.hass.localize("ui.panel.history.device_class")}
+        .value=${this._filters["ha-filter-device-classes"]?.value}
+        .expanded=${this._expandedFilter === "ha-filter-device-classes"}
+        .narrow=${this.narrow}
+        @data-table-filter-changed=${this._filterChanged}
+        @expanded-changed=${this._filterExpanded}
+      ></ha-filter-device-classes>
+      <ha-filter-integrations
+        .value=${this._filters["ha-filter-integrations"]?.value}
+        .expanded=${this._expandedFilter === "ha-filter-integrations"}
+        .narrow=${this.narrow}
+        @data-table-filter-changed=${this._filterChanged}
+        @expanded-changed=${this._filterExpanded}
+      ></ha-filter-integrations>
     `;
   }
 
@@ -248,12 +487,24 @@ class HaPanelHistory extends LitElement {
 
   protected firstUpdated(changedProps: PropertyValues<this>) {
     super.firstUpdated(changedProps);
+    // The filter components (ha-filter-*) label their accordions with
+    // ui.panel.config.* keys, which live in the "config" translation fragment.
+    this.hass.loadFragmentTranslation("config");
+    // Needed to map entities to their integration for the integrations filter.
+    fetchEntitySourcesWithCache(this.hass).then((sources) => {
+      this._entitySources = sources;
+    });
     const searchParams = extractSearchParamsObject();
     if (searchParams.back === "1" && history.length > 1) {
       this._showBack = true;
       navigate(constructUrlCurrentPath(removeSearchParam("back")), {
         replace: true,
       });
+    }
+    // On desktop, open the targets pane by default when nothing is selected
+    // yet, so the empty page immediately shows how to get started.
+    if (!this.narrow && this._getTargetCount() === 0) {
+      this._showTargets = true;
     }
   }
 
@@ -262,6 +513,8 @@ class HaPanelHistory extends LitElement {
       changedProps.has("_startDate") ||
       changedProps.has("_endDate") ||
       changedProps.has("_targetPickerValue") ||
+      changedProps.has("_filters") ||
+      changedProps.has("_entitySources") ||
       (!this._stateHistory &&
         (changedProps.has("_deviceEntityLookup") ||
           changedProps.has("_areaEntityLookup") ||
@@ -276,6 +529,83 @@ class HaPanelHistory extends LitElement {
     this._targetPickerValue = {};
     this._storedTargetPickerValue = this._targetPickerValue;
     this._updatePath();
+  }
+
+  private _getTargetCount(): number {
+    const value = this._targetPickerValue;
+    return (
+      ["floor_id", "area_id", "device_id", "entity_id", "label_id"] as const
+    ).reduce(
+      (count, key) => count + (value[key] ? ensureArray(value[key]).length : 0),
+      0
+    );
+  }
+
+  private _getFilterCount(): number {
+    return Object.values(this._filters).filter((filter) => {
+      const value = filter?.value;
+      if (Array.isArray(value)) {
+        return value.length > 0;
+      }
+      if (value && typeof value === "object") {
+        return Object.values(value).some(
+          (arr) => Array.isArray(arr) && arr.length > 0
+        );
+      }
+      return false;
+    }).length;
+  }
+
+  private _toggleTargets() {
+    this._showTargets = !this._showTargets;
+    // Only one pane open at a time.
+    if (this._showTargets) {
+      this._showFilters = false;
+    }
+  }
+
+  private _closeTargets() {
+    this._showTargets = false;
+  }
+
+  // On mobile, open the add-target search right away when the sheet appears —
+  // but only when nothing is selected yet, so existing targets stay visible.
+  private _openTargetsSearch(ev: Event) {
+    if (this._getTargetCount() > 0) {
+      return;
+    }
+    (ev.currentTarget as HTMLElement)
+      .querySelector("ha-target-picker")
+      ?.openPicker();
+  }
+
+  private _toggleFilters() {
+    this._showFilters = !this._showFilters;
+    // Only one pane open at a time.
+    if (this._showFilters) {
+      this._showTargets = false;
+    }
+  }
+
+  private _closeFilters() {
+    this._showFilters = false;
+  }
+
+  private _filterChanged(ev) {
+    const type = ev.target.localName;
+    this._filters = { ...this._filters, [type]: ev.detail };
+  }
+
+  private _filterExpanded(ev) {
+    if (ev.detail.expanded) {
+      this._expandedFilter = ev.target.localName;
+    } else if (this._expandedFilter === ev.target.localName) {
+      this._expandedFilter = undefined;
+    }
+  }
+
+  private _clearFilters() {
+    this._filters = {};
   }
 
   private async _getStats() {
@@ -383,12 +713,13 @@ class HaPanelHistory extends LitElement {
   }
 
   private _getEntityIds(): string[] {
-    return this.__getEntityIds(
+    const entityIds = this.__getEntityIds(
       this._targetPickerValue,
       this.hass.entities,
       this.hass.devices,
       this.hass.areas
     );
+    return this._applyEntityFilters(entityIds);
   }
 
   private __getEntityIds = memoizeOne(
@@ -400,6 +731,42 @@ class HaPanelHistory extends LitElement {
     ): string[] =>
       resolveEntityIDs(this.hass, targetPickerValue, entities, devices, areas)
   );
+
+  // Narrows the target-resolved entities by the active filter selections.
+  // Returns the input unchanged when no filters are applied.
+  private _applyEntityFilters(entityIds: string[]): string[] {
+    let result = entityIds;
+
+    const domains = this._filters["ha-filter-domains"]?.value as
+      string[] | undefined;
+    if (Array.isArray(domains) && domains.length) {
+      result = result.filter((id) => domains.includes(computeDomain(id)));
+    }
+
+    const deviceClasses = this._filters["ha-filter-device-classes"]?.value as
+      string[] | undefined;
+    if (Array.isArray(deviceClasses) && deviceClasses.length) {
+      result = result.filter((id) => {
+        const deviceClass = this.hass.states[id]?.attributes.device_class;
+        return deviceClass && deviceClasses.includes(deviceClass);
+      });
+    }
+
+    const integrations = this._filters["ha-filter-integrations"]?.value as
+      string[] | undefined;
+    if (
+      Array.isArray(integrations) &&
+      integrations.length &&
+      this._entitySources
+    ) {
+      result = result.filter((id) => {
+        const domain = this._entitySources![id]?.domain;
+        return domain && integrations.includes(domain);
+      });
+    }
+
+    return result;
+  }
 
   private _dateRangeChanged(ev) {
     this._startDate = ev.detail.value.startDate;
@@ -583,6 +950,8 @@ class HaPanelHistory extends LitElement {
         }
 
         .content {
+          display: flex;
+          flex-direction: column;
           height: calc(
             100vh - var(--header-height, 0px) - var(
                 --safe-area-inset-top,
@@ -590,8 +959,173 @@ class HaPanelHistory extends LitElement {
               ) - var(--safe-area-inset-bottom, 0px)
           );
           box-sizing: border-box;
-          overflow-x: hidden;
-          padding: 0 16px 16px;
+          overflow: hidden;
+        }
+
+        /* On desktop everything lives in a card; on mobile it is flush. */
+        :host(:not([narrow])) .content {
+          padding: 16px;
+        }
+
+        .results {
+          flex: 1;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+
+        /* Constrain and center the card like the automation editor content. */
+        :host(:not([narrow])) .results {
+          width: 100%;
+          max-width: var(--ha-automation-editor-width, 1540px);
+          margin-inline: auto;
+        }
+
+        /* Inside the card the toolbar matches the card surface (not greyish). */
+        :host(:not([narrow])) .toolbar {
+          background: var(--card-background-color);
+        }
+
+        /* Toolbar sits directly under the top app bar as a full-width bar. */
+        .toolbar {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-4);
+          height: 56px;
+          flex-shrink: 0;
+          box-sizing: border-box;
+          padding: 0 16px;
+          background: var(--primary-background-color);
+          border-bottom: 1px solid var(--divider-color);
+          direction: var(--direction);
+          overflow-x: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        .toolbar::-webkit-scrollbar {
+          display: none;
+        }
+
+        /* Keep chips at their natural width; the toolbar scrolls instead. */
+        .toolbar > * {
+          flex-shrink: 0;
+        }
+
+        .main {
+          display: flex;
+          flex: 1;
+          min-height: 0;
+        }
+
+        .results-content {
+          flex: 1;
+          min-width: 0;
+          overflow: hidden auto;
+          padding: 16px 8px;
+        }
+
+        /* On mobile go edge-to-edge; the toolbar keeps its own inset. */
+        :host([narrow]) .results-content {
+          padding-inline: 0;
+        }
+
+        /* Devices-table style pane: a left column separated by a divider. */
+        .pane {
+          flex-shrink: 0;
+          width: 320px;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          border-inline-end: 1px solid var(--divider-color);
+        }
+
+        .table-header {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+          height: 56px;
+          flex-shrink: 0;
+          padding: 0 4px;
+          border-bottom: 1px solid var(--divider-color);
+        }
+
+        .pane-title {
+          flex: 1;
+          min-width: 0;
+          font-size: var(--ha-font-size-l);
+          font-weight: var(--ha-font-weight-medium);
+        }
+
+        .pane-content {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+        }
+
+        .pane-content ha-target-picker {
+          display: block;
+          padding: var(--ha-space-4);
+        }
+
+        /* When the empty state is shown above the picker, drop the picker's
+           top padding so the gap to "Add target" matches the selected case. */
+        .pane-content ha-target-picker.no-top-pad,
+        .filter-dialog-content ha-target-picker.no-top-pad {
+          padding-top: 0;
+        }
+
+        ha-adaptive-dialog {
+          --dialog-content-padding: 0;
+          /* Near-full-height bottom sheet (matches the automation editor) so it
+             doesn't grow/shrink with content; header and footer stay put and
+             only content scrolls. */
+          --ha-bottom-sheet-height: 90vh;
+          --ha-bottom-sheet-height: calc(100dvh - var(--ha-space-12));
+        }
+
+        .filter-dialog-content {
+          flex: 1;
+          min-height: 0;
+          box-sizing: border-box;
+          display: flex;
+          flex-direction: column;
+          overflow-y: auto;
+        }
+
+        /* Bottom sheet content has no padding of its own, so pad the picker. */
+        .filter-dialog-content ha-target-picker {
+          display: block;
+          padding: var(--ha-space-4);
+        }
+
+        .relative {
+          position: relative;
+        }
+
+        .badge {
+          position: absolute;
+          top: -4px;
+          right: -4px;
+          inset-inline-end: -4px;
+          inset-inline-start: initial;
+          min-width: 16px;
+          box-sizing: border-box;
+          border-radius: var(--ha-border-radius-circle);
+          font-size: var(--ha-font-size-xs);
+          font-weight: var(--ha-font-weight-normal);
+          background-color: var(--primary-color);
+          line-height: var(--ha-line-height-normal);
+          text-align: center;
+          padding: 0px 2px;
+          color: var(--text-primary-color);
+        }
+
+        ha-assist-chip,
+        ha-date-range-picker {
+          --ha-assist-chip-container-shape: 10px;
+          --ha-assist-chip-container-color: var(--card-background-color);
         }
 
         :host([virtualize]) {
@@ -607,38 +1141,47 @@ class HaPanelHistory extends LitElement {
           padding: 16px;
         }
 
-        .filters {
-          display: flex;
-          align-items: flex-start;
-          margin-top: 16px;
-        }
-
-        ha-date-range-picker {
-          margin-right: 16px;
-          margin-inline-end: 16px;
-          margin-inline-start: initial;
-          max-width: 100%;
-          direction: var(--direction);
-        }
-
-        ha-target-picker {
-          flex: 1;
-          max-width: 100%;
-          min-width: 0;
-        }
-
-        @media all and (max-width: 1025px) {
-          .filters {
-            flex-direction: column;
-          }
-          ha-date-range-picker {
-            width: 100%;
-            margin-bottom: 8px;
-          }
-        }
-
         .start-search {
-          padding-top: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          padding: 16px;
+          box-sizing: border-box;
+        }
+
+        .start-search-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          max-width: 320px;
+          color: var(--secondary-text-color);
+        }
+
+        .start-search-icon {
+          --mdc-icon-size: 48px;
+          color: var(--disabled-text-color);
+          margin-bottom: var(--ha-space-2);
+        }
+
+        .start-search-content p {
+          margin: 0 0 var(--ha-space-4);
+        }
+
+        /* Shown inside the targets pane / sheet when nothing is selected.
+           Sized to match a value group (header + one 56px item row) so the
+           layout doesn't jump when the first target is added. */
+        .empty-state {
+          box-sizing: border-box;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 92px;
+          margin: 16px 16px 0;
+          padding: 0 24px;
+          border-radius: var(--ha-border-radius-lg);
+          background-color: var(--ha-color-fill-neutral-quiet-resting);
           text-align: center;
           color: var(--secondary-text-color);
         }

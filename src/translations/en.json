@@ -11531,7 +11531,11 @@
         }
       },
       "history": {
-        "start_search": "Select areas, devices, entities or labels above",
+        "start_search": "Select areas, devices, entities or labels to see their history",
+        "no_targets": "No targets selected",
+        "targets": "Targets",
+        "filters": "Filters",
+        "device_class": "Device class",
         "add_all": "Add all entities",
         "remove_all": "Remove all selections",
         "download_data": "Download data",
@@ -11539,6 +11543,15 @@
         "add_card": "Add current view as card",
         "add_card_error": "Unable to add card",
         "error_no_data": "You need to select some data sources first."
+      },
+      "logbook": {
+        "targets": "Targets",
+        "filters": "Filters",
+        "device_class": "Device class",
+        "remove_all": "Remove all selections",
+        "start_search": "Select areas, devices, entities or labels to see their activity",
+        "no_targets": "Showing all activity. Add targets to narrow it down.",
+        "show_all": "Show all"
       }
     },
     "tips": {
