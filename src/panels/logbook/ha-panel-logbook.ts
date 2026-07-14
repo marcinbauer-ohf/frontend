@@ -27,7 +27,6 @@ import "../../components/chips/ha-assist-chip";
 import "../../components/date-picker/ha-date-range-picker";
 import "../../components/ha-adaptive-dialog";
 import "../../components/ha-button";
-import "../../components/ha-card";
 import "../../components/ha-dialog-footer";
 import "../../components/ha-filter-device-classes";
 import "../../components/ha-filter-domains";
@@ -104,16 +103,7 @@ export class HaPanelLogbook extends LitElement {
         <div slot="title">${this.hass.localize("panel.logbook")}</div>
 
         <div class="content">
-          ${
-            this.narrow
-              ? html`${this._renderToolbar(targetCount, filterCount)}${this._renderMain()}`
-              : html`<ha-card class="results"
-                  >${this._renderToolbar(
-                  targetCount,
-                  filterCount
-                )}${this._renderMain()}</ha-card
-                >`
-          }
+          ${this._renderToolbar(targetCount, filterCount)}${this._renderMain()}
         </div>
       </ha-top-app-bar-fixed>
       ${
@@ -266,8 +256,8 @@ export class HaPanelLogbook extends LitElement {
                 .path=${mdiFilterVariantRemove}
                 @click=${this._clearFilters}
                 .label=${this.hass.localize(
-                "ui.components.subpage-data-table.clear_filter"
-              )}
+                  "ui.components.subpage-data-table.clear_filter"
+                )}
               ></ha-icon-button>`
             : nothing
         }
@@ -631,31 +621,6 @@ export class HaPanelLogbook extends LitElement {
           );
           box-sizing: border-box;
           overflow: hidden;
-        }
-
-        /* On desktop everything lives in a card; on mobile it is flush. */
-        :host(:not([narrow])) .content {
-          padding: 16px;
-        }
-
-        .results {
-          flex: 1;
-          min-height: 0;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-        }
-
-        /* Constrain and center the card like the automation editor content. */
-        :host(:not([narrow])) .results {
-          width: 100%;
-          max-width: var(--ha-automation-editor-width, 1540px);
-          margin-inline: auto;
-        }
-
-        /* Inside the card the toolbar matches the card surface (not greyish). */
-        :host(:not([narrow])) .toolbar {
-          background: var(--card-background-color);
         }
 
         .toolbar {

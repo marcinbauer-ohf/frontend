@@ -38,7 +38,6 @@ import "../../components/chips/ha-assist-chip";
 import "../../components/date-picker/ha-date-range-picker";
 import "../../components/ha-adaptive-dialog";
 import "../../components/ha-button";
-import "../../components/ha-card";
 import "../../components/ha-dialog-footer";
 import "../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
@@ -267,13 +266,7 @@ class HaPanelHistory extends LitElement {
           </ha-dropdown-item>
         </ha-dropdown>
 
-        <div class="content">
-          ${
-            this.narrow
-              ? html`${toolbar}${main}`
-              : html`<ha-card class="results">${toolbar}${main}</ha-card>`
-          }
-        </div>
+        <div class="content">${toolbar}${main}</div>
       </ha-top-app-bar-fixed>
       ${
         this.narrow && this._showTargets
@@ -960,31 +953,6 @@ class HaPanelHistory extends LitElement {
           );
           box-sizing: border-box;
           overflow: hidden;
-        }
-
-        /* On desktop everything lives in a card; on mobile it is flush. */
-        :host(:not([narrow])) .content {
-          padding: 16px;
-        }
-
-        .results {
-          flex: 1;
-          min-height: 0;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-        }
-
-        /* Constrain and center the card like the automation editor content. */
-        :host(:not([narrow])) .results {
-          width: 100%;
-          max-width: var(--ha-automation-editor-width, 1540px);
-          margin-inline: auto;
-        }
-
-        /* Inside the card the toolbar matches the card surface (not greyish). */
-        :host(:not([narrow])) .toolbar {
-          background: var(--card-background-color);
         }
 
         /* Toolbar sits directly under the top app bar as a full-width bar. */
