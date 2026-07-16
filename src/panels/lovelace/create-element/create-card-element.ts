@@ -38,6 +38,7 @@ const LAZY_LOAD_TYPES = {
   area: () => import("../cards/hui-area-card"),
   calendar: () => import("../cards/hui-calendar-card"),
   conditional: () => import("../cards/hui-conditional-card"),
+  device: () => import("../cards/hui-device-card"),
   "empty-state": () => import("../cards/hui-empty-state-card"),
   "energy-compare": () => import("../cards/energy/hui-energy-compare-card"),
   "energy-carbon-consumed-gauge": () =>

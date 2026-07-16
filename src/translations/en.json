@@ -10563,6 +10563,12 @@
               "description": "This card gives control of a climate or water heater entity for heating or cooling, allowing you to set its mode and desired temperature.",
               "show_current_as_primary": "Show current temperature as primary information"
             },
+            "device": {
+              "name": "Device",
+              "description": "This card shows a device as a single tile: a primary entity with its control, plus its remaining entities as compact rows.",
+              "show_area": "Show area",
+              "show_graph": "Show history graph"
+            },
             "tile": {
               "name": "Tile",
               "description": "This card gives you a quick overview of an entity. It allows you to toggle the entity, show the More info dialog or trigger custom actions.",
