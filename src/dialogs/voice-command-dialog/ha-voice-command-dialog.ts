@@ -1,36 +1,41 @@
-import "@home-assistant/webawesome/dist/components/divider/divider";
 import {
-  mdiChevronDown,
+  mdiArrowLeft,
   mdiClose,
-  mdiHelpCircleOutline,
-  mdiStar,
+  mdiMenu,
+  mdiMessagePlusOutline,
 } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators";
+import { customElement, property, query, state } from "lit/decorators";
 import { storage } from "../../common/decorators/storage";
 import { fireEvent } from "../../common/dom/fire_event";
-import { stopPropagation } from "../../common/dom/stop_propagation";
+import { navigate } from "../../common/navigate";
+import "../../components/ha-adaptive-side-dialog";
 import "../../components/ha-alert";
 import "../../components/ha-assist-chat";
-import "../../components/ha-button";
-import "../../components/ha-dialog";
+import type { HaAssistChat } from "../../components/ha-assist-chat";
+import "../../components/ha-assist-chat-history";
 import "../../components/ha-dialog-header";
-import "../../components/ha-dropdown";
-import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
-import "../../components/ha-dropdown-item";
 import "../../components/ha-icon-button";
-import "../../components/ha-icon-next";
 import "../../components/ha-spinner";
 import type { AssistPipeline } from "../../data/assist_pipeline";
 import {
   getAssistPipeline,
   listAssistPipelines,
 } from "../../data/assist_pipeline";
+import {
+  conversationHasUserContent,
+  createConversationId,
+  deriveConversationTitle,
+  removeConversation,
+  upsertConversation,
+  type StoredAssistConversation,
+} from "../../data/assist_conversation_history";
 import { haStyleDialog } from "../../resources/styles";
 import type { HomeAssistant } from "../../types";
-import { documentationUrl } from "../../util/documentation-url";
 import type { VoiceCommandDialogParams } from "./show-ha-voice-command-dialog";
+
+type AssistDialogView = "chat" | "history";
 
 @customElement("ha-voice-command-dialog")
 export class HaVoiceCommandDialog extends LitElement {
@@ -40,6 +45,8 @@ export class HaVoiceCommandDialog extends LitElement {
 
   @state() private _dialogOpen = false;
 
+  @state() private _view: AssistDialogView = "chat";
+
   @state()
   @storage({
     key: "AssistPipelineId",
@@ -47,6 +54,14 @@ export class HaVoiceCommandDialog extends LitElement {
     subscribe: false,
   })
   private _pipelineId?: string;
+
+  @state()
+  @storage({
+    key: "assist-conversations",
+    state: true,
+    subscribe: true,
+  })
+  private _conversations: StoredAssistConversation[] = [];
 
   @state() private _pipeline?: AssistPipeline;
 
@@ -56,11 +71,15 @@ export class HaVoiceCommandDialog extends LitElement {
 
   @state() private _errorLoadAssist?: "not_found" | "unknown";
 
+  @query("ha-assist-chat") private _chat?: HaAssistChat;
+
   private _startListening = false;
 
   private _prompt?: string;
 
   private _submitPrompt = false;
+
+  private _currentConversationStoreId?: string;
 
   public async showDialog(params: VoiceCommandDialogParams): Promise<void> {
     await this._loadPipelines();
@@ -82,6 +101,8 @@ export class HaVoiceCommandDialog extends LitElement {
     this._startListening = params.start_listening ?? false;
     this._prompt = params.prompt;
     this._submitPrompt = params.submit ?? false;
+    this._view = "chat";
+    this._currentConversationStoreId = undefined;
     this._dialogOpen = true;
     this._open = true;
   }
@@ -91,8 +112,11 @@ export class HaVoiceCommandDialog extends LitElement {
   }
 
   private _dialogClosed(): void {
+    this._saveCurrentConversation();
     this._dialogOpen = false;
     this._pipelines = undefined;
+    this._view = "chat";
+    this._currentConversationStoreId = undefined;
     fireEvent(this, "dialog-closed", { dialog: this.localName });
   }
 
@@ -101,108 +125,87 @@ export class HaVoiceCommandDialog extends LitElement {
       return nothing;
     }
 
+    const isHistory = this._view === "history";
+
     return html`
-      <ha-dialog .open=${this._open} @closed=${this._dialogClosed} flexcontent>
-        <ha-dialog-header slot="header">
+      <ha-adaptive-side-dialog
+        .open=${this._open}
+        @closed=${this._dialogClosed}
+        flexcontent
+        .headerTitle=${
+          isHistory
+            ? this.hass.localize("ui.dialogs.voice_command.history.title")
+            : this.hass.localize("ui.dialogs.voice_command.title")
+        }
+      >
+        <ha-icon-button
+          slot="headerNavigationIcon"
+          .label=${
+            isHistory
+              ? this.hass.localize("ui.common.back")
+              : this.hass.localize("ui.dialogs.voice_command.history.title")
+          }
+          .path=${isHistory ? mdiArrowLeft : mdiMenu}
+          @click=${this._toggleView}
+        ></ha-icon-button>
+
+        <div slot="headerActionItems" class="header-actions">
+          ${
+            isHistory
+              ? nothing
+              : html`
+                  <ha-icon-button
+                    .label=${this.hass.localize(
+                      "ui.dialogs.voice_command.new_conversation"
+                    )}
+                    .path=${mdiMessagePlusOutline}
+                    @click=${this._newConversation}
+                  ></ha-icon-button>
+                `
+          }
           <ha-icon-button
-            slot="navigationIcon"
             data-dialog="close"
             .label=${this.hass.localize("ui.common.close")}
             .path=${mdiClose}
           ></ha-icon-button>
-          <div slot="title">
-            ${this.hass.localize("ui.dialogs.voice_command.title")}
-            <ha-dropdown
-              @opened=${this._loadPipelines}
-              @closed=${stopPropagation}
-              @wa-select=${this._selectPipeline}
-            >
-              <ha-button
-                slot="trigger"
-                appearance="plain"
-                variant="neutral"
-                size="s"
-                .loading=${!this._pipelines}
-              >
-                ${this._pipeline?.name}
-                <ha-svg-icon slot="end" .path=${mdiChevronDown}></ha-svg-icon>
-              </ha-button>
-              ${
-                !this._pipelines
-                  ? nothing
-                  : this._pipelines?.map(
-                      (pipeline) =>
-                        html`<ha-dropdown-item
-                          ?selected=${
-                            pipeline.id === this._pipelineId ||
-                            (!this._pipelineId &&
-                              pipeline.id === this._preferredPipeline)
-                          }
-                          .value=${pipeline.id}
-                        >
-                          ${pipeline.name}${
-                            pipeline.id === this._preferredPipeline
-                              ? html`
-                                  <ha-svg-icon
-                                    slot="details"
-                                    .path=${mdiStar}
-                                  ></ha-svg-icon>
-                                `
-                              : nothing
-                          }
-                        </ha-dropdown-item>`
-                    )
-              }
-              ${
-                this.hass.user?.is_admin
-                  ? html`<wa-divider></wa-divider>
-                      <a href="/config/voice-assistants/assistants"
-                        ><ha-dropdown-item
-                          >${this.hass.localize(
-                            "ui.dialogs.voice_command.manage_assistants"
-                          )}
-
-                          <ha-icon-next
-                            slot="details"
-                          ></ha-icon-next></ha-dropdown-item
-                      ></a>`
-                  : nothing
-              }
-            </ha-dropdown>
-          </div>
-          <ha-icon-button
-            .label=${this.hass.localize("ui.common.help")}
-            .path=${mdiHelpCircleOutline}
-            href=${documentationUrl(this.hass, "/docs/assist/")}
-            slot="actionItems"
-            target="_blank"
-            rel="noopener noreferrer"
-          ></ha-icon-button>
-        </ha-dialog-header>
+        </div>
 
         ${
-          this._errorLoadAssist
-            ? html`<ha-alert alert-type="error">
-                ${this.hass.localize(
-                  `ui.dialogs.voice_command.${this._errorLoadAssist}_error_load_assist`
-                )}
-              </ha-alert>`
-            : this._pipeline
-              ? html`
-                  <ha-assist-chat
-                    .hass=${this.hass}
-                    .pipeline=${this._pipeline}
-                    .startListening=${this._startListening}
-                    .initialPrompt=${this._prompt}
-                    .submitInitialPrompt=${this._submitPrompt}
-                  >
-                  </ha-assist-chat>
-                `
-              : html`<div class="pipelines-loading">
-                  <ha-spinner size="large"></ha-spinner>
-                </div>`
+          isHistory
+            ? html`
+                <ha-assist-chat-history
+                  .conversations=${this._conversations}
+                  @assist-select-conversation=${this._handleSelectConversation}
+                  @assist-delete-conversation=${this._handleDeleteConversation}
+                ></ha-assist-chat-history>
+              `
+            : this._errorLoadAssist
+              ? html`<ha-alert alert-type="error">
+                  ${this.hass.localize(
+                    `ui.dialogs.voice_command.${this._errorLoadAssist}_error_load_assist`
+                  )}
+                </ha-alert>`
+              : this._pipeline
+                ? html`
+                    <ha-assist-chat
+                      .hass=${this.hass}
+                      .pipeline=${this._pipeline}
+                      .pipelines=${this._pipelines}
+                      .pipelineId=${this._pipelineId}
+                      .preferredPipeline=${this._preferredPipeline}
+                      .startListening=${this._startListening}
+                      .initialPrompt=${this._prompt}
+                      .submitInitialPrompt=${this._submitPrompt}
+                      @pipeline-changed=${this._handlePipelineChanged}
+                      @assist-open-settings=${this._openSettings}
+                    >
+                    </ha-assist-chat>
+                  `
+                : html`<div class="pipelines-loading">
+                    <ha-spinner size="large"></ha-spinner>
+                  </div>`
         }
-      </ha-dialog>
+      </ha-adaptive-side-dialog>
     `;
   }
 
@@ -217,6 +220,92 @@ export class HaVoiceCommandDialog extends LitElement {
     }
   }
 
+  private _toggleView() {
+    if (this._view === "chat") {
+      this._saveCurrentConversation();
+      this._view = "history";
+    } else {
+      this._view = "chat";
+    }
+  }
+
+  private _newConversation() {
+    this._saveCurrentConversation();
+    this._chat?.startNewConversation();
+    this._currentConversationStoreId = undefined;
+    this._view = "chat";
+  }
+
+  private _openSettings() {
+    navigate("/config/voice-assistants/assistants");
+    this.closeDialog();
+  }
+
+  private _saveCurrentConversation() {
+    const chat = this._chat;
+    if (!chat) {
+      return;
+    }
+    const messages = chat.getStoredMessages();
+    if (!conversationHasUserContent(messages)) {
+      return;
+    }
+    const id = this._currentConversationStoreId ?? createConversationId();
+    const existing = this._conversations.find(
+      (conversation) => conversation.id === id
+    );
+    const now = Date.now();
+    const conversation: StoredAssistConversation = {
+      id,
+      title: deriveConversationTitle(messages) || existing?.title || "",
+      created: existing?.created ?? now,
+      updated: now,
+      pipeline_id: this._pipelineId,
+      conversation_id: chat.conversationId,
+      messages,
+    };
+    this._conversations = upsertConversation(this._conversations, conversation);
+    this._currentConversationStoreId = id;
+  }
+
+  private async _handleSelectConversation(
+    ev: CustomEvent<{ id: string }>
+  ): Promise<void> {
+    const conversation = this._conversations.find(
+      (item) => item.id === ev.detail.id
+    );
+    if (!conversation) {
+      return;
+    }
+    // Persist the currently open conversation before switching away from it.
+    this._saveCurrentConversation();
+    this._currentConversationStoreId = conversation.id;
+    if (conversation.pipeline_id) {
+      this._pipelineId = conversation.pipeline_id;
+    }
+    this._view = "chat";
+    await this.updateComplete;
+    await this._chat?.updateComplete;
+    this._chat?.restoreConversation(
+      conversation.messages,
+      conversation.conversation_id
+    );
+  }
+
+  private _handleDeleteConversation(ev: CustomEvent<{ id: string }>): void {
+    this._conversations = removeConversation(this._conversations, ev.detail.id);
+    if (this._currentConversationStoreId === ev.detail.id) {
+      this._currentConversationStoreId = undefined;
+    }
+  }
+
+  private async _handlePipelineChanged(
+    ev: CustomEvent<{ pipelineId: string }>
+  ): Promise<void> {
+    this._pipelineId = ev.detail.pipelineId;
+    await this.updateComplete;
+  }
+
   private async _loadPipelines() {
     if (this._pipelines) {
       return;
@@ -226,14 +315,6 @@ export class HaVoiceCommandDialog extends LitElement {
     );
     this._pipelines = pipelines;
     this._preferredPipeline = preferred_pipeline || undefined;
-  }
-
-  private async _selectPipeline(ev: HaDropdownSelectEvent) {
-    const pipelineId = ev.detail?.item?.value;
-    if (pipelineId) {
-      this._pipelineId = pipelineId;
-      await this.updateComplete;
-    }
   }
 
   private async _getPipeline() {
@@ -265,58 +346,13 @@ export class HaVoiceCommandDialog extends LitElement {
     return [
       haStyleDialog,
       css`
-        ha-dialog {
+        ha-adaptive-side-dialog {
           --dialog-content-padding: 0;
         }
-        ha-dialog-header a {
-          color: var(--primary-text-color);
-        }
-        div[slot="title"] {
+        .header-actions {
           display: flex;
-          flex-direction: column;
-          margin: -4px 0;
+          align-items: center;
         }
-        ha-dropdown {
-          display: flex;
-          --mdc-theme-on-primary: var(--text-primary-color);
-          --mdc-theme-primary: var(--primary-color);
-          margin-top: -4px;
-          margin-bottom: 0;
-          margin-right: 0;
-          margin-inline-end: 0;
-          margin-left: -9px;
-          margin-inline-start: -9px;
-        }
-        ha-dropdown ha-button {
-          --ha-button-height: var(--ha-space-5);
-        }
-        ha-dropdown ha-button::part(base) {
-          margin-left: 5px;
-          padding: 0;
-        }
-        @media (prefers-color-scheme: dark) {
-          ha-dropdown ha-button {
-            --ha-button-theme-lighter-color: rgba(255, 255, 255, 0.1);
-          }
-        }
-        ha-dropdown ha-button ha-svg-icon {
-          height: var(--ha-space-7);
-          margin-left: var(--ha-space-1);
-          margin-inline-start: var(--ha-space-1);
-          margin-inline-end: initial;
-          direction: var(--direction);
-        }
-        ha-dropdown-item ha-svg-icon {
-          margin-left: var(--ha-space-1);
-          margin-inline-start: var(--ha-space-1);
-          margin-inline-end: initial;
-          direction: var(--direction);
-          display: block;
-        }
-        ha-dropdown a {
-          text-decoration: none;
-        }
-
         .pipelines-loading {
           display: flex;
           justify-content: center;

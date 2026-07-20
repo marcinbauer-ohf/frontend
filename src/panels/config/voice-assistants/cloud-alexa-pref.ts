@@ -1,4 +1,3 @@
-import { mdiHelpCircleOutline } from "@mdi/js";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
@@ -6,7 +5,7 @@ import { fireEvent } from "../../../common/dom/fire_event";
 import { isEmptyEntityDomainFilter } from "../../../common/entity/entity_domain_filter";
 import "../../../components/ha-alert";
 import "../../../components/ha-card";
-import "../../../components/ha-button";
+import "../../../components/ha-icon-next";
 import "../../../components/ha-md-list-item";
 import "../../../components/ha-switch";
 import type { HaSwitch } from "../../../components/ha-switch";
@@ -65,20 +64,21 @@ export class CloudAlexaPref extends LitElement {
       <ha-card outlined>
         <h1 class="card-header">
           <voice-assistant-brand-icon .voiceAssistantId=${"cloud.alexa"}>
-          </voice-assistant-brand-icon
-          >${this.hass.localize("ui.panel.config.cloud.account.alexa.title")}
+          </voice-assistant-brand-icon>
+          <span class="title-block">
+            <span class="title"
+              >${this.hass.localize(
+                "ui.panel.config.cloud.account.alexa.title"
+              )}</span
+            >
+            <span class="subtitle"
+              >${this.hass.localize(
+                "ui.panel.config.cloud.account.alexa.company"
+              )}</span
+            >
+          </span>
         </h1>
         <div class="header-actions">
-          <ha-icon-button
-            .label=${this.hass.localize(
-              "ui.panel.config.cloud.account.alexa.link_learn_how_it_works"
-            )}
-            .path=${mdiHelpCircleOutline}
-            href="https://www.nabucasa.com/config/amazon_alexa/"
-            target="_blank"
-            rel="noreferrer"
-            class="icon-link"
-          ></ha-icon-button>
           <ha-switch
             .checked=${alexa_enabled}
             @change=${this._enabledToggleChanged}
@@ -87,6 +87,12 @@ export class CloudAlexaPref extends LitElement {
         <div class="card-content">
           <p>
             ${this.hass!.localize("ui.panel.config.cloud.account.alexa.info")}
+            <a
+              href="https://www.nabucasa.com/config/amazon_alexa/"
+              target="_blank"
+              rel="noreferrer"
+              >${this.hass.localize("ui.panel.config.common.learn_more")}</a
+            >
           </p>
           ${
             manualConfig
@@ -180,34 +186,36 @@ export class CloudAlexaPref extends LitElement {
                         `
                       : nothing
                   }
+                  <ha-md-list-item
+                    type="link"
+                    href="/config/voice-assistants/expose?assistants=cloud.alexa&historyBack"
+                  >
+                    <span slot="headline"
+                      >${this.hass.localize(
+                        "ui.panel.config.voice_assistants.assistants.general.accessible_entities"
+                      )}</span
+                    >
+                    ${
+                      manualConfig
+                        ? nothing
+                        : html`<span slot="supporting-text"
+                            >${this.hass.localize(
+                              "ui.panel.config.voice_assistants.assistants.general.accessible_entities_count",
+                              {
+                                number: this.exposedEntities
+                                  ? this._exposedEntitiesCount(
+                                      this.exposedEntities
+                                    )
+                                  : 0,
+                              }
+                            )}</span
+                          >`
+                    }
+                    <ha-icon-next slot="end"></ha-icon-next>
+                  </ha-md-list-item>
                 `
           }
         </div>
-        ${
-          alexa_enabled
-            ? html`<div class="card-actions">
-                <ha-button
-                  appearance="plain"
-                  href="/config/voice-assistants/expose?assistants=cloud.alexa&historyBack"
-                >
-                  ${
-                    manualConfig
-                      ? this.hass!.localize(
-                          "ui.panel.config.cloud.account.alexa.show_entities"
-                        )
-                      : this.hass.localize(
-                          "ui.panel.config.cloud.account.alexa.exposed_entities",
-                          {
-                            number: this.exposedEntities
-                              ? this._exposedEntitiesCount(this.exposedEntities)
-                              : 0,
-                          }
-                        )
-                  }
-                </ha-button>
-              </div>`
-            : nothing
-        }
       </ha-card>
     `;
   }
@@ -276,23 +284,23 @@ export class CloudAlexaPref extends LitElement {
       display: flex;
       flex-direction: row;
     }
-    .header-actions .icon-link {
-      margin-top: -16px;
-      margin-right: 8px;
-      margin-inline-end: 8px;
-      margin-inline-start: initial;
-      direction: var(--direction);
-      color: var(--secondary-text-color);
-    }
-    .card-actions {
-      display: flex;
-    }
-    .card-actions a {
-      text-decoration: none;
-    }
     .card-header {
       display: flex;
       align-items: center;
+    }
+    .card-header .title-block {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .card-header .title {
+      line-height: var(--ha-line-height-condensed);
+    }
+    .card-header .subtitle {
+      font-size: var(--ha-font-size-m);
+      font-weight: var(--ha-font-weight-normal);
+      color: var(--secondary-text-color);
+      line-height: var(--ha-line-height-condensed);
     }
     voice-assistant-brand-icon {
       height: 28px;

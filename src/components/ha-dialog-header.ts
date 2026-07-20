@@ -98,6 +98,7 @@ export class HaDialogHeader extends LitElement {
           height: 100%;
           display: flex;
           flex-direction: row;
+          align-items: center;
         }
         .header-action-items {
           flex: none;
@@ -105,6 +106,7 @@ export class HaDialogHeader extends LitElement {
           height: 100%;
           display: flex;
           flex-direction: row;
+          align-items: center;
         }
       `,
     ];

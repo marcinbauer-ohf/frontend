@@ -1,4 +1,4 @@
-import { mdiHelpCircleOutline, mdiStarFourPoints } from "@mdi/js";
+import { mdiStarFourPoints } from "@mdi/js";
 import type { HassEntity } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement } from "lit";
@@ -18,7 +18,6 @@ import {
   type AITaskPreferences,
 } from "../../../data/ai_task";
 import type { HomeAssistant, ValueChangedEvent } from "../../../types";
-import { brandsUrl } from "../../../util/brands-url";
 import { documentationUrl } from "../../../util/documentation-url";
 
 const filterGenData = (entity: HassEntity) =>
@@ -53,33 +52,6 @@ export class AITaskPref extends LitElement {
   protected render() {
     return html`
       <ha-card outlined>
-        <h1 class="card-header">
-          <img
-            alt=""
-            src=${brandsUrl(
-              {
-                domain: "ai_task",
-                type: "icon",
-                darkOptimized: this.hass.themes?.darkMode,
-              },
-              this.hass.auth.data.hassUrl
-            )}
-            crossorigin="anonymous"
-            referrerpolicy="no-referrer"
-          />${this.hass.localize("ui.panel.config.ai_task.header")}
-        </h1>
-        <div class="header-actions">
-          <ha-icon-button
-            .label=${this.hass.localize(
-              "ui.panel.config.cloud.account.alexa.link_learn_how_it_works"
-            )}
-            .path=${mdiHelpCircleOutline}
-            href=${documentationUrl(this.hass, "/integrations/ai_task/")}
-            target="_blank"
-            rel="noreferrer"
-            class="icon-link"
-          ></ha-icon-button>
-        </div>
         <div class="card-content">
           <p>
             ${this.hass!.localize("ui.panel.config.ai_task.description", {
@@ -87,6 +59,12 @@ export class AITaskPref extends LitElement {
                 .path=${mdiStarFourPoints}
               ></ha-svg-icon>`,
             })}
+            <a
+              href=${documentationUrl(this.hass, "/integrations/ai_task/")}
+              target="_blank"
+              rel="noreferrer"
+              >${this.hass.localize("ui.panel.config.common.learn_more")}</a
+            >
           </p>
           <ha-settings-row .narrow=${this.narrow}>
             <span slot="heading">
@@ -176,33 +154,11 @@ export class AITaskPref extends LitElement {
   }
 
   static styles = css`
-    .card-header {
-      display: flex;
-      align-items: center;
-    }
-    .card-header img {
-      max-width: 28px;
-      margin-right: 16px;
+    a {
+      color: var(--primary-color);
     }
     ha-settings-row {
       padding: 0;
-    }
-    .header-actions {
-      position: absolute;
-      right: 0px;
-      inset-inline-end: 0px;
-      inset-inline-start: initial;
-      top: 24px;
-      display: flex;
-      flex-direction: row;
-    }
-    .header-actions .icon-link {
-      margin-top: -16px;
-      margin-right: 8px;
-      margin-inline-end: 8px;
-      margin-inline-start: initial;
-      direction: var(--direction);
-      color: var(--secondary-text-color);
     }
     .card-actions {
       text-align: right;

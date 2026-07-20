@@ -12,6 +12,7 @@ import "./assist-pref";
 import "./cloud-alexa-pref";
 import "./cloud-discover";
 import "./cloud-google-pref";
+import "./general-pref";
 import { voiceAssistantTabs } from "./ha-config-voice-assistants";
 
 @customElement("ha-config-voice-assistants-assistants")
@@ -27,6 +28,8 @@ export class HaConfigVoiceAssistantsAssistants extends LitElement {
 
   @property({ attribute: "is-wide", type: Boolean }) public isWide = false;
 
+  @property({ type: Boolean }) public narrow = false;
+
   @property({ attribute: false }) public route!: Route;
 
   protected render() {
@@ -39,9 +42,20 @@ export class HaConfigVoiceAssistantsAssistants extends LitElement {
         .hass=${this.hass}
         back-path="/config"
         .route=${this.route}
-        .tabs=${voiceAssistantTabs}
+        .tabs=${[voiceAssistantTabs[0]]}
       >
         <div class="content">
+          ${
+            isComponentLoaded(this.hass.config, "assist_pipeline") ||
+            isComponentLoaded(this.hass.config, "ai_task")
+              ? html`
+                  <general-pref
+                    .hass=${this.hass}
+                    .exposedEntities=${this.exposedEntities}
+                  ></general-pref>
+                `
+              : nothing
+          }
           ${
             isComponentLoaded(this.hass.config, "assist_pipeline")
               ? html`

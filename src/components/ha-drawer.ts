@@ -305,11 +305,16 @@ export class HaDrawer extends LitElement {
       overflow: unset;
       min-width: 0;
       padding-inline-start: var(--ha-sidebar-width);
+      /* Reserved space for a docked right-side panel (e.g. Assist). Defaults to
+         0 so it has no effect unless a panel sets --ha-right-panel-width on the
+         document root. Custom properties cascade into this shadow tree. */
+      padding-inline-end: var(--ha-right-panel-width, 0px);
       width: 100%;
       height: 100%;
       box-sizing: border-box;
       transition:
         padding-inline-start var(--ha-animation-duration-normal) ease,
+        padding-inline-end var(--ha-animation-duration-normal) ease,
         width var(--ha-animation-duration-normal) ease;
     }
 

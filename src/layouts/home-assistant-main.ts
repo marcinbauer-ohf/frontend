@@ -165,7 +165,11 @@ export class HomeAssistantMain extends LitElement {
       /* remove the grey tap highlights in iOS on the fullscreen touch targets */
       -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
       --ha-sidebar-width: calc(56px + var(--safe-area-inset-left, 0px));
-      --ha-top-app-bar-width: calc(100% - var(--ha-sidebar-width));
+      /* Also reserve space for a docked right-side panel (e.g. Assist) so the
+         top app bar ends at its edge instead of running underneath it. */
+      --ha-top-app-bar-width: calc(
+        100% - var(--ha-sidebar-width) - var(--ha-right-panel-width, 0px)
+      );
       --safe-area-content-inset-left: 0px;
       --safe-area-content-inset-right: var(--safe-area-inset-right);
     }
@@ -174,7 +178,7 @@ export class HomeAssistantMain extends LitElement {
     }
     :host([modal]) {
       --ha-sidebar-width: unset;
-      --ha-top-app-bar-width: 100%;
+      --ha-top-app-bar-width: calc(100% - var(--ha-right-panel-width, 0px));
       --safe-area-content-inset-left: var(--safe-area-inset-left);
     }
     partial-panel-resolver,

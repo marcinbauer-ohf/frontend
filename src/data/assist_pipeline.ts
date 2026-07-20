@@ -1,6 +1,28 @@
+import { supportsFeature } from "../common/entity/supports-feature";
 import type { HomeAssistant } from "../types";
 import type { ConversationResult } from "./conversation";
+import { ConversationEntityFeature } from "./conversation";
 import type { SpeechMetadata } from "./stt";
+
+/**
+ * Whether the pipeline's conversation agent can read/write (control) Home
+ * Assistant. True when the agent exposes the CONTROL feature (i.e. it has the
+ * "Assist" / Control Home Assistant LLM API granted), or when the pipeline
+ * prefers handling commands locally (local intents can always control), or when
+ * the agent entity is unknown (assume control, matching the built-in agent).
+ */
+export const assistAgentControlsHome = (
+  hass: HomeAssistant,
+  pipeline: Pick<AssistPipeline, "conversation_engine" | "prefer_local_intents">
+): boolean => {
+  if (pipeline.prefer_local_intents) {
+    return true;
+  }
+  const stateObj = hass.states[pipeline.conversation_engine];
+  return stateObj
+    ? supportsFeature(stateObj, ConversationEntityFeature.CONTROL)
+    : true;
+};
 
 export interface AssistPipeline {
   id: string;

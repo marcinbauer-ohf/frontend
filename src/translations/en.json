@@ -867,6 +867,8 @@
       },
       "conversation-agent-picker": {
         "conversation_agent": "Conversation agent",
+        "home_assistant_built_in": "Home Assistant (built-in)",
+        "add_integration": "Add conversation agent",
         "none": "None"
       },
       "country-picker": {
@@ -900,6 +902,7 @@
       },
       "tts-picker": {
         "tts": "Text-to-speech",
+        "add_integration": "Add integration",
         "none": "None"
       },
       "tts-voice-picker": {
@@ -1030,6 +1033,7 @@
       },
       "stt-picker": {
         "stt": "Speech-to-text",
+        "add_integration": "Add integration",
         "none": "None"
       },
       "related-filter-menu": {
@@ -1649,10 +1653,22 @@
         "found": "I found the following for you:",
         "error": "Oops, an error has occurred",
         "conversation_no_control": "This assistant cannot control your home.",
-        "how_can_i_help": "How can I assist?",
-        "input_label": "Enter a request",
+        "how_can_i_help": "How can I help you today?",
+        "input_label": "Ask anything about your home …",
         "send_text": "Send text",
         "start_listening": "Start listening",
+        "new_conversation": "New conversation",
+        "open_settings": "Settings",
+        "disclaimer": "This assistant can read and write to your Home Assistant and does not send any data.",
+        "disclaimer_no_control": "This assistant can’t control your home and does not send any data.",
+        "learn_more": "Learn more",
+        "history": {
+          "title": "Past conversations",
+          "search": "Search conversations",
+          "empty": "No past conversations yet",
+          "no_results": "No conversations match your search",
+          "untitled": "Untitled conversation"
+        },
         "manage_assistants": "Manage assistants",
         "not_supported_microphone_browser": "Your connection to Home Assistant is not secured using HTTPS. This causes browsers to block Home Assistant from accessing the microphone.",
         "not_supported_microphone_documentation": "Use the Home Assistant app or visit {documentation_link} to learn how to use a secure URL",
@@ -2717,8 +2733,8 @@
             "secondary": "Organize how you interact with your home"
           },
           "voice_assistants": {
-            "main": "Voice assistants",
-            "secondary": "Manage your voice assistants"
+            "main": "Assistants and AI",
+            "secondary": "Manage your assistants and AI agents"
           },
           "energy": {
             "main": "Energy",
@@ -4812,12 +4828,27 @@
         },
         "voice_assistants": {
           "assistants": {
-            "caption": "Assistants",
+            "caption": "Assistants and AI",
+            "general": {
+              "title": "Configuration",
+              "accessible_entities": "Exposed entities",
+              "accessible_entities_count": "{number} {number, plural,\n  one {entity}\n  other {entities}\n}"
+            },
             "pipeline": {
               "link_learn_how_it_works": "[%key:ui::panel::config::cloud::account::remote::link_learn_how_it_works%]",
-              "add_assistant": "Add assistant",
-              "exposed_entities": "[%key:ui::panel::config::cloud::account::google::exposed_entities%]",
-              "assist_devices": "{number} Assist {number, plural,\n  one {device}\n  other {devices}\n}",
+              "provider": "Home Assistant",
+              "intro": "Assist is Home Assistant's built-in text and voice chat that lets you interact with your home.",
+              "agents": "Agents",
+              "agents_intro_title": "Meet agents",
+              "agents_intro": "Assist now supports multiple agents. Each agent has its own conversation agent, voice, and access to your home. Give them an avatar and custom instructions, and switch between them in the Assist chat.",
+              "controls_home": "Can control Home Assistant",
+              "cannot_control_home": "Can’t control Home Assistant",
+              "no_agents": "You don’t have any agents yet",
+              "add_assistant": "Add agent",
+              "expose_new_entities": "Expose new entities automatically",
+              "expose_new_entities_info": "Exposes supported devices that are not classified as security devices.",
+              "assist_devices": "Assist devices",
+              "assist_devices_count": "{number} {number, plural,\n  one {device}\n  other {devices}\n}",
               "delete": {
                 "confirm_title": "Delete {name}?",
                 "confirm_text": "{name} will be permanently deleted.",
@@ -4832,14 +4863,25 @@
               },
               "detail": {
                 "update_assistant_action": "Update",
-                "add_assistant_title": "Add assistant",
+                "add_assistant_title": "Add agent",
+                "edit_assistant_title": "Edit agent",
                 "add_assistant_action": "Create",
                 "try_tts": "Try voice",
                 "debug": "Debug",
                 "set_as_preferred": "Set as preferred",
                 "add_streaming_wake_word": "Add streaming wake word",
+                "access": {
+                  "control_on": "Can read and control the entities you have exposed",
+                  "control_off": "Can only read the entities you have exposed — can’t control them",
+                  "control_hint": "Change control access in the conversation agent’s settings.",
+                  "can_read": "Can read or control {count} {count, plural,\n  one {entity}\n  other {entities}\n}",
+                  "exposed_shared": "Shared by all agents",
+                  "instructions": "Instructions",
+                  "instructions_empty": "No custom instructions"
+                },
                 "form": {
                   "name": "[%key:ui::common::name%]",
+                  "avatar": "Avatar",
                   "conversation_engine": "Conversation agent",
                   "conversation_language": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::detail::form::language%]",
                   "prefer_local_intents": "Prefer handling commands locally",
@@ -4862,13 +4904,17 @@
                     "title": "Conversation agent",
                     "description": "The conversation agent is the brains of your assistant and will process the incoming text commands."
                   },
+                  "access": {
+                    "title": "Access",
+                    "description": "What this agent can see and control in your home."
+                  },
                   "stt": {
                     "title": "Speech-to-text",
-                    "description": "When you are controlling your assistant with voice, the speech-to-text engine turns your voice command into text."
+                    "description": "Turns your spoken commands into text."
                   },
                   "tts": {
                     "title": "Text-to-speech",
-                    "description": "When you are controlling your assistant with voice, the text-to-speech engine turns the conversation text responses into audio."
+                    "description": "Turns your agent's responses into speech."
                   },
                   "wakeword": {
                     "title": "Streaming wake word engine",
@@ -4983,9 +5029,7 @@
               "header": "Expose entities",
               "expose_to": "to {assistants}",
               "expose_entities": "Expose {count} {count, plural,\n  one {entity}\n  other {entities}\n}"
-            },
-            "expose_new_entities": "Expose new entities",
-            "expose_new_entities_info": "Should new entities be exposed? Exposes supported devices that are not classified as security devices."
+            }
           },
           "satellite_wizard": {
             "skip": "Skip",
@@ -6722,14 +6766,13 @@
             },
             "alexa": {
               "title": "Alexa",
+              "company": "Amazon",
               "info": "With the Alexa integration for Home Assistant Cloud you'll be able to control all your Home Assistant devices via any Alexa-enabled device.",
               "enable_ha_skill": "Enable the Home Assistant skill for Alexa",
               "config_documentation": "Configuration documentation",
               "enable_state_reporting": "Enable state reporting",
               "info_state_reporting": "If you enable state reporting, Home Assistant will send all state changes of exposed entities to Amazon. This allows you to always see the latest states in the Alexa app and use the state changes to create routines.",
               "state_reporting_error": "Unable to {enable_disable} report state.",
-              "show_entities": "[%key:ui::panel::config::cloud::account::google::show_entities%]",
-              "exposed_entities": "[%key:ui::panel::config::cloud::account::google::exposed_entities%]",
               "manual_config": "[%key:ui::panel::config::cloud::account::google::manual_config%]",
               "enable": "enable",
               "disable": "disable",
@@ -6737,10 +6780,11 @@
               "not_configured_text": "Before you can use Alexa, you need to activate the Home Assistant skill for Alexa in the Alexa app.",
               "link_learn_how_it_works": "[%key:ui::panel::config::cloud::account::remote::link_learn_how_it_works%]",
               "expose_new_entities": "[%key:ui::panel::config::cloud::account::google::expose_new_entities%]",
-              "expose_new_entities_info": "Should new entities be exposed to Alexa automatically? Exposes supported devices that are not classified as security devices."
+              "expose_new_entities_info": "[%key:ui::panel::config::cloud::account::google::expose_new_entities_info%]"
             },
             "google": {
               "title": "Google Assistant",
+              "company": "Google",
               "info": "With the Google Assistant integration for Home Assistant Cloud, you'll be able to control all your Home Assistant devices via any Google Assistant-enabled device.",
               "http_use_ssl_warning_title": "Local communication unavailable",
               "http_use_ssl_warning_text": "Google devices will not be able to talk locally with Home Assistant, because you have configured an SSL certificate for your HTTP integration.",
@@ -6751,15 +6795,13 @@
               "enter_pin_info": "Please enter a PIN to interact with security devices. Security devices are doors, garage doors, and locks. You will be asked to say/enter this PIN when interacting with security devices via Google Assistant.",
               "devices_pin": "Security devices PIN",
               "enter_pin_hint": "Enter a PIN to use security devices",
-              "show_entities": "Show entities",
-              "exposed_entities": "{number} {number, plural,\n  one {entity}\n  other {entities}\n} exposed",
               "manual_config": "Editing which entities are exposed via the UI is disabled because you have configured entity filters in configuration.yaml.",
               "enter_pin_error": "Unable to store PIN:",
               "not_configured_title": "Continue setting up Google Assistant",
               "not_configured_text": "To start using Google Assistant, add the 'Home Assistant Cloud by Nabu Casa' service in the Google Home app on your smartphone.",
               "link_learn_how_it_works": "[%key:ui::panel::config::cloud::account::remote::link_learn_how_it_works%]",
-              "expose_new_entities": "Expose new entities",
-              "expose_new_entities_info": "Should new entities be exposed to Google Assistant automatically? Exposes supported devices that are not classified as security devices."
+              "expose_new_entities": "Expose new entities automatically",
+              "expose_new_entities_info": "Exposes supported devices that are not classified as security devices."
             },
             "webhooks": {
               "title": "Webhooks",
@@ -8818,7 +8860,7 @@
           "download_device_info": "Preview device analytics"
         },
         "ai_tasks": {
-          "caption": "AI tasks",
+          "caption": "AI suggestions",
           "description": "Configure AI suggestions and task preferences"
         },
         "entity_id_format": {

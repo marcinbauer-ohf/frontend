@@ -1,22 +1,21 @@
-import { mdiCog } from "@mdi/js";
+import { mdiPlus } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { fireEvent } from "../common/dom/fire_event";
 import { debounce } from "../common/util/debounce";
-import type { ConfigEntry, SubEntry } from "../data/config_entries";
-import { getConfigEntry, getSubEntries } from "../data/config_entries";
 import type { Agent } from "../data/conversation";
 import { listAgents } from "../data/conversation";
-import { getExtendedEntityRegistryEntry } from "../data/entity/entity_registry";
-import { fetchIntegrationManifest } from "../data/integration";
-import { showOptionsFlowDialog } from "../dialogs/config-flow/show-dialog-options-flow";
-import { showSubConfigFlowDialog } from "../dialogs/config-flow/show-dialog-sub-config-flow";
+import { showAddIntegrationDialog } from "../panels/config/integrations/show-add-integration-dialog";
 import type { HomeAssistant } from "../types";
 import "./ha-select";
 import type { HaSelectOption, HaSelectSelectEvent } from "./ha-select";
 
 const NONE = "__NONE_OPTION__";
+
+const ADD_INTEGRATION = "__ADD_INTEGRATION__";
+
+const HOME_ASSISTANT_AGENT = "conversation.home_assistant";
 
 @customElement("ha-conversation-agent-picker")
 export class HaConversationAgentPicker extends LitElement {
@@ -34,10 +33,6 @@ export class HaConversationAgentPicker extends LitElement {
 
   @state() _agents?: Agent[];
 
-  @state() private _configEntry?: ConfigEntry;
-
-  @state() private _subConfigEntry?: SubEntry;
-
   protected render() {
     if (!this._agents) {
       return nothing;
@@ -49,7 +44,14 @@ export class HaConversationAgentPicker extends LitElement {
 
     const options: HaSelectOption[] = this._agents.map((agent) => ({
       value: agent.id,
-      label: agent.name,
+      // The built-in agent cannot be deleted or found via the UI, so label it
+      // explicitly as "(built-in)" to disambiguate it from custom agents.
+      label:
+        agent.id === HOME_ASSISTANT_AGENT
+          ? this.hass.localize(
+              "ui.components.conversation-agent-picker.home_assistant_built_in"
+            )
+          : agent.name,
       disabled:
         agent.supported_languages !== "*" &&
         agent.supported_languages.length === 0,
@@ -64,6 +66,14 @@ export class HaConversationAgentPicker extends LitElement {
       });
     }
 
+    options.push({
+      value: ADD_INTEGRATION,
+      label: this.hass.localize(
+        "ui.components.conversation-agent-picker.add_integration"
+      ),
+      iconPath: mdiPlus,
+    });
+
     return html`
       <ha-select
         .label=${
@@ -77,19 +87,7 @@ export class HaConversationAgentPicker extends LitElement {
         .disabled=${this.disabled}
         @selected=${this._changed}
         .options=${options}
-      ></ha-select
-      >${
-        (this._subConfigEntry &&
-          this._configEntry?.supported_subentry_types[
-            this._subConfigEntry.subentry_type
-          ]?.supports_reconfigure) ||
-        this._configEntry?.supports_options
-          ? html`<ha-icon-button
-              .path=${mdiCog}
-              @click=${this._openOptionsFlow}
-            ></ha-icon-button>`
-          : ""
-      }
+      ></ha-select>
     `;
   }
 
@@ -99,43 +97,6 @@ export class HaConversationAgentPicker extends LitElement {
       this._updateAgents();
     } else if (changedProperties.has("language")) {
       this._debouncedUpdateAgents();
-    }
-
-    if (changedProperties.has("value")) {
-      this._maybeFetchConfigEntry();
-    }
-  }
-
-  private async _maybeFetchConfigEntry() {
-    if (!this.value || !(this.value in this.hass.entities)) {
-      this._configEntry = undefined;
-      return;
-    }
-    try {
-      const regEntry = await getExtendedEntityRegistryEntry(
-        this.hass,
-        this.value
-      );
-
-      if (!regEntry.config_entry_id) {
-        this._configEntry = undefined;
-        return;
-      }
-
-      this._configEntry = (
-        await getConfigEntry(this.hass, regEntry.config_entry_id)
-      ).config_entry;
-
-      if (!regEntry.config_subentry_id) {
-        this._subConfigEntry = undefined;
-      } else {
-        this._subConfigEntry = (
-          await getSubEntries(this.hass, regEntry.config_entry_id)
-        ).find((entry) => entry.subentry_id === regEntry.config_subentry_id);
-      }
-    } catch (_err) {
-      this._configEntry = undefined;
-      this._subConfigEntry = undefined;
     }
   }
 
@@ -155,7 +116,7 @@ export class HaConversationAgentPicker extends LitElement {
       // Select Home Assistant conversation agent if it supports the language
       for (const agent of this._agents) {
         if (
-          agent.id === "conversation.home_assistant" &&
+          agent.id === HOME_ASSISTANT_AGENT &&
           (!this.language ||
             agent.supported_languages === "*" ||
             agent.supported_languages.includes(this.language))
@@ -203,37 +164,6 @@ export class HaConversationAgentPicker extends LitElement {
     }
   }
 
-  private async _openOptionsFlow() {
-    if (!this._configEntry) {
-      return;
-    }
-
-    if (
-      this._subConfigEntry &&
-      this._configEntry.supported_subentry_types[
-        this._subConfigEntry.subentry_type
-      ]?.supports_reconfigure
-    ) {
-      showSubConfigFlowDialog(
-        this,
-        this._configEntry,
-        this._subConfigEntry.subentry_type,
-        {
-          startFlowHandler: this._configEntry.entry_id,
-          subEntryId: this._subConfigEntry.subentry_id,
-        }
-      );
-      return;
-    }
-
-    showOptionsFlowDialog(this, this._configEntry, {
-      manifest: await fetchIntegrationManifest(
-        this.hass,
-        this._configEntry.domain
-      ),
-    });
-  }
-
   static styles = css`
     :host {
       display: flex;
@@ -242,13 +172,14 @@ export class HaConversationAgentPicker extends LitElement {
     ha-select {
       width: 100%;
     }
-    ha-icon-button {
-      color: var(--secondary-text-color);
-    }
   `;
 
   private _changed(ev: HaSelectSelectEvent): void {
     const value = ev.detail.value;
+    if (value === ADD_INTEGRATION) {
+      this._addIntegration();
+      return;
+    }
     if (
       !this.hass ||
       value === "" ||
@@ -263,6 +194,18 @@ export class HaConversationAgentPicker extends LitElement {
       value: this._agents!.find((agent) => agent.id === this.value)
         ?.supported_languages,
     });
+  }
+
+  private _addIntegration(): void {
+    // Reset the select back to the current value (the "Add integration" row
+    // is an action, not a selectable value).
+    this.requestUpdate();
+    const refresh = () => {
+      document.removeEventListener("dialog-closed", refresh);
+      this._updateAgents();
+    };
+    document.addEventListener("dialog-closed", refresh);
+    showAddIntegrationDialog(this, { navigateToResult: false });
   }
 }
 

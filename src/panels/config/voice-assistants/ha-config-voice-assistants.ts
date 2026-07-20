@@ -1,5 +1,5 @@
 import { consume } from "@lit/context";
-import { mdiDevices, mdiMicrophone } from "@mdi/js";
+import { mdiDevices, mdiForumOutline } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import type { CloudStatus } from "../../../data/cloud";
@@ -14,7 +14,7 @@ export const voiceAssistantTabs = [
   {
     path: "/config/voice-assistants/assistants",
     translationKey: "ui.panel.config.voice_assistants.assistants.caption",
-    iconPath: mdiMicrophone,
+    iconPath: mdiForumOutline,
   },
   {
     path: "/config/voice-assistants/expose",

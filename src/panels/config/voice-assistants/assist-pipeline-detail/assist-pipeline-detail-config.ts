@@ -1,8 +1,11 @@
 import { css, html, LitElement } from "lit";
 import { customElement, property, query } from "lit/decorators";
 import memoizeOne from "memoize-one";
+import { fireEvent } from "../../../../common/dom/fire_event";
 import type { LocalizeKeys } from "../../../../common/translations/localize";
 import "../../../../components/ha-form/ha-form";
+import "../../../../components/ha-picture-upload";
+import type { HaPictureUpload } from "../../../../components/ha-picture-upload";
 import type { AssistPipeline } from "../../../../data/assist_pipeline";
 import type { HomeAssistant } from "../../../../types";
 
@@ -11,6 +14,8 @@ export class AssistPipelineDetailConfig extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @property({ attribute: false }) public data?: Partial<AssistPipeline>;
+
+  @property({ attribute: false }) public avatar?: string | null;
 
   @property({ attribute: false })
   public supportedLanguages?: string[];
@@ -61,51 +66,41 @@ export class AssistPipelineDetailConfig extends LitElement {
 
   protected render() {
     return html`
-      <div class="section">
-        <div class="intro">
-          <h3>
-            ${this.hass.localize(
-              `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.config.title`
-            )}
-          </h3>
-          <p>
-            ${this.hass.localize(
-              `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.config.description`
-            )}
-          </p>
-        </div>
-        <ha-form
-          .schema=${this._schema(this.supportedLanguages)}
-          .data=${this.data}
-          .hass=${this.hass}
-          .computeLabel=${this._computeLabel}
-        ></ha-form>
-      </div>
+      <ha-form
+        .schema=${this._schema(this.supportedLanguages)}
+        .data=${this.data}
+        .hass=${this.hass}
+        .computeLabel=${this._computeLabel}
+      ></ha-form>
+      <ha-picture-upload
+        class="avatar"
+        crop
+        .hass=${this.hass}
+        .value=${this.avatar ?? null}
+        .label=${this.hass.localize(
+          "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.avatar"
+        )}
+        .cropOptions=${this._cropOptions}
+        @change=${this._avatarChanged}
+      ></ha-picture-upload>
     `;
   }
 
+  private _cropOptions = { round: true, aspectRatio: 1 };
+
+  private _avatarChanged(ev: Event) {
+    fireEvent(this, "avatar-changed", {
+      value: (ev.target as HaPictureUpload).value,
+    });
+  }
+
   static styles = css`
-    .section {
-      border: 1px solid var(--divider-color);
-      border-radius: var(--ha-border-radius-md);
-      box-sizing: border-box;
-      padding: 16px;
+    :host {
+      display: block;
     }
-    .intro {
-      margin-bottom: 16px;
-    }
-    h3 {
-      font-size: var(--ha-font-size-xl);
-      font-weight: var(--ha-font-weight-normal);
-      line-height: var(--ha-line-height-condensed);
-      margin-top: 0;
-      margin-bottom: 4px;
-    }
-    p {
-      color: var(--secondary-text-color);
-      font-size: var(--mdc-typography-body2-font-size, var(--ha-font-size-s));
-      margin-top: 0;
-      margin-bottom: 0;
+    .avatar {
+      display: block;
+      margin-top: 16px;
     }
   `;
 }
@@ -113,5 +108,8 @@ export class AssistPipelineDetailConfig extends LitElement {
 declare global {
   interface HTMLElementTagNameMap {
     "assist-pipeline-detail-config": AssistPipelineDetailConfig;
+  }
+  interface HASSDomEvents {
+    "avatar-changed": { value: string | null };
   }
 }

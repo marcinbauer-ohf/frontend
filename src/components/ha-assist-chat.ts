@@ -1,20 +1,33 @@
 import { consume } from "@lit/context";
+import "@home-assistant/webawesome/dist/components/divider/divider";
 import {
   mdiAlertCircle,
   mdiChevronDown,
   mdiChevronUp,
+  mdiCog,
   mdiCommentProcessingOutline,
   mdiMicrophone,
   mdiSend,
+  mdiShieldCheckOutline,
+  mdiStar,
+  mdiToolboxOutline,
 } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { consumeLocalize } from "../common/decorators/consume-context-entry";
+import { storage } from "../common/decorators/storage";
 import { transform } from "../common/decorators/transform";
+import { fireEvent } from "../common/dom/fire_event";
+import { stopPropagation } from "../common/dom/stop_propagation";
 import { supportsFeature } from "../common/entity/supports-feature";
 import type { LocalizeFunc } from "../common/translations/localize";
+import {
+  ASSIST_AGENT_AVATARS_STORAGE_KEY,
+  type AssistAgentAvatars,
+} from "../data/assist_agent_avatars";
+import type { StoredAssistMessage } from "../data/assist_conversation_history";
 import {
   runAssistPipeline,
   type AssistPipeline,
@@ -25,12 +38,15 @@ import {
 import {
   configContext,
   connectionContext,
+  entitiesContext,
   internationalizationContext,
   statesContext,
 } from "../data/context";
 import { ConversationEntityFeature } from "../data/conversation";
 import { showAlertDialog } from "../dialogs/generic/show-dialog-box";
+import { assistCasitaIcon } from "../resources/assist-casita-icon";
 import { haStyleScrollbar } from "../resources/styles";
+import { brandsUrl } from "../util/brands-url";
 import type {
   HomeAssistant,
   HomeAssistantConfig,
@@ -38,15 +54,19 @@ import type {
   HomeAssistantInternationalization,
 } from "../types";
 import { AudioRecorder } from "../util/audio-recorder";
-import {
-  findAvailableLanguage,
-  getTranslation,
-} from "../util/common-translation";
+import { findAvailableLanguage } from "../util/common-translation";
 import { documentationUrl } from "../util/documentation-url";
 import "./ha-alert";
+import "./ha-button";
+import "./ha-dropdown";
+import type { HaDropdownSelectEvent } from "./ha-dropdown";
+import "./ha-dropdown-item";
 import "./ha-markdown";
+import "./ha-svg-icon";
 import "./input/ha-input";
 import type { HaInput } from "./input/ha-input";
+
+const OPEN_SETTINGS = "__OPEN_SETTINGS__";
 
 interface AssistMessage {
   who: string;
@@ -88,6 +108,12 @@ export const greetingTranslationLanguage = (
 @customElement("ha-assist-chat")
 export class HaAssistChat extends LitElement {
   @property({ attribute: false }) public pipeline?: AssistPipeline;
+
+  @property({ attribute: false }) public pipelines?: AssistPipeline[];
+
+  @property({ attribute: false }) public pipelineId?: string;
+
+  @property({ attribute: false }) public preferredPipeline?: string;
 
   @property({ type: Boolean, attribute: "disable-speech" })
   public disableSpeech = false;
@@ -138,11 +164,23 @@ export class HaAssistChat extends LitElement {
   @consume({ context: connectionContext, subscribe: true })
   private _connection!: HomeAssistantConnection;
 
+  @state()
+  @consume({ context: entitiesContext, subscribe: true })
+  private _entities?: HomeAssistant["entities"];
+
+  @state()
+  @storage({
+    key: ASSIST_AGENT_AVATARS_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _avatars: AssistAgentAvatars = {};
+
   private _conversationId: string | null = null;
 
-  private _greetingLoadToken = 0;
-
   private _initialPromptSubmitted = false;
+
+  private _restoring = false;
 
   private _audioRecorder?: AudioRecorder;
 
@@ -152,48 +190,55 @@ export class HaAssistChat extends LitElement {
 
   private _stt_binary_handler_id?: number | null;
 
-  protected willUpdate(changedProperties: PropertyValues<this>): void {
-    if (
-      !this.hasUpdated ||
-      (changedProperties.has("pipeline") &&
-        assistPipelineChanged(changedProperties.get("pipeline"), this.pipeline))
-    ) {
+  protected willUpdate(_changedProperties: PropertyValues<this>): void {
+    // Seed an empty conversation on first render so the empty state is shown.
+    // The conversation is NOT reset when the pipeline (agent) changes so that
+    // switching agents keeps the visible history; use startNewConversation()
+    // to explicitly start over.
+    if (!this._restoring && !this.hasUpdated) {
       this._conversation = [];
-      this._loadGreeting();
+      this._conversationId = null;
     }
   }
 
-  private async _loadGreeting(): Promise<void> {
-    const token = ++this._greetingLoadToken;
-    const language = greetingTranslationLanguage(
-      this.pipeline?.language,
-      this._language
-    );
-    let greeting: string | undefined;
-    if (language) {
-      try {
-        const result = await getTranslation(null, language, false);
-        if (result.language === language) {
-          greeting = result.data["ui.dialogs.voice_command.how_can_i_help"];
-        }
-      } catch (_err) {
-        // Translation failed to load; fall back to the interface language.
-      }
-    }
-    if (token !== this._greetingLoadToken) {
-      // The pipeline changed while loading; a newer load owns the greeting.
-      return;
-    }
-    this._conversation = [
-      {
-        who: "hass",
-        text:
-          greeting || this._localize("ui.dialogs.voice_command.how_can_i_help"),
-        thinking: "",
-        tool_calls: {},
-      },
-      ...this._conversation,
-    ];
+  /** Export the current conversation as serializable messages for storage. */
+  public getStoredMessages(): StoredAssistMessage[] {
+    return this._conversation
+      .filter((message) => typeof message.text === "string" && message.text)
+      .map((message) => ({
+        who: message.who === "user" ? "user" : "hass",
+        text: message.text as string,
+        error: message.error,
+      }));
+  }
+
+  public get conversationId(): string | null {
+    return this._conversationId;
+  }
+
+  /** Start a fresh conversation (empty state). */
+  public startNewConversation(): void {
+    this._conversation = [];
+    this._conversationId = null;
+  }
+
+  /** Restore a stored conversation into the chat. */
+  public restoreConversation(
+    messages: StoredAssistMessage[],
+    conversationId?: string | null
+  ): void {
+    this._restoring = true;
+    this._conversation = messages.map((message) => ({
+      who: message.who,
+      text: message.text,
+      thinking: "",
+      tool_calls: {},
+      error: message.error,
+    }));
+    this._conversationId = conversationId ?? null;
+    this.updateComplete.then(() => {
+      this._restoring = false;
+    });
   }
 
   protected firstUpdated(changedProperties: PropertyValues<this>): void {
@@ -236,218 +281,384 @@ export class HaAssistChat extends LitElement {
     this._unloadAudio();
   }
 
+  /**
+   * The current agent's uploaded avatar, resolved against the Home Assistant
+   * instance. Stored avatar URLs are relative (/api/image/serve/...), so they
+   * must be resolved to load when the frontend is served from another origin
+   * (yarn dev).
+   */
+  private _uploadedAvatarSrc(): string | undefined {
+    const uploaded = this.pipeline
+      ? this._avatars[this.pipeline.id]
+      : undefined;
+    if (!uploaded) {
+      return undefined;
+    }
+    return uploaded.startsWith("/")
+      ? new URL(uploaded, this._config.auth.data.hassUrl).toString()
+      : uploaded;
+  }
+
+  /**
+   * The current agent's avatar (blinking thinking indicator): the uploaded
+   * avatar if one is set, else the conversation agent's integration logo.
+   */
+  private _renderModelLogo() {
+    const avatarSrc = this._uploadedAvatarSrc();
+    if (avatarSrc) {
+      return html`<img class="thinking-logo avatar" alt="" src=${avatarSrc} />`;
+    }
+    const domain = this.pipeline
+      ? this._entities?.[this.pipeline.conversation_engine]?.platform
+      : undefined;
+    const src = domain
+      ? brandsUrl({ domain, type: "icon" }, this._config?.auth.data.hassUrl)
+      : "";
+    return src
+      ? html`<img
+          class="thinking-logo"
+          alt=""
+          src=${src}
+          crossorigin="anonymous"
+          referrerpolicy="no-referrer"
+        />`
+      : html`<span class="thinking-logo">${assistCasitaIcon}</span>`;
+  }
+
+  /** Whether the agent can read/write (control) Home Assistant. */
+  private _controlsHome(pipeline: AssistPipeline): boolean {
+    if (pipeline.prefer_local_intents) {
+      return true;
+    }
+    const stateObj = this._states[pipeline.conversation_engine];
+    return stateObj
+      ? supportsFeature(stateObj, ConversationEntityFeature.CONTROL)
+      : true;
+  }
+
   protected render(): TemplateResult {
-    const controlHA = !this.pipeline
-      ? false
-      : this.pipeline.prefer_local_intents ||
-        (this._states[this.pipeline.conversation_engine]
-          ? supportsFeature(
-              this._states[this.pipeline.conversation_engine],
-              ConversationEntityFeature.CONTROL
-            )
-          : true);
+    const controlHA = this.pipeline ? this._controlsHome(this.pipeline) : false;
     const supportsMicrophone = AudioRecorder.isSupported;
     const supportsSTT = this.pipeline?.stt_engine && !this.disableSpeech;
+    const avatarSrc = this._uploadedAvatarSrc();
 
     return html`
       <div class="messages ha-scrollbar">
         ${
-          controlHA
-            ? nothing
-            : html`
-                <ha-alert>
-                  ${this._localize(
-                    "ui.dialogs.voice_command.conversation_no_control"
-                  )}
-                </ha-alert>
+          this._conversation.length === 0
+            ? html`
+                <div class="empty-state">
+                  <span class="empty-logo">
+                    ${
+                      avatarSrc
+                        ? html`<img class="avatar" alt="" src=${avatarSrc} />`
+                        : assistCasitaIcon
+                    }
+                  </span>
+                  <p class="empty-heading">
+                    ${this._localize("ui.dialogs.voice_command.how_can_i_help")}
+                  </p>
+                </div>
               `
+            : nothing
         }
         <div class="spacer"></div>
-        ${this._conversation!.map(
-          (message, index) => html`
+        ${this._conversation!.map((message, index) => {
+          const isThinking =
+            message.who === "hass" &&
+            message.text === "…" &&
+            !message.thinking &&
+            !(message.tool_calls && Object.keys(message.tool_calls).length > 0);
+          return html`
             <div class="message-container ${classMap({ [message.who]: true })}">
               ${
-                message.text ||
-                message.error ||
-                message.thinking ||
-                (message.tool_calls &&
-                  Object.keys(message.tool_calls).length > 0)
-                  ? html`
-                      <div
-                        class="message ${classMap({
-                          error: !!message.error,
-                          [message.who]: true,
-                        })}"
-                      >
-                        ${
-                          message.thinking ||
-                          (message.tool_calls &&
-                            Object.keys(message.tool_calls).length > 0)
-                            ? html`
-                                <div
-                                  class="thinking-wrapper ${classMap({
-                                    expanded: !!message.thinking_expanded,
-                                  })}"
-                                >
-                                  <button
-                                    class="thinking-header"
-                                    .index=${index}
-                                    @click=${this._handleToggleThinking}
-                                    aria-expanded=${
-                                      message.thinking_expanded
-                                        ? "true"
-                                        : "false"
-                                    }
+                isThinking
+                  ? html`<span class="thinking-indicator"
+                      >${this._renderModelLogo()}</span
+                    >`
+                  : message.text ||
+                      message.error ||
+                      message.thinking ||
+                      (message.tool_calls &&
+                        Object.keys(message.tool_calls).length > 0)
+                    ? html`
+                        <div
+                          class="message ${classMap({
+                            error: !!message.error,
+                            [message.who]: true,
+                          })}"
+                        >
+                          ${
+                            message.thinking ||
+                            (message.tool_calls &&
+                              Object.keys(message.tool_calls).length > 0)
+                              ? html`
+                                  <div
+                                    class="thinking-wrapper ${classMap({
+                                      expanded: !!message.thinking_expanded,
+                                    })}"
                                   >
-                                    <ha-svg-icon
-                                      .path=${mdiCommentProcessingOutline}
-                                    ></ha-svg-icon>
-                                    <span class="thinking-label">
-                                      ${this._localize(
-                                        "ui.dialogs.voice_command.show_details"
-                                      )}
-                                    </span>
-                                    <ha-svg-icon
-                                      .path=${
+                                    <button
+                                      class="thinking-header"
+                                      .index=${index}
+                                      @click=${this._handleToggleThinking}
+                                      aria-expanded=${
                                         message.thinking_expanded
-                                          ? mdiChevronUp
-                                          : mdiChevronDown
+                                          ? "true"
+                                          : "false"
                                       }
-                                    ></ha-svg-icon>
-                                  </button>
-                                  <div class="thinking-content">
-                                    ${
-                                      message.thinking
-                                        ? html`<ha-markdown
-                                            .content=${message.thinking}
-                                          ></ha-markdown>`
-                                        : nothing
-                                    }
-                                    ${
-                                      message.tool_calls &&
-                                      Object.keys(message.tool_calls).length > 0
-                                        ? html`
-                                            <div class="tool-calls">
-                                              ${Object.values(
-                                                message.tool_calls
-                                              ).map(
-                                                (toolCall) => html`
-                                                  <div class="tool-call">
-                                                    <div class="tool-name">
-                                                      ${toolCall.tool_name}
-                                                    </div>
-                                                    <div class="tool-data">
-                                                      <pre>
+                                    >
+                                      <ha-svg-icon
+                                        .path=${mdiCommentProcessingOutline}
+                                      ></ha-svg-icon>
+                                      <span class="thinking-label">
+                                        ${this._localize(
+                                          "ui.dialogs.voice_command.show_details"
+                                        )}
+                                      </span>
+                                      <ha-svg-icon
+                                        .path=${
+                                          message.thinking_expanded
+                                            ? mdiChevronUp
+                                            : mdiChevronDown
+                                        }
+                                      ></ha-svg-icon>
+                                    </button>
+                                    <div class="thinking-content">
+                                      ${
+                                        message.thinking
+                                          ? html`<ha-markdown
+                                              .content=${message.thinking}
+                                            ></ha-markdown>`
+                                          : nothing
+                                      }
+                                      ${
+                                        message.tool_calls &&
+                                        Object.keys(message.tool_calls).length >
+                                          0
+                                          ? html`
+                                              <div class="tool-calls">
+                                                ${Object.values(
+                                                  message.tool_calls
+                                                ).map(
+                                                  (toolCall) => html`
+                                                    <div class="tool-call">
+                                                      <div class="tool-name">
+                                                        ${toolCall.tool_name}
+                                                      </div>
+                                                      <div class="tool-data">
+                                                        <pre>
 ${JSON.stringify(toolCall.tool_args, null, 2)}</pre>
-                                                    </div>
-                                                    ${
-                                                      toolCall.result
-                                                        ? html`
-                                                            <div
-                                                              class="tool-data"
-                                                            >
-                                                              <pre>
+                                                      </div>
+                                                      ${
+                                                        toolCall.result
+                                                          ? html`
+                                                              <div
+                                                                class="tool-data"
+                                                              >
+                                                                <pre>
 ${JSON.stringify(toolCall.result, null, 2)}</pre>
-                                                            </div>
-                                                          `
-                                                        : nothing
-                                                    }
-                                                  </div>
-                                                `
-                                              )}
-                                            </div>
-                                          `
-                                        : nothing
-                                    }
+                                                              </div>
+                                                            `
+                                                          : nothing
+                                                      }
+                                                    </div>
+                                                  `
+                                                )}
+                                              </div>
+                                            `
+                                          : nothing
+                                      }
+                                    </div>
                                   </div>
-                                </div>
-                              `
-                            : nothing
-                        }
-                        ${
-                          message.text
-                            ? html`
-                                <ha-markdown
-                                  breaks
-                                  cache
-                                  .content=${message.text}
-                                ></ha-markdown>
-                              `
-                            : nothing
-                        }
-                      </div>
-                    `
-                  : nothing
+                                `
+                              : nothing
+                          }
+                          ${
+                            message.text
+                              ? message.who === "hass" && message.text === "…"
+                                ? html`<span class="thinking-indicator"
+                                    >${this._renderModelLogo()}</span
+                                  >`
+                                : html`
+                                    <ha-markdown
+                                      breaks
+                                      cache
+                                      .content=${message.text}
+                                    ></ha-markdown>
+                                  `
+                              : nothing
+                          }
+                        </div>
+                      `
+                    : nothing
               }
             </div>
-          `
-        )}
+          `;
+        })}
       </div>
-      <div class="input" slot="primaryAction">
-        <ha-input
-          id="message-input"
-          @keyup=${this._handleKeyUp}
-          @input=${this._handleInput}
-          .label=${this._localize(`ui.dialogs.voice_command.input_label`)}
-        >
-          <div slot="end">
-            ${
-              this._showSendButton || !supportsSTT
-                ? html`
-                    <ha-icon-button
-                      class="listening-icon"
-                      .path=${mdiSend}
-                      @click=${this._handleSendMessage}
-                      .disabled=${this._processing}
-                      .label=${this._localize(
-                        "ui.dialogs.voice_command.send_text"
-                      )}
-                    >
-                    </ha-icon-button>
-                  `
-                : html`
-                    ${
-                      this._audioRecorder?.active
-                        ? html`
-                            <div class="bouncer">
-                              <div class="double-bounce1"></div>
-                              <div class="double-bounce2"></div>
-                            </div>
-                          `
-                        : nothing
-                    }
-
-                    <div class="listening-icon">
+      <div class="composer-wrapper">
+        <div class="composer">
+          <ha-input
+            class="composer-input"
+            id="message-input"
+            @keyup=${this._handleKeyUp}
+            @input=${this._handleInput}
+            .placeholder=${this._localize(
+              "ui.dialogs.voice_command.input_label"
+            )}
+          ></ha-input>
+          <div class="composer-actions">
+            ${this._renderAgentPill()}
+            <div class="composer-buttons">
+              ${
+                this._showSendButton || !supportsSTT
+                  ? html`
                       <ha-icon-button
-                        .path=${mdiMicrophone}
-                        @click=${this._handleListeningButton}
+                        class="listening-icon"
+                        .path=${mdiSend}
+                        @click=${this._handleSendMessage}
                         .disabled=${this._processing}
                         .label=${this._localize(
-                          "ui.dialogs.voice_command.start_listening"
+                          "ui.dialogs.voice_command.send_text"
                         )}
                       >
                       </ha-icon-button>
+                    `
+                  : html`
                       ${
-                        !supportsMicrophone
+                        this._audioRecorder?.active
                           ? html`
-                              <ha-svg-icon
-                                .path=${mdiAlertCircle}
-                                class="unsupported"
-                              ></ha-svg-icon>
+                              <div class="bouncer">
+                                <div class="double-bounce1"></div>
+                                <div class="double-bounce2"></div>
+                              </div>
                             `
-                          : null
+                          : nothing
                       }
-                    </div>
-                  `
-            }
+
+                      <div class="listening-icon">
+                        <ha-icon-button
+                          .path=${mdiMicrophone}
+                          @click=${this._handleListeningButton}
+                          .disabled=${this._processing}
+                          .label=${this._localize(
+                            "ui.dialogs.voice_command.start_listening"
+                          )}
+                        >
+                        </ha-icon-button>
+                        ${
+                          !supportsMicrophone
+                            ? html`
+                                <ha-svg-icon
+                                  .path=${mdiAlertCircle}
+                                  class="unsupported"
+                                ></ha-svg-icon>
+                              `
+                            : null
+                        }
+                      </div>
+                    `
+              }
+            </div>
           </div>
-        </ha-input>
+        </div>
+        <div class="disclaimer">
+          <ha-svg-icon
+            .path=${controlHA ? mdiToolboxOutline : mdiShieldCheckOutline}
+          ></ha-svg-icon>
+          <span>
+            ${this._localize(
+              controlHA
+                ? "ui.dialogs.voice_command.disclaimer"
+                : "ui.dialogs.voice_command.disclaimer_no_control"
+            )}
+            <a
+              href=${documentationUrl(this._config, "/docs/assist/")}
+              target="_blank"
+              rel="noopener noreferrer"
+              >${this._localize("ui.dialogs.voice_command.learn_more")}</a
+            >
+          </span>
+        </div>
       </div>
     `;
   }
 
+  private _renderAgentPill() {
+    if (!this.pipelines) {
+      return nothing;
+    }
+    return html`
+      <ha-dropdown
+        class="agent-pill"
+        @closed=${stopPropagation}
+        @wa-select=${this._selectPipeline}
+      >
+        <ha-button
+          slot="trigger"
+          appearance="plain"
+          variant="neutral"
+          size="s"
+          .loading=${!this.pipelines}
+        >
+          ${this.pipeline?.name}
+          <ha-svg-icon slot="end" .path=${mdiChevronDown}></ha-svg-icon>
+        </ha-button>
+        ${this.pipelines.map(
+          (pipeline) => html`
+            <ha-dropdown-item
+              ?selected=${
+                pipeline.id === this.pipelineId ||
+                (!this.pipelineId && pipeline.id === this.preferredPipeline)
+              }
+              .value=${pipeline.id}
+            >
+              ${pipeline.name}
+              ${
+                this._controlsHome(pipeline)
+                  ? html`<ha-svg-icon
+                      class="agent-capability"
+                      .path=${mdiToolboxOutline}
+                    ></ha-svg-icon>`
+                  : nothing
+              }
+              ${
+                pipeline.id === this.preferredPipeline
+                  ? html`<ha-svg-icon
+                      slot="details"
+                      .path=${mdiStar}
+                    ></ha-svg-icon>`
+                  : nothing
+              }
+            </ha-dropdown-item>
+          `
+        )}
+        <wa-divider></wa-divider>
+        <ha-dropdown-item .value=${OPEN_SETTINGS}>
+          ${this._localize("ui.dialogs.voice_command.open_settings")}
+          <ha-svg-icon slot="icon" .path=${mdiCog}></ha-svg-icon>
+        </ha-dropdown-item>
+      </ha-dropdown>
+    `;
+  }
+
+  private _selectPipeline(ev: HaDropdownSelectEvent) {
+    const pipelineId = ev.detail?.item?.value;
+    if (pipelineId === OPEN_SETTINGS) {
+      fireEvent(this, "assist-open-settings");
+      return;
+    }
+    if (pipelineId) {
+      fireEvent(this, "pipeline-changed", { pipelineId });
+    }
+  }
+
   private async _scrollMessagesBottom() {
     const lastChatMessage = this._lastChatMessage;
+    if (!lastChatMessage) {
+      return;
+    }
     if (!lastChatMessage.hasUpdated) {
       await lastChatMessage.updateComplete;
     }
@@ -887,8 +1098,150 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
           flex-direction: column;
           padding: 0 var(--ha-space-3) var(--ha-space-4);
         }
-        .input {
-          padding: var(--ha-space-1) var(--ha-space-4) var(--ha-space-6);
+        .empty-state {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: var(--ha-space-4);
+          padding: var(--ha-space-6) var(--ha-space-4);
+          text-align: center;
+        }
+        .empty-logo {
+          display: flex;
+          color: var(--ha-color-primary-60, var(--primary-color));
+        }
+        .empty-logo svg {
+          width: 64px;
+          height: 64px;
+        }
+        .empty-logo img.avatar {
+          width: 64px;
+          height: 64px;
+          border-radius: var(--ha-border-radius-circle);
+          object-fit: cover;
+        }
+        .empty-heading {
+          margin: 0;
+          font-size: var(--ha-font-size-2xl);
+          color: var(--secondary-text-color);
+        }
+        .composer-wrapper {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-2);
+          padding: var(--ha-space-1) var(--ha-space-4) var(--ha-space-4);
+        }
+        .composer {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-1);
+          padding: var(--ha-space-2) var(--ha-space-2) var(--ha-space-2)
+            var(--ha-space-3);
+          border: 1px solid var(--divider-color);
+          border-radius: var(--ha-border-radius-2xl);
+          background-color: var(--ha-color-surface-default, transparent);
+        }
+        .composer:focus-within {
+          border-color: var(--primary-color);
+        }
+        .composer-input {
+          --ha-input-padding-top: 0;
+          width: 100%;
+        }
+        .composer-input::part(wa-base) {
+          border: none;
+          background: transparent;
+          padding: 0;
+          box-shadow: none;
+        }
+        /* Remove the material underline that visually separates the text from
+           the composer controls. */
+        .composer-input::part(wa-base)::after {
+          display: none;
+        }
+        .thinking-indicator {
+          display: inline-flex;
+          padding: var(--ha-space-1) var(--ha-space-2);
+        }
+        .thinking-logo {
+          display: flex;
+          width: 20px;
+          height: 20px;
+          color: var(--ha-color-primary-60, var(--primary-color));
+          animation: thinking-blink 1.4s ease-in-out infinite;
+        }
+        .thinking-logo img,
+        .thinking-logo svg {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+        }
+        .thinking-logo.avatar {
+          border-radius: var(--ha-border-radius-circle);
+          object-fit: cover;
+        }
+        @keyframes thinking-blink {
+          0%,
+          100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.25;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .thinking-logo {
+            animation: none;
+          }
+        }
+        .composer-actions {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+        }
+        .agent-pill {
+          display: flex;
+          --mdc-theme-on-primary: var(--text-primary-color);
+          --mdc-theme-primary: var(--primary-color);
+        }
+        .agent-pill ha-button {
+          --ha-button-height: var(--ha-space-8);
+        }
+        .agent-pill ha-svg-icon {
+          height: var(--ha-space-5);
+        }
+        .agent-capability {
+          --mdc-icon-size: 16px;
+          margin-left: var(--ha-space-1);
+          margin-inline-start: var(--ha-space-1);
+          margin-inline-end: initial;
+          color: var(--secondary-text-color);
+          vertical-align: middle;
+        }
+        .composer-buttons {
+          display: flex;
+          align-items: center;
+          margin-left: auto;
+          margin-inline-start: auto;
+          margin-inline-end: 0;
+        }
+        .disclaimer {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+          padding: 0 var(--ha-space-2);
+          font-size: var(--ha-font-size-s);
+          color: var(--secondary-text-color);
+        }
+        .disclaimer ha-svg-icon {
+          --mdc-icon-size: 16px;
+          flex-shrink: 0;
+        }
+        .disclaimer a {
+          color: inherit;
+          text-decoration: none;
         }
         .spacer {
           flex: 1;
@@ -1106,5 +1459,11 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
 declare global {
   interface HTMLElementTagNameMap {
     "ha-assist-chat": HaAssistChat;
+  }
+  interface HASSDomEvents {
+    "assist-open-settings": undefined;
+  }
+  interface HASSDomEvents {
+    "pipeline-changed": { pipelineId: string };
   }
 }
