@@ -446,6 +446,10 @@ export class StateHistoryCharts extends LitElement {
       margin-top: 16px;
     }
 
+    .entry-container.timeline:not(:first-child) {
+      margin-top: var(--ha-space-8);
+    }
+
     .container,
     lit-virtualizer {
       height: 100%;

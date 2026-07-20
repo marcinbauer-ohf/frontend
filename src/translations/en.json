@@ -674,7 +674,7 @@
         }
       },
       "logbook": {
-        "entries_not_found": "No activity found.",
+        "entries_not_found": "No activity found",
         "automation_triggered": "Triggered",
         "script_ran": "Ran",
         "view_trace": "View trace",
@@ -11531,13 +11531,15 @@
         }
       },
       "history": {
+        "start_search_title": "Nothing to show yet",
         "start_search": "Select areas, devices, entities or labels to see their history",
+        "select_sources": "Select sources",
+        "no_results_title": "No results found",
+        "no_results": "No history for the current selection. Try changing the targets, filters, or time range.",
         "no_targets": "No targets selected",
-        "targets": "Targets",
-        "filters": "Filters",
+        "sources": "Sources",
         "device_class": "Device class",
         "add_all": "Add all entities",
-        "remove_all": "Remove all selections",
         "download_data": "Download data",
         "download_data_error": "Unable to download data",
         "add_card": "Add current view as card",
@@ -11545,12 +11547,13 @@
         "error_no_data": "You need to select some data sources first."
       },
       "logbook": {
-        "targets": "Targets",
-        "filters": "Filters",
+        "sources": "Sources",
         "device_class": "Device class",
-        "remove_all": "Remove all selections",
         "start_search": "Select areas, devices, entities or labels to see their activity",
+        "select_sources": "Select sources",
         "no_targets": "Showing all activity. Add targets to narrow it down.",
+        "no_results_title": "No results found",
+        "no_results": "No activity for the current selection. Try changing the targets, filters, or time range.",
         "show_all": "Show all"
       }
     },

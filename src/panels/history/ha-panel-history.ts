@@ -3,10 +3,9 @@ import {
   mdiClose,
   mdiDotsVertical,
   mdiDownload,
-  mdiFilterVariant,
   mdiFilterVariantRemove,
   mdiImagePlus,
-  mdiPlaylistPlus,
+  mdiTuneVariant,
 } from "@mdi/js";
 import { differenceInHours } from "date-fns";
 import type {
@@ -94,9 +93,7 @@ class HaPanelHistory extends LitElement {
 
   @state() private _isLoading = false;
 
-  @state() private _showTargets = false;
-
-  @state() private _showFilters = false;
+  @state() private _showSources = false;
 
   @state() private _filters: DataTableFilters = {};
 
@@ -145,39 +142,32 @@ class HaPanelHistory extends LitElement {
   }
 
   protected render() {
-    const entitiesSelected = this._getEntityIds().length > 0;
     const targetCount = this._getTargetCount();
     const filterCount = this._getFilterCount();
+    const sourceCount = targetCount + filterCount;
+    // Something is picked (targets and/or filters), even if it resolves to no
+    // entities — that still means the user is actively narrowing.
+    const hasSelection = sourceCount > 0;
+    const hasResults =
+      this._getEntityIds().length > 0 &&
+      !!this._mungedStateHistory &&
+      (this._mungedStateHistory.line.length > 0 ||
+        this._mungedStateHistory.timeline.length > 0);
 
     const toolbar = html`
       <div class="toolbar">
         <div class="relative">
           <ha-assist-chip
-            .active=${this._showTargets}
+            .active=${this._showSources}
             .disabled=${this._isLoading}
-            .label=${this.hass.localize("ui.panel.history.targets")}
-            @click=${this._toggleTargets}
+            .label=${this.hass.localize("ui.panel.history.sources")}
+            @click=${this._toggleSources}
           >
-            <ha-svg-icon slot="icon" .path=${mdiPlaylistPlus}></ha-svg-icon>
+            <ha-svg-icon slot="icon" .path=${mdiTuneVariant}></ha-svg-icon>
           </ha-assist-chip>
           ${
-            targetCount > 0
-              ? html`<div class="badge">${targetCount}</div>`
-              : nothing
-          }
-        </div>
-        <div class="relative">
-          <ha-assist-chip
-            .active=${this._showFilters}
-            .disabled=${this._isLoading}
-            .label=${this.hass.localize("ui.panel.history.filters")}
-            @click=${this._toggleFilters}
-          >
-            <ha-svg-icon slot="icon" .path=${mdiFilterVariant}></ha-svg-icon>
-          </ha-assist-chip>
-          ${
-            filterCount > 0
-              ? html`<div class="badge">${filterCount}</div>`
+            sourceCount > 0
+              ? html`<div class="badge">${sourceCount}</div>`
               : nothing
           }
         </div>
@@ -196,13 +186,8 @@ class HaPanelHistory extends LitElement {
     const main = html`
       <div class="main">
         ${
-          !this.narrow && this._showTargets
-            ? this._renderTargetsPane(targetCount)
-            : nothing
-        }
-        ${
-          !this.narrow && this._showFilters
-            ? this._renderFiltersPane(filterCount)
+          !this.narrow && this._showSources
+            ? this._renderSourcesPane(targetCount, filterCount)
             : nothing
         }
         <div class="results-content ha-scrollbar">
@@ -211,30 +196,30 @@ class HaPanelHistory extends LitElement {
               ? html`<div class="progress-wrapper">
                   <ha-spinner></ha-spinner>
                 </div>`
-              : !entitiesSelected
-                ? html`<div class="start-search">
-                    <div class="start-search-content">
-                      <ha-svg-icon
-                        .path=${mdiChartBoxOutline}
-                        class="start-search-icon"
-                      ></ha-svg-icon>
-                      <p>
-                        ${this.hass.localize("ui.panel.history.start_search")}
-                      </p>
-                    </div>
-                  </div>`
-                : html`
-                    <state-history-charts
-                      .hass=${this.hass}
-                      .historyData=${this._mungedStateHistory}
-                      .startTime=${this._startDate}
-                      .endTime=${this._endDate}
-                      .narrow=${this.narrow}
-                      inside-labels
-                      sync-charts
-                    >
-                    </state-history-charts>
-                  `
+              : !hasSelection
+                ? this._renderEmptyState(
+                    this.hass.localize("ui.panel.history.start_search_title"),
+                    this.hass.localize("ui.panel.history.start_search"),
+                    this.hass.localize("ui.panel.history.select_sources")
+                  )
+                : !hasResults
+                  ? this._renderEmptyState(
+                      this.hass.localize("ui.panel.history.no_results_title"),
+                      this.hass.localize("ui.panel.history.no_results"),
+                      this.hass.localize("ui.panel.history.select_sources")
+                    )
+                  : html`
+                      <state-history-charts
+                        .hass=${this.hass}
+                        .historyData=${this._mungedStateHistory}
+                        .startTime=${this._startDate}
+                        .endTime=${this._endDate}
+                        .narrow=${this.narrow}
+                        inside-labels
+                        sync-charts
+                      >
+                      </state-history-charts>
+                    `
           }
         </div>
       </div>
@@ -269,62 +254,29 @@ class HaPanelHistory extends LitElement {
         <div class="content">${toolbar}${main}</div>
       </ha-top-app-bar-fixed>
       ${
-        this.narrow && this._showTargets
+        this.narrow && this._showSources
           ? html`<ha-adaptive-dialog
               open
               flexcontent
-              header-title=${this.hass.localize("ui.panel.history.targets")}
-              @closed=${this._closeTargets}
-              @opened=${this._openTargetsSearch}
+              header-title=${this.hass.localize("ui.panel.history.sources")}
+              @closed=${this._closeSources}
             >
               ${
-                targetCount > 0
+                sourceCount > 0
                   ? html`<ha-icon-button
                       slot="headerActionItems"
                       .path=${mdiFilterVariantRemove}
-                      @click=${this._removeAll}
+                      @click=${this._clearAll}
                       .disabled=${this._isLoading}
-                      .label=${this.hass.localize("ui.panel.history.remove_all")}
+                      .label=${this.hass.localize("ui.common.clear")}
                     ></ha-icon-button>`
                   : nothing
               }
               <div class="filter-dialog-content">
-                ${this._renderTargetPicker()}
+                ${this._renderDataContent()}
               </div>
               <ha-dialog-footer slot="footer">
-                <ha-button slot="primaryAction" @click=${this._closeTargets}>
-                  ${this.hass.localize(
-                    "ui.components.subpage-data-table.show_results",
-                    { number: this._getEntityIds().length }
-                  )}
-                </ha-button>
-              </ha-dialog-footer>
-            </ha-adaptive-dialog>`
-          : nothing
-      }
-      ${
-        this.narrow && this._showFilters
-          ? html`<ha-adaptive-dialog
-              open
-              flexcontent
-              header-title=${this.hass.localize("ui.panel.history.filters")}
-              @closed=${this._closeFilters}
-            >
-              ${
-                filterCount > 0
-                  ? html`<ha-icon-button
-                      slot="headerActionItems"
-                      .path=${mdiFilterVariantRemove}
-                      @click=${this._clearFilters}
-                      .label=${this.hass.localize(
-                        "ui.components.subpage-data-table.clear_filter"
-                      )}
-                    ></ha-icon-button>`
-                  : nothing
-              }
-              <div class="filter-dialog-content">${this._renderFilters()}</div>
-              <ha-dialog-footer slot="footer">
-                <ha-button slot="primaryAction" @click=${this._closeFilters}>
+                <ha-button slot="primaryAction" @click=${this._closeSources}>
                   ${this.hass.localize(
                     "ui.components.subpage-data-table.show_results",
                     { number: this._getEntityIds().length }
@@ -337,57 +289,38 @@ class HaPanelHistory extends LitElement {
     `;
   }
 
-  private _renderTargetsPane(targetCount: number) {
+  private _renderSourcesPane(targetCount: number, filterCount: number) {
+    const sourceCount = targetCount + filterCount;
     return html`<div class="pane">
       <div class="table-header">
         <ha-icon-button
           .path=${mdiClose}
-          @click=${this._toggleTargets}
+          @click=${this._toggleSources}
           .label=${this.hass.localize("ui.common.close")}
         ></ha-icon-button>
         <span class="pane-title"
-          >${this.hass.localize("ui.panel.history.targets")}</span
+          >${this.hass.localize("ui.panel.history.sources")}</span
         >
         ${
-          targetCount > 0
+          sourceCount > 0
             ? html`<ha-icon-button
                 .path=${mdiFilterVariantRemove}
-                @click=${this._removeAll}
+                @click=${this._clearAll}
                 .disabled=${this._isLoading}
-                .label=${this.hass.localize("ui.panel.history.remove_all")}
+                .label=${this.hass.localize("ui.common.clear")}
               ></ha-icon-button>`
             : nothing
         }
       </div>
-      <div class="pane-content ha-scrollbar">${this._renderTargetPicker()}</div>
+      <div class="pane-content ha-scrollbar">${this._renderDataContent()}</div>
     </div>`;
   }
 
-  private _renderFiltersPane(filterCount: number) {
-    return html`<div class="pane">
-      <div class="table-header">
-        <ha-icon-button
-          .path=${mdiClose}
-          @click=${this._toggleFilters}
-          .label=${this.hass.localize("ui.common.close")}
-        ></ha-icon-button>
-        <span class="pane-title"
-          >${this.hass.localize("ui.panel.history.filters")}</span
-        >
-        ${
-          filterCount > 0
-            ? html`<ha-icon-button
-                .path=${mdiFilterVariantRemove}
-                @click=${this._clearFilters}
-                .label=${this.hass.localize(
-                  "ui.components.subpage-data-table.clear_filter"
-                )}
-              ></ha-icon-button>`
-            : nothing
-        }
-      </div>
-      <div class="pane-content ha-scrollbar">${this._renderFilters()}</div>
-    </div>`;
+  private _renderDataContent() {
+    return html`
+      ${this._renderTargetPicker()}
+      <div class="filter-panels">${this._renderFilters()}</div>
+    `;
   }
 
   private _renderTargetPicker() {
@@ -434,6 +367,24 @@ class HaPanelHistory extends LitElement {
         @expanded-changed=${this._filterExpanded}
       ></ha-filter-integrations>
     `;
+  }
+
+  private _renderEmptyState(title: string, text: string, buttonLabel: string) {
+    return html`<div class="start-search">
+      <div class="start-search-content">
+        <ha-svg-icon
+          .path=${mdiChartBoxOutline}
+          class="start-search-icon"
+        ></ha-svg-icon>
+        <h1>${title}</h1>
+        <p>${text}</p>
+        <div class="start-search-buttons">
+          <ha-button appearance="plain" @click=${this._openSources}>
+            ${buttonLabel}
+          </ha-button>
+        </div>
+      </div>
+    </div>`;
   }
 
   public willUpdate(changedProps: PropertyValues) {
@@ -494,11 +445,6 @@ class HaPanelHistory extends LitElement {
         replace: true,
       });
     }
-    // On desktop, open the targets pane by default when nothing is selected
-    // yet, so the empty page immediately shows how to get started.
-    if (!this.narrow && this._getTargetCount() === 0) {
-      this._showTargets = true;
-    }
   }
 
   protected updated(changedProps: PropertyValues) {
@@ -549,39 +495,23 @@ class HaPanelHistory extends LitElement {
     }).length;
   }
 
-  private _toggleTargets() {
-    this._showTargets = !this._showTargets;
-    // Only one pane open at a time.
-    if (this._showTargets) {
-      this._showFilters = false;
-    }
+  private _toggleSources() {
+    this._showSources = !this._showSources;
   }
 
-  private _closeTargets() {
-    this._showTargets = false;
+  // Empty-state CTA: always open (never toggle closed) the data panel.
+  // Desktop shows the docked side pane, mobile the sheet.
+  private _openSources() {
+    this._showSources = true;
   }
 
-  // On mobile, open the add-target search right away when the sheet appears —
-  // but only when nothing is selected yet, so existing targets stay visible.
-  private _openTargetsSearch(ev: Event) {
-    if (this._getTargetCount() > 0) {
-      return;
-    }
-    (ev.currentTarget as HTMLElement)
-      .querySelector("ha-target-picker")
-      ?.openPicker();
+  private _closeSources() {
+    this._showSources = false;
   }
 
-  private _toggleFilters() {
-    this._showFilters = !this._showFilters;
-    // Only one pane open at a time.
-    if (this._showFilters) {
-      this._showTargets = false;
-    }
-  }
-
-  private _closeFilters() {
-    this._showFilters = false;
+  private _clearAll() {
+    this._clearFilters();
+    this._removeAll();
   }
 
   private _filterChanged(ev) {
@@ -994,9 +924,9 @@ class HaPanelHistory extends LitElement {
           padding: 16px 8px;
         }
 
-        /* On mobile go edge-to-edge; the toolbar keeps its own inset. */
+        /* On mobile, match the toolbar's 16px inset so the graphs line up. */
         :host([narrow]) .results-content {
-          padding-inline: 0;
+          padding-inline: 16px;
         }
 
         /* Devices-table style pane: a left column separated by a divider. */
@@ -1035,6 +965,12 @@ class HaPanelHistory extends LitElement {
         .pane-content ha-target-picker {
           display: block;
           padding: var(--ha-space-4);
+        }
+
+        /* Filter accordions sit below the target picker; a top border marks the
+           boundary between "what to show" and "how to narrow it". */
+        .filter-panels {
+          border-top: 1px solid var(--divider-color);
         }
 
         /* When the empty state is shown above the picker, drop the picker's
@@ -1096,8 +1032,8 @@ class HaPanelHistory extends LitElement {
           --ha-assist-chip-container-color: var(--card-background-color);
         }
 
-        :host([virtualize]) {
-          height: 100%;
+        :host {
+          --ha-generic-picker-width: min(400px, calc(100vw - 32px));
           --ha-generic-picker-max-width: 400px;
         }
 
@@ -1114,7 +1050,6 @@ class HaPanelHistory extends LitElement {
           align-items: center;
           justify-content: center;
           height: 100%;
-          padding: 16px;
           box-sizing: border-box;
         }
 
@@ -1122,19 +1057,35 @@ class HaPanelHistory extends LitElement {
           display: flex;
           flex-direction: column;
           align-items: center;
+          justify-content: center;
           text-align: center;
-          max-width: 320px;
-          color: var(--secondary-text-color);
+          gap: var(--ha-space-4);
+          max-width: 640px;
+          padding: var(--ha-space-8) var(--ha-space-4);
+          box-sizing: border-box;
         }
 
         .start-search-icon {
-          --mdc-icon-size: 48px;
-          color: var(--disabled-text-color);
-          margin-bottom: var(--ha-space-2);
+          --mdc-icon-size: var(--ha-space-16);
+          color: var(--secondary-text-color);
+        }
+
+        .start-search-content h1 {
+          margin: 0;
+          font-size: var(--ha-font-size-xl);
+          font-weight: 500;
         }
 
         .start-search-content p {
-          margin: 0 0 var(--ha-space-4);
+          margin: 0;
+          color: var(--secondary-text-color);
+        }
+
+        .start-search-buttons {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: var(--ha-space-2);
         }
 
         /* Shown inside the targets pane / sheet when nothing is selected.

@@ -1,8 +1,8 @@
 import {
   mdiClose,
-  mdiFilterVariant,
   mdiFilterVariantRemove,
-  mdiPlaylistPlus,
+  mdiTextBoxOutline,
+  mdiTuneVariant,
 } from "@mdi/js";
 import type { HassServiceTarget } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
@@ -10,6 +10,7 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { ensureArray } from "../../common/array/ensure-array";
+import type { HASSDomEvent } from "../../common/dom/fire_event";
 import { computeDomain } from "../../common/entity/compute_domain";
 import { storage } from "../../common/decorators/storage";
 import { navigate } from "../../common/navigate";
@@ -58,9 +59,11 @@ export class HaPanelLogbook extends LitElement {
   @state()
   private _showBack?: boolean;
 
-  @state() private _showTargetPicker = false;
+  @state() private _showSources = false;
 
-  @state() private _showFilters = false;
+  @state() private _logbookLoading = true;
+
+  @state() private _logbookEmpty = false;
 
   @state() private _filters: DataTableFilters = {};
 
@@ -107,61 +110,28 @@ export class HaPanelLogbook extends LitElement {
         </div>
       </ha-top-app-bar-fixed>
       ${
-        this.narrow && this._showTargetPicker
+        this.narrow && this._showSources
           ? html`<ha-adaptive-dialog
               open
               flexcontent
-              header-title=${this.hass.localize("ui.panel.logbook.targets")}
-              @closed=${this._closeTargetPicker}
-              @opened=${this._openTargetsSearch}
+              header-title=${this.hass.localize("ui.panel.logbook.sources")}
+              @closed=${this._closeSources}
             >
               ${
-                targetCount > 0
+                targetCount + filterCount > 0
                   ? html`<ha-icon-button
                       slot="headerActionItems"
                       .path=${mdiFilterVariantRemove}
-                      @click=${this._removeAll}
-                      .label=${this.hass.localize("ui.panel.logbook.remove_all")}
+                      @click=${this._clearAll}
+                      .label=${this.hass.localize("ui.common.clear")}
                     ></ha-icon-button>`
                   : nothing
               }
               <div class="filter-dialog-content">
-                ${this._renderTargetPicker()}
+                ${this._renderDataContent()}
               </div>
               <ha-dialog-footer slot="footer">
-                <ha-button
-                  slot="primaryAction"
-                  @click=${this._closeTargetPicker}
-                >
-                  ${this._showResultsLabel()}
-                </ha-button>
-              </ha-dialog-footer>
-            </ha-adaptive-dialog>`
-          : nothing
-      }
-      ${
-        this.narrow && this._showFilters
-          ? html`<ha-adaptive-dialog
-              open
-              flexcontent
-              header-title=${this.hass.localize("ui.panel.logbook.filters")}
-              @closed=${this._closeFilters}
-            >
-              ${
-                filterCount > 0
-                  ? html`<ha-icon-button
-                      slot="headerActionItems"
-                      .path=${mdiFilterVariantRemove}
-                      @click=${this._clearFilters}
-                      .label=${this.hass.localize(
-                        "ui.components.subpage-data-table.clear_filter"
-                      )}
-                    ></ha-icon-button>`
-                  : nothing
-              }
-              <div class="filter-dialog-content">${this._renderFilters()}</div>
-              <ha-dialog-footer slot="footer">
-                <ha-button slot="primaryAction" @click=${this._closeFilters}>
+                <ha-button slot="primaryAction" @click=${this._closeSources}>
                   ${this._showResultsLabel()}
                 </ha-button>
               </ha-dialog-footer>
@@ -172,33 +142,20 @@ export class HaPanelLogbook extends LitElement {
   }
 
   private _renderToolbar(targetCount: number, filterCount: number) {
+    const sourceCount = targetCount + filterCount;
     return html`
       <div class="toolbar">
         <div class="relative">
           <ha-assist-chip
-            .active=${this._showTargetPicker}
-            .label=${this.hass.localize("ui.panel.logbook.targets")}
-            @click=${this._toggleTargetPicker}
+            .active=${this._showSources}
+            .label=${this.hass.localize("ui.panel.logbook.sources")}
+            @click=${this._toggleSources}
           >
-            <ha-svg-icon slot="icon" .path=${mdiPlaylistPlus}></ha-svg-icon>
+            <ha-svg-icon slot="icon" .path=${mdiTuneVariant}></ha-svg-icon>
           </ha-assist-chip>
           ${
-            targetCount > 0
-              ? html`<div class="badge">${targetCount}</div>`
-              : nothing
-          }
-        </div>
-        <div class="relative">
-          <ha-assist-chip
-            .active=${this._showFilters}
-            .label=${this.hass.localize("ui.panel.logbook.filters")}
-            @click=${this._toggleFilters}
-          >
-            <ha-svg-icon slot="icon" .path=${mdiFilterVariant}></ha-svg-icon>
-          </ha-assist-chip>
-          ${
-            filterCount > 0
-              ? html`<div class="badge">${filterCount}</div>`
+            sourceCount > 0
+              ? html`<div class="badge">${sourceCount}</div>`
               : nothing
           }
         </div>
@@ -214,56 +171,106 @@ export class HaPanelLogbook extends LitElement {
   }
 
   private _renderMain() {
+    // A selection is active when targets and/or filters are set. Only then does
+    // an empty result mean "nothing matched your narrowing" (with a CTA to
+    // adjust it); with no selection we simply show the full activity feed.
+    const hasSelection =
+      this._getTargetCount() > 0 || this._getFilterCount() > 0;
+    const showNoResults =
+      hasSelection && !this._logbookLoading && this._logbookEmpty;
     return html`
       <div class="main">
         ${
-          !this.narrow && this._showTargetPicker
-            ? this._renderTargetsPane(this._getTargetCount())
+          !this.narrow && this._showSources
+            ? this._renderSourcesPane(
+                this._getTargetCount(),
+                this._getFilterCount()
+              )
             : nothing
         }
         ${
-          !this.narrow && this._showFilters
-            ? this._renderFiltersPane(this._getFilterCount())
+          showNoResults
+            ? this._renderEmptyState(
+                this.hass.localize("ui.panel.logbook.no_results_title"),
+                this.hass.localize("ui.panel.logbook.no_results"),
+                this.hass.localize("ui.panel.logbook.select_sources")
+              )
             : nothing
         }
         <ha-logbook
-          class="log"
+          class=${showNoResults ? "log hidden" : "log"}
           .hass=${this.hass}
           .time=${this._time}
           .entityIds=${this._getEntityIds()}
           .narrow=${this.narrow}
           show-cause
           virtualize
+          @logbook-loaded=${this._logbookLoaded}
         ></ha-logbook>
       </div>
     `;
   }
 
-  private _renderFiltersPane(filterCount: number) {
+  private _logbookLoaded(
+    ev: HASSDomEvent<{ loading: boolean; empty: boolean }>
+  ) {
+    this._logbookLoading = ev.detail.loading;
+    this._logbookEmpty = ev.detail.empty;
+  }
+
+  private _openSources() {
+    this._showSources = true;
+  }
+
+  private _renderEmptyState(title: string, text: string, buttonLabel: string) {
+    return html`<div class="start-search">
+      <div class="start-search-content">
+        <ha-svg-icon
+          .path=${mdiTextBoxOutline}
+          class="start-search-icon"
+        ></ha-svg-icon>
+        <h1>${title}</h1>
+        <p>${text}</p>
+        <div class="start-search-buttons">
+          <ha-button appearance="plain" @click=${this._openSources}>
+            ${buttonLabel}
+          </ha-button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  private _renderSourcesPane(targetCount: number, filterCount: number) {
+    const sourceCount = targetCount + filterCount;
     return html`<div class="pane">
       <div class="table-header">
         <ha-icon-button
           .path=${mdiClose}
-          @click=${this._toggleFilters}
+          @click=${this._toggleSources}
           .label=${this.hass.localize("ui.common.close")}
         ></ha-icon-button>
         <span class="pane-title"
-          >${this.hass.localize("ui.panel.logbook.filters")}</span
+          >${this.hass.localize("ui.panel.logbook.sources")}</span
         >
         ${
-          filterCount > 0
+          sourceCount > 0
             ? html`<ha-icon-button
                 .path=${mdiFilterVariantRemove}
-                @click=${this._clearFilters}
-                .label=${this.hass.localize(
-                  "ui.components.subpage-data-table.clear_filter"
-                )}
+                @click=${this._clearAll}
+                .label=${this.hass.localize("ui.common.clear")}
               ></ha-icon-button>`
             : nothing
         }
       </div>
-      <div class="pane-content ha-scrollbar">${this._renderFilters()}</div>
+      <div class="pane-content ha-scrollbar">${this._renderDataContent()}</div>
     </div>`;
+  }
+
+  private _renderDataContent() {
+    return html`
+      ${this._renderTargetPicker()}
+      <div class="filter-panels">${this._renderFilters()}</div>
+    `;
   }
 
   private _renderFilters() {
@@ -291,31 +298,6 @@ export class HaPanelLogbook extends LitElement {
         @expanded-changed=${this._filterExpanded}
       ></ha-filter-integrations>
     `;
-  }
-
-  private _renderTargetsPane(targetCount: number) {
-    return html`<div class="pane">
-      <div class="table-header">
-        <ha-icon-button
-          .path=${mdiClose}
-          @click=${this._toggleTargetPicker}
-          .label=${this.hass.localize("ui.common.close")}
-        ></ha-icon-button>
-        <span class="pane-title"
-          >${this.hass.localize("ui.panel.logbook.targets")}</span
-        >
-        ${
-          targetCount > 0
-            ? html`<ha-icon-button
-                .path=${mdiFilterVariantRemove}
-                @click=${this._removeAll}
-                .label=${this.hass.localize("ui.panel.logbook.remove_all")}
-              ></ha-icon-button>`
-            : nothing
-        }
-      </div>
-      <div class="pane-content ha-scrollbar">${this._renderTargetPicker()}</div>
-    </div>`;
   }
 
   private _renderTargetPicker() {
@@ -357,28 +339,17 @@ export class HaPanelLogbook extends LitElement {
     this._updatePath();
   }
 
-  private _toggleTargetPicker() {
-    this._showTargetPicker = !this._showTargetPicker;
-    // Only one pane open at a time.
-    if (this._showTargetPicker) {
-      this._showFilters = false;
-    }
+  private _toggleSources() {
+    this._showSources = !this._showSources;
   }
 
-  private _closeTargetPicker() {
-    this._showTargetPicker = false;
+  private _closeSources() {
+    this._showSources = false;
   }
 
-  private _toggleFilters() {
-    this._showFilters = !this._showFilters;
-    // Only one pane open at a time.
-    if (this._showFilters) {
-      this._showTargetPicker = false;
-    }
-  }
-
-  private _closeFilters() {
-    this._showFilters = false;
+  private _clearAll() {
+    this._clearFilters();
+    this._removeAll();
   }
 
   private _filterChanged(ev) {
@@ -412,17 +383,6 @@ export class HaPanelLogbook extends LitElement {
       : this.hass.localize("ui.components.subpage-data-table.show_results", {
           number: ids.length,
         });
-  }
-
-  // On mobile, open the add-target search right away when the sheet appears —
-  // but only when nothing is selected yet, so existing targets stay visible.
-  private _openTargetsSearch(ev: Event) {
-    if (this._getTargetCount() > 0) {
-      return;
-    }
-    (ev.currentTarget as HTMLElement)
-      .querySelector("ha-target-picker")
-      ?.openPicker();
   }
 
   protected willUpdate(changedProps: PropertyValues<this>) {
@@ -607,6 +567,7 @@ export class HaPanelLogbook extends LitElement {
       haStyle,
       css`
         :host {
+          --ha-generic-picker-width: min(400px, calc(100vw - 32px));
           --ha-generic-picker-max-width: 400px;
         }
 
@@ -688,6 +649,55 @@ export class HaPanelLogbook extends LitElement {
           min-height: 0;
         }
 
+        /* Kept mounted (so its subscription stays live) but hidden while the
+           panel shows its own "no results" empty state. */
+        .log.hidden {
+          display: none;
+        }
+
+        .start-search {
+          display: flex;
+          flex: 1;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
+        }
+
+        .start-search-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          gap: var(--ha-space-4);
+          max-width: 640px;
+          padding: var(--ha-space-8) var(--ha-space-4);
+          box-sizing: border-box;
+        }
+
+        .start-search-icon {
+          --mdc-icon-size: var(--ha-space-16);
+          color: var(--secondary-text-color);
+        }
+
+        .start-search-content h1 {
+          margin: 0;
+          font-size: var(--ha-font-size-xl);
+          font-weight: 500;
+        }
+
+        .start-search-content p {
+          margin: 0;
+          color: var(--secondary-text-color);
+        }
+
+        .start-search-buttons {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: var(--ha-space-2);
+        }
+
         /* Devices-table style pane: a left column separated by a divider. */
         .pane {
           flex-shrink: 0;
@@ -724,6 +734,12 @@ export class HaPanelLogbook extends LitElement {
         .pane-content ha-target-picker {
           display: block;
           padding: var(--ha-space-4);
+        }
+
+        /* Filter accordions sit below the target picker; a top border marks the
+           boundary between "what to show" and "how to narrow it". */
+        .filter-panels {
+          border-top: 1px solid var(--divider-color);
         }
 
         /* When the empty state is shown above the picker, drop the picker's
