@@ -15,11 +15,15 @@ import {
 import { navigate } from "../../../common/navigate";
 import { caseInsensitiveStringCompare } from "../../../common/string/compare";
 import type { LocalizeFunc } from "../../../common/translations/localize";
+import "../../../components/chips/ha-chip-set";
+import "../../../components/chips/ha-filter-chip";
 import "../../../components/ha-dialog";
 import "../../../components/ha-domain-icon";
 import "../../../components/ha-icon-button-prev";
 import "../../../components/ha-icon-next";
 import "../../../components/ha-svg-icon";
+import "../../../components/list/ha-list-base";
+import type { HaListBase } from "../../../components/list/ha-list-base";
 import "../../../components/input/ha-input-search";
 import type { HaInputSearch } from "../../../components/input/ha-input-search";
 import "../../../components/item/ha-list-item-button";
@@ -34,10 +38,17 @@ import {
   fetchConfigFlowInProgress,
 } from "../../../data/config_flow";
 import type { DataEntryFlowProgress } from "../../../data/data_entry_flow";
+import type { IntegrationType } from "../../../data/integration";
 import {
   domainToName,
   fetchIntegrationManifest,
 } from "../../../data/integration";
+import type { IntegrationCategory } from "../../../data/integration_categories";
+import {
+  INTEGRATION_CATEGORIES,
+  INTEGRATION_CATEGORY_ICONS,
+  getCategoriesForDomains,
+} from "../../../data/integration_categories";
 import type {
   Brand,
   Brands,
@@ -53,7 +64,7 @@ import {
   showAlertDialog,
   showConfirmationDialog,
 } from "../../../dialogs/generic/show-dialog-box";
-import { haStyleDialog } from "../../../resources/styles";
+import { haStyleDialog, haStyleScrollbar } from "../../../resources/styles";
 import { loadVirtualizer } from "../../../resources/virtualizer";
 import type { HomeAssistant } from "../../../types";
 import "./ha-domain-integrations";
@@ -78,6 +89,8 @@ export interface IntegrationListItem extends HaListVirtualizedItem {
   is_add?: boolean;
   single_config_entry?: boolean;
   is_discovered?: boolean;
+  categories?: string[];
+  integration_types?: IntegrationType[];
 }
 
 @customElement("dialog-add-integration")
@@ -108,7 +121,15 @@ class AddIntegrationDialog extends LitElement {
 
   @state() private _narrow = false;
 
+  @state() private _view: "brands" | "categories" = "brands";
+
+  @state() private _pickedCategory?: IntegrationCategory;
+
+  @state() private _typeFilter?: "device" | "service";
+
   @query("ha-list-virtualized") private _listElement?: HaListVirtualized;
+
+  @query("ha-list-base") private _baseListElement?: HaListBase;
 
   private _width?: number;
 
@@ -168,6 +189,9 @@ class AddIntegrationDialog extends LitElement {
     this._openedDirectly = false;
     this._navigateToResult = false;
     this._filter = undefined;
+    this._view = "brands";
+    this._pickedCategory = undefined;
+    this._typeFilter = undefined;
     this._width = undefined;
     this._height = undefined;
     fireEvent(this, "dialog-closed", { dialog: this.localName });
@@ -254,6 +278,15 @@ class AddIntegrationDialog extends LitElement {
       const integrations: IntegrationListItem[] = [];
       const yamlIntegrations: IntegrationListItem[] = [];
 
+      // Localized category names, so search matches by category too.
+      // The "other" fallback is excluded as a search term.
+      const categoryLabels = (domains: string[]) =>
+        getCategoriesForDomains(domains)
+          .filter((category) => category !== "other")
+          .map((category) =>
+            localize(`ui.panel.config.integrations.category.${category}`)
+          );
+
       Object.entries(i).forEach(([domain, integration]) => {
         if (
           "integration_type" in integration &&
@@ -288,6 +321,8 @@ class AddIntegrationDialog extends LitElement {
             overwrites_built_in: integration.overwrites_built_in,
             cloud: supportedIntegration.iot_class?.startsWith("cloud_"),
             single_config_entry: integration.single_config_entry,
+            categories: categoryLabels([domain]),
+            integration_types: [integration.integration_type],
           });
         } else if (
           !("integration_type" in integration) &&
@@ -310,6 +345,21 @@ class AddIntegrationDialog extends LitElement {
               : undefined,
             is_built_in: integration.is_built_in !== false,
             overwrites_built_in: integration.overwrites_built_in,
+            categories: categoryLabels([
+              domain,
+              ...(integration.integrations
+                ? Object.keys(integration.integrations)
+                : []),
+            ]),
+            integration_types: integration.integrations
+              ? [
+                  ...new Set(
+                    Object.values(integration.integrations).map(
+                      (childIntegration) => childIntegration.integration_type
+                    )
+                  ),
+                ]
+              : undefined,
           });
         } else if (filter && "integration_type" in integration) {
           // Integration without a config flow
@@ -322,6 +372,8 @@ class AddIntegrationDialog extends LitElement {
             is_built_in: integration.is_built_in !== false,
             overwrites_built_in: integration.overwrites_built_in,
             cloud: integration.iot_class?.startsWith("cloud_"),
+            categories: categoryLabels([domain]),
+            integration_types: [integration.integration_type],
           });
         }
       });
@@ -332,6 +384,7 @@ class AddIntegrationDialog extends LitElement {
             { name: "name", weight: 5 },
             { name: "domain", weight: 5 },
             { name: "integrations", weight: 2 },
+            { name: "categories", weight: 3 },
             "supported_by",
             "iot_standards",
           ],
@@ -377,15 +430,64 @@ class AddIntegrationDialog extends LitElement {
   );
 
   private _getIntegrations() {
-    return this._filterIntegrations(
-      this._integrations!,
-      this._helpers!,
-      this.hass.config.components,
-      this.hass.localize,
-      this._flowsInProgress?.length ?? 0,
-      this._filter
+    return this._filterByType(
+      this._filterIntegrations(
+        this._integrations!,
+        this._helpers!,
+        this.hass.config.components,
+        this.hass.localize,
+        this._flowsInProgress?.length ?? 0,
+        this._filter
+      ),
+      this._typeFilter
     );
   }
+
+  private _filterByType = memoizeOne(
+    (
+      items: IntegrationListItem[],
+      typeFilter?: "device" | "service"
+    ): IntegrationListItem[] => {
+      if (!typeFilter) {
+        return items;
+      }
+      return items.filter((item) =>
+        typeFilter === "device"
+          ? item.is_add ||
+            item.is_discovered ||
+            !!item.iot_standards?.length ||
+            item.integration_types?.some(
+              (type) => type === "device" || type === "hub"
+            )
+          : item.integration_types?.includes("service")
+      );
+    }
+  );
+
+  private _categorizeIntegrations = memoizeOne(
+    (
+      integrations: IntegrationListItem[]
+    ): Map<IntegrationCategory, IntegrationListItem[]> => {
+      const categorized = new Map<IntegrationCategory, IntegrationListItem[]>();
+      for (const item of integrations) {
+        if (item.is_add || item.is_discovered) {
+          continue;
+        }
+        const categories = getCategoriesForDomains(
+          item.domains ? [item.domain, ...item.domains] : [item.domain]
+        );
+        for (const category of categories) {
+          const items = categorized.get(category);
+          if (items) {
+            items.push(item);
+          } else {
+            categorized.set(category, [item]);
+          }
+        }
+      }
+      return categorized;
+    }
+  );
 
   protected render() {
     if (!this._open && !this._integrations && !this._helpers) {
@@ -408,9 +510,16 @@ class AddIntegrationDialog extends LitElement {
       ? this._getFlowsForCurrentView(pickedIntegration)
       : [];
 
+    const showingCategories =
+      !showingBrandView && !this._filter && this._view === "categories";
+
     const headerTitle = showingBrandView
       ? this._getBrandHeading(pickedIntegration, flowsInProgress)
-      : this.hass.localize("ui.panel.config.integrations.new");
+      : showingCategories && this._pickedCategory
+        ? this.hass.localize(
+            `ui.panel.config.integrations.category.${this._pickedCategory}`
+          )
+        : this.hass.localize("ui.panel.config.integrations.add_device");
 
     return html`<ha-dialog
       .open=${this._open}
@@ -432,7 +541,19 @@ class AddIntegrationDialog extends LitElement {
               }
               ${this._renderBrandView(pickedIntegration, flowsInProgress)}
             `
-          : this._renderAll(integrations)
+          : html`
+              ${
+                showingCategories && this._pickedCategory
+                  ? html`
+                      <ha-icon-button-prev
+                        slot="headerNavigationIcon"
+                        @click=${this._categoryBackClicked}
+                      ></ha-icon-button-prev>
+                    `
+                  : nothing
+              }
+              ${this._renderAll(integrations)}
+            `
       }
     </ha-dialog>`;
   }
@@ -573,23 +694,183 @@ class AddIntegrationDialog extends LitElement {
         )}
         @keydown=${this._maybeSubmit}
       ></ha-input-search>
+      ${this._renderViewChips()}
       ${
         integrations
-          ? html`<ha-list-virtualized
-              .rows=${integrations}
-              .rowRenderer=${this._renderRow}
-              style=${styleMap({
-                width: `${this._width}px`,
-                height: this._narrow
-                  ? "calc(100vh - 184px - var(--safe-area-inset-top, 0px) - var(--safe-area-inset-bottom, 0px))"
-                  : "500px",
-              })}
-            >
-            </ha-list-virtualized>`
+          ? this._renderContent(integrations)
           : html`<div class="flex center">
               <ha-spinner></ha-spinner>
             </div>`
       }`;
+  }
+
+  private _renderContent(integrations: IntegrationListItem[]): TemplateResult {
+    const listStyle = styleMap({
+      width: this._width ? `${this._width}px` : "",
+      height: this._narrow
+        ? "calc(100vh - 240px - var(--safe-area-inset-top, 0px) - var(--safe-area-inset-bottom, 0px))"
+        : "500px",
+    });
+
+    if (this._filter) {
+      // Group search results by their primary category, with a sticky
+      // header per group. Group order follows result relevance.
+      const otherLabel = this.hass.localize(
+        "ui.panel.config.integrations.category.other"
+      );
+      const groups = new Map<string, IntegrationListItem[]>();
+      for (const item of integrations) {
+        const title = item.categories?.[0] || otherLabel;
+        const items = groups.get(title);
+        if (items) {
+          items.push(item);
+        } else {
+          groups.set(title, [item]);
+        }
+      }
+      return html`<div class="search-groups ha-scrollbar" style=${listStyle}>
+        ${[...groups.entries()].map(
+          ([title, items]) => html`
+            <div class="items-title">${title}</div>
+            <ha-list-base>
+              ${items.map((item) => this._renderRow(item))}
+            </ha-list-base>
+          `
+        )}
+      </div>`;
+    }
+
+    if (this._view === "categories") {
+      const categorized = this._categorizeIntegrations(integrations);
+      if (this._pickedCategory) {
+        return html`<ha-list-virtualized
+          .rows=${categorized.get(this._pickedCategory) || []}
+          .rowRenderer=${this._renderRow}
+          style=${listStyle}
+        >
+        </ha-list-virtualized>`;
+      }
+      // Discovered devices and protocol "add device" shortcuts stay
+      // accessible on top of the category list
+      const specialRows = integrations.filter(
+        (item) => item.is_add || item.is_discovered
+      );
+      return html`<ha-list-base class="categories" style=${listStyle}>
+        ${specialRows.map((item) => this._renderRow(item))}
+        ${specialRows.length ? html`<div class="divider"></div>` : nothing}
+        ${INTEGRATION_CATEGORIES.filter(
+          (category) => categorized.get(category)?.length
+        )
+          .map((category) => ({
+            category,
+            label: this.hass.localize(
+              `ui.panel.config.integrations.category.${category}`
+            ),
+          }))
+          .sort((a, b) =>
+            // "Other" always sorts last
+            a.category === "other"
+              ? 1
+              : b.category === "other"
+                ? -1
+                : caseInsensitiveStringCompare(
+                    a.label,
+                    b.label,
+                    this.hass.locale.language
+                  )
+          )
+          .map(
+            ({ category, label }) => html`
+              <ha-list-item-button
+                .categoryId=${category}
+                @click=${this._categoryPicked}
+              >
+                <ha-svg-icon
+                  slot="start"
+                  .path=${INTEGRATION_CATEGORY_ICONS[category]}
+                ></ha-svg-icon>
+                <div slot="headline">${label}</div>
+                <ha-icon-next slot="end"></ha-icon-next>
+              </ha-list-item-button>
+            `
+          )}
+      </ha-list-base>`;
+    }
+
+    return html`<ha-list-virtualized
+      .rows=${integrations}
+      .rowRenderer=${this._renderRow}
+      style=${listStyle}
+    >
+    </ha-list-virtualized>`;
+  }
+
+  private _renderViewChips(): TemplateResult {
+    return html`<ha-chip-set class="views">
+      ${
+        this._filter
+          ? nothing
+          : html`
+              <ha-filter-chip
+                .selected=${this._view === "brands"}
+                .label=${this.hass.localize(
+                  "ui.panel.config.integrations.view_brands"
+                )}
+                @click=${this._showBrandsView}
+              ></ha-filter-chip>
+              <ha-filter-chip
+                .selected=${this._view === "categories"}
+                .label=${this.hass.localize(
+                  "ui.panel.config.integrations.view_categories"
+                )}
+                @click=${this._showCategoriesView}
+              ></ha-filter-chip>
+              <div class="separator"></div>
+            `
+      }
+      <ha-filter-chip
+        .selected=${this._typeFilter === "device"}
+        .label=${this.hass.localize(
+          "ui.panel.config.integrations.filter_devices"
+        )}
+        @click=${this._toggleDeviceFilter}
+      ></ha-filter-chip>
+      <ha-filter-chip
+        .selected=${this._typeFilter === "service"}
+        .label=${this.hass.localize(
+          "ui.panel.config.integrations.filter_services"
+        )}
+        @click=${this._toggleServiceFilter}
+      ></ha-filter-chip>
+    </ha-chip-set>`;
+  }
+
+  private _toggleDeviceFilter() {
+    this._typeFilter = this._typeFilter === "device" ? undefined : "device";
+  }
+
+  private _toggleServiceFilter() {
+    this._typeFilter = this._typeFilter === "service" ? undefined : "service";
+  }
+
+  private _showBrandsView() {
+    this._view = "brands";
+    this._pickedCategory = undefined;
+  }
+
+  private _showCategoriesView() {
+    this._view = "categories";
+    this._pickedCategory = undefined;
+  }
+
+  private _categoryPicked(ev: Event) {
+    this._pickedCategory = (
+      ev.currentTarget as HTMLElement & { categoryId: IntegrationCategory }
+    ).categoryId;
+  }
+
+  private _categoryBackClicked() {
+    this._pickedCategory = undefined;
   }
 
   private _renderRow = (integration: IntegrationListItem) => {
@@ -600,6 +881,7 @@ class AddIntegrationDialog extends LitElement {
       <ha-integration-list-item
         @click=${this._integrationPicked}
         .integration=${integration}
+        .showCategories=${Boolean(this._filter)}
       >
       </ha-integration-list-item>
     `;
@@ -793,9 +1075,12 @@ class AddIntegrationDialog extends LitElement {
   }
 
   private _maybeSubmit(ev: KeyboardEvent) {
-    if (ev.key === "ArrowDown" && this._listElement) {
-      ev.preventDefault();
-      this._listElement.focus();
+    if (ev.key === "ArrowDown") {
+      const list = this._listElement || this._baseListElement;
+      if (list) {
+        ev.preventDefault();
+        list.focus();
+      }
       return;
     }
     if (ev.key !== "Enter") {
@@ -820,6 +1105,7 @@ class AddIntegrationDialog extends LitElement {
 
   static styles = [
     haStyleDialog,
+    haStyleScrollbar,
     css`
       ha-dialog {
         --dialog-content-padding: 0;
@@ -848,6 +1134,42 @@ class AddIntegrationDialog extends LitElement {
       }
       ha-list-virtualized {
         position: relative;
+      }
+      ha-list-base.categories {
+        display: block;
+        overflow-y: auto;
+        padding: 0;
+      }
+      .search-groups {
+        display: block;
+        position: relative;
+        overflow-y: auto;
+      }
+      .items-title {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        font-weight: var(--ha-font-weight-medium);
+        padding: var(--ha-space-2) var(--ha-space-4);
+        background-color: var(--card-background-color);
+      }
+      ha-chip-set.views {
+        display: flex;
+        align-items: center;
+        gap: var(--ha-space-2);
+        padding: 0 var(--ha-space-4) var(--ha-space-3);
+      }
+      .views .separator {
+        width: 1px;
+        align-self: stretch;
+        background-color: var(--divider-color);
+        margin: 0 var(--ha-space-1);
+      }
+      .categories .divider {
+        border-bottom: 1px solid var(--divider-color);
+        margin: var(--ha-space-2) 0;
       }
     `,
   ];

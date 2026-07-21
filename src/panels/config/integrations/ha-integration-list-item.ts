@@ -21,6 +21,9 @@ import type { IntegrationListItem } from "./dialog-add-integration";
 export class HaIntegrationListItem extends HaListItemButton {
   @property({ attribute: false }) public integration!: IntegrationListItem;
 
+  @property({ type: Boolean, attribute: "show-categories" })
+  public showCategories = false;
+
   @state()
   @consumeLocalize()
   private _localize!: LocalizeFunc;
@@ -56,6 +59,13 @@ export class HaIntegrationListItem extends HaListItemButton {
               : nothing
           }
         </div>
+        ${
+          this.showCategories && integration.categories?.length
+            ? html`<div part="supporting-text" class="supporting">
+                ${integration.categories.join(" · ")}
+              </div>`
+            : nothing
+        }
       </div>
       <div part="end" class="end">
         ${
@@ -119,6 +129,13 @@ export class HaIntegrationListItem extends HaListItemButton {
       }
       .discovered-icon {
         color: var(--primary-color);
+      }
+      .supporting {
+        color: var(--secondary-text-color);
+        font-size: var(--ha-font-size-s);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .open-in-new {
         --mdc-icon-size: 22px;
