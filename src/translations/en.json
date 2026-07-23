@@ -1490,7 +1490,13 @@
         "suggesting_2": "Suggesting…",
         "suggesting_3": "Enchanting…",
         "done": "Done!",
-        "error": "Fail!"
+        "error": "Fail!",
+        "promo": {
+          "title": "Name and tag faster",
+          "text": "Set up AI suggestions to help you create meaningful names and descriptions.",
+          "later": "Later",
+          "setup": "Set up AI"
+        }
       },
       "navigation-picker": {
         "add_custom_path": "Add custom path",
@@ -2917,6 +2923,7 @@
         },
         "ai_task": {
           "header": "AI suggestions",
+          "enable_suggestions": "Enable AI suggestions",
           "description": "Home Assistant can use generative AI to help you with tasks. Look for the button with the {button} icon throughout Home Assistant to get suggestions. Select an AI task entity to use this feature.",
           "gen_data_header": "Data generation tasks",
           "gen_data_description": "Suggest automation names.",
@@ -4829,8 +4836,10 @@
         "voice_assistants": {
           "assistants": {
             "caption": "Assistants and AI",
+            "status_enabled": "[%key:ui::panel::config::ai_tasks::enabled%]",
+            "status_disabled": "[%key:ui::panel::config::ai_tasks::disabled%]",
             "general": {
-              "title": "Configuration",
+              "title": "Settings",
               "accessible_entities": "Exposed entities",
               "accessible_entities_count": "{number} {number, plural,\n  one {entity}\n  other {entities}\n}"
             },
@@ -4838,13 +4847,14 @@
               "link_learn_how_it_works": "[%key:ui::panel::config::cloud::account::remote::link_learn_how_it_works%]",
               "provider": "Home Assistant",
               "intro": "Assist is Home Assistant's built-in text and voice chat that lets you interact with your home.",
+              "enable_assist": "Enable Assist",
               "agents": "Agents",
               "agents_intro_title": "Meet agents",
               "agents_intro": "Assist now supports multiple agents. Each agent has its own conversation agent, voice, and access to your home. Give them an avatar and custom instructions, and switch between them in the Assist chat.",
               "controls_home": "Can control Home Assistant",
               "cannot_control_home": "Can’t control Home Assistant",
               "no_agents": "You don’t have any agents yet",
-              "add_assistant": "Add agent",
+              "add_assistant": "Create agent",
               "expose_new_entities": "Expose new entities automatically",
               "expose_new_entities_info": "Exposes supported devices that are not classified as security devices.",
               "assist_devices": "Assist devices",
@@ -4863,7 +4873,7 @@
               },
               "detail": {
                 "update_assistant_action": "Update",
-                "add_assistant_title": "Add agent",
+                "add_assistant_title": "Create agent",
                 "edit_assistant_title": "Edit agent",
                 "add_assistant_action": "Create",
                 "try_tts": "Try voice",
@@ -8884,7 +8894,9 @@
         },
         "ai_tasks": {
           "caption": "AI suggestions",
-          "description": "Configure AI suggestions and task preferences"
+          "description": "Configure AI suggestions and task preferences",
+          "enabled": "Enabled",
+          "disabled": "Disabled"
         },
         "entity_id_format": {
           "caption": "Entity ID format",

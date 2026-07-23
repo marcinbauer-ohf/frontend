@@ -7,6 +7,7 @@ export enum AITaskEntityFeature {
   GENERATE_IMAGE = 4,
 }
 export interface AITaskPreferences {
+  enabled: boolean;
   gen_data_entity_id: string | null;
   gen_image_entity_id: string | null;
 }

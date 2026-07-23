@@ -6,7 +6,8 @@ import { isEmptyEntityDomainFilter } from "../../../common/entity/entity_domain_
 import "../../../components/ha-alert";
 import "../../../components/ha-card";
 import "../../../components/ha-icon-next";
-import "../../../components/ha-md-list-item";
+import "../../../components/item/ha-list-item-base";
+import "../../../components/item/ha-list-item-button";
 import "../../../components/ha-switch";
 import type { HaSwitch } from "../../../components/ha-switch";
 import "../../../components/input/ha-input";
@@ -82,6 +83,12 @@ export class CloudGooglePref extends LitElement {
             <span class="subtitle"
               >${this.hass.localize(
                 "ui.panel.config.cloud.account.google.company"
+              )}
+              ·
+              ${this.hass.localize(
+                google_enabled
+                  ? "ui.panel.config.voice_assistants.assistants.status_enabled"
+                  : "ui.panel.config.voice_assistants.assistants.status_disabled"
               )}</span
             >
           </span>
@@ -144,7 +151,7 @@ export class CloudGooglePref extends LitElement {
                         `
                       : nothing
                   }
-                  <ha-md-list-item>
+                  <ha-list-item-base>
                     <span slot="headline"
                       >${this.hass!.localize(
                         "ui.panel.config.cloud.account.google.expose_new_entities"
@@ -161,7 +168,7 @@ export class CloudGooglePref extends LitElement {
                       .disabled=${this._exposeNew === undefined}
                       @change=${this._exposeNewToggleChanged}
                     ></ha-switch>
-                  </ha-md-list-item>
+                  </ha-list-item-base>
                   ${
                     google_registered
                       ? html`
@@ -189,7 +196,7 @@ export class CloudGooglePref extends LitElement {
                                 `
                               : nothing
                           }
-                          <ha-md-list-item>
+                          <ha-list-item-base>
                             <span slot="headline"
                               >${this.hass!.localize(
                                 "ui.panel.config.cloud.account.google.enable_state_reporting"
@@ -205,9 +212,9 @@ export class CloudGooglePref extends LitElement {
                               .checked=${google_report_state}
                               @change=${this._reportToggleChanged}
                             ></ha-switch>
-                          </ha-md-list-item>
+                          </ha-list-item-base>
 
-                          <ha-md-list-item>
+                          <ha-list-item-base>
                             <span slot="headline"
                               >${this.hass.localize(
                                 "ui.panel.config.cloud.account.google.security_devices"
@@ -219,7 +226,7 @@ export class CloudGooglePref extends LitElement {
                               )}</span
                             >
                             <ha-switch slot="end"></ha-switch>
-                          </ha-md-list-item>
+                          </ha-list-item-base>
 
                           <ha-input
                             id="google_secure_devices_pin"
@@ -235,8 +242,7 @@ export class CloudGooglePref extends LitElement {
                         `
                       : nothing
                   }
-                  <ha-md-list-item
-                    type="link"
+                  <ha-list-item-button
                     href="/config/voice-assistants/expose?assistants=cloud.google_assistant&historyBack"
                   >
                     <span slot="headline"
@@ -261,7 +267,7 @@ export class CloudGooglePref extends LitElement {
                           >`
                     }
                     <ha-icon-next slot="end"></ha-icon-next>
-                  </ha-md-list-item>
+                  </ha-list-item-button>
                 `
           }
         </div>
@@ -343,10 +349,10 @@ export class CloudGooglePref extends LitElement {
       display: flex;
       flex-direction: row;
     }
-    ha-md-list-item {
-      --md-list-item-leading-space: 0;
-      --md-list-item-trailing-space: 0;
-      --md-item-overflow: visible;
+    ha-list-item-base,
+    ha-list-item-button {
+      /* Rows sit inside the card content's own padding. */
+      --ha-row-item-padding-inline: 0;
     }
     ha-input {
       width: 250px;

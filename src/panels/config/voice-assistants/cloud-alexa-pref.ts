@@ -6,7 +6,8 @@ import { isEmptyEntityDomainFilter } from "../../../common/entity/entity_domain_
 import "../../../components/ha-alert";
 import "../../../components/ha-card";
 import "../../../components/ha-icon-next";
-import "../../../components/ha-md-list-item";
+import "../../../components/item/ha-list-item-base";
+import "../../../components/item/ha-list-item-button";
 import "../../../components/ha-switch";
 import type { HaSwitch } from "../../../components/ha-switch";
 import type { CloudStatusLoggedIn } from "../../../data/cloud";
@@ -74,6 +75,12 @@ export class CloudAlexaPref extends LitElement {
             <span class="subtitle"
               >${this.hass.localize(
                 "ui.panel.config.cloud.account.alexa.company"
+              )}
+              ·
+              ${this.hass.localize(
+                alexa_enabled
+                  ? "ui.panel.config.voice_assistants.assistants.status_enabled"
+                  : "ui.panel.config.voice_assistants.assistants.status_disabled"
               )}</span
             >
           </span>
@@ -145,7 +152,7 @@ export class CloudAlexaPref extends LitElement {
                         </ha-alert>`
                       : nothing
                   }
-                  <ha-md-list-item>
+                  <ha-list-item-base>
                     <span slot="headline"
                       >${this.hass!.localize(
                         "ui.panel.config.cloud.account.alexa.expose_new_entities"
@@ -162,11 +169,11 @@ export class CloudAlexaPref extends LitElement {
                       .disabled=${this._exposeNew === undefined}
                       @change=${this._exposeNewToggleChanged}
                     ></ha-switch>
-                  </ha-md-list-item>
+                  </ha-list-item-base>
                   ${
                     alexa_registered
                       ? html`
-                          <ha-md-list-item>
+                          <ha-list-item-base>
                             <span slot="headline"
                               >${this.hass!.localize(
                                 "ui.panel.config.cloud.account.alexa.enable_state_reporting"
@@ -182,12 +189,11 @@ export class CloudAlexaPref extends LitElement {
                               .checked=${alexa_report_state}
                               @change=${this._reportToggleChanged}
                             ></ha-switch>
-                          </ha-md-list-item>
+                          </ha-list-item-base>
                         `
                       : nothing
                   }
-                  <ha-md-list-item
-                    type="link"
+                  <ha-list-item-button
                     href="/config/voice-assistants/expose?assistants=cloud.alexa&historyBack"
                   >
                     <span slot="headline"
@@ -212,7 +218,7 @@ export class CloudAlexaPref extends LitElement {
                           >`
                     }
                     <ha-icon-next slot="end"></ha-icon-next>
-                  </ha-md-list-item>
+                  </ha-list-item-button>
                 `
           }
         </div>
@@ -270,10 +276,10 @@ export class CloudAlexaPref extends LitElement {
     a {
       color: var(--primary-color);
     }
-    ha-md-list-item {
-      --md-list-item-leading-space: 0;
-      --md-list-item-trailing-space: 0;
-      --md-item-overflow: visible;
+    ha-list-item-base,
+    ha-list-item-button {
+      /* Rows sit inside the card content's own padding. */
+      --ha-row-item-padding-inline: 0;
     }
     .header-actions {
       position: absolute;

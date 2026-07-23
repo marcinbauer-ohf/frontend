@@ -14,6 +14,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { storage } from "../../../common/decorators/storage";
+import { fireEvent } from "../../../common/dom/fire_event";
 import { stopPropagation } from "../../../common/dom/stop_propagation";
 import { computeDomain } from "../../../common/entity/compute_domain";
 import { formatLanguageCode } from "../../../common/language/format_language";
@@ -26,11 +27,10 @@ import "../../../components/ha-dropdown-item";
 import "../../../components/ha-expansion-panel";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-icon-next";
-import "../../../components/ha-list";
-import "../../../components/ha-list-item";
-import "../../../components/ha-md-list";
-import "../../../components/ha-md-list-item";
 import "../../../components/ha-svg-icon";
+import "../../../components/item/ha-list-item-base";
+import "../../../components/item/ha-list-item-button";
+import "../../../components/list/ha-list-base";
 import "../../../components/ha-switch";
 import type { HaSwitch } from "../../../components/ha-switch";
 import "../../../components/ha-tooltip";
@@ -42,6 +42,7 @@ import {
   createAssistPipeline,
   deleteAssistPipeline,
   listAssistPipelines,
+  saveAssistPreferences,
   setAssistPipelinePreferred,
   updateAssistPipeline,
 } from "../../../data/assist_pipeline";
@@ -75,6 +76,9 @@ export class AssistPref extends LitElement {
     string,
     ExposeEntitySettings
   >;
+
+  /** Owned by the parent page so the global toggle stays in sync. */
+  @property({ attribute: false }) public assistEnabled?: boolean;
 
   @state() private _pipelines: AssistPipeline[] = [];
 
@@ -196,6 +200,21 @@ export class AssistPref extends LitElement {
             >
           </span>
         </h1>
+        ${
+          this.assistEnabled !== undefined
+            ? html`
+                <div class="header-actions">
+                  <ha-switch
+                    .checked=${this.assistEnabled}
+                    aria-label=${this.hass.localize(
+                      "ui.panel.config.voice_assistants.assistants.pipeline.enable_assist"
+                    )}
+                    @change=${this._enabledToggleChanged}
+                  ></ha-switch>
+                </div>
+              `
+            : nothing
+        }
         <p class="intro">
           ${this.hass.localize(
             "ui.panel.config.voice_assistants.assistants.pipeline.intro"
@@ -207,55 +226,58 @@ export class AssistPref extends LitElement {
             >${this.hass.localize("ui.panel.config.common.learn_more")}</a
           >
         </p>
-        ${
-          !this._agentsIntroDismissed
-            ? html`
-                <ha-alert
-                  class="agents-intro"
-                  dismissable
-                  .title=${this.hass.localize(
+        ${this.assistEnabled === false ? nothing : this._renderContent()}
+      </ha-card>
+    `;
+  }
+
+  private _renderContent() {
+    return html`
+      ${
+        !this._agentsIntroDismissed
+          ? html`
+              <ha-alert
+                class="agents-intro"
+                dismissable
+                .title=${this.hass.localize(
                     "ui.panel.config.voice_assistants.assistants.pipeline.agents_intro_title"
                   )}
-                  @alert-dismissed-clicked=${this._dismissAgentsIntro}
-                >
-                  ${this.hass.localize(
+                @alert-dismissed-clicked=${this._dismissAgentsIntro}
+              >
+                ${this.hass.localize(
                     "ui.panel.config.voice_assistants.assistants.pipeline.agents_intro"
                   )}
-                </ha-alert>
-              `
-            : nothing
-        }
-        <div class="agents">
-          <ha-expansion-panel expanded no-collapse>
-            <div slot="header" class="agents-heading">
-              ${this.hass.localize(
-                "ui.panel.config.voice_assistants.assistants.pipeline.agents"
-              )}
-            </div>
-            ${
-              this._pipelines.length === 0
-                ? html`<div class="empty-body">
-                    <span class="empty-text"
-                      >${this.hass.localize(
+              </ha-alert>
+            `
+          : nothing
+      }
+      <div class="agents">
+        <ha-expansion-panel expanded no-collapse>
+          <div slot="header" class="agents-heading">
+            ${this.hass.localize(
+              "ui.panel.config.voice_assistants.assistants.pipeline.agents"
+            )}
+          </div>
+          ${
+            this._pipelines.length === 0
+              ? html`<div class="empty-body">
+                  <span class="empty-text"
+                    >${this.hass.localize(
                         "ui.panel.config.voice_assistants.assistants.pipeline.no_agents"
                       )}</span
-                    >
-                  </div>`
-                : html`<ha-list>
-                    ${this._pipelines.map(
+                  >
+                </div>`
+              : html`<ha-list-base>
+                  ${this._pipelines.map(
                       (pipeline) => html`
-                        <ha-list-item
-                          twoline
-                          hasMeta
-                          graphic="avatar"
-                          role="button"
+                        <ha-list-item-button
                           .id=${pipeline.id}
                           @click=${this._editPipeline}
                         >
-                          <span slot="graphic" class="agent-avatar"
+                          <span slot="start" class="agent-avatar"
                             >${this._renderAgentAvatar(pipeline)}</span
                           >
-                          <span>
+                          <span slot="headline">
                             ${pipeline.name}
                             ${
                               this._preferred === pipeline.id
@@ -279,11 +301,11 @@ export class AssistPref extends LitElement {
                                 : ""
                             }
                           </span>
-                          <span slot="secondary">
+                          <span slot="supporting-text">
                             ${formatLanguageCode(pipeline.language, this.hass.locale)}
                           </span>
                           <ha-dropdown
-                            slot="meta"
+                            slot="end"
                             placement="bottom-end"
                             @click=${stopPropagation}
                             @wa-select=${this._handlePipelineMenuAction}
@@ -352,90 +374,106 @@ export class AssistPref extends LitElement {
                               ></ha-svg-icon>
                             </ha-dropdown-item>
                           </ha-dropdown>
-                        </ha-list-item>
+                        </ha-list-item-button>
                       `
                     )}
-                  </ha-list>`
-            }
-          </ha-expansion-panel>
-        </div>
-        <ha-button
-          appearance="filled"
-          @click=${this._addPipeline}
-          class="add"
-          size="s"
+                </ha-list-base>`
+          }
+        </ha-expansion-panel>
+      </div>
+      <ha-button
+        appearance="filled"
+        @click=${this._addPipeline}
+        class="add"
+        size="s"
+      >
+        ${this.hass.localize(
+          "ui.panel.config.voice_assistants.assistants.pipeline.add_assistant"
+        )}
+        <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
+      </ha-button>
+      <ha-list-base class="devices">
+        <ha-list-item-base>
+          <span slot="headline">
+            ${this.hass.localize(
+              "ui.panel.config.voice_assistants.assistants.pipeline.expose_new_entities"
+            )}
+          </span>
+          <span slot="supporting-text">
+            ${this.hass.localize(
+              "ui.panel.config.voice_assistants.assistants.pipeline.expose_new_entities_info"
+            )}
+          </span>
+          <ha-switch
+            slot="end"
+            .checked=${this._exposeNew}
+            .disabled=${this._exposeNew === undefined}
+            @change=${this._exposeNewToggleChanged}
+          ></ha-switch>
+        </ha-list-item-base>
+        <ha-list-item-button
+          href="/config/voice-assistants/expose?assistants=conversation&historyBack"
         >
-          ${this.hass.localize(
-            "ui.panel.config.voice_assistants.assistants.pipeline.add_assistant"
-          )}
-          <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
-        </ha-button>
-        <ha-md-list class="devices">
-          <ha-md-list-item>
-            <span slot="headline">
-              ${this.hass.localize(
-                "ui.panel.config.voice_assistants.assistants.pipeline.expose_new_entities"
-              )}
-            </span>
-            <span slot="supporting-text">
-              ${this.hass.localize(
-                "ui.panel.config.voice_assistants.assistants.pipeline.expose_new_entities_info"
-              )}
-            </span>
-            <ha-switch
-              slot="end"
-              .checked=${this._exposeNew}
-              .disabled=${this._exposeNew === undefined}
-              @change=${this._exposeNewToggleChanged}
-            ></ha-switch>
-          </ha-md-list-item>
-          <ha-md-list-item
-            type="link"
-            href="/config/voice-assistants/expose?assistants=conversation&historyBack"
-          >
-            <span slot="headline">
-              ${this.hass.localize(
-                "ui.panel.config.voice_assistants.assistants.general.accessible_entities"
-              )}
-            </span>
-            <span slot="supporting-text">
-              ${this.hass.localize(
-                "ui.panel.config.voice_assistants.assistants.general.accessible_entities_count",
-                {
-                  number: this.exposedEntities
-                    ? this._exposedEntitiesCount(this.exposedEntities)
-                    : 0,
-                }
-              )}
-            </span>
-            <ha-icon-next slot="end"></ha-icon-next>
-          </ha-md-list-item>
-          ${
-            this._pipelineEntitiesCount > 0
-              ? html`
-                  <ha-md-list-item
-                    type="link"
-                    href="/config/voice-assistants/assist/devices"
-                  >
-                    <span slot="headline">
-                      ${this.hass.localize(
+          <span slot="headline">
+            ${this.hass.localize(
+              "ui.panel.config.voice_assistants.assistants.general.accessible_entities"
+            )}
+          </span>
+          <span slot="supporting-text">
+            ${this.hass.localize(
+              "ui.panel.config.voice_assistants.assistants.general.accessible_entities_count",
+              {
+                number: this.exposedEntities
+                  ? this._exposedEntitiesCount(this.exposedEntities)
+                  : 0,
+              }
+            )}
+          </span>
+          <ha-icon-next slot="end"></ha-icon-next>
+        </ha-list-item-button>
+        ${
+          this._pipelineEntitiesCount > 0
+            ? html`
+                <ha-list-item-button
+                  href="/config/voice-assistants/assist/devices"
+                >
+                  <span slot="headline">
+                    ${this.hass.localize(
                         "ui.panel.config.voice_assistants.assistants.pipeline.assist_devices"
                       )}
-                    </span>
-                    <span slot="supporting-text">
-                      ${this.hass.localize(
+                  </span>
+                  <span slot="supporting-text">
+                    ${this.hass.localize(
                         "ui.panel.config.voice_assistants.assistants.pipeline.assist_devices_count",
                         { number: this._pipelineEntitiesCount }
                       )}
-                    </span>
-                    <ha-icon-next slot="end"></ha-icon-next>
-                  </ha-md-list-item>
-                `
-              : ""
-          }
-        </ha-md-list>
-      </ha-card>
+                  </span>
+                  <ha-icon-next slot="end"></ha-icon-next>
+                </ha-list-item-button>
+              `
+            : ""
+        }
+      </ha-list-base>
     `;
+  }
+
+  private async _enabledToggleChanged(ev: Event) {
+    const toggle = ev.target as HaSwitch;
+    const enabled = toggle.checked;
+    // Optimistic: update the UI right away; cores without the preferences
+    // API reject the save, in which case we keep the local value so the
+    // toggle stays usable until core support lands.
+    fireEvent(this, "assist-enabled-changed", { enabled });
+    try {
+      const prefs = await saveAssistPreferences(this.hass, { enabled });
+      if (prefs.enabled !== undefined && prefs.enabled !== enabled) {
+        fireEvent(this, "assist-enabled-changed", {
+          enabled: prefs.enabled !== false,
+        });
+      }
+    } catch (_err: any) {
+      // Keep the optimistic value.
+    }
   }
 
   private async _exposeNewToggleChanged(ev: Event) {
@@ -608,16 +646,14 @@ export class AssistPref extends LitElement {
     a {
       color: var(--primary-color);
     }
-    ha-list-item {
-      --mdc-list-item-meta-size: auto;
-      --mdc-list-item-meta-display: flex;
-      --mdc-list-side-padding-right: 8px;
-      --mdc-list-side-padding-left: 16px;
-    }
-
-    ha-list-item span ha-svg-icon {
+    ha-list-item-button [slot="headline"] ha-svg-icon {
       color: currentColor;
       width: 16px;
+    }
+    .agents ha-dropdown[slot="end"] {
+      /* Compensate the row's inline padding so the icon button sits where
+         the old list item's 8px trailing padding put it. */
+      margin-inline-end: calc(-1 * var(--ha-space-2));
     }
     .agent-avatar {
       width: 32px;
@@ -672,6 +708,15 @@ export class AssistPref extends LitElement {
       flex-direction: column;
       min-width: 0;
     }
+    .header-actions {
+      position: absolute;
+      right: 24px;
+      inset-inline-end: 24px;
+      inset-inline-start: initial;
+      top: 24px;
+      display: flex;
+      flex-direction: row;
+    }
     .card-header .title {
       line-height: var(--ha-line-height-condensed);
     }
@@ -708,9 +753,6 @@ export class AssistPref extends LitElement {
       font-size: var(--ha-font-size-m);
       font-weight: var(--ha-font-weight-bold);
     }
-    .agents ha-list {
-      padding: 0;
-    }
     .empty-body {
       display: flex;
       align-items: center;
@@ -724,9 +766,6 @@ export class AssistPref extends LitElement {
     .empty-text {
       color: var(--secondary-text-color);
       text-align: center;
-    }
-    ha-md-list.devices {
-      padding: 0;
     }
     .casita {
       display: flex;
@@ -754,5 +793,8 @@ export class AssistPref extends LitElement {
 declare global {
   interface HTMLElementTagNameMap {
     "assist-pref": AssistPref;
+  }
+  interface HASSDomEvents {
+    "assist-enabled-changed": { enabled: boolean };
   }
 }

@@ -1,6 +1,8 @@
 import { css, html, LitElement, nothing } from "lit";
-import { customElement, property } from "lit/decorators";
+import { customElement, property, state } from "lit/decorators";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
+import { fetchAITaskPreferences } from "../../../data/ai_task";
+import { fetchAssistPreferences } from "../../../data/assist_pipeline";
 import type { CloudStatus } from "../../../data/cloud";
 import type { ExposeEntitySettings } from "../../../data/expose";
 
@@ -32,6 +34,37 @@ export class HaConfigVoiceAssistantsAssistants extends LitElement {
 
   @property({ attribute: false }) public route!: Route;
 
+  @state() private _assistEnabled?: boolean;
+
+  @state() private _aiEnabled?: boolean;
+
+  private _searchParms = new URLSearchParams(window.location.search);
+
+  protected firstUpdated() {
+    this._loadPreferences();
+  }
+
+  private async _loadPreferences() {
+    if (isComponentLoaded(this.hass.config, "assist_pipeline")) {
+      try {
+        this._assistEnabled =
+          (await fetchAssistPreferences(this.hass)).enabled !== false;
+      } catch (_err) {
+        // Older cores don't have the preferences API; Assist is always
+        // enabled there.
+        this._assistEnabled = true;
+      }
+    }
+    if (isComponentLoaded(this.hass.config, "ai_task")) {
+      try {
+        this._aiEnabled =
+          (await fetchAITaskPreferences(this.hass)).enabled !== false;
+      } catch (_err) {
+        this._aiEnabled = undefined;
+      }
+    }
+  }
+
   protected render() {
     if (!this.hass) {
       return html`<hass-loading-screen></hass-loading-screen>`;
@@ -52,6 +85,7 @@ export class HaConfigVoiceAssistantsAssistants extends LitElement {
                   <general-pref
                     .hass=${this.hass}
                     .exposedEntities=${this.exposedEntities}
+                    .aiEnabled=${this._aiEnabled}
                   ></general-pref>
                 `
               : nothing
@@ -63,6 +97,8 @@ export class HaConfigVoiceAssistantsAssistants extends LitElement {
                     .hass=${this.hass}
                     .cloudStatus=${this.cloudStatus}
                     .exposedEntities=${this.exposedEntities}
+                    .assistEnabled=${this._assistEnabled}
+                    @assist-enabled-changed=${this._assistEnabledChanged}
                   ></assist-pref>
                 `
               : nothing
@@ -95,6 +131,10 @@ export class HaConfigVoiceAssistantsAssistants extends LitElement {
         </div>
       </hass-tabs-subpage>
     `;
+  }
+
+  private _assistEnabledChanged(ev: CustomEvent<{ enabled: boolean }>) {
+    this._assistEnabled = ev.detail.enabled;
   }
 
   static styles = css`

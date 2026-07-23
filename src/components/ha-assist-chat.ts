@@ -63,8 +63,8 @@ import type { HaDropdownSelectEvent } from "./ha-dropdown";
 import "./ha-dropdown-item";
 import "./ha-markdown";
 import "./ha-svg-icon";
-import "./input/ha-input";
-import type { HaInput } from "./input/ha-input";
+import "./ha-textarea";
+import type { HaTextArea } from "./ha-textarea";
 
 const OPEN_SETTINGS = "__OPEN_SETTINGS__";
 
@@ -127,7 +127,7 @@ export class HaAssistChat extends LitElement {
   @property({ attribute: false })
   public submitInitialPrompt = false;
 
-  @query("#message-input") private _messageInput!: HaInput;
+  @query("#message-input") private _messageInput!: HaTextArea;
 
   @query(".message:last-child")
   private _lastChatMessage!: LitElement;
@@ -499,15 +499,17 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
       </div>
       <div class="composer-wrapper">
         <div class="composer">
-          <ha-input
+          <ha-textarea
             class="composer-input"
             id="message-input"
-            @keyup=${this._handleKeyUp}
+            rows="1"
+            resize="auto"
+            @keydown=${this._handleKeyDown}
             @input=${this._handleInput}
             .placeholder=${this._localize(
               "ui.dialogs.voice_command.input_label"
             )}
-          ></ha-input>
+          ></ha-textarea>
           <div class="composer-actions">
             ${this._renderAgentPill()}
             <div class="composer-buttons">
@@ -681,17 +683,22 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
     }
   }
 
-  private _handleKeyUp(ev: KeyboardEvent) {
-    const input = ev.target as HaInput;
-    if (!this._processing && ev.key === "Enter" && input.value) {
-      this._processText(input.value);
+  private _handleKeyDown(ev: KeyboardEvent) {
+    // Enter sends, Shift+Enter inserts a newline.
+    if (ev.key !== "Enter" || ev.shiftKey || ev.isComposing) {
+      return;
+    }
+    ev.preventDefault();
+    const input = ev.target as HaTextArea;
+    if (!this._processing && input.value) {
+      this._processText(input.value.trim());
       input.value = "";
       this._showSendButton = false;
     }
   }
 
   private _handleInput(ev: InputEvent) {
-    const value = (ev.target as HaInput).value;
+    const value = (ev.target as HaTextArea).value;
     if (value && !this._showSendButton) {
       this._showSendButton = true;
     } else if (!value && this._showSendButton) {
@@ -1083,9 +1090,6 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
         ha-alert {
           margin-bottom: var(--ha-space-2);
         }
-        #message-input::part(wa-base) {
-          padding-right: var(--ha-space-1);
-        }
 
         .messages {
           flex: 1 1 400px;
@@ -1136,9 +1140,8 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
         .composer {
           display: flex;
           flex-direction: column;
-          gap: var(--ha-space-1);
-          padding: var(--ha-space-2) var(--ha-space-2) var(--ha-space-2)
-            var(--ha-space-3);
+          gap: var(--ha-space-2);
+          padding: var(--ha-space-4) var(--ha-space-4) var(--ha-space-3);
           border: 1px solid var(--divider-color);
           border-radius: var(--ha-border-radius-2xl);
           background-color: var(--ha-color-surface-default, transparent);
@@ -1147,18 +1150,35 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
           border-color: var(--primary-color);
         }
         .composer-input {
-          --ha-input-padding-top: 0;
+          /* Auto-grow with the typed or pasted text, up to 10 lines, then
+             scroll. */
+          --ha-textarea-max-height: 10lh;
+          /* The composer never uses a floating label; neutralize the form-field
+             background so the collapsed label doesn't paint a grey bar over the
+             text when the textarea is focused. */
+          --ha-color-form-background: transparent;
+          --ha-color-form-background-hover: transparent;
           width: 100%;
         }
         .composer-input::part(wa-base) {
+          min-height: unset;
           border: none;
           background: transparent;
           padding: 0;
+          padding-inline-end: var(--ha-space-1);
           box-shadow: none;
         }
         /* Remove the material underline that visually separates the text from
            the composer controls. */
         .composer-input::part(wa-base)::after {
+          display: none;
+        }
+        .composer-input::part(wa-textarea) {
+          padding: 0;
+          overflow-x: hidden;
+          scrollbar-width: none;
+        }
+        .composer-input::part(wa-textarea)::-webkit-scrollbar {
           display: none;
         }
         .thinking-indicator {

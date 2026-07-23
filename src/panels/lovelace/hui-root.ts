@@ -71,6 +71,7 @@ import {
   showConfirmationDialog,
 } from "../../dialogs/generic/show-dialog-box";
 import { showQuickBar } from "../../dialogs/quick-bar/show-dialog-quick-bar";
+import { isAssistEnabled } from "../../data/assist_pipeline";
 import { showVoiceCommandDialog } from "../../dialogs/voice-command-dialog/show-ha-voice-command-dialog";
 import { haStyle } from "../../resources/styles";
 import { handleBackClick } from "../../layouts/back-navigation";
@@ -154,6 +155,8 @@ class HUIRoot extends LitElement {
   @state() private _curView?: number | "hass-unused-entities";
 
   @state() private _resourceMode: "yaml" | "storage" = "storage";
+
+  @state() private _assistEnabled = true;
 
   private _configChangedByUndo = false;
 
@@ -311,7 +314,9 @@ class HUIRoot extends LitElement {
         suffix:
           this.hass.enableShortcuts && !isMobileClient ? "(A)" : undefined,
         visible:
-          !this._editMode && this._conversation(this.hass.config.components),
+          !this._editMode &&
+          this._assistEnabled &&
+          this._conversation(this.hass.config.components),
         overflow: this.narrow,
       },
       {
@@ -687,6 +692,11 @@ class HUIRoot extends LitElement {
     fetchLovelaceInfo(this.hass).then((info) => {
       this._resourceMode = info.resource_mode;
     });
+    if (this._conversation(this.hass.config.components)) {
+      isAssistEnabled(this.hass).then((enabled) => {
+        this._assistEnabled = enabled;
+      });
+    }
   }
 
   public connectedCallback(): void {

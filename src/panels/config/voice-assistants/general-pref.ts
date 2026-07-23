@@ -4,8 +4,8 @@ import memoizeOne from "memoize-one";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import "../../../components/ha-card";
 import "../../../components/ha-icon-next";
-import "../../../components/ha-md-list";
-import "../../../components/ha-md-list-item";
+import "../../../components/item/ha-list-item-button";
+import "../../../components/list/ha-list-nav";
 import type { ExposeEntitySettings } from "../../../data/expose";
 import type { HomeAssistant } from "../../../types";
 
@@ -22,6 +22,9 @@ export class GeneralPref extends LitElement {
     string,
     ExposeEntitySettings
   >;
+
+  /** Owned by the parent page so the global toggle stays in sync. */
+  @property({ attribute: false }) public aiEnabled?: boolean;
 
   private _exposedEntitiesCount = memoizeOne(
     (exposedEntities: Record<string, ExposeEntitySettings>) =>
@@ -45,11 +48,15 @@ export class GeneralPref extends LitElement {
             "ui.panel.config.voice_assistants.assistants.general.title"
           )}
         </h1>
-        <ha-md-list>
+        <ha-list-nav
+          aria-label=${this.hass.localize(
+            "ui.panel.config.voice_assistants.assistants.general.title"
+          )}
+        >
           ${
             assistLoaded
               ? html`
-                  <ha-md-list-item type="link" href=${EXPOSE_HREF}>
+                  <ha-list-item-button href=${EXPOSE_HREF}>
                     <span slot="headline">
                       ${this.hass.localize(
                         "ui.panel.config.voice_assistants.assistants.general.accessible_entities"
@@ -62,28 +69,36 @@ export class GeneralPref extends LitElement {
                       )}
                     </span>
                     <ha-icon-next slot="end"></ha-icon-next>
-                  </ha-md-list-item>
+                  </ha-list-item-button>
                 `
               : nothing
           }
           ${
             aiTaskLoaded
               ? html`
-                  <ha-md-list-item type="link" href=${AI_TASKS_HREF}>
+                  <ha-list-item-button href=${AI_TASKS_HREF}>
                     <span slot="headline">
                       ${this.hass.localize("ui.panel.config.ai_tasks.caption")}
                     </span>
                     <span slot="supporting-text">
-                      ${this.hass.localize(
-                        "ui.panel.config.ai_tasks.description"
-                      )}
+                      ${
+                        this.aiEnabled !== undefined
+                          ? this.hass.localize(
+                              this.aiEnabled
+                                ? "ui.panel.config.ai_tasks.enabled"
+                                : "ui.panel.config.ai_tasks.disabled"
+                            )
+                          : this.hass.localize(
+                              "ui.panel.config.ai_tasks.description"
+                            )
+                      }
                     </span>
                     <ha-icon-next slot="end"></ha-icon-next>
-                  </ha-md-list-item>
+                  </ha-list-item-button>
                 `
               : nothing
           }
-        </ha-md-list>
+        </ha-list-nav>
       </ha-card>
     `;
   }

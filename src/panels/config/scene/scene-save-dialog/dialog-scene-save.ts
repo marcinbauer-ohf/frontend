@@ -16,6 +16,7 @@ import "../../../../components/ha-icon-picker";
 import "../../../../components/ha-labels-picker";
 import "../../../../components/ha-suggest-with-ai-button";
 import type { SuggestWithAIGenerateTask } from "../../../../components/ha-suggest-with-ai-button";
+import "../../../../components/ha-suggest-with-ai-promo";
 import "../../../../components/ha-svg-icon";
 import "../../../../components/input/ha-input";
 import "../../category/ha-category-picker";
@@ -224,6 +225,14 @@ class DialogSceneSave extends DirtyStateProviderMixin<SceneSaveState>()(
               ></ha-suggest-with-ai-button>`
         }
         ${
+          this._params.hideInputs
+            ? nothing
+            : html`<ha-suggest-with-ai-promo
+                .hass=${this.hass}
+                @ai-promo-setup=${this.closeDialog}
+              ></ha-suggest-with-ai-promo>`
+        }
+        ${
           this._error
             ? html`<ha-alert alert-type="error"
                 >${this.hass.localize(
@@ -410,6 +419,10 @@ class DialogSceneSave extends DirtyStateProviderMixin<SceneSaveState>()(
 
         ha-suggest-with-ai-button {
           margin: var(--ha-space-2) var(--ha-space-4);
+        }
+        ha-suggest-with-ai-promo {
+          display: block;
+          margin-bottom: var(--ha-space-4);
         }
         ha-input {
           --ha-input-padding-bottom: 0;

@@ -1,16 +1,17 @@
 import { mdiStarFourPoints } from "@mdi/js";
 import type { HassEntity } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
-import { css, html, LitElement } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import { computeDomain } from "../../../common/entity/compute_domain";
 import { supportsFeature } from "../../../common/entity/supports-feature";
-import type { HaProgressButton } from "../../../components/buttons/ha-progress-button";
 import "../../../components/entity/ha-entity-picker";
 import type { HaEntityPicker } from "../../../components/entity/ha-entity-picker";
 import "../../../components/ha-card";
 import "../../../components/ha-settings-row";
+import "../../../components/ha-switch";
+import type { HaSwitch } from "../../../components/ha-switch";
 import {
   AITaskEntityFeature,
   fetchAITaskPreferences,
@@ -34,10 +35,6 @@ export class AITaskPref extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @state() private _prefs?: AITaskPreferences;
-
-  private _gen_data_entity_id?: string | null;
-
-  private _gen_image_entity_id?: string | null;
 
   protected firstUpdated(changedProps: PropertyValues<this>) {
     super.firstUpdated(changedProps);
@@ -68,88 +65,95 @@ export class AITaskPref extends LitElement {
           </p>
           <ha-settings-row .narrow=${this.narrow}>
             <span slot="heading">
-              ${this.hass!.localize("ui.panel.config.ai_task.gen_data_header")}
-            </span>
-            <span slot="description">
               ${this.hass!.localize(
-                "ui.panel.config.ai_task.gen_data_description"
+                "ui.panel.config.ai_task.enable_suggestions"
               )}
             </span>
-            <ha-entity-picker
-              data-name="gen_data_entity_id"
-              .disabled=${
-                this._prefs === undefined &&
-                isComponentLoaded(this.hass.config, "ai_task")
-              }
-              .value=${
-                this._gen_data_entity_id || this._prefs?.gen_data_entity_id
-              }
-              .entityFilter=${filterGenData}
-              @value-changed=${this._handlePrefChange}
-            ></ha-entity-picker>
+            <ha-switch
+              .checked=${this._prefs?.enabled !== false}
+              .disabled=${this._prefs === undefined}
+              @change=${this._enabledChanged}
+            ></ha-switch>
           </ha-settings-row>
-          <ha-settings-row .narrow=${this.narrow}>
-            <span slot="heading">
-              ${this.hass!.localize("ui.panel.config.ai_task.gen_image_header")}
-            </span>
-            <span slot="description">
-              ${this.hass!.localize(
-                "ui.panel.config.ai_task.gen_image_description"
-              )}
-            </span>
-            <ha-entity-picker
-              data-name="gen_image_entity_id"
-              .disabled=${
-                this._prefs === undefined &&
-                isComponentLoaded(this.hass.config, "ai_task")
-              }
-              .value=${
-                this._gen_image_entity_id || this._prefs?.gen_image_entity_id
-              }
-              .entityFilter=${filterGenImage}
-              @value-changed=${this._handlePrefChange}
-            ></ha-entity-picker>
-          </ha-settings-row>
-        </div>
-        <div class="card-actions">
-          <ha-progress-button @click=${this._update}>
-            ${this.hass!.localize("ui.common.save")}
-          </ha-progress-button>
+          ${this._prefs?.enabled === false ? nothing : this._renderPickers()}
         </div>
       </ha-card>
     `;
   }
 
-  private _handlePrefChange(ev: ValueChangedEvent<string | undefined>) {
-    const input = ev.target as HaEntityPicker;
-    const key = input.dataset.name as keyof AITaskPreferences;
-    const value = ev.detail.value || null;
-    this[`_${key}`] = value;
+  private _renderPickers() {
+    return html`
+      <ha-settings-row .narrow=${this.narrow}>
+        <span slot="heading">
+          ${this.hass!.localize("ui.panel.config.ai_task.gen_data_header")}
+        </span>
+        <span slot="description">
+          ${this.hass!.localize("ui.panel.config.ai_task.gen_data_description")}
+        </span>
+        <ha-entity-picker
+          data-name="gen_data_entity_id"
+          .disabled=${
+            this._prefs === undefined &&
+            isComponentLoaded(this.hass.config, "ai_task")
+          }
+          .value=${this._prefs?.gen_data_entity_id}
+          .entityFilter=${filterGenData}
+          @value-changed=${this._handlePrefChange}
+        ></ha-entity-picker>
+      </ha-settings-row>
+      <ha-settings-row .narrow=${this.narrow}>
+        <span slot="heading">
+          ${this.hass!.localize("ui.panel.config.ai_task.gen_image_header")}
+        </span>
+        <span slot="description">
+          ${this.hass!.localize(
+            "ui.panel.config.ai_task.gen_image_description"
+          )}
+        </span>
+        <ha-entity-picker
+          data-name="gen_image_entity_id"
+          .disabled=${
+            this._prefs === undefined &&
+            isComponentLoaded(this.hass.config, "ai_task")
+          }
+          .value=${this._prefs?.gen_image_entity_id}
+          .entityFilter=${filterGenImage}
+          @value-changed=${this._handlePrefChange}
+        ></ha-entity-picker>
+      </ha-settings-row>
+    `;
   }
 
-  private async _update(ev) {
-    const button = ev.target as HaProgressButton;
-    if (button.progress) {
-      return;
-    }
-    button.progress = true;
-
-    const oldPrefs = this._prefs;
-    const update: Partial<AITaskPreferences> = {
-      gen_data_entity_id: this._gen_data_entity_id,
-      gen_image_entity_id: this._gen_image_entity_id,
-    };
-    this._prefs = { ...this._prefs!, ...update };
+  private async _enabledChanged(ev: Event) {
+    const toggle = ev.target as HaSwitch;
+    this._prefs = { ...this._prefs!, enabled: toggle.checked };
     try {
-      this._prefs = await saveAITaskPreferences(this.hass, {
-        ...update,
+      const saved = await saveAITaskPreferences(this.hass, {
+        enabled: toggle.checked,
       });
-      button.actionSuccess();
+      // Cores without the `enabled` preference omit it from the response;
+      // keep the local value so the toggle stays usable until core support
+      // lands.
+      this._prefs = { ...saved, enabled: saved.enabled ?? toggle.checked };
     } catch (_err: any) {
-      button.actionError();
+      // Core rejected the (not yet supported) `enabled` key; keep the local
+      // value so the UI remains testable.
+    }
+  }
+
+  private async _handlePrefChange(
+    ev: ValueChangedEvent<string | undefined>
+  ): Promise<void> {
+    const input = ev.target as HaEntityPicker;
+    const key = input.dataset.name as
+      "gen_data_entity_id" | "gen_image_entity_id";
+    const value = ev.detail.value || null;
+    const oldPrefs = this._prefs;
+    this._prefs = { ...this._prefs!, [key]: value };
+    try {
+      this._prefs = await saveAITaskPreferences(this.hass, { [key]: value });
+    } catch (_err: any) {
       this._prefs = oldPrefs;
-    } finally {
-      button.progress = false;
     }
   }
 
@@ -159,9 +163,6 @@ export class AITaskPref extends LitElement {
     }
     ha-settings-row {
       padding: 0;
-    }
-    .card-actions {
-      text-align: right;
     }
     ha-entity-picker {
       flex: 1;

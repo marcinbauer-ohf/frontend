@@ -348,6 +348,11 @@ export class HaVoiceCommandDialog extends LitElement {
       css`
         ha-adaptive-side-dialog {
           --dialog-content-padding: 0;
+          /* On mobile (bottom sheet), open at nearly full height instead of
+             shrink-wrapping the chat content. */
+          --ha-bottom-sheet-height: 90vh;
+          --ha-bottom-sheet-height: calc(100dvh - var(--ha-space-12));
+          --ha-bottom-sheet-max-height: var(--ha-bottom-sheet-height);
         }
         .header-actions {
           display: flex;

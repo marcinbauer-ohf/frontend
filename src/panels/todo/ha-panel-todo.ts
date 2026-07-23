@@ -36,6 +36,7 @@ import "../../components/ha-list-item";
 import "../../components/ha-state-icon";
 import "../../components/ha-svg-icon";
 import "../../components/ha-two-pane-top-app-bar-fixed";
+import { isAssistEnabled } from "../../data/assist_pipeline";
 import { deleteConfigEntry } from "../../data/config_entries";
 import { getExtendedEntityRegistryEntry } from "../../data/entity/entity_registry";
 import { fetchIntegrationManifest } from "../../data/integration";
@@ -66,6 +67,8 @@ class PanelTodo extends LitElement {
     state: true,
   })
   private _entityId?: string;
+
+  @state() private _assistEnabled = true;
 
   private _openAddItemFromUrl = false;
 
@@ -103,6 +106,12 @@ class PanelTodo extends LitElement {
 
     if (!this.hasUpdated) {
       this.hass.loadFragmentTranslation("lovelace");
+
+      if (this._conversation(this.hass.config.components)) {
+        isAssistEnabled(this.hass).then((enabled) => {
+          this._assistEnabled = enabled;
+        });
+      }
 
       const params = decodeTodoQueryParams(extractSearchParamsObject());
       this._openAddItemFromUrl = params.add_item ?? false;
@@ -260,12 +269,19 @@ class PanelTodo extends LitElement {
                 </ha-dropdown-item>`
               : nothing
           }
-          <wa-divider></wa-divider>
-          <ha-dropdown-item value="assist">
-            <ha-svg-icon .path=${mdiCommentProcessingOutline} slot="icon">
-            </ha-svg-icon>
-            ${this.hass.localize("ui.panel.todo.assist")}
-          </ha-dropdown-item>
+          ${
+            this._assistEnabled
+              ? html`<wa-divider></wa-divider>
+                  <ha-dropdown-item value="assist">
+                    <ha-svg-icon
+                      .path=${mdiCommentProcessingOutline}
+                      slot="icon"
+                    >
+                    </ha-svg-icon>
+                    ${this.hass.localize("ui.panel.todo.assist")}
+                  </ha-dropdown-item>`
+              : nothing
+          }
           ${
             entityRegistryEntry?.platform === "local_todo"
               ? html` <wa-divider></wa-divider>

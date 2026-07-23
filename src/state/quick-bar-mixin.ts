@@ -6,6 +6,7 @@ import type { HASSDomEvent } from "../common/dom/fire_event";
 import { mainWindow } from "../common/dom/get_main_window";
 import { ShortcutManager } from "../common/keyboard/shortcuts";
 import { extractSearchParamsObject } from "../common/url/search-params";
+import { isAssistEnabled } from "../data/assist_pipeline";
 import type { QuickBarSection } from "../dialogs/quick-bar/show-dialog-quick-bar";
 import {
   closeQuickBar,
@@ -142,7 +143,7 @@ export default <T extends Constructor<HassElement>>(superClass: T) =>
       isComponentLoaded(this.hass!.config, "conversation")
     );
 
-    private _showVoiceCommandDialog(e: KeyboardEvent) {
+    private async _showVoiceCommandDialog(e: KeyboardEvent) {
       if (
         !this.hass?.enableShortcuts ||
         !canOverrideAlphanumericInput(e.composedPath()) ||
@@ -155,6 +156,10 @@ export default <T extends Constructor<HassElement>>(superClass: T) =>
         return;
       }
       e.preventDefault();
+
+      if (!(await isAssistEnabled(this.hass!))) {
+        return;
+      }
 
       showVoiceCommandDialog(this, this.hass!, { pipeline_id: "last_used" });
     }

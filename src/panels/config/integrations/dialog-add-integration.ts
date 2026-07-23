@@ -1,3 +1,4 @@
+import { mdiMenuDown } from "@mdi/js";
 import type { IFuseOptions } from "fuse.js";
 import Fuse from "fuse.js";
 import type { HassConfig } from "home-assistant-js-websocket";
@@ -15,9 +16,13 @@ import {
 import { navigate } from "../../../common/navigate";
 import { caseInsensitiveStringCompare } from "../../../common/string/compare";
 import type { LocalizeFunc } from "../../../common/translations/localize";
+import "../../../components/chips/ha-assist-chip";
 import "../../../components/chips/ha-chip-set";
 import "../../../components/chips/ha-filter-chip";
 import "../../../components/ha-dialog";
+import "../../../components/ha-dropdown";
+import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
+import "../../../components/ha-dropdown-item";
 import "../../../components/ha-domain-icon";
 import "../../../components/ha-icon-button-prev";
 import "../../../components/ha-icon-next";
@@ -91,6 +96,7 @@ export interface IntegrationListItem extends HaListVirtualizedItem {
   is_discovered?: boolean;
   categories?: string[];
   integration_types?: IntegrationType[];
+  divider?: boolean;
 }
 
 @customElement("dialog-add-integration")
@@ -415,9 +421,17 @@ class AddIntegrationDialog extends LitElement {
             .map((result) => result.item),
         ];
       }
+      const specialRows = [...discoveredRows, ...addDeviceRows];
+      if (specialRows.length) {
+        // Visually separate the discovered/"add device" shortcuts from the
+        // alphabetical brand list below.
+        specialRows[specialRows.length - 1] = {
+          ...specialRows[specialRows.length - 1],
+          divider: true,
+        };
+      }
       return [
-        ...discoveredRows,
-        ...addDeviceRows,
+        ...specialRows,
         ...integrations.sort((a, b) =>
           caseInsensitiveStringCompare(
             a.name || "",
@@ -806,43 +820,62 @@ class AddIntegrationDialog extends LitElement {
   }
 
   private _renderViewChips(): TemplateResult {
-    return html`<ha-chip-set class="views">
+    return html`<div class="views">
+      <ha-chip-set>
+        <ha-filter-chip
+          .selected=${this._typeFilter === "device"}
+          .label=${this.hass.localize(
+            "ui.panel.config.integrations.filter_devices"
+          )}
+          @click=${this._toggleDeviceFilter}
+        ></ha-filter-chip>
+        <ha-filter-chip
+          .selected=${this._typeFilter === "service"}
+          .label=${this.hass.localize(
+            "ui.panel.config.integrations.filter_services"
+          )}
+          @click=${this._toggleServiceFilter}
+        ></ha-filter-chip>
+      </ha-chip-set>
       ${
         this._filter
           ? nothing
           : html`
-              <ha-filter-chip
-                .selected=${this._view === "brands"}
-                .label=${this.hass.localize(
-                  "ui.panel.config.integrations.view_brands"
-                )}
-                @click=${this._showBrandsView}
-              ></ha-filter-chip>
-              <ha-filter-chip
-                .selected=${this._view === "categories"}
-                .label=${this.hass.localize(
-                  "ui.panel.config.integrations.view_categories"
-                )}
-                @click=${this._showCategoriesView}
-              ></ha-filter-chip>
-              <div class="separator"></div>
+              <ha-dropdown
+                placement="bottom-end"
+                @wa-select=${this._viewSelected}
+              >
+                <ha-assist-chip
+                  slot="trigger"
+                  .label=${this.hass.localize(
+                    `ui.panel.config.integrations.view_${this._view}`
+                  )}
+                >
+                  <ha-svg-icon
+                    slot="trailing-icon"
+                    .path=${mdiMenuDown}
+                  ></ha-svg-icon>
+                </ha-assist-chip>
+                <ha-dropdown-item
+                  value="brands"
+                  .selected=${this._view === "brands"}
+                >
+                  ${this.hass.localize(
+                    "ui.panel.config.integrations.view_brands"
+                  )}
+                </ha-dropdown-item>
+                <ha-dropdown-item
+                  value="categories"
+                  .selected=${this._view === "categories"}
+                >
+                  ${this.hass.localize(
+                    "ui.panel.config.integrations.view_categories"
+                  )}
+                </ha-dropdown-item>
+              </ha-dropdown>
             `
       }
-      <ha-filter-chip
-        .selected=${this._typeFilter === "device"}
-        .label=${this.hass.localize(
-          "ui.panel.config.integrations.filter_devices"
-        )}
-        @click=${this._toggleDeviceFilter}
-      ></ha-filter-chip>
-      <ha-filter-chip
-        .selected=${this._typeFilter === "service"}
-        .label=${this.hass.localize(
-          "ui.panel.config.integrations.filter_services"
-        )}
-        @click=${this._toggleServiceFilter}
-      ></ha-filter-chip>
-    </ha-chip-set>`;
+    </div>`;
   }
 
   private _toggleDeviceFilter() {
@@ -853,13 +886,8 @@ class AddIntegrationDialog extends LitElement {
     this._typeFilter = this._typeFilter === "service" ? undefined : "service";
   }
 
-  private _showBrandsView() {
-    this._view = "brands";
-    this._pickedCategory = undefined;
-  }
-
-  private _showCategoriesView() {
-    this._view = "categories";
+  private _viewSelected(ev: HaDropdownSelectEvent<"brands" | "categories">) {
+    this._view = ev.detail.item.value;
     this._pickedCategory = undefined;
   }
 
@@ -879,6 +907,7 @@ class AddIntegrationDialog extends LitElement {
     }
     return html`
       <ha-integration-list-item
+        class=${integration.divider && this._view === "brands" ? "divider" : ""}
         @click=${this._integrationPicked}
         .integration=${integration}
         .showCategories=${Boolean(this._filter)}
@@ -1116,6 +1145,9 @@ class AddIntegrationDialog extends LitElement {
       .divider {
         border-bottom-color: var(--divider-color);
       }
+      ha-integration-list-item.divider {
+        border-bottom: 1px solid var(--divider-color);
+      }
       p {
         text-align: center;
         padding: 16px;
@@ -1155,17 +1187,22 @@ class AddIntegrationDialog extends LitElement {
         padding: var(--ha-space-2) var(--ha-space-4);
         background-color: var(--card-background-color);
       }
-      ha-chip-set.views {
+      .views {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: var(--ha-space-2);
         padding: 0 var(--ha-space-4) var(--ha-space-3);
       }
-      .views .separator {
-        width: 1px;
-        align-self: stretch;
-        background-color: var(--divider-color);
-        margin: 0 var(--ha-space-1);
+      .views ha-chip-set {
+        display: flex;
+        align-items: center;
+        gap: var(--ha-space-2);
+      }
+      /* Match the look of the ha-filter-chip filter buttons */
+      .views ha-assist-chip {
+        --ha-assist-chip-container-shape: var(--ha-border-radius-md);
+        --md-assist-chip-label-text-weight: var(--ha-font-weight-medium);
       }
       .categories .divider {
         border-bottom: 1px solid var(--divider-color);

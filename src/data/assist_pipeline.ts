@@ -24,6 +24,39 @@ export const assistAgentControlsHome = (
     : true;
 };
 
+export interface AssistPipelinePreferences {
+  enabled: boolean;
+}
+
+export const fetchAssistPreferences = (hass: HomeAssistant) =>
+  hass.callWS<AssistPipelinePreferences>({
+    type: "assist_pipeline/preferences/get",
+  });
+
+export const saveAssistPreferences = (
+  hass: HomeAssistant,
+  preferences: Partial<AssistPipelinePreferences>
+) =>
+  hass.callWS<AssistPipelinePreferences>({
+    type: "assist_pipeline/preferences/set",
+    ...preferences,
+  });
+
+/**
+ * Whether Assist is enabled for this instance. Defaults to true when the
+ * backend does not (yet) support the preferences API, so entry points stay
+ * visible on older cores.
+ */
+export const isAssistEnabled = async (
+  hass: HomeAssistant
+): Promise<boolean> => {
+  try {
+    return (await fetchAssistPreferences(hass)).enabled !== false;
+  } catch (_err) {
+    return true;
+  }
+};
+
 export interface AssistPipeline {
   id: string;
   name: string;
