@@ -1,6 +1,5 @@
 import {
   mdiChartBoxOutline,
-  mdiClose,
   mdiDotsVertical,
   mdiDownload,
   mdiFilterVariantRemove,
@@ -160,21 +159,27 @@ class HaPanelHistory extends LitElement {
 
     const toolbar = html`
       <div class="toolbar">
-        <div class="relative">
-          <ha-assist-chip
-            .active=${this._showSources}
-            .disabled=${this._isLoading}
-            .label=${sourcesLabel}
-            @click=${this._toggleSources}
-          >
-            <ha-svg-icon slot="icon" .path=${mdiTuneVariant}></ha-svg-icon>
-          </ha-assist-chip>
-          ${
-            filterCount > 0
-              ? html`<div class="badge">${filterCount}</div>`
-              : nothing
-          }
-        </div>
+        ${
+          !this._showSources
+            ? html`<div class="relative">
+                <ha-assist-chip
+                  .disabled=${this._isLoading}
+                  .label=${sourcesLabel}
+                  @click=${this._toggleSources}
+                >
+                  <ha-svg-icon
+                    slot="icon"
+                    .path=${mdiTuneVariant}
+                  ></ha-svg-icon>
+                </ha-assist-chip>
+                ${
+                  filterCount > 0
+                    ? html`<div class="badge">${filterCount}</div>`
+                    : nothing
+                }
+              </div>`
+            : nothing
+        }
         <ha-date-range-picker
           chip
           ?disabled=${this._isLoading}
@@ -191,11 +196,13 @@ class HaPanelHistory extends LitElement {
       <div class="main">
         ${
           !this.narrow && this._showSources
-            ? this._renderSourcesPane(targetCount, filterCount)
+            ? this._renderSourcesPane(sourcesLabel, targetCount, filterCount)
             : nothing
         }
-        <div class="results-content ha-scrollbar">
-          ${
+        <div class="content-column">
+          ${toolbar}
+          <div class="results-content ha-scrollbar">
+            ${
             this._isLoading
               ? html`<div class="progress-wrapper">
                   <ha-spinner></ha-spinner>
@@ -225,6 +232,7 @@ class HaPanelHistory extends LitElement {
                       </state-history-charts>
                     `
           }
+          </div>
         </div>
       </div>
     `;
@@ -255,7 +263,7 @@ class HaPanelHistory extends LitElement {
           </ha-dropdown-item>
         </ha-dropdown>
 
-        <div class="content">${toolbar}${main}</div>
+        <div class="content">${main}</div>
       </ha-top-app-bar-fixed>
       ${
         this.narrow && this._showSources
@@ -293,18 +301,22 @@ class HaPanelHistory extends LitElement {
     `;
   }
 
-  private _renderSourcesPane(targetCount: number, filterCount: number) {
+  private _renderSourcesPane(
+    sourcesLabel: string,
+    targetCount: number,
+    filterCount: number
+  ) {
     const sourceCount = targetCount + filterCount;
     return html`<div class="pane">
       <div class="table-header">
-        <ha-icon-button
-          .path=${mdiClose}
+        <ha-assist-chip
+          active
+          .disabled=${this._isLoading}
+          .label=${sourcesLabel}
           @click=${this._toggleSources}
-          .label=${this.hass.localize("ui.common.close")}
-        ></ha-icon-button>
-        <span class="pane-title"
-          >${this.hass.localize("ui.panel.history.sources")}</span
         >
+          <ha-svg-icon slot="icon" .path=${mdiTuneVariant}></ha-svg-icon>
+        </ha-assist-chip>
         ${
           sourceCount > 0
             ? html`<ha-icon-button
@@ -889,7 +901,7 @@ class HaPanelHistory extends LitElement {
           overflow: hidden;
         }
 
-        /* Toolbar sits directly under the top app bar as a full-width bar. */
+        /* Toolbar lives in the content column so it shifts with the pane. */
         .toolbar {
           display: flex;
           align-items: center;
@@ -921,6 +933,13 @@ class HaPanelHistory extends LitElement {
           min-height: 0;
         }
 
+        .content-column {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          min-width: 0;
+        }
+
         .results-content {
           flex: 1;
           min-width: 0;
@@ -946,18 +965,12 @@ class HaPanelHistory extends LitElement {
         .table-header {
           display: flex;
           align-items: center;
+          justify-content: space-between;
           gap: var(--ha-space-2);
           height: 56px;
           flex-shrink: 0;
-          padding: 0 4px;
+          padding: 0 16px;
           border-bottom: 1px solid var(--divider-color);
-        }
-
-        .pane-title {
-          flex: 1;
-          min-width: 0;
-          font-size: var(--ha-font-size-l);
-          font-weight: var(--ha-font-weight-medium);
         }
 
         .pane-content {

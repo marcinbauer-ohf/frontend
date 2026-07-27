@@ -1,5 +1,4 @@
 import {
-  mdiClose,
   mdiFilterVariantRemove,
   mdiTextBoxOutline,
   mdiTuneVariant,
@@ -105,9 +104,7 @@ export class HaPanelLogbook extends LitElement {
       >
         <div slot="title">${this.hass.localize("panel.logbook")}</div>
 
-        <div class="content">
-          ${this._renderToolbar(targetCount, filterCount)}${this._renderMain()}
-        </div>
+        <div class="content">${this._renderMain(targetCount, filterCount)}</div>
       </ha-top-app-bar-fixed>
       ${
         this.narrow && this._showSources
@@ -148,20 +145,26 @@ export class HaPanelLogbook extends LitElement {
         : this.hass.localize("ui.panel.logbook.sources");
     return html`
       <div class="toolbar">
-        <div class="relative">
-          <ha-assist-chip
-            .active=${this._showSources}
-            .label=${sourcesLabel}
-            @click=${this._toggleSources}
-          >
-            <ha-svg-icon slot="icon" .path=${mdiTuneVariant}></ha-svg-icon>
-          </ha-assist-chip>
-          ${
-            filterCount > 0
-              ? html`<div class="badge">${filterCount}</div>`
-              : nothing
-          }
-        </div>
+        ${
+          !this._showSources
+            ? html`<div class="relative">
+                <ha-assist-chip
+                  .label=${sourcesLabel}
+                  @click=${this._toggleSources}
+                >
+                  <ha-svg-icon
+                    slot="icon"
+                    .path=${mdiTuneVariant}
+                  ></ha-svg-icon>
+                </ha-assist-chip>
+                ${
+                  filterCount > 0
+                    ? html`<div class="badge">${filterCount}</div>`
+                    : nothing
+                }
+              </div>`
+            : nothing
+        }
         <ha-date-range-picker
           chip
           .startDate=${this._time.range[0]}
@@ -173,7 +176,7 @@ export class HaPanelLogbook extends LitElement {
     `;
   }
 
-  private _renderMain() {
+  private _renderMain(targetCount: number, filterCount: number) {
     // A selection is active when targets and/or filters are set. Only then does
     // an empty result mean "nothing matched your narrowing" (with a CTA to
     // adjust it); with no selection we simply show the full activity feed.
@@ -191,25 +194,28 @@ export class HaPanelLogbook extends LitElement {
               )
             : nothing
         }
-        ${
-          showNoResults
-            ? this._renderEmptyState(
-                this.hass.localize("ui.panel.logbook.no_results_title"),
-                this.hass.localize("ui.panel.logbook.no_results"),
-                this.hass.localize("ui.panel.logbook.select_sources")
-              )
-            : nothing
-        }
-        <ha-logbook
-          class=${showNoResults ? "log hidden" : "log"}
-          .hass=${this.hass}
-          .time=${this._time}
-          .entityIds=${this._getEntityIds()}
-          .narrow=${this.narrow}
-          show-cause
-          virtualize
-          @logbook-loaded=${this._logbookLoaded}
-        ></ha-logbook>
+        <div class="content-column">
+          ${this._renderToolbar(targetCount, filterCount)}
+          ${
+            showNoResults
+              ? this._renderEmptyState(
+                  this.hass.localize("ui.panel.logbook.no_results_title"),
+                  this.hass.localize("ui.panel.logbook.no_results"),
+                  this.hass.localize("ui.panel.logbook.select_sources")
+                )
+              : nothing
+          }
+          <ha-logbook
+            class=${showNoResults ? "log hidden" : "log"}
+            .hass=${this.hass}
+            .time=${this._time}
+            .entityIds=${this._getEntityIds()}
+            .narrow=${this.narrow}
+            show-cause
+            virtualize
+            @logbook-loaded=${this._logbookLoaded}
+          ></ha-logbook>
+        </div>
       </div>
     `;
   }
@@ -245,16 +251,19 @@ export class HaPanelLogbook extends LitElement {
 
   private _renderSourcesPane(targetCount: number, filterCount: number) {
     const sourceCount = targetCount + filterCount;
+    const sourcesLabel =
+      targetCount > 0
+        ? `${this.hass.localize("ui.panel.logbook.sources")}; ${this._getEntityIds()?.length ?? 0}`
+        : this.hass.localize("ui.panel.logbook.sources");
     return html`<div class="pane">
       <div class="table-header">
-        <ha-icon-button
-          .path=${mdiClose}
+        <ha-assist-chip
+          active
+          .label=${sourcesLabel}
           @click=${this._toggleSources}
-          .label=${this.hass.localize("ui.common.close")}
-        ></ha-icon-button>
-        <span class="pane-title"
-          >${this.hass.localize("ui.panel.logbook.sources")}</span
         >
+          <ha-svg-icon slot="icon" .path=${mdiTuneVariant}></ha-svg-icon>
+        </ha-assist-chip>
         ${
           sourceCount > 0
             ? html`<ha-icon-button
@@ -587,6 +596,7 @@ export class HaPanelLogbook extends LitElement {
           overflow: hidden;
         }
 
+        /* Toolbar lives in the content column so it shifts with the pane. */
         .toolbar {
           display: flex;
           align-items: center;
@@ -644,6 +654,13 @@ export class HaPanelLogbook extends LitElement {
           display: flex;
           flex: 1;
           min-height: 0;
+        }
+
+        .content-column {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          min-width: 0;
         }
 
         .log {
@@ -714,18 +731,12 @@ export class HaPanelLogbook extends LitElement {
         .table-header {
           display: flex;
           align-items: center;
+          justify-content: space-between;
           gap: var(--ha-space-2);
           height: 56px;
           flex-shrink: 0;
-          padding: 0 4px;
+          padding: 0 16px;
           border-bottom: 1px solid var(--divider-color);
-        }
-
-        .pane-title {
-          flex: 1;
-          min-width: 0;
-          font-size: var(--ha-font-size-l);
-          font-weight: var(--ha-font-weight-medium);
         }
 
         .pane-content {
