@@ -142,20 +142,23 @@ export class HaPanelLogbook extends LitElement {
   }
 
   private _renderToolbar(targetCount: number, filterCount: number) {
-    const sourceCount = targetCount + filterCount;
+    const sourcesLabel =
+      targetCount > 0
+        ? `${this.hass.localize("ui.panel.logbook.sources")}; ${this._getEntityIds()?.length ?? 0}`
+        : this.hass.localize("ui.panel.logbook.sources");
     return html`
       <div class="toolbar">
         <div class="relative">
           <ha-assist-chip
             .active=${this._showSources}
-            .label=${this.hass.localize("ui.panel.logbook.sources")}
+            .label=${sourcesLabel}
             @click=${this._toggleSources}
           >
             <ha-svg-icon slot="icon" .path=${mdiTuneVariant}></ha-svg-icon>
           </ha-assist-chip>
           ${
-            sourceCount > 0
-              ? html`<div class="badge">${sourceCount}</div>`
+            filterCount > 0
+              ? html`<div class="badge">${filterCount}</div>`
               : nothing
           }
         </div>

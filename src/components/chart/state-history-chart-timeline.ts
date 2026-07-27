@@ -73,7 +73,7 @@ export class StateHistoryChartTimeline extends LitElement {
       <ha-chart-base
         .hass=${this.hass}
         .options=${this._chartOptions}
-        .height=${`${this.data.length * (this.insideLabels ? 54 : 30) + 30}px`}
+        .height=${`${this.data.length * (this.insideLabels ? 64 : 38) + 30}px`}
         .data=${this._chartData as HaECSeries}
         small-controls
         @chart-click=${this._handleChartClick}

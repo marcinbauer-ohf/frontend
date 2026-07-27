@@ -148,6 +148,10 @@ class HaPanelHistory extends LitElement {
     // Something is picked (targets and/or filters), even if it resolves to no
     // entities — that still means the user is actively narrowing.
     const hasSelection = sourceCount > 0;
+    const sourcesLabel =
+      targetCount > 0
+        ? `${this.hass.localize("ui.panel.history.sources")}; ${this._getEntityIds().length}`
+        : this.hass.localize("ui.panel.history.sources");
     const hasResults =
       this._getEntityIds().length > 0 &&
       !!this._mungedStateHistory &&
@@ -160,14 +164,14 @@ class HaPanelHistory extends LitElement {
           <ha-assist-chip
             .active=${this._showSources}
             .disabled=${this._isLoading}
-            .label=${this.hass.localize("ui.panel.history.sources")}
+            .label=${sourcesLabel}
             @click=${this._toggleSources}
           >
             <ha-svg-icon slot="icon" .path=${mdiTuneVariant}></ha-svg-icon>
           </ha-assist-chip>
           ${
-            sourceCount > 0
-              ? html`<div class="badge">${sourceCount}</div>`
+            filterCount > 0
+              ? html`<div class="badge">${filterCount}</div>`
               : nothing
           }
         </div>
