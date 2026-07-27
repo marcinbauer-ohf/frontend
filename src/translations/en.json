@@ -11537,7 +11537,7 @@
         "no_results_title": "No results found",
         "no_results": "No history for the current selection. Try changing the targets, filters, or time range.",
         "no_targets": "No targets selected",
-        "sources": "Filters",
+        "sources": "Sources",
         "device_class": "Device class",
         "add_all": "Add all entities",
         "download_data": "Download data",
@@ -11547,7 +11547,7 @@
         "error_no_data": "You need to select some data sources first."
       },
       "logbook": {
-        "sources": "Filters",
+        "sources": "Sources",
         "device_class": "Device class",
         "start_search": "Select areas, devices, entities or labels to see their activity",
         "select_sources": "Add targets",

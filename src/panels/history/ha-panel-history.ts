@@ -2,9 +2,9 @@ import {
   mdiChartBoxOutline,
   mdiDotsVertical,
   mdiDownload,
-  mdiFilterVariant,
   mdiFilterVariantRemove,
   mdiImagePlus,
+  mdiTuneVariant,
 } from "@mdi/js";
 import { differenceInHours } from "date-fns";
 import type {
@@ -169,7 +169,7 @@ class HaPanelHistory extends LitElement {
                 >
                   <ha-svg-icon
                     slot="icon"
-                    .path=${mdiFilterVariant}
+                    .path=${mdiTuneVariant}
                   ></ha-svg-icon>
                 </ha-assist-chip>
                 ${
@@ -316,7 +316,7 @@ class HaPanelHistory extends LitElement {
             .label=${sourcesLabel}
             @click=${this._toggleSources}
           >
-            <ha-svg-icon slot="icon" .path=${mdiFilterVariant}></ha-svg-icon>
+            <ha-svg-icon slot="icon" .path=${mdiTuneVariant}></ha-svg-icon>
           </ha-assist-chip>
           ${
             filterCount > 0

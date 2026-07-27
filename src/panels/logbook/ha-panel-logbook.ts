@@ -1,7 +1,7 @@
 import {
-  mdiFilterVariant,
   mdiFilterVariantRemove,
   mdiTextBoxOutline,
+  mdiTuneVariant,
 } from "@mdi/js";
 import type { HassServiceTarget } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
@@ -154,7 +154,7 @@ export class HaPanelLogbook extends LitElement {
                 >
                   <ha-svg-icon
                     slot="icon"
-                    .path=${mdiFilterVariant}
+                    .path=${mdiTuneVariant}
                   ></ha-svg-icon>
                 </ha-assist-chip>
                 ${
@@ -263,7 +263,7 @@ export class HaPanelLogbook extends LitElement {
             .label=${sourcesLabel}
             @click=${this._toggleSources}
           >
-            <ha-svg-icon slot="icon" .path=${mdiFilterVariant}></ha-svg-icon>
+            <ha-svg-icon slot="icon" .path=${mdiTuneVariant}></ha-svg-icon>
           </ha-assist-chip>
           ${
             filterCount > 0
