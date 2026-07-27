@@ -2,9 +2,9 @@ import {
   mdiChartBoxOutline,
   mdiDotsVertical,
   mdiDownload,
+  mdiFilterVariant,
   mdiFilterVariantRemove,
   mdiImagePlus,
-  mdiTuneVariant,
 } from "@mdi/js";
 import { differenceInHours } from "date-fns";
 import type {
@@ -169,7 +169,7 @@ class HaPanelHistory extends LitElement {
                 >
                   <ha-svg-icon
                     slot="icon"
-                    .path=${mdiTuneVariant}
+                    .path=${mdiFilterVariant}
                   ></ha-svg-icon>
                 </ha-assist-chip>
                 ${
@@ -203,35 +203,35 @@ class HaPanelHistory extends LitElement {
           ${toolbar}
           <div class="results-content ha-scrollbar">
             ${
-            this._isLoading
-              ? html`<div class="progress-wrapper">
-                  <ha-spinner></ha-spinner>
-                </div>`
-              : !hasSelection
-                ? this._renderEmptyState(
-                    this.hass.localize("ui.panel.history.start_search_title"),
-                    this.hass.localize("ui.panel.history.start_search"),
-                    this.hass.localize("ui.panel.history.select_sources")
-                  )
-                : !hasResults
+              this._isLoading
+                ? html`<div class="progress-wrapper">
+                    <ha-spinner></ha-spinner>
+                  </div>`
+                : !hasSelection
                   ? this._renderEmptyState(
-                      this.hass.localize("ui.panel.history.no_results_title"),
-                      this.hass.localize("ui.panel.history.no_results"),
+                      this.hass.localize("ui.panel.history.start_search_title"),
+                      this.hass.localize("ui.panel.history.start_search"),
                       this.hass.localize("ui.panel.history.select_sources")
                     )
-                  : html`
-                      <state-history-charts
-                        .hass=${this.hass}
-                        .historyData=${this._mungedStateHistory}
-                        .startTime=${this._startDate}
-                        .endTime=${this._endDate}
-                        .narrow=${this.narrow}
-                        inside-labels
-                        sync-charts
-                      >
-                      </state-history-charts>
-                    `
-          }
+                  : !hasResults
+                    ? this._renderEmptyState(
+                        this.hass.localize("ui.panel.history.no_results_title"),
+                        this.hass.localize("ui.panel.history.no_results"),
+                        this.hass.localize("ui.panel.history.select_sources")
+                      )
+                    : html`
+                        <state-history-charts
+                          .hass=${this.hass}
+                          .historyData=${this._mungedStateHistory}
+                          .startTime=${this._startDate}
+                          .endTime=${this._endDate}
+                          .narrow=${this.narrow}
+                          inside-labels
+                          sync-charts
+                        >
+                        </state-history-charts>
+                      `
+            }
           </div>
         </div>
       </div>
@@ -309,14 +309,21 @@ class HaPanelHistory extends LitElement {
     const sourceCount = targetCount + filterCount;
     return html`<div class="pane">
       <div class="table-header">
-        <ha-assist-chip
-          active
-          .disabled=${this._isLoading}
-          .label=${sourcesLabel}
-          @click=${this._toggleSources}
-        >
-          <ha-svg-icon slot="icon" .path=${mdiTuneVariant}></ha-svg-icon>
-        </ha-assist-chip>
+        <div class="relative">
+          <ha-assist-chip
+            active
+            .disabled=${this._isLoading}
+            .label=${sourcesLabel}
+            @click=${this._toggleSources}
+          >
+            <ha-svg-icon slot="icon" .path=${mdiFilterVariant}></ha-svg-icon>
+          </ha-assist-chip>
+          ${
+            filterCount > 0
+              ? html`<div class="badge">${filterCount}</div>`
+              : nothing
+          }
+        </div>
         ${
           sourceCount > 0
             ? html`<ha-icon-button
