@@ -141,10 +141,13 @@ export class AssistPipelineDetailConversation extends LitElement {
                   .label=${this.hass.localize(
                     "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.instructions"
                   )}
-                  .placeholder=${this.hass.localize(
-                    "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.instructions_empty"
-                  )}
-                  .value=${this._instructions() ?? ""}
+                  .placeholder=${
+                    this._prompt ||
+                    this.hass.localize(
+                      "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.instructions_empty"
+                    )
+                  }
+                  .value=${this._instructionsOverride() ?? ""}
                   @change=${this._instructionsChanged}
                 ></ha-textarea>
               </div>`
@@ -154,8 +157,12 @@ export class AssistPipelineDetailConversation extends LitElement {
     `;
   }
 
-  /** Effective instructions: per-agent override, else the agent's prompt. */
-  private _instructions(): string | undefined {
+  /**
+   * The user's per-agent instructions override, if any. The agent's own prompt
+   * is shown as placeholder (ghost) text rather than as the field value, so it
+   * is not returned here.
+   */
+  private _instructionsOverride(): string | undefined {
     if (this._localInstructionsOverride !== undefined) {
       return this._localInstructionsOverride;
     }
@@ -163,20 +170,19 @@ export class AssistPipelineDetailConversation extends LitElement {
     if (id && id in this._instructionsOverrides) {
       return this._instructionsOverrides[id];
     }
-    return this._prompt ?? undefined;
+    return undefined;
   }
 
   private _instructionsChanged(ev: Event) {
     const value = (ev.target as HaTextArea).value;
-    this._localInstructionsOverride = value;
+    this._localInstructionsOverride = value || undefined;
     const id = (this.data as AssistPipeline | undefined)?.id;
     if (!id) {
       return;
     }
-    if (!value || value === (this._prompt ?? "")) {
-      // Matches the agent's own instructions (or cleared) — drop the override
-      // and fall back to the agent's default.
-      this._localInstructionsOverride = undefined;
+    if (!value) {
+      // Cleared — drop the override so the agent's own prompt (ghost text)
+      // applies again.
       const { [id]: _removed, ...rest } = this._instructionsOverrides;
       this._instructionsOverrides = rest;
       return;

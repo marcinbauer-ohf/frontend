@@ -1,4 +1,10 @@
-import { mdiEyeOutline, mdiToolboxOutline } from "@mdi/js";
+import {
+  mdiEarth,
+  mdiEyeOutline,
+  mdiHammerWrench,
+  mdiShieldCheckOutline,
+} from "@mdi/js";
+import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { storage } from "../../../../common/decorators/storage";
@@ -15,9 +21,13 @@ import {
   type AssistAgentControlOverride,
 } from "../../../../data/assist_agent_control_override";
 import type { AssistPipeline } from "../../../../data/assist_pipeline";
-import { assistAgentControlsHome } from "../../../../data/assist_pipeline";
+import {
+  assistAgentControlsHome,
+  assistAgentIsCloud,
+} from "../../../../data/assist_pipeline";
 import type { ExposeEntitySettings } from "../../../../data/expose";
 import { listExposedEntities } from "../../../../data/expose";
+import { fetchIntegrationManifest } from "../../../../data/integration";
 import type { HomeAssistant } from "../../../../types";
 
 const HOME_ASSISTANT_AGENT = "conversation.home_assistant";
@@ -32,6 +42,9 @@ export class AssistPipelineDetailAccess extends LitElement {
 
   @state() private _localControlOverride?: boolean;
 
+  /** iot_class of the agent's integration; undefined = not loaded yet. */
+  @state() private _agentIotClass?: string | null;
+
   @state()
   @storage({
     key: ASSIST_AGENT_CONTROL_OVERRIDE_STORAGE_KEY,
@@ -42,6 +55,35 @@ export class AssistPipelineDetailAccess extends LitElement {
 
   protected firstUpdated() {
     this._fetchExposedCount();
+  }
+
+  protected willUpdate(changedProps: PropertyValues<this>) {
+    if (
+      changedProps.has("data") &&
+      this.data?.conversation_engine !==
+        (changedProps.get("data") as Partial<AssistPipeline> | undefined)
+          ?.conversation_engine
+    ) {
+      this._fetchAgentIotClass();
+    }
+  }
+
+  private async _fetchAgentIotClass() {
+    this._agentIotClass = undefined;
+    const engine = this.data?.conversation_engine;
+    const domain = engine ? this.hass.entities[engine]?.platform : undefined;
+    if (!domain) {
+      this._agentIotClass = null;
+      return;
+    }
+    try {
+      const manifest = await fetchIntegrationManifest(this.hass, domain);
+      if (this.data?.conversation_engine === engine) {
+        this._agentIotClass = manifest.iot_class ?? null;
+      }
+    } catch (_err) {
+      this._agentIotClass = null;
+    }
   }
 
   private async _fetchExposedCount() {
@@ -59,9 +101,12 @@ export class AssistPipelineDetailAccess extends LitElement {
       return nothing;
     }
 
-    const controlsHome = this._controlsHome();
-    const showLocalToggle =
-      this.data.conversation_engine !== HOME_ASSISTANT_AGENT;
+    // The built-in agent executes intents directly; its control access can't
+    // be turned off, so the switch is locked on.
+    const isBuiltInAgent =
+      this.data.conversation_engine === HOME_ASSISTANT_AGENT;
+    const controlsHome = isBuiltInAgent || this._controlsHome();
+    const showLocalToggle = !isBuiltInAgent;
 
     return html`
       <div class="section">
@@ -79,7 +124,7 @@ export class AssistPipelineDetailAccess extends LitElement {
         </div>
         <ha-md-list>
           <ha-md-list-item>
-            <ha-svg-icon slot="start" .path=${mdiToolboxOutline}></ha-svg-icon>
+            <ha-svg-icon slot="start" .path=${mdiHammerWrench}></ha-svg-icon>
             <span slot="headline">
               ${this.hass.localize(
                 "ui.panel.config.voice_assistants.assistants.pipeline.controls_home"
@@ -95,9 +140,38 @@ export class AssistPipelineDetailAccess extends LitElement {
             <ha-switch
               slot="end"
               .checked=${controlsHome}
+              .disabled=${isBuiltInAgent}
               @change=${this._controlChanged}
             ></ha-switch>
           </ha-md-list-item>
+          ${
+            this._agentIotClass !== undefined
+              ? html`<ha-md-list-item>
+                  <ha-svg-icon
+                    slot="start"
+                    .path=${
+                      assistAgentIsCloud(this._agentIotClass)
+                        ? mdiEarth
+                        : mdiShieldCheckOutline
+                    }
+                  ></ha-svg-icon>
+                  <span slot="headline">
+                    ${this.hass.localize(
+                      assistAgentIsCloud(this._agentIotClass)
+                        ? "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_cloud"
+                        : "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_local"
+                    )}
+                  </span>
+                  <span slot="supporting-text">
+                    ${this.hass.localize(
+                      assistAgentIsCloud(this._agentIotClass)
+                        ? "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_cloud_description"
+                        : "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_local_description"
+                    )}
+                  </span>
+                </ha-md-list-item>`
+              : nothing
+          }
           <ha-md-list-item type="button" @click=${this._openExposed}>
             <ha-svg-icon slot="start" .path=${mdiEyeOutline}></ha-svg-icon>
             <span slot="headline">
@@ -164,6 +238,12 @@ export class AssistPipelineDetailAccess extends LitElement {
     if (id) {
       this._controlOverrides = { ...this._controlOverrides, [id]: checked };
     }
+    // Surface the change to the dialog so the form registers as dirty and the
+    // Update button becomes available. `control_home` is a client-only field
+    // (the override lives in localStorage) and is ignored when saving.
+    fireEvent(this, "value-changed", {
+      value: { ...this.data, control_home: checked },
+    });
   }
 
   private _preferLocalChanged(ev: Event) {

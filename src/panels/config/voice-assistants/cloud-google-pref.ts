@@ -83,12 +83,6 @@ export class CloudGooglePref extends LitElement {
             <span class="subtitle"
               >${this.hass.localize(
                 "ui.panel.config.cloud.account.google.company"
-              )}
-              ·
-              ${this.hass.localize(
-                google_enabled
-                  ? "ui.panel.config.voice_assistants.assistants.status_enabled"
-                  : "ui.panel.config.voice_assistants.assistants.status_disabled"
               )}</span
             >
           </span>

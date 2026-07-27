@@ -29,7 +29,12 @@ import "./debug/assist-render-pipeline-events";
 import type { VoiceAssistantPipelineDetailsDialogParams } from "./show-dialog-voice-assistant-pipeline-detail";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
 
-type PipelineDialogData = Partial<AssistPipeline> & { avatar?: string | null };
+type PipelineDialogData = Partial<AssistPipeline> & {
+  avatar?: string | null;
+  // Client-only flag mirroring the "Control Home Assistant" override so the
+  // dialog tracks it as a change; not part of the saved pipeline params.
+  control_home?: boolean;
+};
 
 @customElement("dialog-voice-assistant-pipeline-detail")
 export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<PipelineDialogData>()(
@@ -206,7 +211,7 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
           <assist-pipeline-detail-access
             .hass=${this.hass}
             .data=${this._data}
-            keys="prefer_local_intents"
+            keys="prefer_local_intents,control_home"
             @value-changed=${this._valueChanged}
           ></assist-pipeline-detail-access>
           ${

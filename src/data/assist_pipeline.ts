@@ -24,6 +24,17 @@ export const assistAgentControlsHome = (
     : true;
 };
 
+/**
+ * Whether a conversation agent processes requests in the cloud (sends data
+ * off-device) rather than locally. Derived from the agent integration's
+ * `iot_class` manifest field, following the same `cloud_*` convention used
+ * across the integrations UI. Agents whose integration is unknown or has no
+ * cloud iot_class (built-in intents, a local LLM) are treated as local.
+ */
+export const assistAgentIsCloud = (
+  iotClass: string | undefined | null
+): boolean => !!iotClass?.startsWith("cloud_");
+
 export interface AssistPipelinePreferences {
   enabled: boolean;
 }

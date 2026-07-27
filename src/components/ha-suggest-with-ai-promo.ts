@@ -9,6 +9,7 @@ import { navigate } from "../common/navigate";
 import type { AITaskPreferences } from "../data/ai_task";
 import { fetchAITaskPreferences } from "../data/ai_task";
 import type { HomeAssistant } from "../types";
+import "./ha-alert";
 import "./ha-button";
 import "./ha-svg-icon";
 
@@ -63,25 +64,22 @@ export class HaSuggestWithAIPromo extends LitElement {
     }
 
     return html`
-      <div class="promo">
-        <ha-svg-icon .path=${mdiStarFourPoints}></ha-svg-icon>
-        <div class="content">
-          <span class="title">
-            ${this.hass.localize("ui.components.suggest_with_ai.promo.title")}
-          </span>
-          <span class="text">
-            ${this.hass.localize("ui.components.suggest_with_ai.promo.text")}
-          </span>
-          <div class="actions">
-            <ha-button appearance="plain" size="s" @click=${this._later}>
-              ${this.hass.localize("ui.components.suggest_with_ai.promo.later")}
-            </ha-button>
-            <ha-button size="s" @click=${this._setup}>
-              ${this.hass.localize("ui.components.suggest_with_ai.promo.setup")}
-            </ha-button>
-          </div>
+      <ha-alert
+        .title=${this.hass.localize(
+          "ui.components.suggest_with_ai.promo.title"
+        )}
+      >
+        <ha-svg-icon slot="icon" .path=${mdiStarFourPoints}></ha-svg-icon>
+        ${this.hass.localize("ui.components.suggest_with_ai.promo.text")}
+        <div class="actions">
+          <ha-button appearance="plain" size="s" @click=${this._later}>
+            ${this.hass.localize("ui.components.suggest_with_ai.promo.later")}
+          </ha-button>
+          <ha-button size="s" @click=${this._setup}>
+            ${this.hass.localize("ui.components.suggest_with_ai.promo.setup")}
+          </ha-button>
         </div>
-      </div>
+      </ha-alert>
     `;
   }
 
@@ -95,32 +93,6 @@ export class HaSuggestWithAIPromo extends LitElement {
   }
 
   static styles = css`
-    .promo {
-      display: flex;
-      gap: var(--ha-space-3);
-      padding: var(--ha-space-4);
-      border-radius: var(--ha-border-radius-lg);
-      background-color: var(
-        --ha-color-fill-primary-quiet-resting,
-        rgba(var(--rgb-primary-color), 0.08)
-      );
-    }
-    ha-svg-icon {
-      flex-shrink: 0;
-      margin-top: 2px;
-      color: var(--ha-color-primary-60, var(--primary-color));
-    }
-    .content {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-    }
-    .title {
-      font-weight: var(--ha-font-weight-bold);
-    }
-    .text {
-      color: var(--secondary-text-color);
-    }
     .actions {
       display: flex;
       justify-content: flex-end;

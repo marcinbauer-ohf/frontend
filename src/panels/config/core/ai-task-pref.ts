@@ -98,6 +98,9 @@ export class AITaskPref extends LitElement {
           }
           .value=${this._prefs?.gen_data_entity_id}
           .entityFilter=${filterGenData}
+          .addIntegrationLabel=${this.hass.localize(
+            "ui.panel.config.ai_task.add_integration"
+          )}
           @value-changed=${this._handlePrefChange}
         ></ha-entity-picker>
       </ha-settings-row>
@@ -118,6 +121,9 @@ export class AITaskPref extends LitElement {
           }
           .value=${this._prefs?.gen_image_entity_id}
           .entityFilter=${filterGenImage}
+          .addIntegrationLabel=${this.hass.localize(
+            "ui.panel.config.ai_task.add_integration"
+          )}
           @value-changed=${this._handlePrefChange}
         ></ha-entity-picker>
       </ha-settings-row>

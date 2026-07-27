@@ -31,6 +31,7 @@ import {
   type HelperDomain,
 } from "../../panels/config/helpers/const";
 import { showHelperDetailDialog } from "../../panels/config/helpers/show-dialog-helper-detail";
+import { showAddIntegrationDialog } from "../../panels/config/integrations/show-add-integration-dialog";
 import type { HomeAssistant } from "../../types";
 import "../ha-combo-box-item";
 import "../ha-generic-picker";
@@ -42,6 +43,7 @@ import "../ha-svg-icon";
 import "./state-badge";
 
 const CREATE_ID = "___create-new-entity___";
+const ADD_INTEGRATION_ID = "___add-integration___";
 
 @customElement("ha-entity-picker")
 export class HaEntityPicker extends LitElement {
@@ -86,6 +88,14 @@ export class HaEntityPicker extends LitElement {
   public searchLabel?: string;
 
   @property({ attribute: false }) public createDomains?: string[];
+
+  /**
+   * When set, appends an "Add integration" action row (with this label) to
+   * the end of the list that opens the add-integration dialog instead of
+   * selecting a value.
+   */
+  @property({ attribute: "add-integration-label" })
+  public addIntegrationLabel?: string;
 
   /**
    * Show entities from specific domains.
@@ -319,8 +329,18 @@ export class HaEntityPicker extends LitElement {
     `;
   };
 
-  private _getAdditionalItems = () =>
-    this._getCreateItems(this._i18n.localize, this.createDomains);
+  private _getAdditionalItems = () => [
+    ...this._getCreateItems(this._i18n.localize, this.createDomains),
+    ...(this.addIntegrationLabel
+      ? [
+          {
+            id: ADD_INTEGRATION_ID,
+            primary: this.addIntegrationLabel,
+            icon_path: mdiPlus,
+          } satisfies EntityComboBoxItem,
+        ]
+      : []),
+  ];
 
   private _getCreateItems = memoizeOne(
     (localize: LocalizeFunc, createDomains: this["createDomains"]) => {
@@ -511,6 +531,11 @@ export class HaEntityPicker extends LitElement {
 
     if (!value) {
       this._setValue(undefined);
+      return;
+    }
+
+    if (value === ADD_INTEGRATION_ID) {
+      showAddIntegrationDialog(this, { navigateToResult: false });
       return;
     }
 

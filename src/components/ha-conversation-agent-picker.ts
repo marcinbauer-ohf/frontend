@@ -1,13 +1,20 @@
-import { mdiPlus } from "@mdi/js";
+import { mdiCog, mdiPlus } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { fireEvent } from "../common/dom/fire_event";
 import { debounce } from "../common/util/debounce";
+import type { ConfigEntry, SubEntry } from "../data/config_entries";
+import { getConfigEntry, getSubEntries } from "../data/config_entries";
 import type { Agent } from "../data/conversation";
 import { listAgents } from "../data/conversation";
+import { getExtendedEntityRegistryEntry } from "../data/entity/entity_registry";
+import { fetchIntegrationManifest } from "../data/integration";
+import { showOptionsFlowDialog } from "../dialogs/config-flow/show-dialog-options-flow";
+import { showSubConfigFlowDialog } from "../dialogs/config-flow/show-dialog-sub-config-flow";
 import { showAddIntegrationDialog } from "../panels/config/integrations/show-add-integration-dialog";
 import type { HomeAssistant } from "../types";
+import "./ha-icon-button";
 import "./ha-select";
 import type { HaSelectOption, HaSelectSelectEvent } from "./ha-select";
 
@@ -32,6 +39,10 @@ export class HaConversationAgentPicker extends LitElement {
   @property({ type: Boolean }) public required = false;
 
   @state() _agents?: Agent[];
+
+  @state() private _configEntry?: ConfigEntry;
+
+  @state() private _subConfigEntry?: SubEntry;
 
   protected render() {
     if (!this._agents) {
@@ -87,7 +98,19 @@ export class HaConversationAgentPicker extends LitElement {
         .disabled=${this.disabled}
         @selected=${this._changed}
         .options=${options}
-      ></ha-select>
+      ></ha-select
+      >${
+        (this._subConfigEntry &&
+          this._configEntry?.supported_subentry_types[
+            this._subConfigEntry.subentry_type
+          ]?.supports_reconfigure) ||
+        this._configEntry?.supports_options
+          ? html`<ha-icon-button
+              .path=${mdiCog}
+              @click=${this._openOptionsFlow}
+            ></ha-icon-button>`
+          : ""
+      }
     `;
   }
 
@@ -98,6 +121,74 @@ export class HaConversationAgentPicker extends LitElement {
     } else if (changedProperties.has("language")) {
       this._debouncedUpdateAgents();
     }
+
+    if (changedProperties.has("value")) {
+      this._maybeFetchConfigEntry();
+    }
+  }
+
+  private async _maybeFetchConfigEntry() {
+    if (!this.value || !(this.value in this.hass.entities)) {
+      this._configEntry = undefined;
+      return;
+    }
+    try {
+      const regEntry = await getExtendedEntityRegistryEntry(
+        this.hass,
+        this.value
+      );
+
+      if (!regEntry.config_entry_id) {
+        this._configEntry = undefined;
+        return;
+      }
+
+      this._configEntry = (
+        await getConfigEntry(this.hass, regEntry.config_entry_id)
+      ).config_entry;
+
+      if (!regEntry.config_subentry_id) {
+        this._subConfigEntry = undefined;
+      } else {
+        this._subConfigEntry = (
+          await getSubEntries(this.hass, regEntry.config_entry_id)
+        ).find((entry) => entry.subentry_id === regEntry.config_subentry_id);
+      }
+    } catch (_err) {
+      this._configEntry = undefined;
+      this._subConfigEntry = undefined;
+    }
+  }
+
+  private async _openOptionsFlow() {
+    if (!this._configEntry) {
+      return;
+    }
+
+    if (
+      this._subConfigEntry &&
+      this._configEntry.supported_subentry_types[
+        this._subConfigEntry.subentry_type
+      ]?.supports_reconfigure
+    ) {
+      showSubConfigFlowDialog(
+        this,
+        this._configEntry,
+        this._subConfigEntry.subentry_type,
+        {
+          startFlowHandler: this._configEntry.entry_id,
+          subEntryId: this._subConfigEntry.subentry_id,
+        }
+      );
+      return;
+    }
+
+    showOptionsFlowDialog(this, this._configEntry, {
+      manifest: await fetchIntegrationManifest(
+        this.hass,
+        this._configEntry.domain
+      ),
+    });
   }
 
   private _debouncedUpdateAgents = debounce(() => this._updateAgents(), 500);
@@ -171,6 +262,9 @@ export class HaConversationAgentPicker extends LitElement {
     }
     ha-select {
       width: 100%;
+    }
+    ha-icon-button {
+      color: var(--secondary-text-color);
     }
   `;
 

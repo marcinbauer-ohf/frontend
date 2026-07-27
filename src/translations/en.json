@@ -1495,7 +1495,7 @@
           "title": "Name and tag faster",
           "text": "Set up AI suggestions to help you create meaningful names and descriptions.",
           "later": "Later",
-          "setup": "Set up AI"
+          "setup": "Set up"
         }
       },
       "navigation-picker": {
@@ -1665,8 +1665,14 @@
         "start_listening": "Start listening",
         "new_conversation": "New conversation",
         "open_settings": "Settings",
-        "disclaimer": "This assistant can read and write to your Home Assistant and does not send any data.",
-        "disclaimer_no_control": "This assistant can’t control your home and does not send any data.",
+        "disclaimer": "This assistant can read and write to your Home Assistant.",
+        "disclaimer_no_control": "This assistant can’t control your home.",
+        "disclaimer_data_local": "Your requests are processed locally and no data is sent to the internet.",
+        "disclaimer_data_cloud": "Your requests are sent to the internet for processing.",
+        "control_summary": "Can control your home.",
+        "control_summary_no": "Can’t control your home.",
+        "data_summary_local": "No data leaves your home.",
+        "data_summary_cloud": "Requests are sent to the internet.",
         "learn_more": "Learn more",
         "history": {
           "title": "Past conversations",
@@ -2924,6 +2930,7 @@
         "ai_task": {
           "header": "AI suggestions",
           "enable_suggestions": "Enable AI suggestions",
+          "add_integration": "Add AI integration",
           "description": "Home Assistant can use generative AI to help you with tasks. Look for the button with the {button} icon throughout Home Assistant to get suggestions. Select an AI task entity to use this feature.",
           "gen_data_header": "Data generation tasks",
           "gen_data_description": "Suggest automation names.",
@@ -4851,8 +4858,10 @@
               "agents": "Agents",
               "agents_intro_title": "Meet agents",
               "agents_intro": "Assist now supports multiple agents. Each agent has its own conversation agent, voice, and access to your home. Give them an avatar and custom instructions, and switch between them in the Assist chat.",
-              "controls_home": "Can control Home Assistant",
+              "controls_home": "Control Home Assistant",
               "cannot_control_home": "Can’t control Home Assistant",
+              "data_local": "Runs locally — no data sent to the internet",
+              "data_cloud": "Sends your requests to the internet",
               "no_agents": "You don’t have any agents yet",
               "add_assistant": "Create agent",
               "expose_new_entities": "Expose new entities automatically",
@@ -4881,11 +4890,15 @@
                 "set_as_preferred": "Set as preferred",
                 "add_streaming_wake_word": "Add streaming wake word",
                 "access": {
-                  "control_on": "Can read and control the entities you have exposed",
-                  "control_off": "Can only read the entities you have exposed — can’t control them",
+                  "control_on": "Enabled",
+                  "control_off": "Disabled",
                   "control_hint": "Change control access in the conversation agent’s settings.",
-                  "can_read": "Can read or control {count} {count, plural,\n  one {entity}\n  other {entities}\n}",
+                  "can_read": "Read or control {count} {count, plural,\n  one {entity}\n  other {entities}\n}",
                   "exposed_shared": "Shared by all agents",
+                  "internet_cloud": "Access to the internet",
+                  "internet_cloud_description": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::data_cloud%]",
+                  "internet_local": "Runs locally",
+                  "internet_local_description": "No data is sent to the internet",
                   "instructions": "Instructions",
                   "instructions_empty": "No custom instructions"
                 },

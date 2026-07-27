@@ -4,9 +4,11 @@ import {
   mdiCommentProcessingOutline,
   mdiContentDuplicate,
   mdiDotsVertical,
+  mdiEarth,
+  mdiHammerWrench,
   mdiPlus,
+  mdiShieldCheckOutline,
   mdiStar,
-  mdiToolboxOutline,
   mdiTrashCan,
 } from "@mdi/js";
 import type { PropertyValues } from "lit";
@@ -39,6 +41,7 @@ import { brandsUrl } from "../../../util/brands-url";
 import type { AssistPipeline } from "../../../data/assist_pipeline";
 import {
   assistAgentControlsHome,
+  assistAgentIsCloud,
   createAssistPipeline,
   deleteAssistPipeline,
   listAssistPipelines,
@@ -46,6 +49,7 @@ import {
   setAssistPipelinePreferred,
   updateAssistPipeline,
 } from "../../../data/assist_pipeline";
+import { fetchIntegrationManifests } from "../../../data/integration";
 import type { CloudStatus } from "../../../data/cloud";
 import type { ExposeEntitySettings } from "../../../data/expose";
 import {
@@ -56,6 +60,10 @@ import {
   ASSIST_AGENT_AVATARS_STORAGE_KEY,
   type AssistAgentAvatars,
 } from "../../../data/assist_agent_avatars";
+import {
+  ASSIST_AGENT_CONTROL_OVERRIDE_STORAGE_KEY,
+  type AssistAgentControlOverride,
+} from "../../../data/assist_agent_control_override";
 import {
   showAlertDialog,
   showConfirmationDialog,
@@ -88,6 +96,10 @@ export class AssistPref extends LitElement {
 
   @state() private _brokenAvatars = new Set<string>();
 
+  // Integration domain -> iot_class, used to show each agent's data-locality
+  // icon (cloud vs local). Loaded once the agents are known.
+  @state() private _iotClasses: Record<string, string | null> = {};
+
   @state() private _exposeNew?: boolean;
 
   @state()
@@ -97,6 +109,22 @@ export class AssistPref extends LitElement {
     subscribe: true,
   })
   private _agentsIntroDismissed = false;
+
+  @state()
+  @storage({
+    key: ASSIST_AGENT_CONTROL_OVERRIDE_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _controlOverrides: AssistAgentControlOverride = {};
+
+  /** Per-agent override first, else the agent entity's own capability. */
+  private _controlsHome(pipeline: AssistPipeline): boolean {
+    if (pipeline.id in this._controlOverrides) {
+      return this._controlOverrides[pipeline.id];
+    }
+    return assistAgentControlsHome(this.hass, pipeline);
+  }
 
   private _exposedEntitiesCount = memoizeOne(
     (exposedEntities: Record<string, ExposeEntitySettings>) =>
@@ -120,6 +148,7 @@ export class AssistPref extends LitElement {
     listAssistPipelines(this.hass).then((pipelines) => {
       this._pipelines = pipelines.pipelines;
       this._preferred = pipelines.preferred_pipeline;
+      this._loadAgentManifests(pipelines.pipelines);
     });
     getExposeNewEntities(this.hass, "conversation").then((value) => {
       this._exposeNew = value.expose_new;
@@ -129,6 +158,57 @@ export class AssistPref extends LitElement {
         computeDomain(entity.entity_id) === "assist_satellite" &&
         this.hass.states[entity.entity_id].state !== "unavailable"
     ).length;
+  }
+
+  // Fetch the iot_class of every agent's integration so each row can show a
+  // cloud/local data-locality icon.
+  private async _loadAgentManifests(pipelines: AssistPipeline[]) {
+    const domains = [
+      ...new Set(
+        pipelines
+          .map((pipeline) => this._agentDomain(pipeline))
+          .filter((domain): domain is string => !!domain)
+      ),
+    ];
+    if (!domains.length) {
+      return;
+    }
+    try {
+      const manifests = await fetchIntegrationManifests(this.hass, domains);
+      const iotClasses = { ...this._iotClasses };
+      for (const manifest of manifests) {
+        iotClasses[manifest.domain] = manifest.iot_class ?? null;
+      }
+      this._iotClasses = iotClasses;
+    } catch (_err) {
+      // Locality icon just won't render; not worth surfacing an error.
+    }
+  }
+
+  private _agentDomain(pipeline: AssistPipeline): string | undefined {
+    return this.hass.entities[pipeline.conversation_engine]?.platform;
+  }
+
+  // Cloud (data leaves the home) vs local, once the manifest is known.
+  private _renderAgentLocality(pipeline: AssistPipeline) {
+    const domain = this._agentDomain(pipeline);
+    if (!domain || !(domain in this._iotClasses)) {
+      return nothing;
+    }
+    const isCloud = assistAgentIsCloud(this._iotClasses[domain]);
+    const iconId = `agent-locality-${pipeline.id}`;
+    return html`<ha-svg-icon
+        id=${iconId}
+        class="capability"
+        .path=${isCloud ? mdiEarth : mdiShieldCheckOutline}
+      ></ha-svg-icon>
+      <ha-tooltip for=${iconId}>
+        ${this.hass.localize(
+          isCloud
+            ? "ui.panel.config.voice_assistants.assistants.pipeline.data_cloud"
+            : "ui.panel.config.voice_assistants.assistants.pipeline.data_local"
+        )}
+      </ha-tooltip>`;
   }
 
   // Uploaded avatar → the conversation agent's integration icon → casita.
@@ -240,13 +320,13 @@ export class AssistPref extends LitElement {
                 class="agents-intro"
                 dismissable
                 .title=${this.hass.localize(
-                    "ui.panel.config.voice_assistants.assistants.pipeline.agents_intro_title"
-                  )}
+                  "ui.panel.config.voice_assistants.assistants.pipeline.agents_intro_title"
+                )}
                 @alert-dismissed-clicked=${this._dismissAgentsIntro}
               >
                 ${this.hass.localize(
-                    "ui.panel.config.voice_assistants.assistants.pipeline.agents_intro"
-                  )}
+                  "ui.panel.config.voice_assistants.assistants.pipeline.agents_intro"
+                )}
               </ha-alert>
             `
           : nothing
@@ -263,120 +343,120 @@ export class AssistPref extends LitElement {
               ? html`<div class="empty-body">
                   <span class="empty-text"
                     >${this.hass.localize(
-                        "ui.panel.config.voice_assistants.assistants.pipeline.no_agents"
-                      )}</span
+                      "ui.panel.config.voice_assistants.assistants.pipeline.no_agents"
+                    )}</span
                   >
                 </div>`
               : html`<ha-list-base>
                   ${this._pipelines.map(
-                      (pipeline) => html`
-                        <ha-list-item-button
-                          .id=${pipeline.id}
-                          @click=${this._editPipeline}
+                    (pipeline) => html`
+                      <ha-list-item-button
+                        .id=${pipeline.id}
+                        @click=${this._editPipeline}
+                      >
+                        <span slot="start" class="agent-avatar"
+                          >${this._renderAgentAvatar(pipeline)}</span
                         >
-                          <span slot="start" class="agent-avatar"
-                            >${this._renderAgentAvatar(pipeline)}</span
-                          >
-                          <span slot="headline">
-                            ${pipeline.name}
-                            ${
-                              this._preferred === pipeline.id
-                                ? html`<ha-svg-icon
-                                    .path=${mdiStar}
-                                  ></ha-svg-icon>`
-                                : ""
-                            }
-                            ${
-                              assistAgentControlsHome(this.hass, pipeline)
-                                ? html`<ha-tooltip
-                                    .content=${this.hass.localize(
+                        <span slot="headline">
+                          ${pipeline.name}
+                          ${
+                            this._preferred === pipeline.id
+                              ? html`<ha-svg-icon
+                                  .path=${mdiStar}
+                                ></ha-svg-icon>`
+                              : ""
+                          }
+                          ${
+                            this._controlsHome(pipeline)
+                              ? html`<ha-svg-icon
+                                    id=${`agent-control-${pipeline.id}`}
+                                    class="capability"
+                                    .path=${mdiHammerWrench}
+                                  ></ha-svg-icon>
+                                  <ha-tooltip
+                                    for=${`agent-control-${pipeline.id}`}
+                                  >
+                                    ${this.hass.localize(
                                       "ui.panel.config.voice_assistants.assistants.pipeline.controls_home"
                                     )}
-                                  >
-                                    <ha-svg-icon
-                                      class="capability"
-                                      .path=${mdiToolboxOutline}
-                                    ></ha-svg-icon>
                                   </ha-tooltip>`
-                                : ""
-                            }
-                          </span>
-                          <span slot="supporting-text">
-                            ${formatLanguageCode(pipeline.language, this.hass.locale)}
-                          </span>
-                          <ha-dropdown
-                            slot="end"
-                            placement="bottom-end"
-                            @click=${stopPropagation}
-                            @wa-select=${this._handlePipelineMenuAction}
+                              : ""
+                          }
+                          ${this._renderAgentLocality(pipeline)}
+                        </span>
+                        <span slot="supporting-text">
+                          ${formatLanguageCode(pipeline.language, this.hass.locale)}
+                        </span>
+                        <ha-dropdown
+                          slot="end"
+                          placement="bottom-end"
+                          @click=${stopPropagation}
+                          @wa-select=${this._handlePipelineMenuAction}
+                        >
+                          <ha-icon-button
+                            slot="trigger"
+                            .label=${this.hass!.localize(
+                              "ui.panel.lovelace.editor.menu.open"
+                            )}
+                            .path=${mdiDotsVertical}
+                          ></ha-icon-button>
+                          <ha-dropdown-item value="talk" .data=${pipeline.id}>
+                            ${this.hass!.localize(
+                              "ui.panel.config.voice_assistants.assistants.pipeline.start_conversation"
+                            )}
+                            <ha-svg-icon
+                              slot="icon"
+                              .path=${mdiCommentProcessingOutline}
+                            ></ha-svg-icon>
+                          </ha-dropdown-item>
+                          <ha-dropdown-item
+                            value="set-preferred"
+                            .data=${pipeline.id}
+                            .disabled=${this._preferred === pipeline.id}
                           >
-                            <ha-icon-button
-                              slot="trigger"
-                              .label=${this.hass!.localize(
-                                "ui.panel.lovelace.editor.menu.open"
-                              )}
-                              .path=${mdiDotsVertical}
-                            ></ha-icon-button>
-                            <ha-dropdown-item value="talk" .data=${pipeline.id}>
-                              ${this.hass!.localize(
-                                "ui.panel.config.voice_assistants.assistants.pipeline.start_conversation"
-                              )}
-                              <ha-svg-icon
-                                slot="icon"
-                                .path=${mdiCommentProcessingOutline}
-                              ></ha-svg-icon>
-                            </ha-dropdown-item>
-                            <ha-dropdown-item
-                              value="set-preferred"
-                              .data=${pipeline.id}
-                              .disabled=${this._preferred === pipeline.id}
-                            >
-                              ${this.hass.localize(
-                                "ui.panel.config.voice_assistants.assistants.pipeline.detail.set_as_preferred"
-                              )}
-                              <ha-svg-icon
-                                slot="icon"
-                                .path=${mdiStar}
-                              ></ha-svg-icon>
-                            </ha-dropdown-item>
-                            <ha-dropdown-item
-                              value="debug"
-                              .data=${pipeline.id}
-                            >
-                              ${this.hass.localize(
-                                "ui.panel.config.voice_assistants.assistants.pipeline.detail.debug"
-                              )}
-                              <ha-svg-icon
-                                slot="icon"
-                                .path=${mdiBug}
-                              ></ha-svg-icon>
-                            </ha-dropdown-item>
-                            <ha-dropdown-item
-                              value="duplicate"
-                              .data=${pipeline.id}
-                            >
-                              ${this.hass.localize("ui.common.duplicate")}
-                              <ha-svg-icon
-                                slot="icon"
-                                .path=${mdiContentDuplicate}
-                              ></ha-svg-icon>
-                            </ha-dropdown-item>
-                            <wa-divider></wa-divider>
-                            <ha-dropdown-item
-                              variant="danger"
-                              value="delete"
-                              .data=${pipeline.id}
-                            >
-                              ${this.hass.localize("ui.common.delete")}
-                              <ha-svg-icon
-                                slot="icon"
-                                .path=${mdiTrashCan}
-                              ></ha-svg-icon>
-                            </ha-dropdown-item>
-                          </ha-dropdown>
-                        </ha-list-item-button>
-                      `
-                    )}
+                            ${this.hass.localize(
+                              "ui.panel.config.voice_assistants.assistants.pipeline.detail.set_as_preferred"
+                            )}
+                            <ha-svg-icon
+                              slot="icon"
+                              .path=${mdiStar}
+                            ></ha-svg-icon>
+                          </ha-dropdown-item>
+                          <ha-dropdown-item value="debug" .data=${pipeline.id}>
+                            ${this.hass.localize(
+                              "ui.panel.config.voice_assistants.assistants.pipeline.detail.debug"
+                            )}
+                            <ha-svg-icon
+                              slot="icon"
+                              .path=${mdiBug}
+                            ></ha-svg-icon>
+                          </ha-dropdown-item>
+                          <ha-dropdown-item
+                            value="duplicate"
+                            .data=${pipeline.id}
+                          >
+                            ${this.hass.localize("ui.common.duplicate")}
+                            <ha-svg-icon
+                              slot="icon"
+                              .path=${mdiContentDuplicate}
+                            ></ha-svg-icon>
+                          </ha-dropdown-item>
+                          <wa-divider></wa-divider>
+                          <ha-dropdown-item
+                            variant="danger"
+                            value="delete"
+                            .data=${pipeline.id}
+                          >
+                            ${this.hass.localize("ui.common.delete")}
+                            <ha-svg-icon
+                              slot="icon"
+                              .path=${mdiTrashCan}
+                            ></ha-svg-icon>
+                          </ha-dropdown-item>
+                        </ha-dropdown>
+                      </ha-list-item-button>
+                    `
+                  )}
                 </ha-list-base>`
           }
         </ha-expansion-panel>
@@ -439,14 +519,14 @@ export class AssistPref extends LitElement {
                 >
                   <span slot="headline">
                     ${this.hass.localize(
-                        "ui.panel.config.voice_assistants.assistants.pipeline.assist_devices"
-                      )}
+                      "ui.panel.config.voice_assistants.assistants.pipeline.assist_devices"
+                    )}
                   </span>
                   <span slot="supporting-text">
                     ${this.hass.localize(
-                        "ui.panel.config.voice_assistants.assistants.pipeline.assist_devices_count",
-                        { number: this._pipelineEntitiesCount }
-                      )}
+                      "ui.panel.config.voice_assistants.assistants.pipeline.assist_devices_count",
+                      { number: this._pipelineEntitiesCount }
+                    )}
                   </span>
                   <ha-icon-next slot="end"></ha-icon-next>
                 </ha-list-item-button>

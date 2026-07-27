@@ -75,12 +75,6 @@ export class CloudAlexaPref extends LitElement {
             <span class="subtitle"
               >${this.hass.localize(
                 "ui.panel.config.cloud.account.alexa.company"
-              )}
-              ·
-              ${this.hass.localize(
-                alexa_enabled
-                  ? "ui.panel.config.voice_assistants.assistants.status_enabled"
-                  : "ui.panel.config.voice_assistants.assistants.status_disabled"
               )}</span
             >
           </span>

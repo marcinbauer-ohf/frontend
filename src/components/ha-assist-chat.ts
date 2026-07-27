@@ -6,11 +6,13 @@ import {
   mdiChevronUp,
   mdiCog,
   mdiCommentProcessingOutline,
+  mdiEarth,
+  mdiEyeOutline,
+  mdiHammerWrench,
   mdiMicrophone,
   mdiSend,
   mdiShieldCheckOutline,
   mdiStar,
-  mdiToolboxOutline,
 } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
@@ -27,14 +29,20 @@ import {
   ASSIST_AGENT_AVATARS_STORAGE_KEY,
   type AssistAgentAvatars,
 } from "../data/assist_agent_avatars";
+import {
+  ASSIST_AGENT_CONTROL_OVERRIDE_STORAGE_KEY,
+  type AssistAgentControlOverride,
+} from "../data/assist_agent_control_override";
 import type { StoredAssistMessage } from "../data/assist_conversation_history";
 import {
+  assistAgentIsCloud,
   runAssistPipeline,
   type AssistPipeline,
   type ConversationChatLogAssistantDelta,
   type ConversationChatLogToolResultDelta,
   type PipelineRunEvent,
 } from "../data/assist_pipeline";
+import type { IntegrationManifest } from "../data/integration";
 import {
   configContext,
   connectionContext,
@@ -63,6 +71,7 @@ import type { HaDropdownSelectEvent } from "./ha-dropdown";
 import "./ha-dropdown-item";
 import "./ha-markdown";
 import "./ha-svg-icon";
+import "./ha-tooltip";
 import "./ha-textarea";
 import type { HaTextArea } from "./ha-textarea";
 
@@ -141,6 +150,11 @@ export class HaAssistChat extends LitElement {
 
   @state() private _processing = false;
 
+  // Integration domain -> iot_class for every agent's conversation engine, used
+  // to show the cloud/local data-locality icon. Resolved from the integration
+  // manifests; an agent is treated as local until its manifest is known.
+  @state() private _iotClasses: Record<string, string | null> = {};
+
   @state()
   @consumeLocalize()
   private _localize!: LocalizeFunc;
@@ -175,6 +189,14 @@ export class HaAssistChat extends LitElement {
     subscribe: true,
   })
   private _avatars: AssistAgentAvatars = {};
+
+  @state()
+  @storage({
+    key: ASSIST_AGENT_CONTROL_OVERRIDE_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _controlOverrides: AssistAgentControlOverride = {};
 
   private _conversationId: string | null = null;
 
@@ -273,6 +295,70 @@ export class HaAssistChat extends LitElement {
         this._processText(prompt);
       }
     }
+    if (
+      changedProps.has("pipeline") ||
+      changedProps.has("pipelines") ||
+      changedProps.has("_entities")
+    ) {
+      this._loadManifests();
+    }
+  }
+
+  /** The integration domain that provides a pipeline's conversation agent. */
+  private _pipelineDomain(pipeline?: AssistPipeline): string | undefined {
+    const engine = pipeline?.conversation_engine;
+    return engine ? this._entities?.[engine]?.platform : undefined;
+  }
+
+  /**
+   * Whether an agent processes requests in the cloud, from its integration's
+   * iot_class. Treated as local until the manifest is known.
+   */
+  private _pipelineIsCloud(pipeline?: AssistPipeline): boolean {
+    const domain = this._pipelineDomain(pipeline);
+    return domain ? assistAgentIsCloud(this._iotClasses[domain]) : false;
+  }
+
+  /**
+   * Fetch the iot_class of every listed agent's integration so the disclaimer
+   * and the agent selector can show a consistent cloud/local icon.
+   */
+  private async _loadManifests() {
+    if (!this._connection) {
+      return;
+    }
+    const domains = new Set<string>();
+    const current = this._pipelineDomain(this.pipeline);
+    if (current) {
+      domains.add(current);
+    }
+    for (const pipeline of this.pipelines ?? []) {
+      const domain = this._pipelineDomain(pipeline);
+      if (domain) {
+        domains.add(domain);
+      }
+    }
+    const missing = [...domains].filter(
+      (domain) => !(domain in this._iotClasses)
+    );
+    if (!missing.length) {
+      return;
+    }
+    const updates: Record<string, string | null> = {};
+    await Promise.all(
+      missing.map(async (domain) => {
+        try {
+          const manifest =
+            await this._connection.connection.sendMessagePromise<IntegrationManifest>(
+              { type: "manifest/get", integration: domain }
+            );
+          updates[domain] = manifest.iot_class ?? null;
+        } catch (_err) {
+          updates[domain] = null;
+        }
+      })
+    );
+    this._iotClasses = { ...this._iotClasses, ...updates };
   }
 
   public disconnectedCallback() {
@@ -327,6 +413,12 @@ export class HaAssistChat extends LitElement {
 
   /** Whether the agent can read/write (control) Home Assistant. */
   private _controlsHome(pipeline: AssistPipeline): boolean {
+    // The per-agent (client-side) override wins over the conversation
+    // entity's own capability — the same entity may keep control elsewhere
+    // (e.g. automations) while this agent has it turned off.
+    if (pipeline.id in this._controlOverrides) {
+      return this._controlOverrides[pipeline.id];
+    }
     if (pipeline.prefer_local_intents) {
       return true;
     }
@@ -338,6 +430,7 @@ export class HaAssistChat extends LitElement {
 
   protected render(): TemplateResult {
     const controlHA = this.pipeline ? this._controlsHome(this.pipeline) : false;
+    const engineIsCloud = this._pipelineIsCloud(this.pipeline);
     const supportsMicrophone = AudioRecorder.isSupported;
     const supportsSTT = this.pipeline?.stt_engine && !this.disableSpeech;
     const avatarSrc = this._uploadedAvatarSrc();
@@ -566,14 +659,40 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
           </div>
         </div>
         <div class="disclaimer">
-          <ha-svg-icon
-            .path=${controlHA ? mdiToolboxOutline : mdiShieldCheckOutline}
-          ></ha-svg-icon>
-          <span>
+          <span class="disclaimer-icons">
+            <ha-svg-icon
+              id="disclaimer-control-icon"
+              .path=${controlHA ? mdiHammerWrench : mdiEyeOutline}
+            ></ha-svg-icon>
+            <ha-tooltip for="disclaimer-control-icon">
+              ${this._localize(
+                controlHA
+                  ? "ui.dialogs.voice_command.disclaimer"
+                  : "ui.dialogs.voice_command.disclaimer_no_control"
+              )}
+            </ha-tooltip>
+            <ha-svg-icon
+              id="disclaimer-data-icon"
+              .path=${engineIsCloud ? mdiEarth : mdiShieldCheckOutline}
+            ></ha-svg-icon>
+            <ha-tooltip for="disclaimer-data-icon">
+              ${this._localize(
+                engineIsCloud
+                  ? "ui.dialogs.voice_command.disclaimer_data_cloud"
+                  : "ui.dialogs.voice_command.disclaimer_data_local"
+              )}
+            </ha-tooltip>
+          </span>
+          <span class="disclaimer-text">
             ${this._localize(
               controlHA
-                ? "ui.dialogs.voice_command.disclaimer"
-                : "ui.dialogs.voice_command.disclaimer_no_control"
+                ? "ui.dialogs.voice_command.control_summary"
+                : "ui.dialogs.voice_command.control_summary_no"
+            )}
+            ${this._localize(
+              engineIsCloud
+                ? "ui.dialogs.voice_command.data_summary_cloud"
+                : "ui.dialogs.voice_command.data_summary_local"
             )}
             <a
               href=${documentationUrl(this._config, "/docs/assist/")}
@@ -621,10 +740,18 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
                 this._controlsHome(pipeline)
                   ? html`<ha-svg-icon
                       class="agent-capability"
-                      .path=${mdiToolboxOutline}
+                      .path=${mdiHammerWrench}
                     ></ha-svg-icon>`
                   : nothing
               }
+              <ha-svg-icon
+                class="agent-capability"
+                .path=${
+                  this._pipelineIsCloud(pipeline)
+                    ? mdiEarth
+                    : mdiShieldCheckOutline
+                }
+              ></ha-svg-icon>
               ${
                 pipeline.id === this.preferredPipeline
                   ? html`<ha-svg-icon
@@ -1117,12 +1244,12 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
           color: var(--ha-color-primary-60, var(--primary-color));
         }
         .empty-logo svg {
-          width: 64px;
-          height: 64px;
+          width: 96px;
+          height: 96px;
         }
         .empty-logo img.avatar {
-          width: 64px;
-          height: 64px;
+          width: 96px;
+          height: 96px;
           border-radius: var(--ha-border-radius-circle);
           object-fit: cover;
         }
@@ -1255,9 +1382,24 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
           font-size: var(--ha-font-size-s);
           color: var(--secondary-text-color);
         }
+        .disclaimer-icons {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--ha-space-1);
+          flex-shrink: 0;
+        }
+        .disclaimer-text {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          line-clamp: 2;
+          overflow: hidden;
+        }
         .disclaimer ha-svg-icon {
           --mdc-icon-size: 16px;
           flex-shrink: 0;
+          display: block;
+          color: var(--disabled-text-color);
         }
         .disclaimer a {
           color: inherit;
