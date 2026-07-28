@@ -4848,6 +4848,7 @@
             "general": {
               "title": "Settings",
               "accessible_entities": "Exposed entities",
+              "all_exposed_entities": "All exposed entities",
               "accessible_entities_count": "{number} {number, plural,\n  one {entity}\n  other {entities}\n}"
             },
             "pipeline": {

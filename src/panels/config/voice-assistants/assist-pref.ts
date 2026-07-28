@@ -496,7 +496,7 @@ export class AssistPref extends LitElement {
         >
           <span slot="headline">
             ${this.hass.localize(
-              "ui.panel.config.voice_assistants.assistants.general.accessible_entities"
+              "ui.panel.config.voice_assistants.assistants.general.all_exposed_entities"
             )}
           </span>
           <span slot="supporting-text">
