@@ -120,7 +120,7 @@ export class CloudDiscover extends LitElement {
       font-weight: var(--ha-font-weight-normal);
       line-height: var(--ha-line-height-condensed);
       text-align: center;
-      max-width: 600px;
+      max-width: var(--ha-page-content-max-width, 600px);
       margin: 0 auto 8px auto;
     }
     @media (min-width: 800px) {

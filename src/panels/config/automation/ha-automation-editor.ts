@@ -1251,7 +1251,7 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
         manual-automation-editor,
         blueprint-automation-editor {
           margin: 0 auto;
-          max-width: 1040px;
+          max-width: var(--ha-page-content-max-width, 1040px);
           padding: 28px 20px 0;
           display: block;
         }
@@ -1273,7 +1273,7 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
           display: flex;
           align-items: center;
           margin: 0 auto;
-          max-width: 1040px;
+          max-width: var(--ha-page-content-max-width, 1040px);
           padding: 28px 20px 0;
         }
       `,

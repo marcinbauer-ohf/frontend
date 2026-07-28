@@ -1,13 +1,11 @@
 import {
   mdiAccount,
   mdiCodeBraces,
-  mdiCommentProcessingOutline,
   mdiDevices,
   mdiDotsVertical,
   mdiFileMultiple,
   mdiFormatListBulletedTriangle,
   mdiHelpCircleOutline,
-  mdiMagnify,
   mdiPencil,
   mdiPlus,
   mdiRedo,
@@ -23,8 +21,6 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { ifDefined } from "lit/directives/if-defined";
-import memoizeOne from "memoize-one";
-import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import { UndoRedoController } from "../../common/controllers/undo-redo-controller";
 import { fireEvent } from "../../common/dom/fire_event";
 import { isNavigationClick } from "../../common/dom/is-navigation-click";
@@ -72,13 +68,10 @@ import {
 } from "../../dialogs/generic/show-dialog-box";
 import { isMoreInfoView } from "../../dialogs/more-info/const";
 import { showMoreInfoDialog } from "../../dialogs/more-info/show-ha-more-info-dialog";
-import { showQuickBar } from "../../dialogs/quick-bar/show-dialog-quick-bar";
 import { showVoiceCommandDialog } from "../../dialogs/voice-command-dialog/show-ha-voice-command-dialog";
 import { haStyle } from "../../resources/styles";
 import type { HomeAssistant, PanelInfo } from "../../types";
 import { documentationUrl } from "../../util/documentation-url";
-import { isMac } from "../../util/is_mac";
-import { isMobileClient } from "../../util/is_mobile";
 import { showToast } from "../../util/toast";
 import { showAreaRegistryDetailDialog } from "../config/areas/show-dialog-area-registry-detail";
 import { showNewAutomationDialog } from "../config/automation/show-dialog-new-automation";
@@ -171,10 +164,6 @@ class HUIRoot extends LitElement {
     }),
   });
 
-  private _conversation = memoizeOne((_components) =>
-    isComponentLoaded(this.hass.config, "conversation")
-  );
-
   private _renderActionItems(): TemplateResult {
     const result: TemplateResult[] = [];
 
@@ -257,6 +246,7 @@ class HUIRoot extends LitElement {
         visible:
           !this._editMode && this.hass.user?.is_admin && !this.hass.kioskMode,
         overflow: this.narrow,
+        overflow_can_promote: true,
         subItems: [
           {
             icon: mdiDevices,
@@ -286,31 +276,6 @@ class HUIRoot extends LitElement {
             overflowAction: this._addPerson,
           },
         ],
-      },
-      {
-        icon: mdiMagnify,
-        key: "ui.panel.lovelace.menu.search_home_assistant",
-        buttonAction: this._showQuickBar,
-        overflowAction: this._showQuickBar,
-        suffix:
-          this.hass.enableShortcuts && !isMobileClient
-            ? isMac
-              ? "(⌘ + K)"
-              : "(Ctrl + K)"
-            : undefined,
-        visible: !this._editMode && !this.hass.kioskMode,
-        overflow: this.narrow,
-      },
-      {
-        icon: mdiCommentProcessingOutline,
-        key: "ui.panel.lovelace.menu.assist_tooltip",
-        buttonAction: this._showVoiceCommandDialog,
-        overflowAction: this._showVoiceCommandDialog,
-        suffix:
-          this.hass.enableShortcuts && !isMobileClient ? "(A)" : undefined,
-        visible:
-          !this._editMode && this._conversation(this.hass.config.components),
-        overflow: this.narrow,
       },
       {
         icon: mdiRefresh,
@@ -366,11 +331,14 @@ class HUIRoot extends LitElement {
       });
     }
 
-    const overflowItems = items.filter((i) => i.visible && i.overflow);
-    const overflowCanPromote =
-      overflowItems.length === 1 && overflowItems[0].overflow_can_promote;
+    // Items marked overflow_can_promote always show as direct toolbar
+    // buttons; only the remaining overflow items collapse into the "..."
+    // menu, regardless of what else is present there.
+    const overflowItems = items.filter(
+      (i) => i.visible && i.overflow && !i.overflow_can_promote
+    );
     const buttonItems = items.filter(
-      (i) => i.visible && (!i.overflow || overflowCanPromote)
+      (i) => i.visible && (!i.overflow || i.overflow_can_promote)
     );
 
     buttonItems.forEach((item, index) => {
@@ -421,7 +389,7 @@ class HUIRoot extends LitElement {
       result.push(button);
     });
 
-    if (overflowItems.length && !overflowCanPromote) {
+    if (overflowItems.length) {
       result.push(html`
         <ha-dropdown
           slot="actionItems"
@@ -547,6 +515,9 @@ class HUIRoot extends LitElement {
 
     const isSubview = curViewConfig?.subview;
     const hasTabViews = views.filter((view) => !view.subview).length > 1;
+    // The view tabs get their own row below the toolbar so they never overlap
+    // the floating search/ask pill, and so the dashboard title stays visible.
+    const showSecondaryTabBar = this._editMode || (hasTabViews && !isSubview);
 
     return html`
       <div
@@ -596,21 +567,13 @@ class HUIRoot extends LitElement {
                               ></ha-menu-button>
                             `
                       }
-                      ${
-                        isSubview
-                          ? html`
-                              <div class="main-title">
-                                ${curViewConfig.title}
-                              </div>
-                            `
-                          : hasTabViews
-                            ? tabs
-                            : html`
-                                <div class="main-title">
-                                  ${views[0]?.title ?? dashboardTitle}
-                                </div>
-                              `
-                      }
+                      <div class="main-title">
+                        ${
+                          isSubview
+                            ? curViewConfig.title
+                            : (views[0]?.title ?? dashboardTitle)
+                        }
+                      </div>
                       <div class="action-items">
                         ${this._renderActionItems()}
                       </div>
@@ -618,19 +581,25 @@ class HUIRoot extends LitElement {
               }
             </div>
             ${
-              this._editMode
+              showSecondaryTabBar
                 ? html`
                     <div class="tab-bar">
                       ${tabs}
-                      <ha-icon-button
-                        slot="nav"
-                        id="add-view"
-                        @click=${this._addView}
-                        .label=${this.hass!.localize(
-                          "ui.panel.lovelace.editor.edit_view.add"
-                        )}
-                        .path=${mdiPlus}
-                      ></ha-icon-button>
+                      ${
+                        this._editMode
+                          ? html`
+                              <ha-icon-button
+                                slot="nav"
+                                id="add-view"
+                                @click=${this._addView}
+                                .label=${this.hass!.localize(
+                                  "ui.panel.lovelace.editor.edit_view.add"
+                                )}
+                                .path=${mdiPlus}
+                              ></ha-icon-button>
+                            `
+                          : nothing
+                      }
                     </div>
                   `
                 : nothing
@@ -638,7 +607,7 @@ class HUIRoot extends LitElement {
           </slot>
         </div>
         <hui-view-container
-          class=${this._editMode ? "has-tab-bar" : ""}
+          class=${showSecondaryTabBar ? "has-tab-bar" : ""}
           .hass=${this.hass}
           .theme=${curViewConfig?.theme}
           id="view"
@@ -882,10 +851,6 @@ class HUIRoot extends LitElement {
       dismissText: this.hass.localize("ui.common.not_now"),
       confirm: () => location.reload(),
     });
-  };
-
-  private _showQuickBar = () => {
-    showQuickBar(this, { showHint: this.hass.enableShortcuts });
   };
 
   private _goBack(): void {
@@ -1386,6 +1351,7 @@ class HUIRoot extends LitElement {
           color: var(--app-header-edit-text-color, white);
         }
         .toolbar {
+          position: relative;
           border-bottom: var(--app-header-border-bottom, none);
           height: var(--header-height);
           display: flex;
@@ -1394,12 +1360,17 @@ class HUIRoot extends LitElement {
           padding: 0px 12px;
           font-weight: var(--ha-font-weight-normal);
           box-sizing: border-box;
+          width: 100%;
+          max-width: var(--ha-view-max-width, 1400px);
+          margin: 0 auto;
+          transition: max-width var(--ha-animation-duration-normal) ease;
         }
         .edit-mode .toolbar {
           border-bottom: none;
         }
         .narrow .toolbar {
           padding: 0 4px;
+          max-width: none;
         }
         .main-title {
           margin-inline-start: var(--ha-space-6);
@@ -1477,9 +1448,22 @@ class HUIRoot extends LitElement {
         }
         .tab-bar {
           display: flex;
+          width: 100%;
+          max-width: var(--ha-view-max-width, 1400px);
+          margin: 0 auto;
+          box-sizing: border-box;
+          transition: max-width var(--ha-animation-duration-normal) ease;
+        }
+        .narrow .tab-bar {
+          max-width: none;
+        }
+        .tab-bar ha-tab-group {
+          flex: 0 1 auto;
+          margin: 0 auto;
         }
         .edit-mode ha-tab-group {
           flex-grow: 0;
+          margin: 0;
           color: var(--app-header-edit-text-color, #fff);
           --ha-tab-active-text-color: var(--app-header-edit-text-color, #fff);
           --ha-tab-indicator-color: var(--app-header-edit-text-color, #fff);

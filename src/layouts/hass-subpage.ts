@@ -1,9 +1,12 @@
-import type { CSSResultGroup, TemplateResult } from "lit";
-import { css, html, LitElement } from "lit";
-import { customElement, eventOptions, property } from "lit/decorators";
+import { consume } from "@lit/context";
+import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
+import { css, html, LitElement, nothing } from "lit";
+import { customElement, eventOptions, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { restoreScroll } from "../common/decorators/restore-scroll";
+import { toggleAttribute } from "../common/dom/toggle_attribute";
 import { goBack } from "../common/navigate";
+import { settingsDetailContext } from "../data/context";
 import "../components/ha-icon-button-arrow-prev";
 import "../components/ha-menu-button";
 import { haStyleScrollbar } from "../resources/styles";
@@ -25,32 +28,50 @@ class HassSubpage extends LitElement {
 
   @property({ type: Boolean }) public scrollable = true;
 
+  /** True when rendered in the settings split layout's detail column. */
+  @state()
+  @consume({ context: settingsDetailContext, subscribe: true })
+  private _settingsDetail = false;
+
   // @ts-ignore
   @restoreScroll(".content") private _savedScrollPos?: number;
 
+  public willUpdate(_changedProperties: PropertyValues<this>) {
+    toggleAttribute(this, "in-detail", this._settingsDetail);
+  }
+
   protected render(): TemplateResult {
+    // In the settings detail column the list beside it is the header, so the
+    // navigation and title are dropped and the row only carries page actions
+    const detail = this._settingsDetail;
+
     return html`
-      <div class="toolbar ${classMap({ narrow: this.narrow })}">
+      <div class="toolbar ${classMap({ narrow: this.narrow, detail })}">
         <div class="toolbar-content">
           ${
-            this.mainPage || history.state?.root
-              ? html`<ha-menu-button></ha-menu-button>`
-              : this.backPath
-                ? html`
-                    <ha-icon-button-arrow-prev
-                      href=${this.backPath}
-                    ></ha-icon-button-arrow-prev>
-                  `
-                : html`
-                    <ha-icon-button-arrow-prev
-                      @click=${this._backTapped}
-                    ></ha-icon-button-arrow-prev>
-                  `
+            detail
+              ? nothing
+              : this.mainPage || history.state?.root
+                ? html`<ha-menu-button></ha-menu-button>`
+                : this.backPath
+                  ? html`
+                      <ha-icon-button-arrow-prev
+                        href=${this.backPath}
+                      ></ha-icon-button-arrow-prev>
+                    `
+                  : html`
+                      <ha-icon-button-arrow-prev
+                        @click=${this._backTapped}
+                      ></ha-icon-button-arrow-prev>
+                    `
           }
-
-          <div class="main-title">
-            <slot name="header">${this.header}</slot>
-          </div>
+          ${
+            detail
+              ? nothing
+              : html`<div class="main-title">
+                  <slot name="header">${this.header}</slot>
+                </div>`
+          }
           <slot name="toolbar-icon"></slot>
         </div>
       </div>
@@ -107,6 +128,20 @@ class HassSubpage extends LitElement {
         }
         :host([narrow]) .toolbar {
           padding-left: var(--safe-area-inset-left);
+        }
+
+        /* The settings list beside the detail column is the page header */
+        .toolbar.detail {
+          display: none;
+        }
+        :host([in-detail]) {
+          display: flex;
+          flex-direction: column;
+        }
+        :host([in-detail]) .content {
+          height: auto;
+          flex: 1 1 auto;
+          min-height: 0;
         }
 
         .toolbar-content {

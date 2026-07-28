@@ -176,6 +176,14 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
 
   @property({ type: Boolean, attribute: "no-sort" }) public noSort = false;
 
+  /**
+   * When true, forwards the "assist" slotted content into the search input's
+   * end slot (replacing the default clear button) so a caller can embed an
+   * action, e.g. an Assist shortcut, directly in the field.
+   */
+  @property({ type: Boolean, attribute: "show-assist" }) public showAssist =
+    false;
+
   @query("lit-virtualizer") public virtualizerElement?: LitVirtualizer;
 
   @query("ha-input-search") private _searchFieldElement?: HaInputSearch;
@@ -254,6 +262,7 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
         @blur=${this._resetSelectedItem}
         @input=${this._filterChanged}
       >
+        ${this.showAssist ? html`<slot name="assist" slot="end"></slot>` : nothing}
       </ha-input-search>
       ${this._renderSectionButtons()}
       ${

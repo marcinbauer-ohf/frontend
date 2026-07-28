@@ -1,54 +1,66 @@
+import type { PropertyValues, TemplateResult } from "lit";
+import { css, html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators";
-
-import { mdiAccount, mdiLock } from "@mdi/js";
-import type { PropertyValues } from "lit";
-import type { RouterOptions } from "../../layouts/hass-router-page";
-import { HassRouterPage } from "../../layouts/hass-router-page";
-import type { PageNavigation } from "../../layouts/hass-tabs-subpage";
-import { SubscribeMixin } from "../../mixins/subscribe-mixin";
-import type { HomeAssistant } from "../../types";
-
-export const profileSections: PageNavigation[] = [
-  {
-    path: "/profile/general",
-    translationKey: "ui.panel.profile.tabs.general",
-    iconPath: mdiAccount,
-  },
-  {
-    path: "/profile/security",
-    translationKey: "ui.panel.profile.tabs.security",
-    iconPath: mdiLock,
-  },
-];
+import { extractPage } from "../../layouts/hass-router-page";
+import type { HomeAssistant, Route } from "../../types";
+import "../config/dashboard/ha-config-dashboard";
+import "./ha-profile-router";
 
 @customElement("ha-panel-profile")
-class HaPanelProfile extends SubscribeMixin(HassRouterPage) {
+class HaPanelProfile extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @property({ type: Boolean }) public narrow = false;
 
-  protected routerOptions: RouterOptions = {
-    defaultPage: "general",
-    routes: {
-      general: {
-        tag: "ha-profile-section-general",
-        load: () => import("./ha-profile-section-general"),
-      },
-      security: {
-        tag: "ha-profile-section-security",
-        load: () => import("./ha-profile-section-security"),
-      },
-    },
-  };
+  @property({ attribute: false }) public route!: Route;
 
-  protected updatePageEl(el) {
-    el.route = this.routeTail;
-    el.hass = this.hass;
-    el.narrow = this.narrow;
+  protected render(): TemplateResult {
+    if (this.narrow) {
+      return html`
+        <ha-profile-router
+          .hass=${this.hass}
+          .route=${this.route}
+          .narrow=${true}
+        ></ha-profile-router>
+      `;
+    }
+
+    // Desktop shows the same settings list beside the profile pages as the
+    // settings panel does, so navigating between them keeps the layout. The
+    // list column is what /profile lists on mobile, so the detail column shows
+    // the profile itself rather than listing it again.
+    const detailRoute =
+      extractPage(this.route.path, "dashboard") === "dashboard"
+        ? { prefix: this.route.prefix, path: "/general" }
+        : this.route;
+
+    return html`
+      <ha-config-dashboard
+        split
+        .hass=${this.hass}
+        .narrow=${false}
+        .isWide=${false}
+        .selectedPath=${this._detailPath}
+      >
+        <ha-profile-router
+          slot="detail"
+          .hass=${this.hass}
+          .route=${detailRoute}
+          .narrow=${false}
+        ></ha-profile-router>
+      </ha-config-dashboard>
+    `;
+  }
+
+  /** Path of the page shown in the detail column, e.g. `/profile/security`. */
+  private get _detailPath(): string {
+    const page = extractPage(this.route.path, "dashboard");
+    return `${this.route.prefix}/${page === "dashboard" ? "general" : page}`;
   }
 
   protected firstUpdated(changedProps: PropertyValues<this>) {
     super.firstUpdated(changedProps);
+    this.hass.loadFragmentTranslation("config");
     this.style.setProperty(
       "--app-header-background-color",
       "var(--sidebar-background-color)"
@@ -62,7 +74,18 @@ class HaPanelProfile extends SubscribeMixin(HassRouterPage) {
       "1px solid var(--divider-color)"
     );
   }
+
+  static styles = css`
+    :host {
+      display: block;
+    }
+    ha-profile-router > * {
+      display: block;
+      height: 100%;
+    }
+  `;
 }
+
 declare global {
   interface HTMLElementTagNameMap {
     "ha-panel-profile": HaPanelProfile;

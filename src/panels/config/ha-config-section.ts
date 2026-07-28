@@ -41,7 +41,7 @@ export class HaConfigSection extends LitElement {
 
     .content {
       padding: 28px 20px 0;
-      max-width: 1040px;
+      max-width: var(--ha-page-content-max-width, 1040px);
       margin: 0 auto;
     }
 
@@ -121,7 +121,7 @@ export class HaConfigSection extends LitElement {
     }
 
     .full-width {
-      padding: 0;
+      padding: 0 var(--ha-space-4);
     }
 
     .full-width .layout {

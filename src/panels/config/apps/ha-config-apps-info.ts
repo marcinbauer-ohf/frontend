@@ -99,7 +99,7 @@ class HaConfigAppsInfo extends LitElement {
       haStyle,
       css`
         .content {
-          max-width: 600px;
+          max-width: var(--ha-page-content-max-width, 600px);
           margin: 0 auto;
           padding: var(--ha-space-4);
           display: flex;

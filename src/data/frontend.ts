@@ -7,10 +7,55 @@ export interface CoreFrontendUserData {
   apps_info_dismissed?: boolean;
 }
 
+export interface SidebarCustomItem {
+  title: string;
+  icon?: string;
+  /** SVG path data, used for items added from settings pages */
+  iconPath?: string;
+  path: string;
+}
+
 export interface SidebarFrontendUserData {
   panelOrder?: string[];
   hiddenPanels?: string[];
+  customItems?: SidebarCustomItem[];
 }
+
+const moveItem = <T>(items: T[], from: number, to: number): T[] => {
+  const next = [...items];
+  next.splice(to, 0, ...next.splice(from, 1));
+  return next;
+};
+
+/**
+ * Apply a sortable move over an edit-mode navigation list, which renders the
+ * panels first and the custom links after them. The saved order keeps those two
+ * as separate lists, so a row can only move within its own group; a move that
+ * crosses the boundary returns `null` and is left to roll back.
+ */
+export const applySidebarMove = (
+  move: { oldIndex: number; newIndex: number },
+  panelPaths: string[],
+  customItems: SidebarCustomItem[]
+): { panelOrder: string[]; customItems: SidebarCustomItem[] } | null => {
+  const { oldIndex, newIndex } = move;
+  const panelCount = panelPaths.length;
+
+  if (oldIndex < panelCount !== newIndex < panelCount) {
+    return null;
+  }
+
+  return oldIndex < panelCount
+    ? { panelOrder: moveItem(panelPaths, oldIndex, newIndex), customItems }
+    : {
+        panelOrder: panelPaths,
+        customItems: moveItem(
+          customItems,
+          oldIndex - panelCount,
+          newIndex - panelCount
+        ),
+      };
+};
 
 export interface CoreFrontendSystemData {
   default_panel?: string;

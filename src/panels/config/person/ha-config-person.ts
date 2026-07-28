@@ -27,7 +27,6 @@ import "../../../layouts/hass-tabs-subpage";
 import type { HomeAssistant, Route } from "../../../types";
 import { documentationUrl } from "../../../util/documentation-url";
 import "../ha-config-section";
-import { configSections } from "../config-sections";
 import {
   loadPersonDetailDialog,
   showPersonDetailDialog,
@@ -61,7 +60,6 @@ export class HaConfigPerson extends LitElement {
         .hass=${this.hass}
         .route=${this.route}
         back-path="/config"
-        .tabs=${configSections.persons}
         has-fab
       >
         <ha-config-section .isWide=${this.isWide}>

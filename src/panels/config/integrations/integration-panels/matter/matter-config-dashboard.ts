@@ -240,7 +240,7 @@ export class MatterConfigDashboard extends LitElement {
       css`
         ha-card {
           margin: 0 auto var(--ha-space-4);
-          max-width: 600px;
+          max-width: var(--ha-page-content-max-width, 600px);
         }
 
         .nav-card {

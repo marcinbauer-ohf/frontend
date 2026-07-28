@@ -58,7 +58,6 @@ import { KeyboardShortcutMixin } from "../../../mixins/keyboard-shortcut-mixin";
 import { SubscribeMixin } from "../../../mixins/subscribe-mixin";
 import { haStyle } from "../../../resources/styles";
 import type { HomeAssistant, Route } from "../../../types";
-import { configSections } from "../config-sections";
 import { isHelperDomain } from "../helpers/const";
 import "./ha-config-flow-card";
 import type { DataEntryFlowProgressExtended } from "./ha-config-integrations";
@@ -507,7 +506,6 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
           this._searchParams.has("historyBack") ? undefined : "/config"
         }
         .route=${this.route}
-        .tabs=${configSections.devices}
         has-fab
       >
         ${

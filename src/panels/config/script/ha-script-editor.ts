@@ -1160,7 +1160,7 @@ export class HaScriptEditor extends SubscribeMixin(
         manual-script-editor,
         blueprint-script-editor {
           margin: 0 auto;
-          max-width: 1040px;
+          max-width: var(--ha-page-content-max-width, 1040px);
           padding: 28px 20px 0;
           display: block;
         }

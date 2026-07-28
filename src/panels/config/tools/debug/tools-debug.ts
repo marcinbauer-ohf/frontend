@@ -127,7 +127,7 @@ class HaPanelDevDebug extends SubscribeMixin(LitElement) {
       .content {
         padding: var(--ha-space-7) var(--ha-space-5) var(--ha-space-4);
         display: block;
-        max-width: 600px;
+        max-width: var(--ha-page-content-max-width, 600px);
         margin: 0 auto;
       }
     `,

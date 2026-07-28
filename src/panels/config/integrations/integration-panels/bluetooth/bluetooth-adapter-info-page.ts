@@ -490,7 +490,7 @@ export class BluetoothAdapterInfoPage extends LitElement {
         }
 
         ha-card {
-          max-width: 600px;
+          max-width: var(--ha-page-content-max-width, 600px);
           margin: 0 auto var(--ha-space-4);
         }
 

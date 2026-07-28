@@ -117,7 +117,6 @@ import {
   getLabelsTableColumn,
   getModifiedAtTableColumn,
 } from "../common/data-table-columns";
-import { configSections } from "../config-sections";
 import type { Helper } from "../helpers/const";
 import { isHelperDomain } from "../helpers/const";
 import "../integrations/ha-integration-overflow-menu";
@@ -814,7 +813,6 @@ export class HaConfigEntities extends LitElement {
           this._searchParms.has("historyBack") ? undefined : "/config"
         }
         .route=${this.route}
-        .tabs=${configSections.devices}
         .columns=${this._columns(this.hass.localize, filteredEntities)}
         .data=${filteredEntities}
         .searchLabel=${this.hass.localize(

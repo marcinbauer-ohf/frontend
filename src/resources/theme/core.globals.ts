@@ -47,6 +47,14 @@ export const coreStyles = css`
     --ha-animation-duration-fast: 150ms;
     --ha-animation-duration-normal: 250ms;
     --ha-animation-duration-slow: 350ms;
+
+    /* Max width dashboard content is centered/capped to on wide screens;
+       shared by the app bar/tabs and the floating search pill so they stay
+       aligned to the same lane regardless of where each is rendered.
+       Matches the sections view's own cap: 4 columns x 500px + 3x32px
+       column gaps + 32px padding each side (hui-sections-view.ts .wrapper),
+       the widest of the non-full-bleed layouts (masonry caps at 4x500=2000px). */
+    --ha-view-max-width: 2160px;
   }
 
   @media (prefers-reduced-motion: reduce) {

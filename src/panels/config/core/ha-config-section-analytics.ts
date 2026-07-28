@@ -31,12 +31,12 @@ class HaConfigSectionAnalytics extends LitElement {
   static styles = css`
     .content {
       padding: 28px 20px 0;
-      max-width: 1040px;
+      max-width: var(--ha-page-content-max-width, 1040px);
       margin: 0 auto;
     }
     ha-config-analytics {
       display: block;
-      max-width: 600px;
+      max-width: var(--ha-page-content-max-width, 600px);
       margin: 0 auto;
       margin-bottom: 24px;
     }

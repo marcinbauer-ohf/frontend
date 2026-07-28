@@ -13,13 +13,14 @@ import memoizeOne from "memoize-one";
 import { canShowPage } from "../common/config/can_show_page";
 import { restoreScroll } from "../common/decorators/restore-scroll";
 import { isNavigationClick } from "../common/dom/is-navigation-click";
+import { toggleAttribute } from "../common/dom/toggle_attribute";
 import { goBack, navigate } from "../common/navigate";
 import type { LocalizeFunc } from "../common/translations/localize";
 import "../components/ha-icon-button-arrow-prev";
 import "../components/ha-menu-button";
 import "../components/ha-svg-icon";
 import "../components/ha-tab";
-import { narrowViewportContext } from "../data/context";
+import { narrowViewportContext, settingsDetailContext } from "../data/context";
 import { haStyleScrollbar } from "../resources/styles";
 import type { HomeAssistant, Route } from "../types";
 
@@ -56,6 +57,11 @@ export class HassTabsSubpage extends LitElement {
   @property({ attribute: false }) public backCallback?: () => void;
 
   @property({ type: Boolean, attribute: "main-page" }) public mainPage = false;
+
+  /** True when rendered in the settings split layout's detail column. */
+  @state()
+  @consume({ context: settingsDetailContext, subscribe: true })
+  private _settingsDetail = false;
 
   @property({ attribute: false }) public route!: Route;
 
@@ -144,6 +150,7 @@ export class HassTabsSubpage extends LitElement {
 
   public willUpdate(changedProperties: PropertyValues<this>) {
     this.toggleAttribute("narrow", this._narrow);
+    toggleAttribute(this, "in-detail", this._settingsDetail);
 
     if (changedProperties.has("route")) {
       const currentPath = `${this.route.prefix}${this.route.path}`;
@@ -164,27 +171,33 @@ export class HassTabsSubpage extends LitElement {
       this._narrow,
       this.localizeFunc || this.hass.localize
     );
+    // In the settings detail column the list beside it is the header, so the
+    // navigation and title are dropped and the row only carries page actions
+    const detail = this._settingsDetail;
+
     return html`
-      <div class="toolbar ${classMap({ narrow: this._narrow })}">
+      <div class="toolbar ${classMap({ narrow: this._narrow, detail })}">
         <slot name="toolbar">
           <div class="toolbar-content">
             ${
-              this.mainPage || (!this.backPath && history.state?.root)
-                ? html`<ha-menu-button></ha-menu-button>`
-                : this.backPath
-                  ? html`
-                      <ha-icon-button-arrow-prev
-                        .href=${this.backPath}
-                      ></ha-icon-button-arrow-prev>
-                    `
-                  : html`
-                      <ha-icon-button-arrow-prev
-                        @click=${this._backTapped}
-                      ></ha-icon-button-arrow-prev>
-                    `
+              detail
+                ? nothing
+                : this.mainPage || (!this.backPath && history.state?.root)
+                  ? html`<ha-menu-button></ha-menu-button>`
+                  : this.backPath
+                    ? html`
+                        <ha-icon-button-arrow-prev
+                          .href=${this.backPath}
+                        ></ha-icon-button-arrow-prev>
+                      `
+                    : html`
+                        <ha-icon-button-arrow-prev
+                          @click=${this._backTapped}
+                        ></ha-icon-button-arrow-prev>
+                      `
             }
             ${
-              this._narrow || !this.showTabs
+              !detail && (this._narrow || !this.showTabs)
                 ? html`<div class="main-title">
                     <slot name="header">${!this.showTabs ? tabs[0] : ""}</slot>
                   </div>`
@@ -295,6 +308,18 @@ export class HassTabsSubpage extends LitElement {
           position: fixed;
         }
 
+        /* No toolbar of its own in the settings detail column, so the content
+           takes whatever height is left instead of subtracting a header */
+        :host([in-detail]) {
+          display: flex;
+          flex-direction: column;
+        }
+        :host([in-detail]) .container {
+          height: auto;
+          flex: 1 1 auto;
+          min-height: 0;
+        }
+
         .container {
           display: flex;
           height: calc(
@@ -322,6 +347,10 @@ export class HassTabsSubpage extends LitElement {
         }
         :host([narrow]) .toolbar {
           padding-left: var(--safe-area-inset-left);
+        }
+        /* The settings list beside the detail column is the page header */
+        .toolbar.detail {
+          display: none;
         }
         .toolbar-content {
           padding: 8px 12px;

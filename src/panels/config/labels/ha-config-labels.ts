@@ -57,7 +57,6 @@ import {
   getCreatedAtTableColumn,
   getModifiedAtTableColumn,
 } from "../common/data-table-columns";
-import { configSections } from "../config-sections";
 import { showLabelDetailDialog } from "./show-dialog-label-detail";
 
 type ConfigTranslationKey = FlattenObjectKeys<
@@ -255,7 +254,6 @@ export class HaConfigLabels extends LitElement {
         .narrow=${this.narrow}
         back-path="/config"
         .route=${this.route}
-        .tabs=${configSections.areas}
         .columns=${this._columns(this.hass.localize, this.narrow)}
         .data=${this._data(this._labels)}
         .noDataText=${this.hass.localize("ui.panel.config.labels.no_labels")}

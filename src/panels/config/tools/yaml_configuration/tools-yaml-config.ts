@@ -249,7 +249,7 @@ export class ToolsYamlConfig extends LitElement {
 
         .content {
           padding: var(--ha-space-7) var(--ha-space-5) var(--ha-space-4);
-          max-width: 1040px;
+          max-width: var(--ha-page-content-max-width, 1040px);
           margin: 0 auto;
         }
 

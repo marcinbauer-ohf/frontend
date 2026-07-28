@@ -297,7 +297,7 @@ class ZHADevicePage extends LitElement {
           grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
           gap: var(--ha-space-4);
           align-items: start;
-          max-width: 1400px;
+          max-width: var(--ha-page-content-max-width, 1400px);
           width: 100%;
           margin: 0 auto;
           padding: var(--ha-space-4) var(--ha-space-4)

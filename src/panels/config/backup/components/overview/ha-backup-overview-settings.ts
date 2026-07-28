@@ -299,7 +299,7 @@ class HaBackupBackupsSummary extends LitElement {
       css`
         .content {
           padding: 28px 20px 0;
-          max-width: 690px;
+          max-width: var(--ha-page-content-max-width, 690px);
           margin: 0 auto;
           gap: var(--ha-space-6);
           display: flex;

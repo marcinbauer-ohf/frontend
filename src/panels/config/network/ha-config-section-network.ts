@@ -88,7 +88,7 @@ class HaConfigSectionNetwork extends LitElement {
   static styles = css`
     .content {
       padding: 28px 20px 0;
-      max-width: 1040px;
+      max-width: var(--ha-page-content-max-width, 1040px);
       margin: 0 auto;
     }
     supervisor-hostname,
@@ -100,7 +100,7 @@ class HaConfigSectionNetwork extends LitElement {
       display: block;
       margin: 0 auto;
       margin-bottom: 24px;
-      max-width: 600px;
+      max-width: var(--ha-page-content-max-width, 600px);
     }
     .discovery-card ha-md-list {
       padding-top: 0;

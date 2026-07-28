@@ -54,7 +54,6 @@ import {
 import "../../../layouts/hass-tabs-subpage";
 import type { HomeAssistant, Route } from "../../../types";
 import { showToast } from "../../../util/toast";
-import { configSections } from "../config-sections";
 import {
   loadAreaRegistryDetailDialog,
   showAreaRegistryDetailDialog,
@@ -171,7 +170,6 @@ export class HaConfigAreasDashboard extends LitElement {
         .backPath=${
           this._searchParms.has("historyBack") ? undefined : "/config"
         }
-        .tabs=${configSections.areas}
         .route=${this.route}
         has-fab
       >

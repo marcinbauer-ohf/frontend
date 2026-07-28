@@ -1372,7 +1372,7 @@ export class HaSceneEditor extends DirtyStateProviderMixin<number>()(
         }
         .container {
           padding: 28px 20px 0;
-          max-width: 1040px;
+          max-width: var(--ha-page-content-max-width, 1040px);
           margin: 0 auto;
         }
         .narrow.container {

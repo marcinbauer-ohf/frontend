@@ -412,7 +412,7 @@ class HaConfigLabs extends SubscribeMixin(LitElement) {
       }
 
       .content {
-        max-width: 800px;
+        max-width: var(--ha-page-content-max-width, 800px);
         margin: 0 auto;
         padding: var(--ha-space-4);
         display: flex;
@@ -499,7 +499,7 @@ class HaConfigLabs extends SubscribeMixin(LitElement) {
 
       /* Empty state */
       .empty {
-        max-width: 500px;
+        max-width: var(--ha-page-content-max-width, 500px);
         margin: 0 auto;
         padding: var(--ha-space-12) var(--ha-space-4);
         text-align: center;

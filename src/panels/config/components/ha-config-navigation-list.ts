@@ -1,6 +1,7 @@
 import type { CSSResultGroup, TemplateResult } from "lit";
 import { css, html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators";
+import { classMap } from "lit/directives/class-map";
 import "../../../components/ha-icon-next";
 import "../../../components/ha-svg-icon";
 import "../../../components/item/ha-list-item-button";
@@ -21,6 +22,9 @@ class HaConfigNavigationList extends LitElement {
 
   @property() public label?: string;
 
+  /** Path of the page shown in the detail column, highlighted in the list. */
+  @property({ attribute: false }) public selectedPath?: string;
+
   public render(): TemplateResult {
     return html`
       <ha-list-nav .ariaLabel=${this.label}>
@@ -29,6 +33,7 @@ class HaConfigNavigationList extends LitElement {
           return html`
             <ha-list-item-button
               .href=${externalApp ? undefined : page.path}
+              class=${classMap({ selected: this._isSelected(page.path) })}
               @click=${externalApp ? this._handleExternalApp : undefined}
             >
               <div
@@ -62,11 +67,32 @@ class HaConfigNavigationList extends LitElement {
     `;
   }
 
+  // Sub-pages of the selected page keep it highlighted, e.g. a single area
+  // page for /config/areas
+  private _isSelected(path: string): boolean {
+    return (
+      !!this.selectedPath &&
+      (this.selectedPath === path || this.selectedPath.startsWith(`${path}/`))
+    );
+  }
+
   private _handleExternalApp() {
     this.hass.auth.external!.fireMessage({ type: "config_screen/show" });
   }
 
   static styles: CSSResultGroup = css`
+    ha-list-item-button.selected {
+      background-color: color-mix(
+        in srgb,
+        var(--primary-color) 15%,
+        transparent
+      );
+    }
+    ha-list-item-button.selected::part(headline),
+    ha-list-item-button.selected ha-icon-next {
+      color: var(--primary-color);
+    }
+
     ha-svg-icon,
     ha-icon-next {
       color: var(--secondary-text-color);

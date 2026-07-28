@@ -327,7 +327,7 @@ export class CloudRemotePref extends LitElement {
         --md-item-overflow: visible;
       }
       ha-tip {
-        max-width: 600px;
+        max-width: var(--ha-page-content-max-width, 600px);
         margin: 0 auto;
       }
       ha-alert {

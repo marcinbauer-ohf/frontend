@@ -338,7 +338,7 @@ export class CloudAccount extends SubscribeMixin(LitElement) {
           padding-bottom: calc(
             var(--safe-area-inset-bottom) + var(--ha-space-6)
           );
-          max-width: 860px;
+          max-width: var(--ha-page-content-max-width, 860px);
           margin: 0 auto;
           gap: var(--ha-space-6);
           display: flex;

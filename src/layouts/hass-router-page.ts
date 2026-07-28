@@ -6,7 +6,7 @@ import { navigate } from "../common/navigate";
 import { computeRouteTail } from "../common/url/route";
 import type { Route } from "../types";
 
-const extractPage = (path: string, defaultPage: string) => {
+export const extractPage = (path: string, defaultPage: string) => {
   if (path === "") {
     return defaultPage;
   }

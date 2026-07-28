@@ -495,6 +495,7 @@
       "optional": "optional",
       "default": "Default",
       "dont_save": "Don't save",
+      "done": "Done",
       "copy": "Copy",
       "show": "Show",
       "replace": "Replace",
@@ -2513,12 +2514,21 @@
     "sidebar": {
       "external_app_configuration": "App settings",
       "sidebar_toggle": "Sidebar toggle",
-      "edit_sidebar": "Edit sidebar",
-      "edit_subtitle": "Synced on all devices",
-      "migrate_to_user_data": "This will change the sidebar on all the devices you are logged in to. To create a sidebar per device, you should use a different user for that device.",
-      "default": "default",
-      "reset_to_defaults": "Reset to defaults",
-      "reset_confirmation": "Are you sure you want to reset the sidebar to its default configuration? This will restore the original order and visibility of all panels."
+      "search": "Search",
+      "search_navigate_ask": "Search, navigate, or ask",
+      "assist": "Assist",
+      "home": "Home",
+      "more": "More",
+      "dashboards": "Dashboards",
+      "expand": "Expand sidebar",
+      "collapse": "Collapse sidebar",
+      "done": "Done",
+      "hide_panel": "Hide panel",
+      "show_panel": "Show panel",
+      "add_link": "Add link",
+      "link_icon": "Icon",
+      "link_name": "Name",
+      "link_path": "Path"
     },
     "panel": {
       "app": {
@@ -6918,6 +6928,7 @@
         },
         "person": {
           "caption": "People",
+          "description": "Manage the people Home Assistant recognizes and control their access.",
           "introduction": "Manage the people Home Assistant recognizes and control their access.",
           "note_about_persons_configured_in_yaml": "People configured via configuration.yaml cannot be edited via the UI.",
           "learn_more": "Learn more about people",
@@ -10915,9 +10926,9 @@
           "description": "This will hide the sidebar by default, similar to the mobile experience."
         },
         "customize_sidebar": {
-          "header": "Change the order and hide items from the sidebar",
-          "description": "You can also press and hold the header of the sidebar to activate edit mode.",
-          "button": "Edit"
+          "header": "Manage sidebar",
+          "description": "Change the order, hide items, or add shortcuts. You can also press and hold the sidebar to activate edit mode.",
+          "button": "Manage"
         },
         "vibrate": {
           "header": "Vibrate",

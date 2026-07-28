@@ -1,4 +1,3 @@
-import { mdiMenu } from "@mdi/js";
 import type { PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -9,7 +8,7 @@ import { fireEvent } from "../../common/dom/fire_event";
 import { navigate } from "../../common/navigate";
 import { computeRouteTail } from "../../common/url/route";
 import { nextRender } from "../../common/util/render-status";
-import "../../components/ha-icon-button";
+import "../../components/ha-menu-button";
 import type { HassioAddonDetails } from "../../data/hassio/addon";
 import {
   fetchHassioAddonInfo,
@@ -128,11 +127,7 @@ class HaPanelApp extends LitElement {
         (this.narrow || this.hass.dockedSidebar === "always_hidden")
           ? html`
               <div class="header">
-                <ha-icon-button
-                  .label=${this.hass.localize("ui.sidebar.sidebar_toggle")}
-                  .path=${mdiMenu}
-                  @click=${this._toggleMenu}
-                ></ha-icon-button>
+                <ha-menu-button></ha-menu-button>
                 <div class="main-title">${this._addon.name}</div>
               </div>
             `
@@ -566,7 +561,7 @@ class HaPanelApp extends LitElement {
       margin-inline-start: var(--ha-space-2);
     }
 
-    ha-icon-button {
+    ha-menu-button {
       pointer-events: auto;
     }
   `;

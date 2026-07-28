@@ -104,7 +104,7 @@ class HaBackupDetailsRestore extends LitElement {
 
   static styles = css`
     :host {
-      max-width: 690px;
+      max-width: var(--ha-page-content-max-width, 690px);
       width: 100%;
       margin: 0 auto;
       gap: var(--ha-space-6);

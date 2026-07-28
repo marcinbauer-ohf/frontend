@@ -293,7 +293,7 @@ export class HaLongLivedAccessTokenDialog extends DirtyStateProviderMixin<string
           text-align: center;
         }
         #qr img {
-          max-width: 90%;
+          max-width: var(--ha-page-content-max-width, 90%);
           height: auto;
           display: block;
           margin: 0 auto;

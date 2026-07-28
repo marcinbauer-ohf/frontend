@@ -113,7 +113,6 @@ import {
   getLabelsTableColumn,
   getTriggeredAtTableColumn,
 } from "../common/data-table-columns";
-import { configSections } from "../config-sections";
 import { showLabelDetailDialog } from "../labels/show-dialog-label-detail";
 import {
   getAssistantsSortableKey,
@@ -434,7 +433,6 @@ class HaScriptPicker extends SubscribeMixin(LitElement) {
           this._searchParms.has("historyBack") ? undefined : "/config"
         }
         .route=${this.route}
-        .tabs=${configSections.automations}
         .searchLabel=${this.hass.localize(
           "ui.panel.config.script.picker.search",
           { number: scripts.length }

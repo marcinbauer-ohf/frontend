@@ -323,7 +323,7 @@ class HaConfigEnergy extends LitElement {
         }
         .content {
           padding: 0 var(--ha-space-5);
-          max-width: 1040px;
+          max-width: var(--ha-page-content-max-width, 1040px);
           margin: 0 auto;
         }
 
@@ -341,7 +341,7 @@ class HaConfigEnergy extends LitElement {
         ha-energy-device-settings,
         ha-energy-device-settings-water {
           display: block;
-          max-width: 600px;
+          max-width: var(--ha-page-content-max-width, 600px);
           margin: 0 auto 12px;
         }
       `,

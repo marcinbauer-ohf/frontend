@@ -104,6 +104,15 @@ export const floorsContext = createContext<HomeAssistant["floors"]>("floors");
  */
 export const narrowViewportContext = createContext<boolean>("narrowViewport");
 
+/**
+ * Whether a page is rendered in the detail column of the settings split
+ * layout, where the settings list beside it acts as the page's header. Page
+ * layouts use this to drop their own toolbar chrome.
+ */
+export const settingsDetailContext = createContext<boolean>(
+  "settingsDetailColumn"
+);
+
 // #region lazy-contexts
 
 /**

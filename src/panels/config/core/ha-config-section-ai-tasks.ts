@@ -31,11 +31,11 @@ class HaConfigSectionAITasks extends LitElement {
   static styles = css`
     .content {
       padding: var(--ha-space-7) var(--ha-space-5) 0;
-      max-width: 1040px;
+      max-width: var(--ha-page-content-max-width, 1040px);
       margin: 0 auto;
     }
     ai-task-pref {
-      max-width: 600px;
+      max-width: var(--ha-page-content-max-width, 600px);
       margin: 0 auto;
       display: block;
     }
