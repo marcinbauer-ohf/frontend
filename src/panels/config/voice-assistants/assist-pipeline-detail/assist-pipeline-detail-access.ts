@@ -2,6 +2,7 @@ import {
   mdiEarth,
   mdiEyeOutline,
   mdiHammerWrench,
+  mdiHomeOutline,
   mdiShieldCheckOutline,
 } from "@mdi/js";
 import type { PropertyValues } from "lit";
@@ -10,6 +11,7 @@ import { customElement, property, state } from "lit/decorators";
 import { storage } from "../../../../common/decorators/storage";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import { navigate } from "../../../../common/navigate";
+import type { LocalizeKeys } from "../../../../common/translations/localize";
 import "../../../../components/ha-icon-next";
 import "../../../../components/ha-md-list";
 import "../../../../components/ha-md-list-item";
@@ -31,6 +33,18 @@ import { fetchIntegrationManifest } from "../../../../data/integration";
 import type { HomeAssistant } from "../../../../types";
 
 const HOME_ASSISTANT_AGENT = "conversation.home_assistant";
+
+/**
+ * ponytail: MOCKUP ONLY — illustrates how control access would break down once
+ * agents can manage Home Assistant, not just operate it. `available` marks what
+ * an agent can actually do today. See `_renderControlCapabilities`.
+ */
+const CONTROL_CAPABILITIES = [
+  { key: "entities", available: true },
+  { key: "automations", available: false },
+  { key: "dashboards", available: false },
+  { key: "settings", available: false },
+] as const;
 
 @customElement("assist-pipeline-detail-access")
 export class AssistPipelineDetailAccess extends LitElement {
@@ -105,8 +119,20 @@ export class AssistPipelineDetailAccess extends LitElement {
     // be turned off, so the switch is locked on.
     const isBuiltInAgent =
       this.data.conversation_engine === HOME_ASSISTANT_AGENT;
-    const controlsHome = isBuiltInAgent || this._controlsHome();
     const showLocalToggle = !isBuiltInAgent;
+    const preferLocal = this.data.prefer_local_intents ?? false;
+    // Local intents can always control, so handling commands locally implies
+    // control access. Lock the switch instead of letting it move on its own.
+    const controlLocked = isBuiltInAgent || preferLocal;
+    const controlsHome = controlLocked || this._controlsHome();
+    // While the manifest is still loading, assume the agent is cloud-based
+    // rather than promise that nothing leaves the network.
+    const localHandlingDescription = this.hass.localize(
+      this._agentIotClass === undefined ||
+        assistAgentIsCloud(this._agentIotClass)
+        ? "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.prefer_local_intents_description"
+        : "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.prefer_local_intents_description_local"
+    );
 
     return html`
       <div class="section">
@@ -123,6 +149,29 @@ export class AssistPipelineDetailAccess extends LitElement {
           </p>
         </div>
         <ha-md-list>
+          ${
+            showLocalToggle
+              ? html`<ha-md-list-item>
+                  <ha-svg-icon
+                    slot="start"
+                    .path=${mdiHomeOutline}
+                  ></ha-svg-icon>
+                  <span slot="headline">
+                    ${this.hass.localize(
+                      "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.prefer_local_intents"
+                    )}
+                  </span>
+                  <span slot="supporting-text">
+                    ${localHandlingDescription}
+                  </span>
+                  <ha-switch
+                    slot="end"
+                    .checked=${preferLocal}
+                    @change=${this._preferLocalChanged}
+                  ></ha-switch>
+                </ha-md-list-item>`
+              : nothing
+          }
           <ha-md-list-item>
             <ha-svg-icon slot="start" .path=${mdiHammerWrench}></ha-svg-icon>
             <span slot="headline">
@@ -132,46 +181,22 @@ export class AssistPipelineDetailAccess extends LitElement {
             </span>
             <span slot="supporting-text">
               ${this.hass.localize(
-                controlsHome
-                  ? "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.control_on"
-                  : "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.control_off"
+                !isBuiltInAgent && preferLocal
+                  ? "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.control_locked_local"
+                  : controlsHome
+                    ? "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.control_on"
+                    : "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.control_off"
               )}
             </span>
             <ha-switch
               slot="end"
               .checked=${controlsHome}
-              .disabled=${isBuiltInAgent}
+              .disabled=${controlLocked}
               @change=${this._controlChanged}
             ></ha-switch>
           </ha-md-list-item>
-          ${
-            this._agentIotClass !== undefined
-              ? html`<ha-md-list-item>
-                  <ha-svg-icon
-                    slot="start"
-                    .path=${
-                      assistAgentIsCloud(this._agentIotClass)
-                        ? mdiEarth
-                        : mdiShieldCheckOutline
-                    }
-                  ></ha-svg-icon>
-                  <span slot="headline">
-                    ${this.hass.localize(
-                      assistAgentIsCloud(this._agentIotClass)
-                        ? "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_cloud"
-                        : "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_local"
-                    )}
-                  </span>
-                  <span slot="supporting-text">
-                    ${this.hass.localize(
-                      assistAgentIsCloud(this._agentIotClass)
-                        ? "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_cloud_description"
-                        : "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_local_description"
-                    )}
-                  </span>
-                </ha-md-list-item>`
-              : nothing
-          }
+          ${controlsHome ? this._renderControlCapabilities() : nothing}
+          ${this._renderInternet(preferLocal)}
           <ha-md-list-item type="button" @click=${this._openExposed}>
             <ha-svg-icon slot="start" .path=${mdiEyeOutline}></ha-svg-icon>
             <span slot="headline">
@@ -187,47 +212,93 @@ export class AssistPipelineDetailAccess extends LitElement {
             </span>
             <ha-icon-next slot="end"></ha-icon-next>
           </ha-md-list-item>
-          ${
-            showLocalToggle
-              ? html`<ha-md-list-item>
-                  <span slot="headline">
-                    ${this.hass.localize(
-                      "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.prefer_local_intents"
-                    )}
-                  </span>
-                  <span slot="supporting-text">
-                    ${this.hass.localize(
-                      "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.prefer_local_intents_description"
-                    )}
-                  </span>
-                  <ha-switch
-                    slot="end"
-                    .checked=${this.data.prefer_local_intents ?? true}
-                    @change=${this._preferLocalChanged}
-                  ></ha-switch>
-                </ha-md-list-item>`
-              : nothing
-          }
         </ha-md-list>
       </div>
     `;
   }
 
-  /** Effective control access: per-agent override, else the agent capability. */
+  /**
+   * ponytail: MOCKUP ONLY. What "Control Home Assistant" breaks down into once
+   * management capabilities land — the grants live on the agent's config entry
+   * (its LLM APIs), which the frontend can't read or set per agent yet, so
+   * every row is inert: entity control reflects the row above it, the rest are
+   * off and disabled. Delete this and CONTROL_CAPABILITIES, or wire it to the
+   * real grants, before this ships.
+   */
+  private _renderControlCapabilities() {
+    return CONTROL_CAPABILITIES.map(
+      ({ key, available }) => html`
+        <ha-md-list-item class="sub">
+          <span slot="headline">
+            ${this.hass.localize(
+              `ui.panel.config.voice_assistants.assistants.pipeline.detail.access.capability_${key}` as LocalizeKeys
+            )}
+          </span>
+          ${
+            available
+              ? nothing
+              : html`<span slot="supporting-text">
+                  ${this.hass.localize(
+                    "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.capability_coming_soon"
+                  )}
+                </span>`
+          }
+          <ha-switch slot="end" .checked=${available} disabled></ha-switch>
+        </ha-md-list-item>
+      `
+    );
+  }
+
+  /**
+   * Where the agent's requests go — a fact the user can't change, derived from
+   * its integration. Kept as its own row rather than merged into the local
+   * handling switch above: merged, that switch would read as a privacy
+   * guarantee a cloud agent can't give, and would contradict the same
+   * cloud/local badge shown in the agent list and the chat.
+   */
+  private _renderInternet(preferLocal: boolean) {
+    // undefined = the manifest is still loading, null = there is none, so we
+    // don't know where requests go and claim nothing.
+    if (!this._agentIotClass) {
+      return nothing;
+    }
+    const isCloud = assistAgentIsCloud(this._agentIotClass);
+
+    return html`
+      <ha-md-list-item>
+        <ha-svg-icon
+          slot="start"
+          .path=${isCloud ? mdiEarth : mdiShieldCheckOutline}
+        ></ha-svg-icon>
+        <span slot="headline">
+          ${this.hass.localize(
+            isCloud
+              ? "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_cloud"
+              : "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_local"
+          )}
+        </span>
+        <span slot="supporting-text">
+          ${this.hass.localize(
+            !isCloud
+              ? "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_local_description"
+              : preferLocal
+                ? "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_cloud_partial_description"
+                : "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.internet_cloud_description"
+          )}
+        </span>
+      </ha-md-list-item>
+    `;
+  }
+
+  /** Effective control access, with the not-yet-saved switch state first. */
   private _controlsHome(): boolean {
     if (this._localControlOverride !== undefined) {
       return this._localControlOverride;
     }
-    const id = (this.data as AssistPipeline | undefined)?.id;
-    if (id && id in this._controlOverrides) {
-      return this._controlOverrides[id];
-    }
     return assistAgentControlsHome(
-      this.hass,
-      this.data as Pick<
-        AssistPipeline,
-        "conversation_engine" | "prefer_local_intents"
-      >
+      this.hass.states,
+      this.data as AssistPipeline,
+      this._controlOverrides
     );
   }
 
@@ -247,9 +318,11 @@ export class AssistPipelineDetailAccess extends LitElement {
   }
 
   private _preferLocalChanged(ev: Event) {
-    const checked = (ev.target as HaSwitch).checked;
     fireEvent(this, "value-changed", {
-      value: { ...this.data, prefer_local_intents: checked },
+      value: {
+        ...this.data,
+        prefer_local_intents: (ev.target as HaSwitch).checked,
+      },
     });
   }
 
@@ -289,6 +362,10 @@ export class AssistPipelineDetailAccess extends LitElement {
     }
     ha-md-list-item ha-svg-icon[slot="start"] {
       color: var(--secondary-text-color);
+    }
+    /* Indents a row under the one it belongs to, where the icon would be. */
+    ha-md-list-item.sub {
+      --md-list-item-leading-space: 40px;
     }
   `;
 }

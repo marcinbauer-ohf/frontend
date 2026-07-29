@@ -24,6 +24,24 @@ export interface GenDataTaskResult<T = string> {
   data: T;
 }
 
+export interface GenImageTask {
+  task_name: string;
+  entity_id?: string;
+  instructions: string;
+}
+
+export interface GenImageTaskResult {
+  conversation_id: string;
+  media_source_id: string;
+  /** Signed path to the generated image, valid for one hour. */
+  url: string;
+  mime_type: string;
+  width?: number;
+  height?: number;
+  model?: string;
+  revised_prompt?: string;
+}
+
 export interface AITaskStructureField {
   description?: string;
   required?: boolean;
@@ -53,6 +71,21 @@ export const generateDataAITask = async <T = string>(
   const result = await hass.callService<GenDataTaskResult<T>>(
     "ai_task",
     "generate_data",
+    task,
+    undefined,
+    true,
+    true
+  );
+  return result.response!;
+};
+
+export const generateImageAITask = async (
+  hass: HomeAssistant,
+  task: GenImageTask
+): Promise<GenImageTaskResult> => {
+  const result = await hass.callService<GenImageTaskResult>(
+    "ai_task",
+    "generate_image",
     task,
     undefined,
     true,

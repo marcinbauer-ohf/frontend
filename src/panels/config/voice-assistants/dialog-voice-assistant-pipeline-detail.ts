@@ -104,6 +104,9 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
       }
     }
     this._data = {
+      // New agents handle simple commands locally by default. Existing
+      // pipelines keep whatever they were stored with (absent = off, above).
+      prefer_local_intents: true,
       ...(this._params.pipeline || {}),
       language:
         this._params.pipeline?.language ||
@@ -320,7 +323,7 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
         language: data.language!,
         conversation_engine: data.conversation_engine!,
         conversation_language: data.conversation_language ?? null,
-        prefer_local_intents: data.prefer_local_intents ?? true,
+        prefer_local_intents: data.prefer_local_intents ?? false,
         stt_engine: data.stt_engine ?? null,
         stt_language: data.stt_language ?? null,
         tts_engine: data.tts_engine ?? null,

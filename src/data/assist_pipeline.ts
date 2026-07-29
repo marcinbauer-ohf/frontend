@@ -1,24 +1,35 @@
 import { supportsFeature } from "../common/entity/supports-feature";
 import type { HomeAssistant } from "../types";
+import type { AssistAgentControlOverride } from "./assist_agent_control_override";
 import type { ConversationResult } from "./conversation";
 import { ConversationEntityFeature } from "./conversation";
 import type { SpeechMetadata } from "./stt";
 
 /**
  * Whether the pipeline's conversation agent can read/write (control) Home
- * Assistant. True when the agent exposes the CONTROL feature (i.e. it has the
- * "Assist" / Control Home Assistant LLM API granted), or when the pipeline
- * prefers handling commands locally (local intents can always control), or when
- * the agent entity is unknown (assume control, matching the built-in agent).
+ * Assistant, as every surface that shows this must compute it the same way:
+ *
+ * 1. Handling commands locally implies control — local intents always can.
+ * 2. Otherwise the user's per-agent override (see `overrides`), if they set one.
+ * 3. Otherwise the agent's own capability: the CONTROL feature (i.e. the
+ *    "Assist" / Control Home Assistant LLM API granted to it), assuming control
+ *    when the agent entity is unknown, matching the built-in agent.
  */
 export const assistAgentControlsHome = (
-  hass: HomeAssistant,
-  pipeline: Pick<AssistPipeline, "conversation_engine" | "prefer_local_intents">
+  states: HomeAssistant["states"],
+  pipeline: Pick<
+    AssistPipeline,
+    "conversation_engine" | "prefer_local_intents"
+  > & { id?: string },
+  overrides: AssistAgentControlOverride = {}
 ): boolean => {
   if (pipeline.prefer_local_intents) {
     return true;
   }
-  const stateObj = hass.states[pipeline.conversation_engine];
+  if (pipeline.id && pipeline.id in overrides) {
+    return overrides[pipeline.id];
+  }
+  const stateObj = states[pipeline.conversation_engine];
   return stateObj
     ? supportsFeature(stateObj, ConversationEntityFeature.CONTROL)
     : true;
@@ -28,8 +39,9 @@ export const assistAgentControlsHome = (
  * Whether a conversation agent processes requests in the cloud (sends data
  * off-device) rather than locally. Derived from the agent integration's
  * `iot_class` manifest field, following the same `cloud_*` convention used
- * across the integrations UI. Agents whose integration is unknown or has no
- * cloud iot_class (built-in intents, a local LLM) are treated as local.
+ * across the integrations UI. Agents with no cloud iot_class (built-in intents,
+ * a local LLM) are local; callers must treat an unknown integration as neither,
+ * not as local, so we never promise privacy we can't verify.
  */
 export const assistAgentIsCloud = (
   iotClass: string | undefined | null

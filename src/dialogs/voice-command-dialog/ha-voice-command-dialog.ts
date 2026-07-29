@@ -179,33 +179,50 @@ export class HaVoiceCommandDialog extends LitElement {
                   @assist-delete-conversation=${this._handleDeleteConversation}
                 ></ha-assist-chat-history>
               `
-            : this._errorLoadAssist
-              ? html`<ha-alert alert-type="error">
-                  ${this.hass.localize(
-                    `ui.dialogs.voice_command.${this._errorLoadAssist}_error_load_assist`
-                  )}
-                </ha-alert>`
-              : this._pipeline
-                ? html`
-                    <ha-assist-chat
-                      .hass=${this.hass}
-                      .pipeline=${this._pipeline}
-                      .pipelines=${this._pipelines}
-                      .pipelineId=${this._pipelineId}
-                      .preferredPipeline=${this._preferredPipeline}
-                      .startListening=${this._startListening}
-                      .initialPrompt=${this._prompt}
-                      .submitInitialPrompt=${this._submitPrompt}
-                      @pipeline-changed=${this._handlePipelineChanged}
-                      @assist-open-settings=${this._openSettings}
-                    >
-                    </ha-assist-chat>
-                  `
-                : html`<div class="pipelines-loading">
-                    <ha-spinner size="large"></ha-spinner>
-                  </div>`
+            : nothing
         }
+        ${this._renderChat(isHistory)}
       </ha-adaptive-side-dialog>
+    `;
+  }
+
+  /**
+   * The open conversation lives inside `ha-assist-chat`, so the element stays
+   * mounted (just hidden) while the history list is shown — unmounting it would
+   * discard the conversation and start a new one on the way back.
+   */
+  private _renderChat(hidden: boolean) {
+    if (this._errorLoadAssist) {
+      return hidden
+        ? nothing
+        : html`<ha-alert alert-type="error">
+            ${this.hass.localize(
+              `ui.dialogs.voice_command.${this._errorLoadAssist}_error_load_assist`
+            )}
+          </ha-alert>`;
+    }
+    if (!this._pipeline) {
+      return hidden
+        ? nothing
+        : html`<div class="pipelines-loading">
+            <ha-spinner size="large"></ha-spinner>
+          </div>`;
+    }
+    return html`
+      <ha-assist-chat
+        class=${hidden ? "hidden" : ""}
+        .hass=${this.hass}
+        .pipeline=${this._pipeline}
+        .pipelines=${this._pipelines}
+        .pipelineId=${this._pipelineId}
+        .preferredPipeline=${this._preferredPipeline}
+        .startListening=${this._startListening}
+        .initialPrompt=${this._prompt}
+        .submitInitialPrompt=${this._submitPrompt}
+        @pipeline-changed=${this._handlePipelineChanged}
+        @assist-open-settings=${this._openSettings}
+      >
+      </ha-assist-chat>
     `;
   }
 
@@ -361,6 +378,10 @@ export class HaVoiceCommandDialog extends LitElement {
         .pipelines-loading {
           display: flex;
           justify-content: center;
+        }
+        /* Outer-tree rule, so it wins over the element's own :host display. */
+        ha-assist-chat.hidden {
+          display: none;
         }
       `,
     ];

@@ -1,9 +1,13 @@
 import { mdiImagePlus } from "@mdi/js";
-import type { TemplateResult } from "lit";
+import type { PropertyValues, TemplateResult } from "lit";
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import type { MediaPickedEvent } from "../data/media-player";
+import { isComponentLoaded } from "../common/config/is_component_loaded";
 import { fireEvent } from "../common/dom/fire_event";
+import type { AITaskPreferences } from "../data/ai_task";
+import { fetchAITaskPreferences } from "../data/ai_task";
+import { showAIImageDialog } from "../dialogs/ai-image/show-dialog-ai-image";
 import { haStyle } from "../resources/styles";
 import {
   MEDIA_PREFIX,
@@ -54,27 +58,69 @@ export class HaPictureUpload extends LitElement {
 
   @property({ type: Number }) public size = 512;
 
+  /** Offer generating the picture with the AI task integration. */
+  @property({ type: Boolean, attribute: "generate-ai" }) public generateAi =
+    false;
+
+  /** Prompt the generate dialog starts with. Only used with `generate-ai`. */
+  @property({ attribute: false }) public aiPrompt?: string;
+
+  /** Task name reported to the AI task integration. */
+  @property({ attribute: false }) public aiTaskName?: string;
+
   @state() private _uploading = false;
+
+  @state() private _aiPrefs?: AITaskPreferences;
+
+  protected firstUpdated(changedProps: PropertyValues<this>): void {
+    super.firstUpdated(changedProps);
+    if (
+      !this.generateAi ||
+      !this.hass ||
+      !isComponentLoaded(this.hass.config, "ai_task")
+    ) {
+      return;
+    }
+    fetchAITaskPreferences(this.hass).then((prefs) => {
+      this._aiPrefs = prefs;
+    });
+  }
+
+  private get _canGenerate(): boolean {
+    return Boolean(
+      this.generateAi &&
+      this._aiPrefs?.enabled !== false &&
+      this._aiPrefs?.gen_image_entity_id
+    );
+  }
 
   public render(): TemplateResult {
     if (!this.value) {
+      const generateLink = this._canGenerate
+        ? html`<button class="link" @click=${this._generateWithAI}>
+            ${this.hass.localize("ui.components.picture-upload.generate_ai")}
+          </button>`
+        : undefined;
+
+      const selectMediaLink = this.selectMedia
+        ? html`<button class="link" @click=${this._chooseMedia}>
+            ${this.hass.localize("ui.components.picture-upload.select_media")}
+          </button>`
+        : undefined;
+
       const secondary =
         this.secondary ||
-        (this.selectMedia
+        (selectMediaLink
           ? html`${this.hass.localize(
               "ui.components.picture-upload.secondary",
-              {
-                select_media: html`<button
-                  class="link"
-                  @click=${this._chooseMedia}
-                >
-                  ${this.hass.localize(
-                    "ui.components.picture-upload.select_media"
-                  )}
-                </button>`,
-              }
-            )}`
-          : undefined);
+              { select_media: selectMediaLink }
+            )}${generateLink ? html` · ${generateLink}` : ""}`
+          : generateLink
+            ? html`${this.hass.localize(
+                "ui.components.picture-upload.secondary_generate",
+                { generate_ai: generateLink }
+              )}`
+            : undefined);
 
       return html`
         <ha-file-upload
@@ -217,6 +263,16 @@ export class HaPictureUpload extends LitElement {
       this._uploading = false;
     }
   }
+
+  private _generateWithAI = () => {
+    showAIImageDialog(this, {
+      taskName: this.aiTaskName || this.label || "Picture",
+      instructions: this.aiPrompt,
+      // The preview in the dialog already acts as the confirmation step, so
+      // skip the cropper and upload the generated picture as-is.
+      imageGeneratedCallback: (file) => this._uploadFile(file),
+    });
+  };
 
   private _chooseMedia = () => {
     showMediaBrowserDialog(this, {

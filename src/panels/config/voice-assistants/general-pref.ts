@@ -59,7 +59,7 @@ export class GeneralPref extends LitElement {
                   <ha-list-item-button href=${EXPOSE_HREF}>
                     <span slot="headline">
                       ${this.hass.localize(
-                        "ui.panel.config.voice_assistants.assistants.general.accessible_entities"
+                        "ui.panel.config.voice_assistants.assistants.general.all_exposed_entities"
                       )}
                     </span>
                     <span slot="supporting-text">

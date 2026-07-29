@@ -1059,7 +1059,9 @@
         "supported_formats": "Supports JPEG, PNG, or GIF image.",
         "unsupported_format": "Unsupported format, please choose a JPEG, PNG, or GIF image.",
         "secondary": "Drop your file here or {select_media}",
-        "select_media": "select from media"
+        "secondary_generate": "Drop your file here or {generate_ai}",
+        "select_media": "select from media",
+        "generate_ai": "generate with AI"
       },
       "color-picker": {
         "default": "default",
@@ -1669,10 +1671,12 @@
         "disclaimer_no_control": "This assistant can’t control your home.",
         "disclaimer_data_local": "Your requests are processed locally and no data is sent to the internet.",
         "disclaimer_data_cloud": "Your requests are sent to the internet for processing.",
+        "disclaimer_data_cloud_partial": "Commands your home understands are handled locally; anything else is sent to the internet for processing.",
         "control_summary": "Can control your home.",
         "control_summary_no": "Can’t control your home.",
         "data_summary_local": "No data leaves your home.",
         "data_summary_cloud": "Requests are sent to the internet.",
+        "data_summary_cloud_partial": "Only commands your home can’t handle are sent to the internet.",
         "learn_more": "Learn more",
         "history": {
           "title": "Past conversations",
@@ -1687,7 +1691,17 @@
         "not_supported_microphone_documentation_link": "the documentation",
         "unknown_error_load_assist": "Loading the Assist pipeline failed",
         "not_found_error_load_assist": "Cannot find the Assist pipeline",
-        "show_details": "Show details"
+        "show_details": "Show details",
+        "permission": {
+          "title": "Allow this action?",
+          "no_details": "No details provided",
+          "allow_once": "Allow once",
+          "allow_session": "Allow for this conversation",
+          "deny": "Deny",
+          "allowed": "Allowed. Running it now.",
+          "session_allowed": "Allowed. I won't ask again in this conversation.",
+          "denied": "Denied. I didn't do anything."
+        }
       },
       "generic": {
         "default_confirmation_title": "Are you sure?"
@@ -2410,6 +2424,16 @@
       "enter_code": {
         "title": "Enter code",
         "input_label": "Code"
+      },
+      "ai_image": {
+        "header": "Generate picture with AI",
+        "instructions": "Describe the picture",
+        "instructions_placeholder": "A friendly robot waving hello",
+        "generate": "Generate",
+        "try_again": "Try again",
+        "use_image": "Use picture",
+        "preview_alt": "Generated picture",
+        "error": "Something went wrong while generating the picture."
       },
       "tts-try": {
         "header": "Try text-to-speech",
@@ -4861,8 +4885,9 @@
               "agents_intro": "Assist now supports multiple agents. Each agent has its own conversation agent, voice, and access to your home. Give them an avatar and custom instructions, and switch between them in the Assist chat.",
               "controls_home": "Control Home Assistant",
               "cannot_control_home": "Can’t control Home Assistant",
-              "data_local": "Runs locally — no data sent to the internet",
+              "data_local": "Your requests are handled on your network, not sent to the internet",
               "data_cloud": "Sends your requests to the internet",
+              "data_cloud_partial": "Only commands your home can’t handle are sent to the internet",
               "no_agents": "You don’t have any agents yet",
               "add_assistant": "Create agent",
               "expose_new_entities": "Expose new entities automatically",
@@ -4893,23 +4918,33 @@
                 "access": {
                   "control_on": "Enabled",
                   "control_off": "Disabled",
+                  "control_locked_local": "Always on while commands are handled locally",
+                  "capability_entities": "Devices and entities",
+                  "capability_automations": "Automations and scripts",
+                  "capability_dashboards": "Dashboards",
+                  "capability_settings": "Settings and integrations",
+                  "capability_coming_soon": "Coming soon",
                   "control_hint": "Change control access in the conversation agent’s settings.",
                   "can_read": "Read or control {count} {count, plural,\n  one {entity}\n  other {entities}\n}",
                   "exposed_shared": "Shared by all agents",
                   "internet_cloud": "Access to the internet",
                   "internet_cloud_description": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::data_cloud%]",
                   "internet_local": "Runs locally",
-                  "internet_local_description": "No data is sent to the internet",
+                  "internet_local_description": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::data_local%]",
+                  "internet_cloud_partial_description": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::data_cloud_partial%]",
                   "instructions": "Instructions",
                   "instructions_empty": "No custom instructions"
                 },
                 "form": {
                   "name": "[%key:ui::common::name%]",
                   "avatar": "Avatar",
+                  "avatar_ai_prompt": "Avatar for a voice assistant. Friendly character portrait, centered, flat illustration, simple solid background.",
+                  "avatar_ai_prompt_named": "Avatar for a voice assistant named “{name}”. Friendly character portrait, centered, flat illustration, simple solid background.",
                   "conversation_engine": "Conversation agent",
                   "conversation_language": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::detail::form::language%]",
                   "prefer_local_intents": "Prefer handling commands locally",
-                  "prefer_local_intents_description": "A command will first be sent to the local conversation agent. If the local agent does not handle the command, it will be sent to selected agent.",
+                  "prefer_local_intents_description": "Commands Home Assistant understands are answered locally. Everything else is sent to the internet.",
+                  "prefer_local_intents_description_local": "Commands Home Assistant understands are answered directly, without the agent.",
                   "language": "Language",
                   "stt_engine": "Speech-to-text",
                   "stt_language": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::detail::form::language%]",

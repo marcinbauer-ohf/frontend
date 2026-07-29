@@ -15,6 +15,10 @@ import type { AssistPipeline } from "../../../../data/assist_pipeline";
 import { getConversationAgentInfo } from "../../../../data/conversation";
 import type { HomeAssistant } from "../../../../types";
 
+// The built-in agent matches intents instead of prompting a model, so it has
+// no instructions to override.
+const HOME_ASSISTANT_AGENT = "conversation.home_assistant";
+
 @customElement("assist-pipeline-detail-conversation")
 export class AssistPipelineDetailConversation extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
@@ -134,7 +138,8 @@ export class AssistPipelineDetailConversation extends LitElement {
           @supported-languages-changed=${this._supportedLanguagesChanged}
         ></ha-form>
         ${
-          this.data?.conversation_engine
+          this.data?.conversation_engine &&
+          this.data.conversation_engine !== HOME_ASSISTANT_AGENT
             ? html`<div class="instructions">
                 <ha-textarea
                   autogrow

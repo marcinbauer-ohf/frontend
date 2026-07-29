@@ -23,7 +23,6 @@ import { storage } from "../common/decorators/storage";
 import { transform } from "../common/decorators/transform";
 import { fireEvent } from "../common/dom/fire_event";
 import { stopPropagation } from "../common/dom/stop_propagation";
-import { supportsFeature } from "../common/entity/supports-feature";
 import type { LocalizeFunc } from "../common/translations/localize";
 import {
   ASSIST_AGENT_AVATARS_STORAGE_KEY,
@@ -35,6 +34,7 @@ import {
 } from "../data/assist_agent_control_override";
 import type { StoredAssistMessage } from "../data/assist_conversation_history";
 import {
+  assistAgentControlsHome,
   assistAgentIsCloud,
   runAssistPipeline,
   type AssistPipeline,
@@ -50,7 +50,6 @@ import {
   internationalizationContext,
   statesContext,
 } from "../data/context";
-import { ConversationEntityFeature } from "../data/conversation";
 import { showAlertDialog } from "../dialogs/generic/show-dialog-box";
 import { assistCasitaIcon } from "../resources/assist-casita-icon";
 import { haStyleScrollbar } from "../resources/styles";
@@ -76,6 +75,12 @@ import "./ha-textarea";
 import type { HaTextArea } from "./ha-textarea";
 
 const OPEN_SETTINGS = "__OPEN_SETTINGS__";
+
+// ponytail: front-end-only mock of the agentic "may I run this?" prompt. There is
+// no backend contract for it yet, so it is faked from the composer: send
+// "/permission light.turn_off kitchen" to get the card. Drop the trigger and
+// drive it from a chat-log delta once the backend can ask for confirmation.
+const MOCK_PERMISSION_TRIGGER = "/permission";
 
 interface AssistMessage {
   who: string;
@@ -202,6 +207,10 @@ export class HaAssistChat extends LitElement {
 
   private _initialPromptSubmitted = false;
 
+  // ponytail: see MOCK_PERMISSION_TRIGGER. Conversation-scoped on purpose — a
+  // grant that outlives the chat needs a backend store and a way to revoke it.
+  private _mockPermissionGranted = false;
+
   private _restoring = false;
 
   private _audioRecorder?: AudioRecorder;
@@ -242,6 +251,7 @@ export class HaAssistChat extends LitElement {
   public startNewConversation(): void {
     this._conversation = [];
     this._conversationId = null;
+    this._mockPermissionGranted = false;
   }
 
   /** Restore a stored conversation into the chat. */
@@ -311,12 +321,19 @@ export class HaAssistChat extends LitElement {
   }
 
   /**
-   * Whether an agent processes requests in the cloud, from its integration's
-   * iot_class. Treated as local until the manifest is known.
+   * Where an agent processes requests, from its integration's iot_class.
+   * `undefined` while the manifest is unknown or missing — we say nothing about
+   * an agent whose provenance we can't verify rather than imply it is local.
    */
-  private _pipelineIsCloud(pipeline?: AssistPipeline): boolean {
+  private _pipelineLocality(
+    pipeline?: AssistPipeline
+  ): "cloud" | "local" | undefined {
     const domain = this._pipelineDomain(pipeline);
-    return domain ? assistAgentIsCloud(this._iotClasses[domain]) : false;
+    const iotClass = domain ? this._iotClasses[domain] : undefined;
+    if (!iotClass) {
+      return undefined;
+    }
+    return assistAgentIsCloud(iotClass) ? "cloud" : "local";
   }
 
   /**
@@ -413,24 +430,19 @@ export class HaAssistChat extends LitElement {
 
   /** Whether the agent can read/write (control) Home Assistant. */
   private _controlsHome(pipeline: AssistPipeline): boolean {
-    // The per-agent (client-side) override wins over the conversation
-    // entity's own capability — the same entity may keep control elsewhere
-    // (e.g. automations) while this agent has it turned off.
-    if (pipeline.id in this._controlOverrides) {
-      return this._controlOverrides[pipeline.id];
-    }
-    if (pipeline.prefer_local_intents) {
-      return true;
-    }
-    const stateObj = this._states[pipeline.conversation_engine];
-    return stateObj
-      ? supportsFeature(stateObj, ConversationEntityFeature.CONTROL)
-      : true;
+    return assistAgentControlsHome(
+      this._states,
+      pipeline,
+      this._controlOverrides
+    );
   }
 
   protected render(): TemplateResult {
     const controlHA = this.pipeline ? this._controlsHome(this.pipeline) : false;
-    const engineIsCloud = this._pipelineIsCloud(this.pipeline);
+    const locality = this._pipelineLocality(this.pipeline);
+    // A cloud agent that handles simple commands locally only sends the rest.
+    const partiallyLocal =
+      locality === "cloud" && !!this.pipeline?.prefer_local_intents;
     const supportsMicrophone = AudioRecorder.isSupported;
     const supportsSTT = this.pipeline?.stt_engine && !this.disableSpeech;
     const avatarSrc = this._uploadedAvatarSrc();
@@ -569,17 +581,19 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
                           }
                           ${
                             message.text
-                              ? message.who === "hass" && message.text === "…"
-                                ? html`<span class="thinking-indicator"
-                                    >${this._renderModelLogo()}</span
-                                  >`
-                                : html`
-                                    <ha-markdown
-                                      breaks
-                                      cache
-                                      .content=${message.text}
-                                    ></ha-markdown>
-                                  `
+                              ? typeof message.text !== "string"
+                                ? message.text
+                                : message.who === "hass" && message.text === "…"
+                                  ? html`<span class="thinking-indicator"
+                                      >${this._renderModelLogo()}</span
+                                    >`
+                                  : html`
+                                      <ha-markdown
+                                        breaks
+                                        cache
+                                        .content=${message.text}
+                                      ></ha-markdown>
+                                    `
                               : nothing
                           }
                         </div>
@@ -671,17 +685,25 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
                   : "ui.dialogs.voice_command.disclaimer_no_control"
               )}
             </ha-tooltip>
-            <ha-svg-icon
-              id="disclaimer-data-icon"
-              .path=${engineIsCloud ? mdiEarth : mdiShieldCheckOutline}
-            ></ha-svg-icon>
-            <ha-tooltip for="disclaimer-data-icon">
-              ${this._localize(
-                engineIsCloud
-                  ? "ui.dialogs.voice_command.disclaimer_data_cloud"
-                  : "ui.dialogs.voice_command.disclaimer_data_local"
-              )}
-            </ha-tooltip>
+            ${
+              locality
+                ? html`<ha-svg-icon
+                      id="disclaimer-data-icon"
+                      .path=${
+                        locality === "cloud" ? mdiEarth : mdiShieldCheckOutline
+                      }
+                    ></ha-svg-icon>
+                    <ha-tooltip for="disclaimer-data-icon">
+                      ${this._localize(
+                        locality === "local"
+                          ? "ui.dialogs.voice_command.disclaimer_data_local"
+                          : partiallyLocal
+                            ? "ui.dialogs.voice_command.disclaimer_data_cloud_partial"
+                            : "ui.dialogs.voice_command.disclaimer_data_cloud"
+                      )}
+                    </ha-tooltip>`
+                : nothing
+            }
           </span>
           <span class="disclaimer-text">
             ${this._localize(
@@ -689,11 +711,17 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
                 ? "ui.dialogs.voice_command.control_summary"
                 : "ui.dialogs.voice_command.control_summary_no"
             )}
-            ${this._localize(
-              engineIsCloud
-                ? "ui.dialogs.voice_command.data_summary_cloud"
-                : "ui.dialogs.voice_command.data_summary_local"
-            )}
+            ${
+              locality
+                ? this._localize(
+                    locality === "local"
+                      ? "ui.dialogs.voice_command.data_summary_local"
+                      : partiallyLocal
+                        ? "ui.dialogs.voice_command.data_summary_cloud_partial"
+                        : "ui.dialogs.voice_command.data_summary_cloud"
+                  )
+                : nothing
+            }
             <a
               href=${documentationUrl(this._config, "/docs/assist/")}
               target="_blank"
@@ -744,14 +772,18 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
                     ></ha-svg-icon>`
                   : nothing
               }
-              <ha-svg-icon
-                class="agent-capability"
-                .path=${
-                  this._pipelineIsCloud(pipeline)
-                    ? mdiEarth
-                    : mdiShieldCheckOutline
-                }
-              ></ha-svg-icon>
+              ${
+                this._pipelineLocality(pipeline)
+                  ? html`<ha-svg-icon
+                      class="agent-capability"
+                      .path=${
+                        this._pipelineLocality(pipeline) === "cloud"
+                          ? mdiEarth
+                          : mdiShieldCheckOutline
+                      }
+                    ></ha-svg-icon>`
+                  : nothing
+              }
               ${
                 pipeline.id === this.preferredPipeline
                   ? html`<ha-svg-icon
@@ -873,6 +905,78 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
 
   private _addMessage(message: AssistMessage) {
     this._conversation = [...this._conversation!, message];
+  }
+
+  private _addMockPermissionMessage(request: string) {
+    const message: AssistMessage = {
+      who: "hass",
+      text: "",
+      thinking: "",
+      tool_calls: {},
+    };
+    // Already allowed for this conversation: act without asking again.
+    if (this._mockPermissionGranted) {
+      message.text = this._localize(
+        "ui.dialogs.voice_command.permission.allowed"
+      );
+      this._addMessage(message);
+      return;
+    }
+    message.text = html`
+      <div class="permission">
+        <div class="permission-header">
+          ${this._localize("ui.dialogs.voice_command.permission.title")}
+        </div>
+        <div class="tool-data">
+          <pre>
+${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</pre>
+        </div>
+        <div class="permission-actions">
+          <ha-button
+            size="s"
+            .message=${message}
+            .outcome=${"allowed"}
+            @click=${this._handleMockPermissionDecision}
+          >
+            ${this._localize("ui.dialogs.voice_command.permission.allow_once")}
+          </ha-button>
+          <ha-button
+            size="s"
+            appearance="filled"
+            .message=${message}
+            .outcome=${"session_allowed"}
+            @click=${this._handleMockPermissionDecision}
+          >
+            ${this._localize("ui.dialogs.voice_command.permission.allow_session")}
+          </ha-button>
+          <ha-button
+            size="s"
+            appearance="plain"
+            .message=${message}
+            .outcome=${"denied"}
+            @click=${this._handleMockPermissionDecision}
+          >
+            ${this._localize("ui.dialogs.voice_command.permission.deny")}
+          </ha-button>
+        </div>
+      </div>
+    `;
+    this._addMessage(message);
+  }
+
+  private _handleMockPermissionDecision(ev: Event) {
+    const button = ev.currentTarget as unknown as {
+      message: AssistMessage;
+      outcome: "allowed" | "session_allowed" | "denied";
+    };
+    if (button.outcome === "session_allowed") {
+      this._mockPermissionGranted = true;
+    }
+    // Mutate in place so the message keeps its identity in _conversation.
+    button.message.text = this._localize(
+      `ui.dialogs.voice_command.permission.${button.outcome}`
+    );
+    this.requestUpdate("_conversation");
   }
 
   private async _showNotSupportedMessage() {
@@ -1056,6 +1160,13 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
     this._unloadAudio();
     this._processing = true;
     this._addMessage({ who: "user", text, thinking: "", tool_calls: {} });
+    if (text.toLowerCase().startsWith(MOCK_PERMISSION_TRIGGER)) {
+      this._addMockPermissionMessage(
+        text.slice(MOCK_PERMISSION_TRIGGER.length).trim()
+      );
+      this._processing = false;
+      return;
+    }
     const hassMessageProcesser = this._createAddHassMessageProcessor();
     hassMessageProcesser.addMessage();
     try {
@@ -1517,6 +1628,20 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
           overflow-y: auto;
           display: flex;
           flex-direction: column;
+          gap: var(--ha-space-2);
+        }
+        .permission {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-2);
+        }
+        .permission-header {
+          font-size: var(--ha-font-size-m);
+          font-weight: var(--ha-font-weight-medium);
+        }
+        .permission-actions {
+          display: flex;
+          flex-wrap: wrap;
           gap: var(--ha-space-2);
         }
         .tool-calls {

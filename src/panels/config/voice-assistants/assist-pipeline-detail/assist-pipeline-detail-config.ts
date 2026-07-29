@@ -75,18 +75,35 @@ export class AssistPipelineDetailConfig extends LitElement {
       <ha-picture-upload
         class="avatar"
         crop
+        generate-ai
         .hass=${this.hass}
         .value=${this.avatar ?? null}
         .label=${this.hass.localize(
           "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.avatar"
         )}
         .cropOptions=${this._cropOptions}
+        .aiTaskName=${this.hass.localize(
+          "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.avatar"
+        )}
+        .aiPrompt=${this._aiPrompt(this.data?.name)}
         @change=${this._avatarChanged}
       ></ha-picture-upload>
     `;
   }
 
   private _cropOptions = { round: true, aspectRatio: 1 };
+
+  private _aiPrompt(name?: string) {
+    const trimmed = name?.trim();
+    return trimmed
+      ? this.hass.localize(
+          "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.avatar_ai_prompt_named",
+          { name: trimmed }
+        )
+      : this.hass.localize(
+          "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.avatar_ai_prompt"
+        );
+  }
 
   private _avatarChanged(ev: Event) {
     fireEvent(this, "avatar-changed", {

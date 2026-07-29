@@ -118,12 +118,12 @@ export class AssistPref extends LitElement {
   })
   private _controlOverrides: AssistAgentControlOverride = {};
 
-  /** Per-agent override first, else the agent entity's own capability. */
   private _controlsHome(pipeline: AssistPipeline): boolean {
-    if (pipeline.id in this._controlOverrides) {
-      return this._controlOverrides[pipeline.id];
-    }
-    return assistAgentControlsHome(this.hass, pipeline);
+    return assistAgentControlsHome(
+      this.hass.states,
+      pipeline,
+      this._controlOverrides
+    );
   }
 
   private _exposedEntitiesCount = memoizeOne(
@@ -189,13 +189,15 @@ export class AssistPref extends LitElement {
     return this.hass.entities[pipeline.conversation_engine]?.platform;
   }
 
-  // Cloud (data leaves the home) vs local, once the manifest is known.
+  // Cloud (data leaves the home) vs local, once the manifest is known. An
+  // integration we can't resolve gets no icon rather than a local claim.
   private _renderAgentLocality(pipeline: AssistPipeline) {
     const domain = this._agentDomain(pipeline);
-    if (!domain || !(domain in this._iotClasses)) {
+    const iotClass = domain ? this._iotClasses[domain] : undefined;
+    if (!iotClass) {
       return nothing;
     }
-    const isCloud = assistAgentIsCloud(this._iotClasses[domain]);
+    const isCloud = assistAgentIsCloud(iotClass);
     const iconId = `agent-locality-${pipeline.id}`;
     return html`<ha-svg-icon
         id=${iconId}
@@ -204,9 +206,11 @@ export class AssistPref extends LitElement {
       ></ha-svg-icon>
       <ha-tooltip for=${iconId}>
         ${this.hass.localize(
-          isCloud
-            ? "ui.panel.config.voice_assistants.assistants.pipeline.data_cloud"
-            : "ui.panel.config.voice_assistants.assistants.pipeline.data_local"
+          !isCloud
+            ? "ui.panel.config.voice_assistants.assistants.pipeline.data_local"
+            : pipeline.prefer_local_intents
+              ? "ui.panel.config.voice_assistants.assistants.pipeline.data_cloud_partial"
+              : "ui.panel.config.voice_assistants.assistants.pipeline.data_cloud"
         )}
       </ha-tooltip>`;
   }
@@ -496,7 +500,7 @@ export class AssistPref extends LitElement {
         >
           <span slot="headline">
             ${this.hass.localize(
-              "ui.panel.config.voice_assistants.assistants.general.all_exposed_entities"
+              "ui.panel.config.voice_assistants.assistants.general.accessible_entities"
             )}
           </span>
           <span slot="supporting-text">
