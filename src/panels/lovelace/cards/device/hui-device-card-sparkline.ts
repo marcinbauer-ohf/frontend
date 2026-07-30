@@ -15,6 +15,14 @@ const MINUTE = 60000;
 const HOUR = 60 * MINUTE;
 
 /**
+ * Drawing height in px. The y coordinates are scaled to this and
+ * `hui-graph-base` draws them into a viewBox of its own `clientHeight`, so the
+ * two must agree or the line is clipped. Set on `:host` below and used as the
+ * fallback before layout has run.
+ */
+const GRAPH_HEIGHT = 40;
+
+/**
  * Inline history sparkline for a single numeric entity. Self-fetching: it
  * subscribes to the recorder history window and feeds coordinates to
  * `hui-graph-base`. Mirrors `hui-graph-header-footer` but stripped to the
@@ -126,7 +134,7 @@ export class HuiDeviceCardSparkline extends LitElement {
     const { points } = coordinatesMinimalResponseCompressedState(
       limitedHistoryFromStateObj(stateObj),
       width,
-      width / 5,
+      this.clientHeight || GRAPH_HEIGHT,
       10
     );
     this._coordinates = points;
@@ -146,7 +154,7 @@ export class HuiDeviceCardSparkline extends LitElement {
     const { points } = coordinatesMinimalResponseCompressedState(
       entityHistory,
       width,
-      width / 5,
+      this.clientHeight || GRAPH_HEIGHT,
       maxDetails,
       {
         minX: now - this.hoursToShow * HOUR,
@@ -178,10 +186,11 @@ export class HuiDeviceCardSparkline extends LitElement {
     :host {
       display: block;
       width: 100%;
+      height: ${GRAPH_HEIGHT}px;
       pointer-events: none;
     }
     hui-graph-base {
-      --accent-color: var(--device-card-graph-color, var(--state-icon-color));
+      --accent-color: var(--device-card-color, var(--state-icon-color));
     }
   `;
 }

@@ -103,6 +103,7 @@ export default [
           "glance-card",
           "tile-card",
           "area-card",
+          "device-card",
         ],
       },
       {

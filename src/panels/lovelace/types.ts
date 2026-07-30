@@ -168,6 +168,13 @@ export interface LovelaceGenericElementEditor<C = any> extends HTMLElement {
   schema?: any;
   setConfig(config: any): void;
   focusYamlEditor?: () => void;
+  /**
+   * Apply side effects the editor staged outside the card config (e.g. entity
+   * registry writes). Called by the hosting dialog just before it saves, so a
+   * cancelled dialog leaves them unapplied. Must be safe to call with nothing
+   * staged.
+   */
+  commit?: () => Promise<void>;
 }
 
 export interface LovelaceCardFeature extends HTMLElement {

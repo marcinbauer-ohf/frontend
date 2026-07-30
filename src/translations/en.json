@@ -159,6 +159,9 @@
           "reset": "Reset"
         }
       },
+      "device": {
+        "set": "[%key:ui::card::timer::actions::set%]"
+      },
       "cover": {
         "position": "Position",
         "tilt_position": "Tilt position",
@@ -10221,6 +10224,7 @@
               "attribute": "Attribute",
               "camera_image": "Camera entity",
               "image_entity": "Image entity",
+              "device": "Device",
               "show_entity_picture": "Show entity picture",
               "show_entity_picture_helper": "Use the entity's picture if available; falls back to the configured image",
               "camera_view": "Camera view",
@@ -10567,7 +10571,20 @@
               "name": "Device",
               "description": "This card shows a device as a single tile: a primary entity with its control, plus its remaining entities as compact rows.",
               "show_area": "Show area",
-              "show_graph": "Show history graph"
+              "show_graph": "Show history graph",
+              "interactions": "Interactions",
+              "hours_to_show": "Hours to show",
+              "sections": {
+                "empty": "Drag entities here",
+                "hero": "Featured",
+                "hero_helper": "Shown large at the top of the card. Only one entity fits here.",
+                "visible": "Visible",
+                "visible_helper": "Shown as rows under the featured entity. Drag to reorder.",
+                "hidden": "Hidden",
+                "hidden_helper": "Left off this card. These stay active in Home Assistant and other cards can still use them.",
+                "disabled": "Disabled",
+                "disabled_helper": "Turned off everywhere in Home Assistant, not just on this card. Applied when you save."
+              }
             },
             "tile": {
               "name": "Tile",

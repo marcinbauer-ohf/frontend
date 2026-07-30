@@ -167,6 +167,10 @@ export abstract class HuiElementEditor<
     this._yamlEditor.focus();
   }
 
+  public async commit() {
+    await this._configElement?.commit?.();
+  }
+
   protected async getConfigElement(): Promise<
     LovelaceGenericElementEditor | undefined
   > {

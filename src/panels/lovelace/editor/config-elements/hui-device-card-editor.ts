@@ -1,6 +1,6 @@
 import { mdiGestureTap } from "@mdi/js";
-import { html, LitElement, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators";
+import { css, html, LitElement, nothing } from "lit";
+import { customElement, property, query, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import {
   array,
@@ -27,6 +27,8 @@ import {
   supportedActions,
   type UiAction,
 } from "../../components/hui-action-editor";
+import "./hui-device-card-entities-editor";
+import type { HuiDeviceCardEntitiesEditor } from "./hui-device-card-entities-editor";
 
 const TAP_ACTIONS: UiAction[] = [
   "more-info",
@@ -41,6 +43,7 @@ const cardConfigStruct = assign(
     device: optional(string()),
     entity: optional(string()),
     entities: optional(array(string())),
+    hidden_entities: optional(array(string())),
     name: optional(string()),
     show_area: optional(boolean()),
     show_graph: optional(boolean()),
@@ -62,6 +65,9 @@ export class HuiDeviceCardEditor
 
   @state() private _config?: DeviceCardConfig;
 
+  @query("hui-device-card-entities-editor")
+  private _entitiesEditor?: HuiDeviceCardEntitiesEditor;
+
   public setConfig(config: DeviceCardConfig): void {
     assert(config, cardConfigStruct);
     this._config = config;
@@ -80,10 +86,14 @@ export class HuiDeviceCardEditor
             { name: "show_graph", selector: { boolean: {} } },
           ],
         },
-        {
-          name: "entities",
-          selector: { entity: { multiple: true } },
-        },
+      ] as const satisfies HaFormSchema[]
+  );
+
+  // Rendered below the entity sections, so the sections stay next to the
+  // device picker they belong to.
+  private _interactionsSchema = memoizeOne(
+    () =>
+      [
         {
           name: "interactions",
           type: "expandable",
@@ -133,15 +143,48 @@ export class HuiDeviceCardEditor
         .computeLabel=${this._computeLabelCallback}
         @value-changed=${this._valueChanged}
       ></ha-form>
+      ${
+        this._config.device
+          ? html`
+              <hui-device-card-entities-editor
+                .hass=${this.hass}
+                .deviceId=${this._config.device}
+                .value=${this._config}
+                @value-changed=${this._entitiesChanged}
+              ></hui-device-card-entities-editor>
+            `
+          : nothing
+      }
+      <ha-form
+        .hass=${this.hass}
+        .data=${this._config}
+        .schema=${this._interactionsSchema()}
+        .computeLabel=${this._computeLabelCallback}
+        @value-changed=${this._valueChanged}
+      ></ha-form>
     `;
+  }
+
+  /** Forwarded by the edit-card dialog on save to apply staged registry writes. */
+  public async commit(): Promise<void> {
+    await this._entitiesEditor?.commit();
   }
 
   private _valueChanged(ev: CustomEvent): void {
     fireEvent(this, "config-changed", { config: ev.detail.value });
   }
 
+  private _entitiesChanged(ev: CustomEvent): void {
+    ev.stopPropagation();
+    fireEvent(this, "config-changed", {
+      config: { ...this._config, ...ev.detail.value },
+    });
+  }
+
   private _computeLabelCallback = (
-    schema: SchemaUnion<ReturnType<typeof this._schema>>
+    schema:
+      | SchemaUnion<ReturnType<typeof this._schema>>
+      | SchemaUnion<ReturnType<typeof this._interactionsSchema>>
   ) => {
     switch (schema.name) {
       case "device":
@@ -152,10 +195,6 @@ export class HuiDeviceCardEditor
         return this.hass!.localize(
           "ui.panel.lovelace.editor.card.generic.name"
         );
-      case "entities":
-        return this.hass!.localize(
-          "ui.panel.lovelace.editor.card.generic.entities"
-        );
       default:
         return (
           this.hass!.localize(
@@ -164,6 +203,14 @@ export class HuiDeviceCardEditor
         );
     }
   };
+
+  static styles = css`
+    :host {
+      display: flex;
+      flex-direction: column;
+      gap: var(--ha-space-4);
+    }
+  `;
 }
 
 declare global {

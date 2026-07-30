@@ -5,9 +5,13 @@ import { customElement, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
+import { fireEvent } from "../../../common/dom/fire_event";
+import { stopPropagation } from "../../../common/dom/stop_propagation";
+import type { LocalizeKeys } from "../../../common/translations/localize";
 import { computeDomain } from "../../../common/entity/compute_domain";
 import { computeStateName } from "../../../common/entity/compute_state_name";
 import { computeDeviceName } from "../../../common/entity/compute_device_name";
+import { computeEntityName } from "../../../common/entity/compute_entity_name";
 import { stateActive } from "../../../common/entity/state_active";
 import { stateColorCss } from "../../../common/entity/state_color";
 import { UNAVAILABLE, UNKNOWN } from "../../../data/entity/entity";
@@ -16,6 +20,7 @@ import { forwardHaptic } from "../../../data/haptics";
 import "../../../components/ha-card";
 import "../../../components/ha-state-icon";
 import "../../../components/ha-svg-icon";
+import "../../../components/tile/ha-tile-icon";
 import "../../../components/entity/ha-entity-toggle";
 import "../../../state-display/state-display";
 import type { ActionHandlerEvent } from "../../../data/lovelace/action_handler";
@@ -25,6 +30,7 @@ import { handleAction } from "../common/handle-action";
 import { hasAction } from "../common/has-action";
 import { createEntityNotFoundWarning } from "../components/hui-warning";
 import type { LovelaceCard, LovelaceCardEditor } from "../types";
+import { resolveDeviceCardEntities } from "./device/device-card-entities";
 import "./device/hui-device-card-sparkline";
 import type { DeviceCardConfig } from "./types";
 
@@ -50,28 +56,32 @@ const PRESSABLE_DOMAINS = new Set([
   "automation",
 ]);
 
-/** Preferred primary-entity domain, most interesting first. Sensor is last. */
-const DOMAIN_PRIORITY = [
-  "camera",
-  "climate",
-  "media_player",
-  "light",
-  "switch",
-  "fan",
-  "cover",
-  "lock",
-  "vacuum",
-  "humidifier",
-  "water_heater",
-  "alarm_control_panel",
-  "binary_sensor",
-  "sensor",
-];
+/** The action verb for each pressable domain, so the button is not just a name. */
+const PRESS_LABEL: Record<string, LocalizeKeys> = {
+  button: "ui.card.button.press",
+  input_button: "ui.card.button.press",
+  scene: "ui.card.scene.activate",
+  script: "ui.card.script.run",
+  automation: "ui.card.automation.trigger",
+};
 
-interface ResolvedEntities {
-  primary?: string;
-  secondary: string[];
-}
+/**
+ * Domains holding a value the user sets rather than a measurement. They get a
+ * "Set" button (the real control lives in more info) and never a sparkline —
+ * graphing a setpoint over time is meaningless even though it has a unit.
+ */
+const SETTABLE_DOMAINS = new Set([
+  "number",
+  "input_number",
+  "select",
+  "input_select",
+  "text",
+  "input_text",
+  "date",
+  "time",
+  "datetime",
+  "input_datetime",
+]);
 
 const isUnavailableState = (stateObj?: HassEntity) =>
   !stateObj || stateObj.state === UNAVAILABLE || stateObj.state === UNKNOWN;
@@ -119,54 +129,11 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
   }
 
   public getCardSize(): number {
-    const { secondary } = this._resolveEntities(this.hass, this._config);
-    return 2 + secondary.length;
+    const { visible } = this._resolveEntities(this.hass, this._config);
+    return 2 + visible.length;
   }
 
-  private _resolveEntities = memoizeOne(
-    (hass?: HomeAssistant, config?: DeviceCardConfig): ResolvedEntities => {
-      if (!hass || !config) {
-        return { secondary: [] };
-      }
-
-      // Explicit config wins over device auto-resolution.
-      if (config.entity) {
-        return {
-          primary: config.entity,
-          secondary: (config.entities ?? []).filter((id) => hass.states[id]),
-        };
-      }
-
-      const deviceEntities = Object.values(hass.entities)
-        .filter(
-          (entry) =>
-            entry.device_id === config.device &&
-            !entry.hidden &&
-            entry.entity_category == null &&
-            hass.states[entry.entity_id]
-        )
-        .map((entry) => entry.entity_id);
-
-      if (!deviceEntities.length) {
-        return { secondary: [] };
-      }
-
-      const priorityOf = (entityId: string) => {
-        const idx = DOMAIN_PRIORITY.indexOf(computeDomain(entityId));
-        return idx === -1 ? DOMAIN_PRIORITY.length : idx;
-      };
-      const sorted = [...deviceEntities].sort(
-        (a, b) => priorityOf(a) - priorityOf(b)
-      );
-
-      return {
-        primary: sorted[0],
-        secondary: config.entities
-          ? config.entities.filter((id) => hass.states[id])
-          : sorted.slice(1),
-      };
-    }
-  );
+  private _resolveEntities = memoizeOne(resolveDeviceCardEntities);
 
   private _feedImageUrl(stateObj: HassEntity): string | undefined {
     const entityPicture =
@@ -181,7 +148,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
   }
 
   private _handleAction(ev: ActionHandlerEvent) {
-    const entityId = this._resolveEntities(this.hass, this._config).primary;
+    const entityId = this._resolveEntities(this.hass, this._config).hero;
     handleAction(
       this,
       this.hass!,
@@ -205,12 +172,9 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       return nothing;
     }
 
-    const { primary, secondary } = this._resolveEntities(
-      this.hass,
-      this._config
-    );
+    const { hero, visible } = this._resolveEntities(this.hass, this._config);
 
-    if (!primary) {
+    if (!hero) {
       return html`
         <hui-warning .hass=${this.hass}>
           ${createEntityNotFoundWarning(this.hass, this._config.device ?? "")}
@@ -218,22 +182,23 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       `;
     }
 
-    const stateObj = this.hass.states[primary];
+    const stateObj = this.hass.states[hero];
     if (!stateObj) {
       return html`
         <hui-warning .hass=${this.hass}>
-          ${createEntityNotFoundWarning(this.hass, primary)}
+          ${createEntityNotFoundWarning(this.hass, hero)}
         </hui-warning>
       `;
     }
 
-    const domain = computeDomain(primary);
+    const domain = computeDomain(hero);
     const unavailable = isUnavailableState(stateObj);
     const active = stateActive(stateObj);
     const toggleable = TOGGLEABLE_DOMAINS.has(domain);
     const pressable = PRESSABLE_DOMAINS.has(domain);
+    const settable = SETTABLE_DOMAINS.has(domain);
     const unit = stateObj.attributes.unit_of_measurement as string | undefined;
-    const isNumeric = unit != null && !toggleable && !pressable;
+    const isNumeric = unit != null && !toggleable && !pressable && !settable;
 
     const device = this._config.device
       ? this.hass.devices[this._config.device]
@@ -259,7 +224,6 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     const cardClasses = {
       active: active && toggleable,
       unavailable,
-      feed: !!feedImage,
     };
 
     return html`
@@ -278,106 +242,90 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
           })}
           @action=${this._handleAction}
         >
-          ${
-            feedImage
-              ? html`
-                  <img
-                    class="feed"
-                    src=${feedImage}
-                    alt=""
-                    aria-hidden="true"
-                  />
-                  <div class="scrim" aria-hidden="true"></div>
-                `
-              : !unavailable
-                ? html`
-                    <ha-state-icon
-                      class="hero-graphic"
-                      aria-hidden="true"
-                      .hass=${this.hass}
-                      .stateObj=${stateObj}
-                    ></ha-state-icon>
-                  `
-                : nothing
-          }
-
-          <div class="text">
-            ${areaName ? html`<p class="eyebrow">${areaName}</p>` : nothing}
-            <p class="name">${name}</p>
-            ${
-              unavailable
-                ? html`
-                    <div class="offline">
-                      <span class="offline-label">
-                        ${this.hass.localize("state.default.unavailable")}
-                      </span>
-                      ${
-                      formatUnavailableDuration(stateObj.last_changed)
-                        ? html`<span class="offline-dur"
-                            >${formatUnavailableDuration(
-                            stateObj.last_changed
-                          )}</span
-                          >`
-                        : nothing
-                    }
-                    </div>
-                  `
-                : html`
-                    <p class="state">
-                      <state-display
+          <div class="hero">
+            <ha-tile-icon
+              data-domain=${domain}
+              data-state=${stateObj.state}
+              class=${classMap({ image: !!feedImage })}
+              .imageUrl=${feedImage}
+            >
+              ${
+                feedImage
+                  ? nothing
+                  : html`
+                      <ha-state-icon
+                        slot="icon"
                         .hass=${this.hass}
                         .stateObj=${stateObj}
-                      ></state-display>
-                    </p>
-                  `
+                      ></ha-state-icon>
+                    `
+              }
+            </ha-tile-icon>
+
+            <div class="text">
+              ${areaName ? html`<p class="eyebrow">${areaName}</p>` : nothing}
+              <p class="name">${name}</p>
+              ${
+                unavailable
+                  ? html`
+                      <div class="offline">
+                        <span class="offline-label">
+                          ${this.hass.localize("state.default.unavailable")}
+                        </span>
+                        ${
+                          formatUnavailableDuration(stateObj.last_changed)
+                            ? html`<span class="offline-dur"
+                                >${formatUnavailableDuration(
+                                  stateObj.last_changed
+                                )}</span
+                              >`
+                            : nothing
+                        }
+                      </div>
+                    `
+                  : html`
+                      <p class="state">
+                        <state-display
+                          .hass=${this.hass}
+                          .stateObj=${stateObj}
+                        ></state-display>
+                      </p>
+                    `
+              }
+            </div>
+
+            ${
+              unavailable
+                ? html`<ha-svg-icon
+                    class="alert"
+                    .path=${mdiAlertCircleOutline}
+                  ></ha-svg-icon>`
+                : nothing
             }
+
+            <div class="control">
+              ${unavailable ? nothing : this._renderControl(stateObj)}
+            </div>
           </div>
 
-          ${
-            unavailable
-              ? html`<ha-svg-icon
-                  class="alert"
-                  .path=${mdiAlertCircleOutline}
-                ></ha-svg-icon>`
-              : nothing
-          }
           ${
             isNumeric && !unavailable && this._config.show_graph !== false
               ? html`
                   <hui-device-card-sparkline
                     class="graph"
                     .hass=${this.hass}
-                    .entity=${primary}
+                    .entity=${hero}
                     .hoursToShow=${this._config.hours_to_show ?? 24}
                   ></hui-device-card-sparkline>
                 `
               : nothing
           }
-
-          <div class="control">
-            ${
-              !unavailable && toggleable
-                ? html`<ha-entity-toggle
-                    .hass=${this.hass}
-                    .stateObj=${stateObj}
-                  ></ha-entity-toggle>`
-                : !unavailable && pressable
-                  ? html`<button
-                      class="action-button"
-                      @click=${this._handlePress}
-                      aria-label=${name}
-                    >
-                      <ha-svg-icon .path=${mdiPower}></ha-svg-icon>
-                    </button>`
-                  : nothing
-            }
-          </div>
         </div>
 
         ${
-          secondary.length
+          visible.length
             ? html`<div class="secondary ${classMap({ dimmed: unavailable })}">
-                ${secondary.map((entityId) => this._renderRow(entityId))}
+                ${visible.map((entityId) => this._renderRow(entityId))}
               </div>`
             : nothing
         }
@@ -392,7 +340,10 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     const unavailable = isUnavailableState(stateObj);
     const active = stateActive(stateObj);
     const toggleable = TOGGLEABLE_DOMAINS.has(domain);
-    const name = computeStateName(stateObj);
+    // Device name only belongs on the hero — rows drop it and keep the rest.
+    const name =
+      computeEntityName(stateObj, this.hass!.entities, this.hass!.devices) ||
+      computeStateName(stateObj);
 
     return html`
       <div
@@ -416,78 +367,141 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
                 class="alert"
                 .path=${mdiAlertCircleOutline}
               ></ha-svg-icon>`
-            : toggleable
-              ? html`<ha-entity-toggle
-                  .hass=${this.hass}
-                  .stateObj=${stateObj}
-                ></ha-entity-toggle>`
-              : html`<span class="row-value">
-                  <state-display
-                    .hass=${this.hass}
-                    .stateObj=${stateObj}
-                  ></state-display>
-                </span>`
+            : html`
+                ${
+                  // A toggle already states the value, so only show it otherwise.
+                  toggleable
+                    ? nothing
+                    : html`<span class="row-value">
+                        <state-display
+                          .hass=${this.hass}
+                          .stateObj=${stateObj}
+                        ></state-display>
+                      </span>`
+                }
+                ${this._renderControl(stateObj)}
+              `
         }
       </div>
     `;
   }
 
+  /**
+   * The control an entity gets: a toggle, a press button, or a "Set" button
+   * that opens more info where the real editor lives. Shared by the hero and
+   * the rows so the two cannot drift apart.
+   */
+  private _renderControl(stateObj: HassEntity) {
+    const domain = computeDomain(stateObj.entity_id);
+
+    if (TOGGLEABLE_DOMAINS.has(domain)) {
+      return html`<ha-entity-toggle
+        .hass=${this.hass}
+        .stateObj=${stateObj}
+      ></ha-entity-toggle>`;
+    }
+
+    if (PRESSABLE_DOMAINS.has(domain)) {
+      return html`<button
+        class="action-button icon-only"
+        data-entity=${stateObj.entity_id}
+        aria-label=${this.hass!.localize(PRESS_LABEL[domain])}
+        @click=${this._handlePress}
+        @mousedown=${stopPropagation}
+        @touchstart=${stopPropagation}
+      >
+        <ha-svg-icon .path=${mdiPower}></ha-svg-icon>
+      </button>`;
+    }
+
+    if (SETTABLE_DOMAINS.has(domain)) {
+      return html`<button
+        class="action-button"
+        data-entity=${stateObj.entity_id}
+        @click=${this._handleSet}
+        @mousedown=${stopPropagation}
+        @touchstart=${stopPropagation}
+      >
+        ${this.hass!.localize("ui.card.device.set")}
+      </button>`;
+    }
+
+    return nothing;
+  }
+
   private _handlePress(ev: Event) {
     ev.stopPropagation();
-    const primary = this._resolveEntities(this.hass, this._config).primary;
-    if (!primary) return;
-    const domain = computeDomain(primary);
+    const entityId = (ev.currentTarget as HTMLElement).dataset.entity;
+    if (!entityId) return;
+    const domain = computeDomain(entityId);
     // button/input_button fire `press`; scene/script/automation use `turn_on`.
     const service =
       domain === "button" || domain === "input_button" ? "press" : "turn_on";
-    this.hass!.callService(domain, service, { entity_id: primary });
+    this.hass!.callService(domain, service, { entity_id: entityId });
     forwardHaptic(this, "light");
+  }
+
+  private _handleSet(ev: Event) {
+    ev.stopPropagation();
+    const entityId = (ev.currentTarget as HTMLElement).dataset.entity;
+    if (!entityId) return;
+    fireEvent(this, "hass-more-info", { entityId });
   }
 
   static styles = css`
     :host {
-      --device-card-color: var(--state-icon-color);
+      /* Grey when inactive, state colour when active — same as the tile card. */
+      --device-card-color: var(--state-inactive-color);
     }
     ha-card {
       overflow: hidden;
       height: 100%;
     }
 
+    /* The whole block is one action + hover surface so the graph shares the
+       hero's background instead of leaving a lighter strip below it. */
     .primary {
       position: relative;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 12px;
-      min-height: 104px;
       cursor: pointer;
       overflow: hidden;
       transition: background-color 180ms ease-in-out;
     }
-    @media (min-width: 600px) {
-      .primary {
-        min-height: 128px;
-      }
+    /* Same shape as the tile card: icon left, text, control right. */
+    .hero {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+    }
+    /* ha-tile-icon only draws its own tinted shape when interactive, and the
+       whole row is the action target here — so tint it from the outside rather
+       than nesting a button that does nothing. */
+    ha-tile-icon {
+      flex: none;
+      --tile-icon-color: var(--device-card-color);
+      border-radius: var(--ha-border-radius-pill);
+      background-color: color-mix(
+        in srgb,
+        var(--device-card-color) 20%,
+        transparent
+      );
+      transition: background-color 180ms ease-in-out;
+    }
+    /* A photo — camera frame or media artwork — is unreadable cropped to a
+       circle, so any entity picture gets a rounded square instead. */
+    ha-tile-icon.image {
+      background: none;
+      --tile-icon-border-radius: var(--ha-border-radius-sm);
     }
     .primary:focus-visible {
       outline: 2px solid var(--primary-color);
       outline-offset: -2px;
     }
-    ha-card.active .primary {
-      background-color: color-mix(
-        in srgb,
-        var(--device-card-color) 12%,
-        transparent
-      );
-    }
-    ha-card.active .primary:hover {
-      background-color: color-mix(
-        in srgb,
-        var(--device-card-color) 18%,
-        transparent
-      );
-    }
+    /* Active state is carried by the coloured icon, as on the tile card — no
+       full-row wash, which reads as muddy at this height. */
     .primary:hover {
       background-color: var(--secondary-background-color);
     }
@@ -505,59 +519,9 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       );
     }
 
-    /* Hero graphic (fallback for the app's product PNG) */
-    .hero-graphic {
-      position: absolute;
-      right: 4px;
-      top: 50%;
-      transform: translateY(-50%);
-      --mdc-icon-size: 72px;
-      color: var(--device-card-color);
-      opacity: 0.16;
-      z-index: 1;
-      pointer-events: none;
-    }
-    ha-card.active .hero-graphic {
-      opacity: 0.22;
-    }
-
-    /* Camera / media hero feed */
-    .feed {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: 0;
-    }
-    .scrim {
-      position: absolute;
-      inset: 0;
-      z-index: 1;
-      background: linear-gradient(
-        to top,
-        rgba(0, 0, 0, 0.8),
-        rgba(0, 0, 0, 0.3) 60%,
-        rgba(0, 0, 0, 0.1)
-      );
-    }
-    ha-card.feed .text {
-      color: #fff;
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
-    }
-    ha-card.feed .eyebrow,
-    ha-card.feed .state {
-      color: rgba(255, 255, 255, 0.85);
-    }
-
     .text {
-      position: relative;
-      z-index: 2;
+      flex: 1;
       min-width: 0;
-      padding-inline-end: 40%;
-    }
-    ha-card.feed .text {
-      padding-inline-end: 0;
     }
     .eyebrow {
       margin: 0 0 2px;
@@ -610,46 +574,64 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     }
 
     .alert {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      inset-inline-end: 12px;
-      inset-inline-start: initial;
-      z-index: 2;
+      flex: none;
       color: var(--warning-color);
     }
 
     .graph {
-      position: relative;
-      z-index: 1;
-      margin: 0 -12px;
+      display: block;
     }
 
     .control {
-      position: relative;
-      z-index: 2;
       display: flex;
+      flex: none;
       align-items: center;
-      min-height: 24px;
+    }
+    .control:empty {
+      display: none;
     }
 
+    /* Reads as an action, not as state: accent coloured so it carries the same
+       weight as the toggle it sits in place of. */
     .action-button {
       display: flex;
+      flex: none;
       align-items: center;
       justify-content: center;
-      width: 44px;
-      height: 26px;
+      height: 30px;
+      padding: 0 12px;
       border: none;
-      border-radius: 999px;
-      background: var(--secondary-background-color);
-      color: var(--secondary-text-color);
+      border-radius: var(--ha-border-radius-pill);
+      background-color: color-mix(
+        in srgb,
+        var(--primary-color) 16%,
+        transparent
+      );
+      color: var(--primary-color);
+      font-family: inherit;
+      font-size: var(--ha-font-size-s);
+      font-weight: var(--ha-font-weight-medium);
+      line-height: 1;
       cursor: pointer;
+      transition: background-color 180ms ease-in-out;
+    }
+    .action-button.icon-only {
+      width: 30px;
+      padding: 0;
     }
     .action-button:hover {
-      background: var(--divider-color);
+      background-color: color-mix(
+        in srgb,
+        var(--primary-color) 28%,
+        transparent
+      );
+    }
+    .action-button:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
     }
     .action-button ha-svg-icon {
-      --mdc-icon-size: 16px;
+      --mdc-icon-size: 20px;
     }
 
     /* Secondary rows */
@@ -662,20 +644,13 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       align-items: center;
       gap: 12px;
       padding: 0 12px;
-      min-height: 52px;
+      min-height: 40px;
       border-top: 1px solid var(--divider-color);
       cursor: pointer;
       transition: background-color 180ms ease-in-out;
     }
     .row:hover {
       background-color: var(--secondary-background-color);
-    }
-    .row.active {
-      background-color: color-mix(
-        in srgb,
-        var(--state-active-color, var(--primary-color)) 10%,
-        transparent
-      );
     }
     .row.unavailable {
       opacity: 0.5;
