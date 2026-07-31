@@ -4,12 +4,13 @@ import {
   mdiCommentProcessingOutline,
   mdiContentDuplicate,
   mdiDotsVertical,
-  mdiEarth,
   mdiHammerWrench,
   mdiPlus,
+  mdiRobotOutline,
   mdiShieldCheckOutline,
   mdiStar,
   mdiTrashCan,
+  mdiWeb,
 } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
@@ -40,6 +41,7 @@ import { assistCasitaIcon } from "../../../resources/assist-casita-icon";
 import { brandsUrl } from "../../../util/brands-url";
 import type { AssistPipeline } from "../../../data/assist_pipeline";
 import {
+  assistAgentBuildsHome,
   assistAgentControlsHome,
   assistAgentIsCloud,
   createAssistPipeline,
@@ -61,6 +63,7 @@ import {
   type AssistAgentAvatars,
 } from "../../../data/assist_agent_avatars";
 import {
+  ASSIST_AGENT_BUILD_OVERRIDE_STORAGE_KEY,
   ASSIST_AGENT_CONTROL_OVERRIDE_STORAGE_KEY,
   type AssistAgentControlOverride,
 } from "../../../data/assist_agent_control_override";
@@ -118,11 +121,27 @@ export class AssistPref extends LitElement {
   })
   private _controlOverrides: AssistAgentControlOverride = {};
 
+  @state()
+  @storage({
+    key: ASSIST_AGENT_BUILD_OVERRIDE_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _buildOverrides: AssistAgentControlOverride = {};
+
   private _controlsHome(pipeline: AssistPipeline): boolean {
     return assistAgentControlsHome(
       this.hass.states,
       pipeline,
       this._controlOverrides
+    );
+  }
+
+  private _buildsHome(pipeline: AssistPipeline): boolean {
+    return assistAgentBuildsHome(
+      this._controlsHome(pipeline),
+      pipeline,
+      this._buildOverrides
     );
   }
 
@@ -202,7 +221,7 @@ export class AssistPref extends LitElement {
     return html`<ha-svg-icon
         id=${iconId}
         class="capability"
-        .path=${isCloud ? mdiEarth : mdiShieldCheckOutline}
+        .path=${isCloud ? mdiWeb : mdiShieldCheckOutline}
       ></ha-svg-icon>
       <ha-tooltip for=${iconId}>
         ${this.hass.localize(
@@ -375,13 +394,29 @@ export class AssistPref extends LitElement {
                               ? html`<ha-svg-icon
                                     id=${`agent-control-${pipeline.id}`}
                                     class="capability"
-                                    .path=${mdiHammerWrench}
+                                    .path=${mdiRobotOutline}
                                   ></ha-svg-icon>
                                   <ha-tooltip
                                     for=${`agent-control-${pipeline.id}`}
                                   >
                                     ${this.hass.localize(
                                       "ui.panel.config.voice_assistants.assistants.pipeline.controls_home"
+                                    )}
+                                  </ha-tooltip>`
+                              : ""
+                          }
+                          ${
+                            this._buildsHome(pipeline)
+                              ? html`<ha-svg-icon
+                                    id=${`agent-build-${pipeline.id}`}
+                                    class="capability"
+                                    .path=${mdiHammerWrench}
+                                  ></ha-svg-icon>
+                                  <ha-tooltip
+                                    for=${`agent-build-${pipeline.id}`}
+                                  >
+                                    ${this.hass.localize(
+                                      "ui.panel.config.voice_assistants.assistants.pipeline.builds_home"
                                     )}
                                   </ha-tooltip>`
                               : ""

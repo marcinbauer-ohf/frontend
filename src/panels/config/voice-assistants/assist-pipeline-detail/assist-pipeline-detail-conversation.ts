@@ -12,12 +12,9 @@ import {
   type AssistAgentInstructionsOverride,
 } from "../../../../data/assist_agent_instructions_override";
 import type { AssistPipeline } from "../../../../data/assist_pipeline";
+import { HOME_ASSISTANT_AGENT } from "../../../../data/assist_pipeline";
 import { getConversationAgentInfo } from "../../../../data/conversation";
 import type { HomeAssistant } from "../../../../types";
-
-// The built-in agent matches intents instead of prompting a model, so it has
-// no instructions to override.
-const HOME_ASSISTANT_AGENT = "conversation.home_assistant";
 
 @customElement("assist-pipeline-detail-conversation")
 export class AssistPipelineDetailConversation extends LitElement {
@@ -138,8 +135,7 @@ export class AssistPipelineDetailConversation extends LitElement {
           @supported-languages-changed=${this._supportedLanguagesChanged}
         ></ha-form>
         ${
-          this.data?.conversation_engine &&
-          this.data.conversation_engine !== HOME_ASSISTANT_AGENT
+          this._supportsInstructions()
             ? html`<div class="instructions">
                 <ha-textarea
                   autogrow
@@ -160,6 +156,19 @@ export class AssistPipelineDetailConversation extends LitElement {
         }
       </div>
     `;
+  }
+
+  /**
+   * The built-in agent and Home Assistant Cloud (Nabu Casa) don't take custom
+   * instructions, so the field is hidden for them.
+   */
+  private _supportsInstructions(): boolean {
+    const engine = this.data?.conversation_engine;
+    return (
+      !!engine &&
+      engine !== HOME_ASSISTANT_AGENT &&
+      this.hass.entities[engine]?.platform !== "cloud"
+    );
   }
 
   /**

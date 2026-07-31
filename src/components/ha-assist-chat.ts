@@ -6,13 +6,14 @@ import {
   mdiChevronUp,
   mdiCog,
   mdiCommentProcessingOutline,
-  mdiEarth,
   mdiEyeOutline,
   mdiHammerWrench,
   mdiMicrophone,
+  mdiRobotOutline,
   mdiSend,
   mdiShieldCheckOutline,
   mdiStar,
+  mdiWeb,
 } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
@@ -29,11 +30,13 @@ import {
   type AssistAgentAvatars,
 } from "../data/assist_agent_avatars";
 import {
+  ASSIST_AGENT_BUILD_OVERRIDE_STORAGE_KEY,
   ASSIST_AGENT_CONTROL_OVERRIDE_STORAGE_KEY,
   type AssistAgentControlOverride,
 } from "../data/assist_agent_control_override";
 import type { StoredAssistMessage } from "../data/assist_conversation_history";
 import {
+  assistAgentBuildsHome,
   assistAgentControlsHome,
   assistAgentIsCloud,
   runAssistPipeline,
@@ -202,6 +205,14 @@ export class HaAssistChat extends LitElement {
     subscribe: true,
   })
   private _controlOverrides: AssistAgentControlOverride = {};
+
+  @state()
+  @storage({
+    key: ASSIST_AGENT_BUILD_OVERRIDE_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _buildOverrides: AssistAgentControlOverride = {};
 
   private _conversationId: string | null = null;
 
@@ -437,8 +448,18 @@ export class HaAssistChat extends LitElement {
     );
   }
 
+  /** Whether the agent may also build (create and edit) in Home Assistant. */
+  private _buildsHome(pipeline: AssistPipeline): boolean {
+    return assistAgentBuildsHome(
+      this._controlsHome(pipeline),
+      pipeline,
+      this._buildOverrides
+    );
+  }
+
   protected render(): TemplateResult {
     const controlHA = this.pipeline ? this._controlsHome(this.pipeline) : false;
+    const buildHA = this.pipeline ? this._buildsHome(this.pipeline) : false;
     const locality = this._pipelineLocality(this.pipeline);
     // A cloud agent that handles simple commands locally only sends the rest.
     const partiallyLocal =
@@ -676,7 +697,7 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
           <span class="disclaimer-icons">
             <ha-svg-icon
               id="disclaimer-control-icon"
-              .path=${controlHA ? mdiHammerWrench : mdiEyeOutline}
+              .path=${controlHA ? mdiRobotOutline : mdiEyeOutline}
             ></ha-svg-icon>
             <ha-tooltip for="disclaimer-control-icon">
               ${this._localize(
@@ -686,11 +707,24 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
               )}
             </ha-tooltip>
             ${
+              buildHA
+                ? html`<ha-svg-icon
+                      id="disclaimer-build-icon"
+                      .path=${mdiHammerWrench}
+                    ></ha-svg-icon>
+                    <ha-tooltip for="disclaimer-build-icon">
+                      ${this._localize(
+                        "ui.dialogs.voice_command.disclaimer_build"
+                      )}
+                    </ha-tooltip>`
+                : nothing
+            }
+            ${
               locality
                 ? html`<ha-svg-icon
                       id="disclaimer-data-icon"
                       .path=${
-                        locality === "cloud" ? mdiEarth : mdiShieldCheckOutline
+                        locality === "cloud" ? mdiWeb : mdiShieldCheckOutline
                       }
                     ></ha-svg-icon>
                     <ha-tooltip for="disclaimer-data-icon">
@@ -707,9 +741,11 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
           </span>
           <span class="disclaimer-text">
             ${this._localize(
-              controlHA
-                ? "ui.dialogs.voice_command.control_summary"
-                : "ui.dialogs.voice_command.control_summary_no"
+              buildHA
+                ? "ui.dialogs.voice_command.control_summary_build"
+                : controlHA
+                  ? "ui.dialogs.voice_command.control_summary"
+                  : "ui.dialogs.voice_command.control_summary_no"
             )}
             ${
               locality
@@ -768,6 +804,14 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
                 this._controlsHome(pipeline)
                   ? html`<ha-svg-icon
                       class="agent-capability"
+                      .path=${mdiRobotOutline}
+                    ></ha-svg-icon>`
+                  : nothing
+              }
+              ${
+                this._buildsHome(pipeline)
+                  ? html`<ha-svg-icon
+                      class="agent-capability"
                       .path=${mdiHammerWrench}
                     ></ha-svg-icon>`
                   : nothing
@@ -778,7 +822,7 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
                       class="agent-capability"
                       .path=${
                         this._pipelineLocality(pipeline) === "cloud"
-                          ? mdiEarth
+                          ? mdiWeb
                           : mdiShieldCheckOutline
                       }
                     ></ha-svg-icon>`

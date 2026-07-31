@@ -5,6 +5,9 @@ import type { ConversationResult } from "./conversation";
 import { ConversationEntityFeature } from "./conversation";
 import type { SpeechMetadata } from "./stt";
 
+/** The built-in agent, which matches intents instead of prompting a model. */
+export const HOME_ASSISTANT_AGENT = "conversation.home_assistant";
+
 /**
  * Whether the pipeline's conversation agent can read/write (control) Home
  * Assistant, as every surface that shows this must compute it the same way:
@@ -34,6 +37,25 @@ export const assistAgentControlsHome = (
     ? supportsFeature(stateObj, ConversationEntityFeature.CONTROL)
     : true;
 };
+
+/**
+ * Whether the agent may build in Home Assistant — create and edit automations,
+ * dashboards, and settings — on top of operating what already exists. Opt-in
+ * per agent, and only meaningful while the agent can control at all, so callers
+ * pass the control result they already computed. Never true for the built-in
+ * agent: it matches intents and has no tools to create or edit anything.
+ *
+ * ponytail: there is no backend grant for building yet, so this reads the
+ * client-side override only. Swap for the real grant once the tools exist.
+ */
+export const assistAgentBuildsHome = (
+  controlsHome: boolean,
+  pipeline: { id?: string; conversation_engine?: string },
+  overrides: AssistAgentControlOverride = {}
+): boolean =>
+  controlsHome &&
+  pipeline.conversation_engine !== HOME_ASSISTANT_AGENT &&
+  !!(pipeline.id && overrides[pipeline.id]);
 
 /**
  * Whether a conversation agent processes requests in the cloud (sends data

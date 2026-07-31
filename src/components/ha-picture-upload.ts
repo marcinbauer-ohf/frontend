@@ -1,13 +1,9 @@
 import { mdiImagePlus } from "@mdi/js";
-import type { PropertyValues, TemplateResult } from "lit";
-import { LitElement, css, html } from "lit";
-import { customElement, property, state } from "lit/decorators";
+import type { TemplateResult } from "lit";
+import { LitElement, css, html, nothing } from "lit";
+import { customElement, property, query, state } from "lit/decorators";
 import type { MediaPickedEvent } from "../data/media-player";
-import { isComponentLoaded } from "../common/config/is_component_loaded";
 import { fireEvent } from "../common/dom/fire_event";
-import type { AITaskPreferences } from "../data/ai_task";
-import { fetchAITaskPreferences } from "../data/ai_task";
-import { showAIImageDialog } from "../dialogs/ai-image/show-dialog-ai-image";
 import { haStyle } from "../resources/styles";
 import {
   MEDIA_PREFIX,
@@ -22,6 +18,7 @@ import { showImageCropperDialog } from "../dialogs/image-cropper-dialog/show-ima
 import type { HomeAssistant } from "../types";
 import "./ha-button";
 import "./ha-file-upload";
+import "./ha-svg-icon";
 import { showMediaBrowserDialog } from "./media-player/show-media-browser-dialog";
 
 @customElement("ha-picture-upload")
@@ -58,50 +55,18 @@ export class HaPictureUpload extends LitElement {
 
   @property({ type: Number }) public size = 512;
 
-  /** Offer generating the picture with the AI task integration. */
-  @property({ type: Boolean, attribute: "generate-ai" }) public generateAi =
-    false;
-
-  /** Prompt the generate dialog starts with. Only used with `generate-ai`. */
-  @property({ attribute: false }) public aiPrompt?: string;
-
-  /** Task name reported to the AI task integration. */
-  @property({ attribute: false }) public aiTaskName?: string;
+  /** Render a single button instead of the full drop zone. */
+  @property({ type: Boolean, reflect: true }) public compact = false;
 
   @state() private _uploading = false;
 
-  @state() private _aiPrefs?: AITaskPreferences;
-
-  protected firstUpdated(changedProps: PropertyValues<this>): void {
-    super.firstUpdated(changedProps);
-    if (
-      !this.generateAi ||
-      !this.hass ||
-      !isComponentLoaded(this.hass.config, "ai_task")
-    ) {
-      return;
-    }
-    fetchAITaskPreferences(this.hass).then((prefs) => {
-      this._aiPrefs = prefs;
-    });
-  }
-
-  private get _canGenerate(): boolean {
-    return Boolean(
-      this.generateAi &&
-      this._aiPrefs?.enabled !== false &&
-      this._aiPrefs?.gen_image_entity_id
-    );
-  }
+  @query("#compact-input") private _compactInput?: HTMLInputElement;
 
   public render(): TemplateResult {
+    if (this.compact) {
+      return this._renderCompact();
+    }
     if (!this.value) {
-      const generateLink = this._canGenerate
-        ? html`<button class="link" @click=${this._generateWithAI}>
-            ${this.hass.localize("ui.components.picture-upload.generate_ai")}
-          </button>`
-        : undefined;
-
       const selectMediaLink = this.selectMedia
         ? html`<button class="link" @click=${this._chooseMedia}>
             ${this.hass.localize("ui.components.picture-upload.select_media")}
@@ -114,13 +79,8 @@ export class HaPictureUpload extends LitElement {
           ? html`${this.hass.localize(
               "ui.components.picture-upload.secondary",
               { select_media: selectMediaLink }
-            )}${generateLink ? html` · ${generateLink}` : ""}`
-          : generateLink
-            ? html`${this.hass.localize(
-                "ui.components.picture-upload.secondary_generate",
-                { generate_ai: generateLink }
-              )}`
-            : undefined);
+            )}`
+          : undefined);
 
       return html`
         <ha-file-upload
@@ -166,6 +126,77 @@ export class HaPictureUpload extends LitElement {
         </div>
       </div>
     </div>`;
+  }
+
+  private _renderCompact(): TemplateResult {
+    return html`
+      <input
+        id="compact-input"
+        type="file"
+        accept="image/png, image/jpeg, image/gif"
+        hidden
+        @change=${this._handleInputPicked}
+      />
+      ${
+        this.value
+          ? html`<img
+              .src=${
+                this.value.startsWith("/")
+                  ? this.hass.hassUrl(this.value)
+                  : this.value
+              }
+              alt=${
+                this.currentImageAltText ||
+                this.hass.localize(
+                  "ui.components.picture-upload.current_image_alt"
+                )
+              }
+            />`
+          : nothing
+      }
+      <ha-button
+        appearance="plain"
+        size="s"
+        .loading=${this._uploading}
+        @click=${this._openFilePicker}
+      >
+        <ha-svg-icon slot="start" .path=${mdiImagePlus}></ha-svg-icon>
+        ${
+          this.label || this.hass.localize("ui.components.picture-upload.label")
+        }
+      </ha-button>
+      ${
+        this.value
+          ? html`<ha-button
+              appearance="plain"
+              size="s"
+              variant="danger"
+              @click=${this._handleChangeClick}
+            >
+              ${this.hass.localize("ui.components.picture-upload.clear_picture")}
+            </ha-button>`
+          : nothing
+      }
+    `;
+  }
+
+  private _openFilePicker = () => {
+    this._compactInput?.click();
+  };
+
+  private _handleInputPicked(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    // Reset so cancelling the crop and picking the same file again still fires.
+    input.value = "";
+    if (!file) {
+      return;
+    }
+    if (this.crop) {
+      this._cropFile(file);
+    } else {
+      this._uploadFile(file);
+    }
   }
 
   private _handleChangeClick() {
@@ -264,16 +295,6 @@ export class HaPictureUpload extends LitElement {
     }
   }
 
-  private _generateWithAI = () => {
-    showAIImageDialog(this, {
-      taskName: this.aiTaskName || this.label || "Picture",
-      instructions: this.aiPrompt,
-      // The preview in the dialog already acts as the confirmation step, so
-      // skip the cropper and upload the generated picture as-is.
-      imageGeneratedCallback: (file) => this._uploadFile(file),
-    });
-  };
-
   private _chooseMedia = () => {
     showMediaBrowserDialog(this, {
       action: "pick",
@@ -334,6 +355,19 @@ export class HaPictureUpload extends LitElement {
         :host {
           display: block;
           height: 240px;
+        }
+        :host([compact]) {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+          height: auto;
+        }
+        :host([compact]) img {
+          width: 40px;
+          height: 40px;
+          margin-bottom: 0;
+          object-fit: cover;
+          border-radius: var(--ha-border-radius-circle);
         }
         ha-file-upload {
           height: 100%;

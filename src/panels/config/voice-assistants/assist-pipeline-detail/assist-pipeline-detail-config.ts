@@ -72,38 +72,23 @@ export class AssistPipelineDetailConfig extends LitElement {
         .hass=${this.hass}
         .computeLabel=${this._computeLabel}
       ></ha-form>
-      <ha-picture-upload
-        class="avatar"
-        crop
-        generate-ai
-        .hass=${this.hass}
-        .value=${this.avatar ?? null}
-        .label=${this.hass.localize(
-          "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.avatar"
-        )}
-        .cropOptions=${this._cropOptions}
-        .aiTaskName=${this.hass.localize(
-          "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.avatar"
-        )}
-        .aiPrompt=${this._aiPrompt(this.data?.name)}
-        @change=${this._avatarChanged}
-      ></ha-picture-upload>
+      <div class="avatar-card">
+        <ha-picture-upload
+          crop
+          compact
+          .hass=${this.hass}
+          .value=${this.avatar ?? null}
+          .label=${this.hass.localize(
+            "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.avatar_add"
+          )}
+          .cropOptions=${this._cropOptions}
+          @change=${this._avatarChanged}
+        ></ha-picture-upload>
+      </div>
     `;
   }
 
   private _cropOptions = { round: true, aspectRatio: 1 };
-
-  private _aiPrompt(name?: string) {
-    const trimmed = name?.trim();
-    return trimmed
-      ? this.hass.localize(
-          "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.avatar_ai_prompt_named",
-          { name: trimmed }
-        )
-      : this.hass.localize(
-          "ui.panel.config.voice_assistants.assistants.pipeline.detail.form.avatar_ai_prompt"
-        );
-  }
 
   private _avatarChanged(ev: Event) {
     fireEvent(this, "avatar-changed", {
@@ -115,9 +100,13 @@ export class AssistPipelineDetailConfig extends LitElement {
     :host {
       display: block;
     }
-    .avatar {
-      display: block;
-      margin-top: 16px;
+    /* Same framed section as the steps below, so the avatar controls read as
+       one block rather than loose buttons under the form. */
+    .avatar-card {
+      border: 1px solid var(--divider-color);
+      border-radius: var(--ha-border-radius-md);
+      box-sizing: border-box;
+      padding: 16px;
     }
   `;
 }

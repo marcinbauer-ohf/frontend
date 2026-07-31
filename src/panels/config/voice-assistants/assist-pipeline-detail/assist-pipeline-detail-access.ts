@@ -1,9 +1,10 @@
 import {
-  mdiEarth,
   mdiEyeOutline,
   mdiHammerWrench,
   mdiHomeOutline,
+  mdiRobotOutline,
   mdiShieldCheckOutline,
+  mdiWeb,
 } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
@@ -11,7 +12,6 @@ import { customElement, property, state } from "lit/decorators";
 import { storage } from "../../../../common/decorators/storage";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import { navigate } from "../../../../common/navigate";
-import type { LocalizeKeys } from "../../../../common/translations/localize";
 import "../../../../components/ha-icon-next";
 import "../../../../components/ha-md-list";
 import "../../../../components/ha-md-list-item";
@@ -19,32 +19,21 @@ import "../../../../components/ha-svg-icon";
 import "../../../../components/ha-switch";
 import type { HaSwitch } from "../../../../components/ha-switch";
 import {
+  ASSIST_AGENT_BUILD_OVERRIDE_STORAGE_KEY,
   ASSIST_AGENT_CONTROL_OVERRIDE_STORAGE_KEY,
   type AssistAgentControlOverride,
 } from "../../../../data/assist_agent_control_override";
 import type { AssistPipeline } from "../../../../data/assist_pipeline";
 import {
+  assistAgentBuildsHome,
   assistAgentControlsHome,
   assistAgentIsCloud,
+  HOME_ASSISTANT_AGENT,
 } from "../../../../data/assist_pipeline";
 import type { ExposeEntitySettings } from "../../../../data/expose";
 import { listExposedEntities } from "../../../../data/expose";
 import { fetchIntegrationManifest } from "../../../../data/integration";
 import type { HomeAssistant } from "../../../../types";
-
-const HOME_ASSISTANT_AGENT = "conversation.home_assistant";
-
-/**
- * ponytail: MOCKUP ONLY — illustrates how control access would break down once
- * agents can manage Home Assistant, not just operate it. `available` marks what
- * an agent can actually do today. See `_renderControlCapabilities`.
- */
-const CONTROL_CAPABILITIES = [
-  { key: "entities", available: true },
-  { key: "automations", available: false },
-  { key: "dashboards", available: false },
-  { key: "settings", available: false },
-] as const;
 
 @customElement("assist-pipeline-detail-access")
 export class AssistPipelineDetailAccess extends LitElement {
@@ -56,6 +45,8 @@ export class AssistPipelineDetailAccess extends LitElement {
 
   @state() private _localControlOverride?: boolean;
 
+  @state() private _localBuildOverride?: boolean;
+
   /** iot_class of the agent's integration; undefined = not loaded yet. */
   @state() private _agentIotClass?: string | null;
 
@@ -66,6 +57,14 @@ export class AssistPipelineDetailAccess extends LitElement {
     subscribe: true,
   })
   private _controlOverrides: AssistAgentControlOverride = {};
+
+  @state()
+  @storage({
+    key: ASSIST_AGENT_BUILD_OVERRIDE_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _buildOverrides: AssistAgentControlOverride = {};
 
   protected firstUpdated() {
     this._fetchExposedCount();
@@ -136,18 +135,6 @@ export class AssistPipelineDetailAccess extends LitElement {
 
     return html`
       <div class="section">
-        <div class="intro">
-          <h3>
-            ${this.hass.localize(
-              "ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.access.title"
-            )}
-          </h3>
-          <p>
-            ${this.hass.localize(
-              "ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.access.description"
-            )}
-          </p>
-        </div>
         <ha-md-list>
           ${
             showLocalToggle
@@ -173,7 +160,7 @@ export class AssistPipelineDetailAccess extends LitElement {
               : nothing
           }
           <ha-md-list-item>
-            <ha-svg-icon slot="start" .path=${mdiHammerWrench}></ha-svg-icon>
+            <ha-svg-icon slot="start" .path=${mdiRobotOutline}></ha-svg-icon>
             <span slot="headline">
               ${this.hass.localize(
                 "ui.panel.config.voice_assistants.assistants.pipeline.controls_home"
@@ -195,7 +182,36 @@ export class AssistPipelineDetailAccess extends LitElement {
               @change=${this._controlChanged}
             ></ha-switch>
           </ha-md-list-item>
-          ${controlsHome ? this._renderControlCapabilities() : nothing}
+          ${
+            // The built-in agent matches intents; it has no tools to create or
+            // edit anything, so building isn't on offer for it at all.
+            isBuiltInAgent
+              ? nothing
+              : html`<ha-md-list-item>
+                  <ha-svg-icon
+                    slot="start"
+                    .path=${mdiHammerWrench}
+                  ></ha-svg-icon>
+                  <span slot="headline">
+                    ${this.hass.localize(
+                      "ui.panel.config.voice_assistants.assistants.pipeline.builds_home"
+                    )}
+                  </span>
+                  <span slot="supporting-text">
+                    ${this.hass.localize(
+                      controlsHome
+                        ? "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.build_description"
+                        : "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.build_needs_control"
+                    )}
+                  </span>
+                  <ha-switch
+                    slot="end"
+                    .checked=${controlsHome && this._buildsHome()}
+                    .disabled=${!controlsHome}
+                    @change=${this._buildChanged}
+                  ></ha-switch>
+                </ha-md-list-item>`
+          }
           ${this._renderInternet(preferLocal)}
           <ha-md-list-item type="button" @click=${this._openExposed}>
             <ha-svg-icon slot="start" .path=${mdiEyeOutline}></ha-svg-icon>
@@ -218,38 +234,6 @@ export class AssistPipelineDetailAccess extends LitElement {
   }
 
   /**
-   * ponytail: MOCKUP ONLY. What "Control Home Assistant" breaks down into once
-   * management capabilities land — the grants live on the agent's config entry
-   * (its LLM APIs), which the frontend can't read or set per agent yet, so
-   * every row is inert: entity control reflects the row above it, the rest are
-   * off and disabled. Delete this and CONTROL_CAPABILITIES, or wire it to the
-   * real grants, before this ships.
-   */
-  private _renderControlCapabilities() {
-    return CONTROL_CAPABILITIES.map(
-      ({ key, available }) => html`
-        <ha-md-list-item class="sub">
-          <span slot="headline">
-            ${this.hass.localize(
-              `ui.panel.config.voice_assistants.assistants.pipeline.detail.access.capability_${key}` as LocalizeKeys
-            )}
-          </span>
-          ${
-            available
-              ? nothing
-              : html`<span slot="supporting-text">
-                  ${this.hass.localize(
-                    "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.capability_coming_soon"
-                  )}
-                </span>`
-          }
-          <ha-switch slot="end" .checked=${available} disabled></ha-switch>
-        </ha-md-list-item>
-      `
-    );
-  }
-
-  /**
    * Where the agent's requests go — a fact the user can't change, derived from
    * its integration. Kept as its own row rather than merged into the local
    * handling switch above: merged, that switch would read as a privacy
@@ -268,7 +252,7 @@ export class AssistPipelineDetailAccess extends LitElement {
       <ha-md-list-item>
         <ha-svg-icon
           slot="start"
-          .path=${isCloud ? mdiEarth : mdiShieldCheckOutline}
+          .path=${isCloud ? mdiWeb : mdiShieldCheckOutline}
         ></ha-svg-icon>
         <span slot="headline">
           ${this.hass.localize(
@@ -317,6 +301,32 @@ export class AssistPipelineDetailAccess extends LitElement {
     });
   }
 
+  /** Whether the agent may build, with the not-yet-saved switch state first. */
+  private _buildsHome(): boolean {
+    if (this._localBuildOverride !== undefined) {
+      return this._localBuildOverride;
+    }
+    return assistAgentBuildsHome(
+      true,
+      this.data as AssistPipeline,
+      this._buildOverrides
+    );
+  }
+
+  private _buildChanged(ev: Event) {
+    const checked = (ev.target as HaSwitch).checked;
+    this._localBuildOverride = checked;
+    const id = (this.data as AssistPipeline | undefined)?.id;
+    if (id) {
+      this._buildOverrides = { ...this._buildOverrides, [id]: checked };
+    }
+    // Client-only field, like `control_home`: it marks the form dirty so the
+    // Update button lights up, and is dropped when saving.
+    fireEvent(this, "value-changed", {
+      value: { ...this.data, build_home: checked },
+    });
+  }
+
   private _preferLocalChanged(ev: Event) {
     fireEvent(this, "value-changed", {
       value: {
@@ -333,28 +343,6 @@ export class AssistPipelineDetailAccess extends LitElement {
   }
 
   static styles = css`
-    .section {
-      border: 1px solid var(--divider-color);
-      border-radius: var(--ha-border-radius-md);
-      box-sizing: border-box;
-      padding: 16px;
-    }
-    .intro {
-      margin-bottom: 16px;
-    }
-    h3 {
-      font-size: var(--ha-font-size-xl);
-      font-weight: var(--ha-font-weight-normal);
-      line-height: var(--ha-line-height-condensed);
-      margin-top: 0;
-      margin-bottom: 4px;
-    }
-    p {
-      color: var(--secondary-text-color);
-      font-size: var(--mdc-typography-body2-font-size, var(--ha-font-size-s));
-      margin-top: 0;
-      margin-bottom: 0;
-    }
     ha-md-list {
       padding: 0;
       --md-list-item-leading-space: 0;
@@ -362,10 +350,6 @@ export class AssistPipelineDetailAccess extends LitElement {
     }
     ha-md-list-item ha-svg-icon[slot="start"] {
       color: var(--secondary-text-color);
-    }
-    /* Indents a row under the one it belongs to, where the icon would be. */
-    ha-md-list-item.sub {
-      --md-list-item-leading-space: 40px;
     }
   `;
 }

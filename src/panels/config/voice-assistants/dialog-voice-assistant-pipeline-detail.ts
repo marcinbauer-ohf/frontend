@@ -31,9 +31,11 @@ import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
 
 type PipelineDialogData = Partial<AssistPipeline> & {
   avatar?: string | null;
-  // Client-only flag mirroring the "Control Home Assistant" override so the
-  // dialog tracks it as a change; not part of the saved pipeline params.
+  // Client-only flags mirroring the "Control Home Assistant" and "Build in Home
+  // Assistant" overrides so the dialog tracks them as a change; not part of the
+  // saved pipeline params.
   control_home?: boolean;
+  build_home?: boolean;
 };
 
 @customElement("dialog-voice-assistant-pipeline-detail")
@@ -205,18 +207,20 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
             @avatar-changed=${this._avatarChanged}
             ?autofocus=${!isExistingPipeline}
           ></assist-pipeline-detail-config>
-          <assist-pipeline-detail-conversation
-            .hass=${this.hass}
-            .data=${this._data}
-            keys="conversation_engine,conversation_language"
-            @value-changed=${this._valueChanged}
-          ></assist-pipeline-detail-conversation>
-          <assist-pipeline-detail-access
-            .hass=${this.hass}
-            .data=${this._data}
-            keys="prefer_local_intents,control_home"
-            @value-changed=${this._valueChanged}
-          ></assist-pipeline-detail-access>
+          <div class="agent-card">
+            <assist-pipeline-detail-conversation
+              .hass=${this.hass}
+              .data=${this._data}
+              keys="conversation_engine,conversation_language"
+              @value-changed=${this._valueChanged}
+            ></assist-pipeline-detail-conversation>
+            <assist-pipeline-detail-access
+              .hass=${this.hass}
+              .data=${this._data}
+              keys="prefer_local_intents,control_home,build_home"
+              @value-changed=${this._valueChanged}
+            ></assist-pipeline-detail-access>
+          </div>
           ${
             !this._cloudActive &&
             (this._data.tts_engine === "cloud" ||
@@ -362,6 +366,18 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
         .content > *:not(:last-child) {
           margin-bottom: 16px;
           display: block;
+        }
+        /* The conversation agent and its access rows read as one card: the
+           agent picker and instructions on top, what it may do below. */
+        .agent-card {
+          border: 1px solid var(--divider-color);
+          border-radius: var(--ha-border-radius-md);
+          box-sizing: border-box;
+          padding: 16px;
+        }
+        .agent-card > assist-pipeline-detail-access {
+          display: block;
+          margin-top: 16px;
         }
         ha-alert {
           margin-bottom: 16px;

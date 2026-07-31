@@ -1059,9 +1059,7 @@
         "supported_formats": "Supports JPEG, PNG, or GIF image.",
         "unsupported_format": "Unsupported format, please choose a JPEG, PNG, or GIF image.",
         "secondary": "Drop your file here or {select_media}",
-        "secondary_generate": "Drop your file here or {generate_ai}",
-        "select_media": "select from media",
-        "generate_ai": "generate with AI"
+        "select_media": "select from media"
       },
       "color-picker": {
         "default": "default",
@@ -1669,10 +1667,12 @@
         "open_settings": "Settings",
         "disclaimer": "This assistant can read and write to your Home Assistant.",
         "disclaimer_no_control": "This assistant can’t control your home.",
+        "disclaimer_build": "This assistant can also create and edit automations, dashboards, and settings.",
         "disclaimer_data_local": "Your requests are processed locally and no data is sent to the internet.",
         "disclaimer_data_cloud": "Your requests are sent to the internet for processing.",
         "disclaimer_data_cloud_partial": "Commands your home understands are handled locally; anything else is sent to the internet for processing.",
         "control_summary": "Can control your home.",
+        "control_summary_build": "Can control and build in your home.",
         "control_summary_no": "Can’t control your home.",
         "data_summary_local": "No data leaves your home.",
         "data_summary_cloud": "Requests are sent to the internet.",
@@ -2424,16 +2424,6 @@
       "enter_code": {
         "title": "Enter code",
         "input_label": "Code"
-      },
-      "ai_image": {
-        "header": "Generate picture with AI",
-        "instructions": "Describe the picture",
-        "instructions_placeholder": "A friendly robot waving hello",
-        "generate": "Generate",
-        "try_again": "Try again",
-        "use_image": "Use picture",
-        "preview_alt": "Generated picture",
-        "error": "Something went wrong while generating the picture."
       },
       "tts-try": {
         "header": "Try text-to-speech",
@@ -4884,6 +4874,7 @@
               "agents_intro_title": "Meet agents",
               "agents_intro": "Assist now supports multiple agents. Each agent has its own conversation agent, voice, and access to your home. Give them an avatar and custom instructions, and switch between them in the Assist chat.",
               "controls_home": "Control Home Assistant",
+              "builds_home": "Build in Home Assistant",
               "cannot_control_home": "Can’t control Home Assistant",
               "data_local": "Your requests are handled on your network, not sent to the internet",
               "data_cloud": "Sends your requests to the internet",
@@ -4919,15 +4910,12 @@
                   "control_on": "Enabled",
                   "control_off": "Disabled",
                   "control_locked_local": "Always on while commands are handled locally",
-                  "capability_entities": "Devices and entities",
-                  "capability_automations": "Automations and scripts",
-                  "capability_dashboards": "Dashboards",
-                  "capability_settings": "Settings and integrations",
-                  "capability_coming_soon": "Coming soon",
+                  "build_description": "Let this agent create and edit automations, dashboards, and settings",
+                  "build_needs_control": "Requires control of Home Assistant",
                   "control_hint": "Change control access in the conversation agent’s settings.",
                   "can_read": "Read or control {count} {count, plural,\n  one {entity}\n  other {entities}\n}",
                   "exposed_shared": "Shared by all agents",
-                  "internet_cloud": "Access to the internet",
+                  "internet_cloud": "Requires the internet",
                   "internet_cloud_description": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::data_cloud%]",
                   "internet_local": "Runs locally",
                   "internet_local_description": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::data_local%]",
@@ -4938,8 +4926,7 @@
                 "form": {
                   "name": "[%key:ui::common::name%]",
                   "avatar": "Avatar",
-                  "avatar_ai_prompt": "Avatar for a voice assistant. Friendly character portrait, centered, flat illustration, simple solid background.",
-                  "avatar_ai_prompt_named": "Avatar for a voice assistant named “{name}”. Friendly character portrait, centered, flat illustration, simple solid background.",
+                  "avatar_add": "Add avatar",
                   "conversation_engine": "Conversation agent",
                   "conversation_language": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::detail::form::language%]",
                   "prefer_local_intents": "Prefer handling commands locally",
@@ -4962,10 +4949,6 @@
                   "conversation": {
                     "title": "Conversation agent",
                     "description": "The conversation agent is the brains of your assistant and will process the incoming text commands."
-                  },
-                  "access": {
-                    "title": "Access",
-                    "description": "What this agent can see and control in your home."
                   },
                   "stt": {
                     "title": "Speech-to-text",
