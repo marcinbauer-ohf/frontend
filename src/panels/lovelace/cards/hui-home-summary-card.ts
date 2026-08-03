@@ -6,39 +6,24 @@ import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
 import { computeCssColor } from "../../../common/color/compute-color";
 import { calcDate } from "../../../common/datetime/calc_date";
-import { computeDomain } from "../../../common/entity/compute_domain";
-import {
-  findEntities,
-  generateEntityFilter,
-} from "../../../common/entity/entity_filter";
-import { formatNumber } from "../../../common/number/format_number";
 import "../../../components/ha-card";
 import "../../../components/tile/ha-tile-container";
 import "../../../components/tile/ha-tile-icon";
 import "../../../components/tile/ha-tile-info";
 import type { EnergyData } from "../../../data/energy";
-import {
-  computeConsumptionData,
-  formatConsumptionShort,
-  getEnergyDataCollection,
-  getSummedData,
-} from "../../../data/energy";
+import { getEnergyDataCollection } from "../../../data/energy";
 import type { ActionHandlerEvent } from "../../../data/lovelace/action_handler";
 import { SubscribeMixin } from "../../../mixins/subscribe-mixin";
 import type { HomeAssistant } from "../../../types";
 import { handleAction } from "../common/handle-action";
 import { hasAction } from "../common/has-action";
 import {
+  computeHomeSummaryState,
   getSummaryLabel,
   HOME_SUMMARIES_COLORS,
-  HOME_SUMMARIES_FILTERS,
   HOME_SUMMARIES_ICONS,
   type HomeSummary,
 } from "../strategies/home/helpers/home-summaries";
-import {
-  filterLowBatteryEntities,
-  filterUnavailableBatteryEntities,
-} from "../../maintenance/strategies/maintenance-view-strategy";
 import type { LovelaceCard, LovelaceGridOptions } from "../types";
 import { tileCardStyle } from "./tile/tile-card-style";
 import type { HomeSummaryCard } from "./types";
@@ -117,222 +102,6 @@ export class HuiHomeSummaryCard
       summary === "energy" && !energyData
   );
 
-  private _computeSummaryState(): string {
-    if (!this._config || !this.hass) {
-      return "";
-    }
-    const allEntities = Object.keys(this.hass!.states);
-
-    const areas = Object.values(this.hass.areas);
-
-    switch (this._config.summary) {
-      case "light": {
-        // Number of lights on
-        const lightsFilters = HOME_SUMMARIES_FILTERS.light.map((filter) =>
-          generateEntityFilter(this.hass!, filter)
-        );
-
-        const lightEntities = findEntities(allEntities, lightsFilters);
-
-        const onLights = lightEntities.filter((entityId) => {
-          const s = this.hass!.states[entityId]?.state;
-          return s === "on";
-        });
-
-        return onLights.length
-          ? this.hass.localize("ui.card.home-summary.count_lights_on", {
-              count: onLights.length,
-            })
-          : this.hass.localize("ui.card.home-summary.all_lights_off");
-      }
-      case "climate": {
-        // Min/Max temperature of the areas
-        const areaSensors = areas
-          .map((area) => area.temperature_entity_id)
-          .filter(Boolean);
-
-        const sensorsValues = areaSensors
-          .map(
-            (entityId) => parseFloat(this.hass!.states[entityId!]?.state) || NaN
-          )
-          .filter((value) => !isNaN(value));
-
-        if (sensorsValues.length === 0) {
-          return "";
-        }
-        const minTemp = Math.min(...sensorsValues);
-        const maxTemp = Math.max(...sensorsValues);
-
-        if (isNaN(minTemp) || isNaN(maxTemp)) {
-          return "";
-        }
-
-        const formattedMinTemp = formatNumber(minTemp, this.hass?.locale, {
-          minimumFractionDigits: 1,
-          maximumFractionDigits: 1,
-        });
-        const formattedMaxTemp = formatNumber(maxTemp, this.hass?.locale, {
-          minimumFractionDigits: 1,
-          maximumFractionDigits: 1,
-        });
-        return formattedMinTemp === formattedMaxTemp
-          ? `${formattedMinTemp}°`
-          : `${formattedMinTemp} - ${formattedMaxTemp}°`;
-      }
-      case "security": {
-        // Alarm and lock status
-        const securityFilters = HOME_SUMMARIES_FILTERS.security.map((filter) =>
-          generateEntityFilter(this.hass!, filter)
-        );
-
-        const securityEntities = findEntities(allEntities, securityFilters);
-
-        const locks = securityEntities.filter((entityId) => {
-          const domain = computeDomain(entityId);
-          return domain === "lock";
-        });
-
-        const alarms = securityEntities.filter((entityId) => {
-          const domain = computeDomain(entityId);
-          return domain === "alarm_control_panel";
-        });
-
-        const disarmedAlarms = alarms.filter((entityId) => {
-          const s = this.hass!.states[entityId]?.state;
-          return s === "disarmed";
-        });
-
-        if (!locks.length && !alarms.length) {
-          return "";
-        }
-
-        const unlockedLocks = locks.filter((entityId) => {
-          const s = this.hass!.states[entityId]?.state;
-          return s === "unlocked" || s === "jammed" || s === "open";
-        });
-
-        if (unlockedLocks.length) {
-          return this.hass.localize(
-            "ui.card.home-summary.count_locks_unlocked",
-            {
-              count: unlockedLocks.length,
-            }
-          );
-        }
-        if (disarmedAlarms.length) {
-          return this.hass.localize(
-            "ui.card.home-summary.count_alarms_disarmed",
-            {
-              count: disarmedAlarms.length,
-            }
-          );
-        }
-        return this.hass.localize("ui.card.home-summary.all_secure");
-      }
-      case "media_players": {
-        // Playing media
-        const mediaPlayerFilters = HOME_SUMMARIES_FILTERS.media_players.map(
-          (filter) => generateEntityFilter(this.hass!, filter)
-        );
-
-        const mediaPlayerEntities = findEntities(
-          allEntities,
-          mediaPlayerFilters
-        );
-
-        const playingMedia = mediaPlayerEntities.filter((entityId) => {
-          const s = this.hass!.states[entityId]?.state;
-          return s === "playing";
-        });
-
-        return playingMedia.length
-          ? this.hass.localize("ui.card.home-summary.count_media_playing", {
-              count: playingMedia.length,
-            })
-          : this.hass.localize("ui.card.home-summary.no_media_playing");
-      }
-      case "maintenance": {
-        const maintenanceFilters = HOME_SUMMARIES_FILTERS.maintenance.map(
-          (filter) => generateEntityFilter(this.hass!, filter)
-        );
-
-        const maintenanceEntities = findEntities(
-          allEntities,
-          maintenanceFilters
-        );
-
-        const lowBatteryEntities = filterLowBatteryEntities(
-          this.hass!,
-          maintenanceEntities
-        );
-
-        const unavailableBatteryEntities = filterUnavailableBatteryEntities(
-          this.hass!,
-          maintenanceEntities
-        );
-
-        const lowBatteryText =
-          lowBatteryEntities.length > 0
-            ? this.hass.localize(
-                "ui.card.home-summary.count_maintenance_low_battery_issues",
-                {
-                  count: lowBatteryEntities.length,
-                }
-              )
-            : undefined;
-
-        const unavailableText =
-          unavailableBatteryEntities.length > 0
-            ? this.hass.localize(
-                "ui.card.home-summary.count_maintenance_issues_unavailable_battery_entities",
-                {
-                  count: unavailableBatteryEntities.length,
-                }
-              )
-            : undefined;
-
-        if (lowBatteryText && unavailableText) {
-          return `${lowBatteryText}, ${unavailableText}`;
-        }
-
-        if (lowBatteryText) {
-          return lowBatteryText;
-        }
-
-        if (unavailableText) {
-          return unavailableText;
-        }
-
-        return this.hass.localize("ui.card.home-summary.all_maintenance_good");
-      }
-      case "energy": {
-        if (!this._energyData) {
-          return "";
-        }
-        const { summedData } = getSummedData(this._energyData);
-        const { consumption } = computeConsumptionData(summedData, undefined);
-        const totalConsumption = consumption.total.used_total;
-        return formatConsumptionShort(this.hass, totalConsumption, "kWh");
-      }
-      case "persons": {
-        const personsFilters = HOME_SUMMARIES_FILTERS.persons.map((filter) =>
-          generateEntityFilter(this.hass!, filter)
-        );
-        const personEntities = findEntities(allEntities, personsFilters);
-        const personsHome = personEntities.filter((entityId) => {
-          const s = this.hass!.states[entityId]?.state;
-          return s === "home";
-        });
-        return personsHome.length
-          ? this.hass.localize("ui.card.home-summary.count_persons_home", {
-              count: personsHome.length,
-            })
-          : this.hass.localize("ui.card.home-summary.nobody_home");
-      }
-    }
-    return "";
-  }
-
   protected render() {
     if (!this._config || !this.hass) {
       return nothing;
@@ -344,7 +113,11 @@ export class HuiHomeSummaryCard
       "--tile-color": color,
     };
 
-    const secondary = this._computeSummaryState();
+    const secondary = computeHomeSummaryState(
+      this.hass,
+      this._config.summary,
+      this._energyData
+    );
     const secondaryLoading = this._computeSecondaryLoading(
       this._config.summary,
       this._energyData

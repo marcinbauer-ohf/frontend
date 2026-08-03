@@ -11,6 +11,7 @@ import "../components/ha-drawer";
 import { narrowViewportContext } from "../data/context";
 import { showNotificationDrawer } from "../dialogs/notifications/show-notification-drawer";
 import type { HomeAssistant, Route } from "../types";
+import "./ambient/ha-ambient-layer";
 import "./partial-panel-resolver";
 
 declare global {
@@ -38,6 +39,8 @@ export class HomeAssistantMain extends LitElement {
 
   @state() private _drawerOpen = false;
 
+  @state() private _ambientActive = false;
+
   private _narrowViewportProvider = new ContextProvider(this, {
     context: narrowViewportContext,
     initialValue: this.narrow,
@@ -59,7 +62,12 @@ export class HomeAssistantMain extends LitElement {
 
     return html`
       <ha-snowflakes .hass=${this.hass} .narrow=${this.narrow}></ha-snowflakes>
+      <ha-ambient-layer
+        .hass=${this.hass}
+        @ambient-active=${this._ambientActiveChanged}
+      ></ha-ambient-layer>
       <ha-drawer
+        ?inert=${this._ambientActive}
         .type=${sidebarNarrow ? "modal" : ""}
         .open=${sidebarNarrow ? this._drawerOpen : false}
         .direction=${computeRTLDirection(this.hass)}
@@ -157,6 +165,14 @@ export class HomeAssistantMain extends LitElement {
   private _drawerClosed() {
     this._drawerOpen = false;
     this._sidebarEditMode = false;
+  }
+
+  /**
+   * While an ambient screen is up the app behind it must be unreachable — Tab
+   * escaping the lock screen is a security bug, not a papercut.
+   */
+  private _ambientActiveChanged(ev: HASSDomEvent<{ active: boolean }>) {
+    this._ambientActive = ev.detail.active;
   }
 
   static styles = css`

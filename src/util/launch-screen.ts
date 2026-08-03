@@ -5,6 +5,13 @@ import { parseAnimationDuration } from "../common/util/parse-animation-duration"
 let removalInitiated = false;
 
 /**
+ * Minimum time the launch screen stays up. A boot screen that flashes for 200ms
+ * on a fast connect reads as a glitch, so it is floored. Measured against the
+ * navigation start, which is when the screen was painted.
+ */
+const MIN_DISPLAY_MS = 1500;
+
+/**
  * Removes the launch screen with a CSS fade-out transition.
  *
  * @param instant - Removes the launch screen without animation. Used when the
@@ -20,21 +27,36 @@ export const removeLaunchScreen = (instant = false): boolean => {
   }
   removalInitiated = true;
 
-  if (instant) {
-    launchScreenElement.parentElement.removeChild(launchScreenElement);
-    return true;
-  }
+  const remove = () => {
+    // Anything that must not animate while the boot screen is still up gates on
+    // this, so it is set as the hand-off starts, not when it finishes.
+    document.documentElement.classList.add("booted");
 
-  launchScreenElement.classList.add("removing");
-  const durationFromCss = getComputedStyle(document.documentElement)
-    .getPropertyValue("--ha-animation-duration-normal")
-    .trim();
-  setTimeout(
-    () => {
+    if (instant) {
       launchScreenElement.parentElement?.removeChild(launchScreenElement);
-    },
-    parseAnimationDuration(durationFromCss || "250ms")
-  );
+      return;
+    }
+
+    launchScreenElement.classList.add("removing");
+    const durationFromCss = getComputedStyle(document.documentElement)
+      .getPropertyValue("--ha-animation-duration-normal")
+      .trim();
+    setTimeout(
+      () => {
+        launchScreenElement.parentElement?.removeChild(launchScreenElement);
+      },
+      parseAnimationDuration(durationFromCss || "250ms")
+    );
+  };
+
+  // The removal is still ours (callers rely on the return value to fire
+  // `frontend/loaded` exactly once); it just waits out the minimum display time.
+  const remainingMinDisplay = MIN_DISPLAY_MS - performance.now();
+  if (!instant && remainingMinDisplay > 0) {
+    setTimeout(remove, remainingMinDisplay);
+  } else {
+    remove();
+  }
   return true;
 };
 
