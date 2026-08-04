@@ -1,7 +1,10 @@
 import { fireEvent } from "../../common/dom/fire_event";
 import type { HomeAssistant } from "../../types";
+import { closeDialog } from "../make-dialog-manager";
 
 const loadVoiceCommandDialog = () => import("./ha-voice-command-dialog");
+
+const VOICE_COMMAND_DIALOG_TAG = "ha-voice-command-dialog";
 
 export interface VoiceCommandDialogParams {
   pipeline_id: "last_used" | "preferred" | string;
@@ -27,7 +30,7 @@ export const showVoiceCommandDialog = (
     return;
   }
   fireEvent(element, "show-dialog", {
-    dialogTag: "ha-voice-command-dialog",
+    dialogTag: VOICE_COMMAND_DIALOG_TAG,
     dialogImport: loadVoiceCommandDialog,
     dialogParams: {
       pipeline_id: dialogParams.pipeline_id,
@@ -37,4 +40,8 @@ export const showVoiceCommandDialog = (
       submit: dialogParams.submit ?? false,
     },
   });
+};
+
+export const closeVoiceCommandDialog = (): void => {
+  closeDialog(VOICE_COMMAND_DIALOG_TAG);
 };

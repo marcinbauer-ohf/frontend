@@ -23,8 +23,12 @@ export const SIDE_DIALOG_BOTTOM_SHEET_MEDIA_QUERY =
  */
 export const SIDE_DIALOG_DOCKED_MEDIA_QUERY = "(min-width: 1200px)";
 
-/** Width of the docked panel, kept in sync with the reserved layout space. */
+/** Default width of the docked panel, kept in sync with the reserved space. */
 export const DOCKED_PANEL_WIDTH = 420;
+
+/** Drag bounds for the docked panel. */
+const DOCKED_PANEL_MIN_WIDTH = 320;
+const DOCKED_PANEL_MAX_WIDTH = 800;
 
 /** CSS custom property (set on :root) the app shell reserves space for. */
 const RIGHT_PANEL_WIDTH_VAR = "--ha-right-panel-width";
@@ -99,6 +103,8 @@ export class HaAdaptiveSideDialog extends LitElement {
 
   @state() private _dockedClosing = false;
 
+  @state() private _dockedWidth = DOCKED_PANEL_WIDTH;
+
   @query(".docked-panel") private _dockedPanel?: HTMLElement;
 
   @state()
@@ -144,13 +150,24 @@ export class HaAdaptiveSideDialog extends LitElement {
     if (
       changedProperties.has("mode") ||
       changedProperties.has("open") ||
-      changedProperties.has("_dockedClosing")
+      changedProperties.has("_dockedClosing") ||
+      changedProperties.has("_dockedWidth")
     ) {
       this._syncDockedWidth();
     }
     // Reset the closing flag when the host reopens the panel.
     if (changedProperties.has("open") && this.open && this._dockedClosing) {
       this._dockedClosing = false;
+    }
+    // The overlay modes emit `closed` themselves when the host clears `open`;
+    // the docked panel has to run its own slide-out to get there.
+    if (
+      changedProperties.has("open") &&
+      !this.open &&
+      this.mode === "docked" &&
+      changedProperties.get("open")
+    ) {
+      this._requestDockedClose();
     }
   }
 
@@ -159,7 +176,7 @@ export class HaAdaptiveSideDialog extends LitElement {
     if (this.mode === "docked" && this.open && !this._dockedClosing) {
       document.documentElement.style.setProperty(
         RIGHT_PANEL_WIDTH_VAR,
-        `${DOCKED_PANEL_WIDTH}px`
+        `${this._dockedWidth}px`
       );
     } else {
       this._releaseDockedWidth();
@@ -228,11 +245,19 @@ export class HaAdaptiveSideDialog extends LitElement {
       return html`
         <aside
           class="docked-panel"
+          style=${`width: ${this._dockedWidth}px`}
           aria-labelledby=${this._defaultAriaLabelledBy || nothing}
           ?data-open=${this.open && !this._dockedClosing}
           @click=${this._handleDockedClick}
           @keydown=${this._handleDockedKeyDown}
         >
+          <div
+            class="resize-handle"
+            @pointerdown=${this._startResize}
+            @dblclick=${this._resetDockedWidth}
+          >
+            <div class="indicator"></div>
+          </div>
           ${
             this.withoutHeader
               ? nothing
@@ -276,6 +301,38 @@ export class HaAdaptiveSideDialog extends LitElement {
       </ha-side-sheet>
     `;
   }
+
+  /** Drag the inline-start edge to resize; double-click resets the width. */
+  private _startResize = (ev: PointerEvent) => {
+    ev.preventDefault();
+    const handle = ev.currentTarget as HTMLElement;
+    const startX = ev.clientX;
+    const startWidth = this._dockedWidth;
+    const rtl = getComputedStyle(this).direction === "rtl";
+
+    const onMove = (moveEv: PointerEvent) => {
+      const delta = (rtl ? -1 : 1) * (startX - moveEv.clientX);
+      this._dockedWidth = Math.min(
+        Math.max(startWidth + delta, DOCKED_PANEL_MIN_WIDTH),
+        Math.min(DOCKED_PANEL_MAX_WIDTH, window.innerWidth)
+      );
+    };
+    const onEnd = () => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onEnd);
+      handle.removeEventListener("pointercancel", onEnd);
+    };
+
+    handle.setPointerCapture(ev.pointerId);
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onEnd);
+    handle.addEventListener("pointercancel", onEnd);
+  };
+
+  private _resetDockedWidth = (ev: Event) => {
+    ev.preventDefault();
+    this._dockedWidth = DOCKED_PANEL_WIDTH;
+  };
 
   private _handleDockedClick = (ev: Event) => {
     const shouldClose = ev
@@ -360,7 +417,6 @@ export class HaAdaptiveSideDialog extends LitElement {
           top: 0;
           bottom: 0;
           inset-inline-end: 0;
-          width: ${DOCKED_PANEL_WIDTH}px;
           max-width: 100vw;
           z-index: var(--ha-side-sheet-z-index, 5);
           display: flex;
@@ -388,6 +444,33 @@ export class HaAdaptiveSideDialog extends LitElement {
           .docked-panel {
             transition: none;
           }
+        }
+        .resize-handle {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          inset-inline-start: -4px;
+          width: 12px;
+          display: flex;
+          justify-content: center;
+          cursor: ew-resize;
+          touch-action: none;
+          z-index: 1;
+        }
+        .resize-handle .indicator {
+          width: 4px;
+          border-radius: var(--ha-border-radius-pill);
+          background-color: var(--primary-color);
+          transform: scale3d(0, 1, 1);
+          opacity: 0;
+          transition:
+            transform 180ms ease-in-out,
+            opacity 180ms ease-in-out;
+        }
+        .resize-handle:hover .indicator,
+        .resize-handle:active .indicator {
+          transform: scale3d(1, 1, 1);
+          opacity: 1;
         }
         .docked-body {
           flex: 1;

@@ -183,10 +183,11 @@ export class HaAssistChat extends LitElement {
 
   @query("#message-input") private _messageInput!: HaTextArea;
 
-  @query(".message:last-child")
-  private _lastChatMessage!: LitElement;
+  @query(".messages") private _messages?: HTMLElement;
 
-  @query(".message:last-child img:last-of-type")
+  // Every `.message` is the last child of its own container, so anchoring on
+  // `.message:last-child` matched the *first* message in the chat.
+  @query(".message-container:last-child img:last-of-type")
   private _lastChatMessageImage: HTMLImageElement | undefined;
 
   @state() private _conversation: AssistMessage[] = [];
@@ -254,6 +255,9 @@ export class HaAssistChat extends LitElement {
   private _conversationId: string | null = null;
 
   private _initialPromptSubmitted = false;
+
+  /** Whether new messages should pull the view along, off once scrolled up. */
+  private _followMessages = true;
 
   // ponytail: see MOCK_PERMISSION_TRIGGER. Conversation-scoped on purpose — a
   // grant that outlives the chat needs a backend store and a way to revoke it.
@@ -506,7 +510,7 @@ export class HaAssistChat extends LitElement {
     const avatarSrc = this._uploadedAvatarSrc();
 
     return html`
-      <div class="messages ha-scrollbar">
+      <div class="messages ha-scrollbar" @scroll=${this._handleMessagesScroll}>
         ${
           this._conversation.length === 0
             ? html`
@@ -525,7 +529,9 @@ export class HaAssistChat extends LitElement {
               `
             : nothing
         }
-        <div class="spacer"></div>
+        <!-- Pushes the conversation to the bottom; the empty state centers
+             itself, so a second growing child would halve its space. -->
+        ${this._conversation.length ? html`<div class="spacer"></div>` : nothing}
         ${this._conversation!.map((message, index) => {
           const isThinking =
             message.who === "hass" &&
@@ -897,12 +903,10 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
   }
 
   private async _scrollMessagesBottom() {
-    const lastChatMessage = this._lastChatMessage;
-    if (!lastChatMessage) {
+    const messages = this._messages;
+    // Don't yank the view back down while the user is reading further up.
+    if (!messages || !this._followMessages) {
       return;
-    }
-    if (!lastChatMessage.hasUpdated) {
-      await lastChatMessage.updateComplete;
     }
     if (
       this._lastChatMessageImage &&
@@ -915,13 +919,17 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
         console.warn("Failed to decode image:", err);
       }
     }
-    const isLastMessageFullyVisible =
-      lastChatMessage.getBoundingClientRect().y <
-      this.getBoundingClientRect().top + 24;
-    if (!isLastMessageFullyVisible) {
-      lastChatMessage.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    messages.scrollTo({ top: messages.scrollHeight, behavior: "smooth" });
   }
+
+  private _handleMessagesScroll = () => {
+    const messages = this._messages;
+    if (!messages) {
+      return;
+    }
+    this._followMessages =
+      messages.scrollHeight - messages.scrollTop - messages.clientHeight < 48;
+  };
 
   private _handleKeyDown(ev: KeyboardEvent) {
     // Enter sends, Shift+Enter inserts a newline.
@@ -1544,6 +1552,20 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
           gap: var(--ha-space-4);
           padding: var(--ha-space-6) var(--ha-space-4);
           text-align: center;
+          /* Drops into place once the panel or sheet has opened. The duration
+             tokens collapse to 1ms under reduced motion. */
+          animation: empty-state-in var(--ha-animation-duration-slow) ease-out
+            var(--ha-animation-duration-normal) both;
+        }
+        @keyframes empty-state-in {
+          from {
+            opacity: 0;
+            transform: translateY(calc(var(--ha-space-6) * -1));
+          }
+          to {
+            opacity: 1;
+            transform: none;
+          }
         }
         .empty-logo {
           display: flex;
@@ -1718,6 +1740,20 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
           display: flex;
           flex-direction: column;
           margin: var(--ha-space-2) 0;
+          /* Runs once per bubble, when its element is created. Streaming deltas
+             mutate the existing element, so they don't retrigger it. */
+          animation: message-in var(--ha-animation-duration-slow)
+            cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @keyframes message-in {
+          from {
+            opacity: 0;
+            transform: translateY(var(--ha-space-3));
+          }
+          to {
+            opacity: 1;
+            transform: none;
+          }
         }
         .message-container.user {
           align-self: flex-end;
@@ -1732,7 +1768,7 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
           overflow-wrap: break-word;
           scroll-margin-top: var(--ha-space-6);
           margin: var(--ha-space-2) 0;
-          padding: var(--ha-space-2);
+          padding: var(--ha-space-2) var(--ha-space-3);
           border-radius: var(--ha-border-radius-xl);
         }
         @media all and (max-width: 450px), all and (max-height: 500px) {
@@ -1745,7 +1781,7 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
           margin-inline-start: var(--ha-space-6);
           margin-inline-end: initial;
           align-self: flex-end;
-          border-bottom-right-radius: 0px;
+          border-bottom-right-radius: var(--ha-border-radius-sm);
           --markdown-link-color: var(--text-primary-color);
           background-color: var(
             --chat-background-color-user,
@@ -1759,7 +1795,7 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
           margin-inline-end: var(--ha-space-6);
           margin-inline-start: initial;
           align-self: flex-start;
-          border-bottom-left-radius: 0px;
+          border-bottom-left-radius: var(--ha-border-radius-sm);
           background-color: var(
             --chat-background-color-hass,
             var(--secondary-background-color)
@@ -1901,6 +1937,23 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
           margin: 0;
           white-space: pre-wrap;
           word-break: break-all;
+        }
+        /* The bubble is already on screen as the thinking indicator, so it is
+           the arriving text that needs the easing, not the bubble. Fires once,
+           when the markdown element replaces the indicator. */
+        .message ha-markdown {
+          animation: text-in var(--ha-animation-duration-normal)
+            cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @keyframes text-in {
+          from {
+            opacity: 0;
+            transform: translateY(var(--ha-space-1));
+          }
+          to {
+            opacity: 1;
+            transform: none;
+          }
         }
         ha-markdown {
           --markdown-image-border-radius: calc(var(--ha-border-radius-xl) / 2);

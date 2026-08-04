@@ -2101,7 +2101,7 @@
             "stream_orientation_8": "Rotate right"
           },
           "voice_assistants": "[%key:ui::panel::config::dashboard::voice_assistants::main%]",
-          "no_aliases": "Configure aliases and expose settings for voice assistants"
+          "no_aliases": "Configure aliases and sharing settings for voice assistants"
         }
       },
       "recreate_entity_ids": {
@@ -2147,7 +2147,7 @@
         "action_used": "Action used: {name}"
       },
       "voice-settings": {
-        "expose_header": "Expose",
+        "expose_header": "Shared with",
         "aliases_header": "Aliases",
         "aliases_description": "Aliases are the names voice assistants use for this entity.",
         "aliases_description_assist": "Assist uses all aliases equally.",
@@ -4886,8 +4886,8 @@
             "status_disabled": "[%key:ui::panel::config::ai_tasks::disabled%]",
             "general": {
               "title": "Settings",
-              "accessible_entities": "Exposed entities",
-              "all_exposed_entities": "All exposed entities",
+              "accessible_entities": "Shared entities",
+              "all_exposed_entities": "All shared entities",
               "accessible_entities_count": "{number} {number, plural,\n  one {entity}\n  other {entities}\n}"
             },
             "pipeline": {
@@ -4906,8 +4906,8 @@
               "data_cloud_partial": "Only commands your home can’t handle are sent to the internet",
               "no_agents": "You don’t have any agents yet",
               "add_assistant": "Create agent",
-              "expose_new_entities": "Expose new entities automatically",
-              "expose_new_entities_info": "Exposes supported devices that are not classified as security devices.",
+              "expose_new_entities": "Share new devices automatically",
+              "expose_new_entities_info": "New supported devices are shared automatically, except security devices like locks and alarm panels.",
               "assist_devices": "Assist devices",
               "assist_devices_count": "{number} {number, plural,\n  one {device}\n  other {devices}\n}",
               "delete": {
@@ -5075,7 +5075,7 @@
             }
           },
           "expose": {
-            "caption": "Expose",
+            "caption": "Shared entities",
             "headers": {
               "icon": "Icon",
               "name": "Name",
@@ -5083,19 +5083,19 @@
               "remove": "[%key:ui::common::remove%]"
             },
             "aliases": "{count} aliases",
-            "expose": "Expose",
-            "unexpose": "Unexpose",
-            "add": "Expose entities",
-            "expose_confirm_title": "Expose selected entities?",
-            "expose_confirm_text": "Do you want to expose {entities} entities to {assistants}?",
-            "unexpose_confirm_title": "Stop exposing selected entities?",
-            "unexpose_confirm_text": "Do you want to stop exposing {entities} entities to {assistants}?",
+            "expose": "Share",
+            "unexpose": "Stop sharing",
+            "add": "Share entities",
+            "expose_confirm_title": "Share selected entities?",
+            "expose_confirm_text": "Do you want to share {entities} entities with {assistants}?",
+            "unexpose_confirm_title": "Stop sharing selected entities?",
+            "unexpose_confirm_text": "Do you want to stop sharing {entities} entities with {assistants}?",
             "manually_configured": "Configured in YAML, not editable in UI",
             "not_supported": "Not supported by this assistant",
             "expose_dialog": {
-              "header": "Expose entities",
-              "expose_to": "to {assistants}",
-              "expose_entities": "Expose {count} {count, plural,\n  one {entity}\n  other {entities}\n}"
+              "header": "Share entities",
+              "expose_to": "with {assistants}",
+              "expose_entities": "Share {count} {count, plural,\n  one {entity}\n  other {entities}\n}"
             }
           },
           "satellite_wizard": {
@@ -6838,7 +6838,7 @@
               "enable_ha_skill": "Enable the Home Assistant skill for Alexa",
               "config_documentation": "Configuration documentation",
               "enable_state_reporting": "Enable state reporting",
-              "info_state_reporting": "If you enable state reporting, Home Assistant will send all state changes of exposed entities to Amazon. This allows you to always see the latest states in the Alexa app and use the state changes to create routines.",
+              "info_state_reporting": "If you enable state reporting, Home Assistant will send all state changes of shared entities to Amazon. This allows you to always see the latest states in the Alexa app and use the state changes to create routines.",
               "state_reporting_error": "Unable to {enable_disable} report state.",
               "manual_config": "[%key:ui::panel::config::cloud::account::google::manual_config%]",
               "enable": "enable",
@@ -6857,18 +6857,18 @@
               "http_use_ssl_warning_text": "Google devices will not be able to talk locally with Home Assistant, because you have configured an SSL certificate for your HTTP integration.",
               "config_documentation": "Configuration documentation",
               "enable_state_reporting": "Enable state reporting",
-              "info_state_reporting": "If you enable state reporting, Home Assistant will send all state changes of exposed entities to Google. This speeds up voice commands and allows you to always see the latest states in the Google app.",
+              "info_state_reporting": "If you enable state reporting, Home Assistant will send all state changes of shared entities to Google. This speeds up voice commands and allows you to always see the latest states in the Google app.",
               "security_devices": "Security devices",
               "enter_pin_info": "Please enter a PIN to interact with security devices. Security devices are doors, garage doors, and locks. You will be asked to say/enter this PIN when interacting with security devices via Google Assistant.",
               "devices_pin": "Security devices PIN",
               "enter_pin_hint": "Enter a PIN to use security devices",
-              "manual_config": "Editing which entities are exposed via the UI is disabled because you have configured entity filters in configuration.yaml.",
+              "manual_config": "Editing which entities are shared via the UI is disabled because you have configured entity filters in configuration.yaml.",
               "enter_pin_error": "Unable to store PIN:",
               "not_configured_title": "Continue setting up Google Assistant",
               "not_configured_text": "To start using Google Assistant, add the 'Home Assistant Cloud by Nabu Casa' service in the Google Home app on your smartphone.",
               "link_learn_how_it_works": "[%key:ui::panel::config::cloud::account::remote::link_learn_how_it_works%]",
-              "expose_new_entities": "Expose new entities automatically",
-              "expose_new_entities_info": "Exposes supported devices that are not classified as security devices."
+              "expose_new_entities": "Share new devices automatically",
+              "expose_new_entities_info": "New supported devices are shared automatically, except security devices like locks and alarm panels."
             },
             "webhooks": {
               "title": "Webhooks",
