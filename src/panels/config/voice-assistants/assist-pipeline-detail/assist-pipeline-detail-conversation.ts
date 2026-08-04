@@ -113,48 +113,46 @@ export class AssistPipelineDetailConversation extends LitElement {
 
   protected render() {
     return html`
-      <div class="section">
-        <div class="intro">
-          <h3>
-            ${this.hass.localize(
-              `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.conversation.title`
-            )}
-          </h3>
-          <p>
-            ${this.hass.localize(
-              `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.conversation.description`
-            )}
-          </p>
-        </div>
-        <ha-form
-          .schema=${this._schema(this.data?.language, this._supportedLanguages)}
-          .data=${this.data}
-          .hass=${this.hass}
-          .computeLabel=${this._computeLabel}
-          .computeHelper=${this._computeHelper}
-          @supported-languages-changed=${this._supportedLanguagesChanged}
-        ></ha-form>
-        ${
-          this._supportsInstructions()
-            ? html`<div class="instructions">
-                <ha-textarea
-                  autogrow
-                  .label=${this.hass.localize(
-                    "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.instructions"
-                  )}
-                  .placeholder=${
-                    this._prompt ||
-                    this.hass.localize(
-                      "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.instructions_empty"
-                    )
-                  }
-                  .value=${this._instructionsOverride() ?? ""}
-                  @change=${this._instructionsChanged}
-                ></ha-textarea>
-              </div>`
-            : nothing
-        }
+      <div class="intro">
+        <h3>
+          ${this.hass.localize(
+            `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.conversation.title`
+          )}
+        </h3>
+        <p>
+          ${this.hass.localize(
+            `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.conversation.description`
+          )}
+        </p>
       </div>
+      <ha-form
+        .schema=${this._schema(this.data?.language, this._supportedLanguages)}
+        .data=${this.data}
+        .hass=${this.hass}
+        .computeLabel=${this._computeLabel}
+        .computeHelper=${this._computeHelper}
+        @supported-languages-changed=${this._supportedLanguagesChanged}
+      ></ha-form>
+      ${
+        this._supportsInstructions()
+          ? html`<div class="instructions">
+              <ha-textarea
+                autogrow
+                .label=${this.hass.localize(
+                  "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.instructions"
+                )}
+                .placeholder=${
+                  this._prompt ||
+                  this.hass.localize(
+                    "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.instructions_empty"
+                  )
+                }
+                .value=${this._instructionsOverride() ?? ""}
+                @change=${this._instructionsChanged}
+              ></ha-textarea>
+            </div>`
+          : nothing
+      }
     `;
   }
 
@@ -231,11 +229,10 @@ export class AssistPipelineDetailConversation extends LitElement {
   }
 
   static styles = css`
-    .section {
-      border: 1px solid var(--divider-color);
-      border-radius: var(--ha-border-radius-md);
-      box-sizing: border-box;
-      padding: 16px;
+    /* No card of its own: the dialog wraps this and the access rows in one
+       agent card. */
+    :host {
+      display: block;
     }
     .intro {
       margin-bottom: 16px;

@@ -59,11 +59,14 @@ export class HaDialogHeader extends LitElement {
         }
         .header-content {
           flex: 1;
-          padding: 10px var(--ha-space-1);
+          /* Overridable so a header can match a surrounding bar height, e.g.
+             the app toolbar next to the docked assist panel. */
+          padding: var(--ha-dialog-header-content-vertical-padding, 10px)
+            var(--ha-space-1);
           display: flex;
           flex-direction: column;
           justify-content: center;
-          min-height: var(--ha-space-12);
+          min-height: var(--ha-dialog-header-min-height, var(--ha-space-12));
           min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;

@@ -150,19 +150,13 @@ export class HaVoiceCommandDialog extends LitElement {
         ></ha-icon-button>
 
         <div slot="headerActionItems" class="header-actions">
-          ${
-            isHistory
-              ? nothing
-              : html`
-                  <ha-icon-button
-                    .label=${this.hass.localize(
-                      "ui.dialogs.voice_command.new_conversation"
-                    )}
-                    .path=${mdiMessagePlusOutline}
-                    @click=${this._newConversation}
-                  ></ha-icon-button>
-                `
-          }
+          <ha-icon-button
+            .label=${this.hass.localize(
+              "ui.dialogs.voice_command.new_conversation"
+            )}
+            .path=${mdiMessagePlusOutline}
+            @click=${this._newConversation}
+          ></ha-icon-button>
           <ha-icon-button
             data-dialog="close"
             .label=${this.hass.localize("ui.common.close")}
@@ -365,6 +359,9 @@ export class HaVoiceCommandDialog extends LitElement {
       css`
         ha-adaptive-side-dialog {
           --dialog-content-padding: 0;
+          /* Line the header up with the app toolbar it sits next to. */
+          --ha-dialog-header-min-height: var(--header-height);
+          --ha-dialog-header-content-vertical-padding: 0px;
           /* On mobile (bottom sheet), open at nearly full height instead of
              shrink-wrapping the chat content. */
           --ha-bottom-sheet-height: 90vh;

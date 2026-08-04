@@ -13,6 +13,7 @@ import {
   mdiSend,
   mdiShieldCheckOutline,
   mdiStar,
+  mdiViewDashboardOutline,
   mdiWeb,
 } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
@@ -84,6 +85,42 @@ const OPEN_SETTINGS = "__OPEN_SETTINGS__";
 // "/permission light.turn_off kitchen" to get the card. Drop the trigger and
 // drive it from a chat-log delta once the backend can ask for confirmation.
 const MOCK_PERMISSION_TRIGGER = "/permission";
+
+// ponytail: same deal for the "here is what I built" card: send "/preview
+// dashboard", "/preview automation" or "/preview settings" to see what an agent
+// with build access would return. Deliberately just a summary and a link — what
+// was built can't be rendered usefully in the chat. Static mock content; drive
+// it from the real tool result once the backend reports what was changed.
+const MOCK_PREVIEW_TRIGGER = "/preview";
+
+type MockPreviewKind = "dashboard" | "automation" | "settings";
+
+// Lists the mock triggers above. Keep the string in sync when one is added or
+// dropped — it goes away with them.
+const MOCK_HELP_TRIGGER = "/help";
+
+// A path opens the changed thing; automation has none because it opens a
+// read-only dialog with what was created instead.
+const MOCK_PREVIEWS: Record<MockPreviewKind, { icon: string; path?: string }> =
+  {
+    dashboard: { icon: mdiViewDashboardOutline, path: "/lovelace/0" },
+    automation: { icon: mdiRobotOutline },
+    settings: { icon: mdiCog, path: "/config/general" },
+  };
+
+const MOCK_PREVIEW_AUTOMATION = {
+  alias: "Lamp on at sunset",
+  triggers: [{ trigger: "sun", event: "sunset", offset: "-00:15:00" }],
+  conditions: [],
+  actions: [
+    {
+      action: "light.turn_on",
+      target: { entity_id: "light.living_room_lamp" },
+      data: { brightness_pct: 40 },
+    },
+  ],
+  mode: "single",
+};
 
 interface AssistMessage {
   who: string;
@@ -1008,6 +1045,103 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
     this._addMessage(message);
   }
 
+  private _addMockPreviewMessage(arg: string) {
+    const kind: MockPreviewKind = arg.startsWith("dash")
+      ? "dashboard"
+      : arg.startsWith("set")
+        ? "settings"
+        : "automation";
+    const message: AssistMessage = {
+      who: "hass",
+      text: "",
+      thinking: "",
+      tool_calls: {},
+    };
+    message.text = html`
+      <div class="preview">
+        <div class="preview-header">
+          <ha-svg-icon .path=${MOCK_PREVIEWS[kind].icon}></ha-svg-icon>
+          <span
+            >${this._localize(
+              `ui.dialogs.voice_command.preview.${kind}.title`
+            )}</span
+          >
+        </div>
+        <div class="preview-summary">
+          ${this._localize(`ui.dialogs.voice_command.preview.${kind}.summary`)}
+        </div>
+        ${
+          MOCK_PREVIEWS[kind].path
+            ? html`<a href=${MOCK_PREVIEWS[kind].path}>
+                ${this._localize(`ui.dialogs.voice_command.preview.${kind}.link`)}
+              </a>`
+            : html`<button
+                  type="button"
+                  class="preview-link"
+                  @click=${this._showMockAutomation}
+                >
+                  ${this._localize(
+                    `ui.dialogs.voice_command.preview.${kind}.link`
+                  )}
+                </button>
+                <div class="permission-actions">
+                  <ha-button
+                    size="s"
+                    appearance="filled"
+                    .message=${message}
+                    .outcome=${"created"}
+                    @click=${this._handleMockAutomationDecision}
+                  >
+                    ${this._localize(
+                      "ui.dialogs.voice_command.preview.automation.create"
+                    )}
+                  </ha-button>
+                  <ha-button
+                    size="s"
+                    appearance="plain"
+                    .message=${message}
+                    .outcome=${"discarded"}
+                    @click=${this._handleMockAutomationDecision}
+                  >
+                    ${this._localize(
+                      "ui.dialogs.voice_command.preview.automation.discard"
+                    )}
+                  </ha-button>
+                </div>`
+        }
+      </div>
+    `;
+    this._addMessage(message);
+  }
+
+  private _handleMockAutomationDecision(ev: Event) {
+    const button = ev.currentTarget as unknown as {
+      message: AssistMessage;
+      outcome: "created" | "discarded";
+    };
+    // Mutate in place so the message keeps its identity in _conversation.
+    button.message.text = this._localize(
+      `ui.dialogs.voice_command.preview.automation.${button.outcome}`
+    );
+    this.requestUpdate("_conversation");
+  }
+
+  private _showMockAutomation() {
+    // The dialog needs `hass` for the automation editor rows, so it is opened
+    // through the dialog manager (which provides it) rather than rendered here.
+    fireEvent(this, "show-dialog", {
+      dialogTag: "dialog-assist-automation-preview",
+      dialogImport: () =>
+        import("../dialogs/assist-automation-preview/dialog-assist-automation-preview"),
+      dialogParams: {
+        config: MOCK_PREVIEW_AUTOMATION,
+        description: this._localize(
+          "ui.dialogs.voice_command.preview.automation.description"
+        ),
+      },
+    });
+  }
+
   private _handleMockPermissionDecision(ev: Event) {
     const button = ev.currentTarget as unknown as {
       message: AssistMessage;
@@ -1207,6 +1341,23 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
     if (text.toLowerCase().startsWith(MOCK_PERMISSION_TRIGGER)) {
       this._addMockPermissionMessage(
         text.slice(MOCK_PERMISSION_TRIGGER.length).trim()
+      );
+      this._processing = false;
+      return;
+    }
+    if (text.toLowerCase().startsWith(MOCK_HELP_TRIGGER)) {
+      this._addMessage({
+        who: "hass",
+        text: this._localize("ui.dialogs.voice_command.mock_help"),
+        thinking: "",
+        tool_calls: {},
+      });
+      this._processing = false;
+      return;
+    }
+    if (text.toLowerCase().startsWith(MOCK_PREVIEW_TRIGGER)) {
+      this._addMockPreviewMessage(
+        text.slice(MOCK_PREVIEW_TRIGGER.length).trim().toLowerCase()
       );
       this._processing = false;
       return;
@@ -1687,6 +1838,39 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
           display: flex;
           flex-wrap: wrap;
           gap: var(--ha-space-2);
+        }
+        .preview {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-2);
+        }
+        .preview-header {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+          font-size: var(--ha-font-size-m);
+          font-weight: var(--ha-font-weight-medium);
+        }
+        .preview-header ha-svg-icon {
+          --mdc-icon-size: 18px;
+        }
+        .preview-summary {
+          font-size: var(--ha-font-size-m);
+          color: var(--secondary-text-color);
+        }
+        .preview a,
+        .preview-link {
+          font-size: var(--ha-font-size-m);
+          color: var(--primary-color);
+        }
+        .preview-link {
+          align-self: flex-start;
+          background: none;
+          border: none;
+          padding: 0;
+          font-family: inherit;
+          text-decoration: underline;
+          cursor: pointer;
         }
         .tool-calls {
           display: flex;

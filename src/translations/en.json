@@ -1701,6 +1701,31 @@
           "allowed": "Allowed. Running it now.",
           "session_allowed": "Allowed. I won't ask again in this conversation.",
           "denied": "Denied. I didn't do anything."
+        },
+        "mock_help": "Design mockups, not real agent behavior:\n- `/permission [action]` — the agent asks before acting\n- `/preview dashboard` — a dashboard it changed\n- `/preview automation` — an automation it created\n- `/preview settings` — settings it changed\n- `/help` — this list",
+        "preview": {
+          "dashboard": {
+            "title": "Dashboard updated",
+            "summary": "Added a Living room section with 4 tile cards to the Home dashboard.",
+            "link": "Open Home dashboard"
+          },
+          "automation": {
+            "title": "Automation ready to create",
+            "summary": "Lamp on at sunset: 15 minutes before sunset, turn on the living room lamp at 40%.",
+            "description": "Every day, 15 minutes before sunset, this turns on the living room lamp at 40% brightness.",
+            "link": "Show automation",
+            "show_yaml": "Show YAML",
+            "show_ui": "Show visual editor",
+            "create": "Create and enable",
+            "discard": "Discard",
+            "created": "Created Lamp on at sunset and enabled it.",
+            "discarded": "Discarded. I didn't create anything."
+          },
+          "settings": {
+            "title": "Settings changed",
+            "summary": "Set the unit system to metric and the time zone to Europe/Amsterdam.",
+            "link": "Open general settings"
+          }
         }
       },
       "generic": {
