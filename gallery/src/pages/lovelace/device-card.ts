@@ -441,9 +441,61 @@ const ROW_CARD_HERO: DemoEntity = {
   },
 };
 
+/**
+ * Domains whose control is not on/off: the card gives these a tile card feature
+ * (open/close, modes, speed) instead of a toggle.
+ */
+const FEATURE_CONTROLLED: DemoEntity[] = [
+  {
+    entity_id: "climate.radiator",
+    state: "heat",
+    attributes: {
+      friendly_name: "Radiator",
+      current_temperature: 19,
+      temperature: 21,
+      min_temp: 7,
+      max_temp: 30,
+      hvac_modes: ["off", "heat", "auto"],
+      hvac_action: "heating",
+      supported_features: 1,
+    },
+  },
+  {
+    entity_id: "cover.shutter",
+    state: "open",
+    attributes: {
+      friendly_name: "Shutter",
+      current_position: 70,
+      device_class: "shutter",
+      supported_features: 15,
+    },
+  },
+  {
+    entity_id: "fan.ventilation",
+    state: "on",
+    attributes: {
+      friendly_name: "Ventilation",
+      percentage: 66,
+      percentage_step: 33.3,
+      supported_features: 1,
+    },
+  },
+  {
+    entity_id: "lock.back_door",
+    state: "locked",
+    attributes: { friendly_name: "Back door", supported_features: 0 },
+  },
+  {
+    entity_id: "vacuum.cleaner",
+    state: "docked",
+    attributes: { friendly_name: "Cleaner", supported_features: 15420 },
+  },
+];
+
 const ALL_ENTITIES: DemoEntity[] = [
   ROW_CARD_HERO,
   ...TOGGLEABLE,
+  ...FEATURE_CONTROLLED,
   ...PRESSABLE,
   ...NUMERIC,
   ...READ_ONLY,
@@ -472,12 +524,14 @@ ${entities.map((e) => `    - ${e.entity_id}`).join("\n")}
 const CONFIGS = [
   // Heroes, one per rendering case.
   ...TOGGLEABLE.map(heroCard),
+  ...FEATURE_CONTROLLED.map(heroCard),
   ...PRESSABLE.map(heroCard),
   ...NUMERIC.map(heroCard),
   ...READ_ONLY.map(heroCard),
 
   // The same entities as secondary rows.
   rowCard("Rows — toggleable", TOGGLEABLE),
+  rowCard("Rows — domain controls", FEATURE_CONTROLLED),
   rowCard("Rows — pressable", PRESSABLE),
   rowCard("Rows — numeric", NUMERIC),
   rowCard("Rows — read-only (1/3)", READ_ONLY.slice(0, 12)),

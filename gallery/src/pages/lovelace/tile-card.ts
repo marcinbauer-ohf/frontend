@@ -317,6 +317,46 @@ const CONFIGS = [
     },
   },
   {
+    heading: "HVAC modes feature (bottom)",
+    config: `
+- type: tile
+  entity: climate.thermostat
+  features:
+  - type: climate-hvac-modes
+    `,
+  },
+  {
+    heading: "HVAC modes feature (inline)",
+    config: `
+- type: tile
+  entity: climate.thermostat
+  features_position: inline
+  features:
+  - type: climate-hvac-modes
+    `,
+  },
+  {
+    heading: "HVAC modes feature (inline, icons forced)",
+    config: `
+- type: tile
+  entity: climate.thermostat
+  features_position: inline
+  features:
+  - type: climate-hvac-modes
+    style: icons
+    `,
+  },
+  {
+    heading: "Target temperature feature (inline)",
+    config: `
+- type: tile
+  entity: climate.dual_thermostat
+  features_position: inline
+  features:
+  - type: target-temperature
+    `,
+  },
+  {
     heading: "Fan direction feature",
     config: {
       type: "tile",

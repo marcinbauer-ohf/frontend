@@ -32,20 +32,47 @@ import { createEntityNotFoundWarning } from "../components/hui-warning";
 import type { LovelaceCard, LovelaceCardEditor } from "../types";
 import { resolveDeviceCardEntities } from "./device/device-card-entities";
 import "./device/hui-device-card-sparkline";
+import "../card-features/hui-card-feature";
+import {
+  supportsFeatureType,
+  type UiFeatureType,
+} from "../card-features/registry";
+import type {
+  LovelaceCardFeatureConfig,
+  LovelaceCardFeatureContext,
+} from "../card-features/types";
 import type { DeviceCardConfig } from "./types";
 
 /** Domains that render a pill toggle instead of a read-only value. */
 const TOGGLEABLE_DOMAINS = new Set([
   "light",
   "switch",
-  "fan",
   "input_boolean",
-  "media_player",
-  "cover",
-  "lock",
   "siren",
-  "humidifier",
 ]);
+
+/**
+ * Domains whose control is not on/off, so a toggle would misrepresent them: a
+ * cover has positions, a radiator has modes, a fan has speeds. They reuse the
+ * card feature the tile card already provides for that domain, rendered in the
+ * narrow inline position (see `hui-card-features`), and fall back to the
+ * read-only value when the entity does not support the feature.
+ */
+const FEATURE_CONTROLS: Record<string, LovelaceCardFeatureConfig> = {
+  climate: { type: "climate-hvac-modes" },
+  cover: { type: "cover-open-close" },
+  fan: { type: "fan-speed" },
+  humidifier: { type: "humidifier-toggle" },
+  lock: { type: "lock-commands" },
+  media_player: { type: "media-player-playback" },
+  // Features that require config carry it here; they render nothing without it.
+  vacuum: {
+    type: "vacuum-commands",
+    commands: ["start_pause", "stop", "return_home"],
+  },
+  valve: { type: "valve-open-close" },
+  water_heater: { type: "water-heater-operation-modes" },
+};
 
 /** Domains that render a round action button (press-only). */
 const PRESSABLE_DOMAINS = new Set([
@@ -222,7 +249,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     const color = active ? stateColorCss(stateObj) : undefined;
 
     const cardClasses = {
-      active: active && toggleable,
+      active: active && (toggleable || !!this._featureConfigFor(hero)),
       unavailable,
     };
 
@@ -349,7 +376,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       <div
         class="row ${classMap({
           unavailable,
-          active: active && toggleable,
+          active: active && (toggleable || !!this._featureConfigFor(entityId)),
         })}"
         data-entity=${entityId}
         .actionHandler=${actionHandler({})}
@@ -386,13 +413,58 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     `;
   }
 
+  private _featureContext = (
+    (cache: Map<string, LovelaceCardFeatureContext>) => (entityId: string) => {
+      // A fresh context object on every render would make the feature element
+      // re-create itself, so keep one per entity.
+      let context = cache.get(entityId);
+      if (!context) {
+        context = { entity_id: entityId };
+        cache.set(entityId, context);
+      }
+      return context;
+    }
+  )(new Map());
+
+  /** The card feature this entity's domain uses, when the entity supports it. */
+  private _featureConfigFor(
+    entityId: string
+  ): LovelaceCardFeatureConfig | undefined {
+    const config = FEATURE_CONTROLS[computeDomain(entityId)];
+    if (
+      !config ||
+      !this.hass ||
+      !supportsFeatureType(
+        this.hass,
+        { entity_id: entityId },
+        config.type as UiFeatureType
+      )
+    ) {
+      return undefined;
+    }
+    return config;
+  }
+
   /**
-   * The control an entity gets: a toggle, a press button, or a "Set" button
-   * that opens more info where the real editor lives. Shared by the hero and
-   * the rows so the two cannot drift apart.
+   * The control an entity gets: a domain feature, a toggle, a press button, or
+   * a "Set" button that opens more info where the real editor lives. Shared by
+   * the hero and the rows so the two cannot drift apart.
    */
   private _renderControl(stateObj: HassEntity) {
     const domain = computeDomain(stateObj.entity_id);
+
+    const featureConfig = this._featureConfigFor(stateObj.entity_id);
+    if (featureConfig) {
+      return html`<hui-card-feature
+        class="feature"
+        .hass=${this.hass}
+        .context=${this._featureContext(stateObj.entity_id)}
+        .feature=${featureConfig}
+        .position=${"inline"}
+        @click=${stopPropagation}
+        @action=${stopPropagation}
+      ></hui-card-feature>`;
+    }
 
     if (TOGGLEABLE_DOMAINS.has(domain)) {
       return html`<ha-entity-toggle
@@ -593,6 +665,21 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
 
     /* Reads as an action, not as state: accent coloured so it carries the same
        weight as the toggle it sits in place of. */
+    /* The domain control sits where the toggle would, kept row-height and
+       narrow so the entity name keeps the space it needs. */
+    .feature {
+      display: flex;
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 168px;
+      --feature-height: 30px;
+      --feature-border-radius: var(--ha-border-radius-pill);
+      --feature-button-spacing: 4px;
+      --feature-color: var(--device-card-color, var(--state-icon-color));
+    }
+    .feature > * {
+      width: 100%;
+    }
     .action-button {
       display: flex;
       flex: none;
