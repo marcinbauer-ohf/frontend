@@ -1,6 +1,4 @@
 import { ensureArray } from "../common/array/ensure-array";
-import { formatNumericDuration } from "../common/datetime/format_duration";
-import secondsToDuration from "../common/datetime/seconds_to_duration";
 import { computeStateName } from "../common/entity/compute_state_name";
 import { formatListWithAnds } from "../common/string/format-list";
 import { isTemplate } from "../common/string/has-template";
@@ -177,42 +175,19 @@ const tryDescribeAction = <T extends ActionType>(
     const config = action as DelayAction;
 
     let duration: string;
-    if (typeof config.delay === "number") {
+    if (typeof config.delay === "string" && isTemplate(config.delay)) {
       duration = hass.localize(
-        `${actionTranslationBaseKey}.delay.description.duration_string`,
-        {
-          string: secondsToDuration(config.delay)!,
-        }
-      );
-    } else if (typeof config.delay === "string") {
-      duration = isTemplate(config.delay)
-        ? hass.localize(
-            `${actionTranslationBaseKey}.delay.description.duration_template`
-          )
-        : hass.localize(
-            `${actionTranslationBaseKey}.delay.description.duration_string`,
-            {
-              string:
-                config.delay ||
-                hass.localize(
-                  `${actionTranslationBaseKey}.delay.description.duration_unknown`
-                ),
-            }
-          );
-    } else if (config.delay) {
-      duration = hass.localize(
-        `${actionTranslationBaseKey}.delay.description.duration_string`,
-        {
-          string: formatNumericDuration(hass.locale, config.delay),
-        }
+        `${actionTranslationBaseKey}.delay.description.duration_template`
       );
     } else {
       duration = hass.localize(
         `${actionTranslationBaseKey}.delay.description.duration_string`,
         {
-          string: hass.localize(
-            `${actionTranslationBaseKey}.delay.description.duration_unknown`
-          ),
+          string:
+            describeOptionalDuration(hass.locale, config.delay) ??
+            hass.localize(
+              `${actionTranslationBaseKey}.delay.description.duration_unknown`
+            ),
         }
       );
     }
