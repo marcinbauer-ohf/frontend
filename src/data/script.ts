@@ -156,18 +156,18 @@ export interface DelayAction extends BaseAction {
   delay: number | Partial<DelayActionParts> | string;
 }
 
-export interface WaitAction extends BaseAction {
-  wait_template: string;
-  timeout?: number;
-  continue_on_timeout?: boolean;
-}
-
 export interface WaitForTriggerActionParts extends BaseAction {
   milliseconds?: number;
   seconds?: number;
   minutes?: number;
   hours?: number;
   days?: number;
+}
+
+export interface WaitAction extends BaseAction {
+  wait_template: string;
+  timeout?: number | Partial<WaitForTriggerActionParts> | string;
+  continue_on_timeout?: boolean;
 }
 
 export interface WaitForTriggerAction extends BaseAction {

@@ -57,7 +57,11 @@ import type {
   TriggerSidebarConfig,
 } from "../../../../data/automation";
 import { isTrigger, subscribeTrigger } from "../../../../data/automation";
-import { describeTrigger } from "../../../../data/automation_i18n";
+import {
+  describeForOption,
+  describeOffsetOption,
+  describeTrigger,
+} from "../../../../data/automation_i18n";
 import { validateConfig } from "../../../../data/config";
 import { fullEntitiesContext } from "../../../../data/context";
 import type { DeviceTrigger } from "../../../../data/device/device_automation";
@@ -226,6 +230,15 @@ export default class HaAutomationTriggerRow extends LitElement {
             ?.target
         : undefined;
 
+    const options =
+      type === "platform"
+        ? (this.trigger as PlatformTrigger).options
+        : undefined;
+
+    const offsetDuration = describeOffsetOption(this.hass, options);
+
+    const forDuration = describeForOption(this.hass, options);
+
     const noteTooltipText = truncateWithEllipsis(
       (type !== "list" &&
         (this.trigger as Exclude<Trigger, TriggerList>).note?.trim()) ||
@@ -259,6 +272,8 @@ export default class HaAutomationTriggerRow extends LitElement {
               )
             : nothing
         }
+        ${offsetDuration ? html`<span>${offsetDuration}</span>` : nothing}
+        ${forDuration ? html`<span>${forDuration}</span>` : nothing}
         ${
           type !== "list" &&
           (this.trigger as Exclude<Trigger, TriggerList>).note?.trim()

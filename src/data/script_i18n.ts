@@ -6,7 +6,7 @@ import { formatListWithAnds } from "../common/string/format-list";
 import { isTemplate } from "../common/string/has-template";
 import type { HomeAssistant } from "../types";
 import type { Condition } from "./automation";
-import { describeCondition } from "./automation_i18n";
+import { describeCondition, describeOptionalDuration } from "./automation_i18n";
 import { localizeDeviceAutomationAction } from "./device/device_automation";
 import type { EntityRegistryEntry } from "./entity/entity_registry";
 import { domainToName } from "./integration";
@@ -25,12 +25,35 @@ import type {
   SetConversationResponseAction,
   StopAction,
   VariablesAction,
+  WaitAction,
   WaitForTriggerAction,
 } from "./script";
 import { getActionType } from "./script";
 
 const actionTranslationBaseKey =
   "ui.panel.config.automation.editor.actions.type";
+
+/**
+ * Describes the `timeout` of a wait action. Without it a wait is indefinite, so
+ * the row should say when the sequence gives up and moves on.
+ */
+const describeTimeout = (
+  hass: HomeAssistant,
+  timeout: WaitAction["timeout"]
+): string | undefined => {
+  if (timeout === undefined || timeout === null) {
+    return undefined;
+  }
+  if (typeof timeout === "string" && isTemplate(timeout)) {
+    return hass.localize("ui.panel.config.automation.editor.timeout_template");
+  }
+  const duration = describeOptionalDuration(hass.locale, timeout);
+  return duration
+    ? hass.localize("ui.panel.config.automation.editor.timeout_duration", {
+        duration,
+      })
+    : undefined;
+};
 
 const shouldShowDomainPrefix = (
   domain: string,
@@ -202,14 +225,20 @@ const tryDescribeAction = <T extends ActionType>(
   if (actionType === "wait_for_trigger") {
     const config = action as WaitForTriggerAction;
     const triggers = ensureArray(config.wait_for_trigger);
+    const timeout = describeTimeout(hass, config.timeout);
     if (!triggers || triggers.length === 0) {
       return hass.localize(
-        `${actionTranslationBaseKey}.wait_for_trigger.description.wait_for_a_trigger`
+        `${actionTranslationBaseKey}.wait_for_trigger.description.wait_for_a_trigger`,
+        { hasTimeout: timeout ? "true" : "false", timeout: timeout }
       );
     }
     return hass.localize(
       `${actionTranslationBaseKey}.wait_for_trigger.description.wait_for_triggers`,
-      { count: triggers.length }
+      {
+        count: triggers.length,
+        hasTimeout: timeout ? "true" : "false",
+        timeout: timeout,
+      }
     );
   }
 
@@ -241,8 +270,11 @@ const tryDescribeAction = <T extends ActionType>(
   }
 
   if (actionType === "wait_template") {
+    const config = action as WaitAction;
+    const timeout = describeTimeout(hass, config.timeout);
     return hass.localize(
-      `${actionTranslationBaseKey}.wait_template.description.full`
+      `${actionTranslationBaseKey}.wait_template.description.full`,
+      { hasTimeout: timeout ? "true" : "false", timeout: timeout }
     );
   }
 

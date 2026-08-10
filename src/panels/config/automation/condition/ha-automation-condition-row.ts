@@ -55,7 +55,10 @@ import type {
   PlatformCondition,
 } from "../../../../data/automation";
 import { isCondition, testCondition } from "../../../../data/automation";
-import { describeCondition } from "../../../../data/automation_i18n";
+import {
+  describeCondition,
+  describeForOption,
+} from "../../../../data/automation_i18n";
 import type { ConditionDescriptions } from "../../../../data/condition";
 import { CONDITION_BUILDING_BLOCKS } from "../../../../data/condition";
 import {
@@ -192,6 +195,14 @@ export default class HaAutomationConditionRow extends LitElement {
     const conditionTargetSpec =
       this.conditionDescriptions[this.condition.condition]?.target;
 
+    const forDuration =
+      this._getType(this.condition, this.conditionDescriptions) === "platform"
+        ? describeForOption(
+            this.hass,
+            (this.condition as PlatformCondition).options
+          )
+        : undefined;
+
     const noteTooltipText = truncateWithEllipsis(
       this.condition.note?.trim() || "",
       250
@@ -236,6 +247,7 @@ export default class HaAutomationConditionRow extends LitElement {
               )
             : nothing
         }
+        ${forDuration ? html`<span>${forDuration}</span>` : nothing}
         ${
           this.condition.note?.trim()
             ? html`

@@ -1,6 +1,7 @@
 import { TZDate } from "@date-fns/tz";
 import type { HassConfig, HassEntity } from "home-assistant-js-websocket";
 import { ensureArray } from "../common/array/ensure-array";
+import { createDurationData } from "../common/datetime/create_duration_data";
 import {
   formatDurationDigital,
   formatDurationLong,
@@ -58,6 +59,74 @@ const describeDuration = (
     duration = formatNumericDuration(locale, forTime);
   }
   return duration;
+};
+
+const toDurationData = (value: number | string | ForDict) =>
+  typeof value === "number"
+    ? {
+        days: Math.floor(value / 86400),
+        hours: Math.floor((value % 86400) / 3600),
+        minutes: Math.floor((value % 3600) / 60),
+        seconds: Math.floor(value % 60),
+      }
+    : typeof value === "string"
+      ? createDurationData(value)
+      : value;
+
+/**
+ * Describes a duration in words ("2 minutes"), rather than the digital notation
+ * ("2:00") the legacy descriptions use. Returns undefined when there is nothing
+ * worth showing: `Intl.DurationFormat` drops zero units and yields an empty
+ * string for an all-zero duration, which is how these options are defaulted.
+ */
+export const describeOptionalDuration = (
+  locale: FrontendLocaleData,
+  value: unknown
+): string | undefined => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const data = toDurationData(value as number | string | ForDict);
+  if (!data) {
+    return undefined;
+  }
+  try {
+    return formatDurationLong(locale, data) || undefined;
+  } catch (_err) {
+    // Non-numeric or mixed-sign values cannot be formatted
+    return undefined;
+  }
+};
+
+/** Describes the `for` option of a platform trigger or condition for a row header. */
+export const describeForOption = (
+  hass: HomeAssistant,
+  options?: Record<string, unknown>
+): string | undefined => {
+  const duration = describeOptionalDuration(hass.locale, options?.for);
+  return duration
+    ? hass.localize("ui.panel.config.automation.editor.for_duration", {
+        duration,
+      })
+    : undefined;
+};
+
+/**
+ * Describes the `offset` option of a platform trigger for a row header. It is
+ * meaningless without `offset_type`, which says whether it applies before or
+ * after the event.
+ */
+export const describeOffsetOption = (
+  hass: HomeAssistant,
+  options?: Record<string, unknown>
+): string | undefined => {
+  const duration = describeOptionalDuration(hass.locale, options?.offset);
+  return duration
+    ? hass.localize("ui.panel.config.automation.editor.offset_duration", {
+        duration,
+        offsetType: (options?.offset_type as string | undefined) ?? "before",
+      })
+    : undefined;
 };
 
 const localizeTimeString = (

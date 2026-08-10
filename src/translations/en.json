@@ -5140,6 +5140,10 @@
             "move_down": "Move down",
             "collapse_all": "Collapse all",
             "expand_all": "Expand all",
+            "for_duration": "for {duration}",
+            "offset_duration": "{offsetType, select, \n after {{duration} after}\n other {{duration} before}\n}",
+            "timeout_duration": "with a timeout of {duration}",
+            "timeout_template": "with a templated timeout",
             "description": {
               "label": "Description",
               "placeholder": "Optional description",
@@ -5837,7 +5841,7 @@
                   "continue_timeout": "Continue on timeout",
                   "description": {
                     "picker": "Waits for a template to be evaluated to true to perform a sequence of actions.",
-                    "full": "Wait for a template to evaluate to true"
+                    "full": "Wait for a template to evaluate to true{hasTimeout, select, \n true { {timeout}}\n other {}\n}"
                   }
                 },
                 "wait_for_trigger": {
@@ -5846,8 +5850,8 @@
                   "continue_timeout": "[%key:ui::panel::config::automation::editor::actions::type::wait_template::continue_timeout%]",
                   "description": {
                     "picker": "Waits for a trigger to perform a sequence of actions.",
-                    "wait_for_a_trigger": "Wait for a trigger",
-                    "wait_for_triggers": "Wait for {count, plural,\n one {a trigger}\n other {one of {count} triggers}\n}"
+                    "wait_for_a_trigger": "Wait for a trigger{hasTimeout, select, \n true { {timeout}}\n other {}\n}",
+                    "wait_for_triggers": "Wait for {count, plural,\n one {a trigger}\n other {one of {count} triggers}\n}{hasTimeout, select, \n true { {timeout}}\n other {}\n}"
                   }
                 },
                 "condition": {
