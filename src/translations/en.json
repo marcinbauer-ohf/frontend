@@ -5140,6 +5140,7 @@
             "move_down": "Move down",
             "collapse_all": "Collapse all",
             "expand_all": "Expand all",
+            "trigger_behavior": "{behavior, select, \n each {each}\n first {first}\n all {all}\n other {}\n}",
             "description": {
               "label": "Description",
               "placeholder": "Optional description",
