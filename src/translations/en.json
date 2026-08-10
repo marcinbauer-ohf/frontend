@@ -5144,6 +5144,7 @@
             "offset_duration": "{offsetType, select, \n after {{duration} after}\n other {{duration} before}\n}",
             "timeout_duration": "with a timeout of {duration}",
             "timeout_template": "with a templated timeout",
+            "trigger_behavior": "{behavior, select, \n each {each}\n first {first}\n all {all}\n other {}\n}",
             "description": {
               "label": "Description",
               "placeholder": "Optional description",

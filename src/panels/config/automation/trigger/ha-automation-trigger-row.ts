@@ -67,6 +67,7 @@ import { fullEntitiesContext } from "../../../../data/context";
 import type { DeviceTrigger } from "../../../../data/device/device_automation";
 import type { EntityRegistryEntry } from "../../../../data/entity/entity_registry";
 import type { TargetSelector } from "../../../../data/selector";
+import { getTargetEntityCount } from "../../../../data/target";
 import type { TriggerDescriptions } from "../../../../data/trigger";
 import { isTriggerList } from "../../../../data/trigger";
 import {
@@ -239,6 +240,21 @@ export default class HaAutomationTriggerRow extends LitElement {
 
     const forDuration = describeForOption(this.hass, options);
 
+    const description = describeTrigger(
+      this.trigger,
+      this.hass,
+      this._entityReg
+    );
+
+    const behavior =
+      type === "platform"
+        ? this._describeBehavior(this.trigger as PlatformTrigger, target)
+        : undefined;
+
+    // Kept in one text run so the header's chip-sized flex gap does not open up
+    // around the separator
+    const heading = behavior ? `${description} · ${behavior}` : description;
+
     const noteTooltipText = truncateWithEllipsis(
       (type !== "list" &&
         (this.trigger as Exclude<Trigger, TriggerList>).note?.trim()) ||
@@ -261,7 +277,7 @@ export default class HaAutomationTriggerRow extends LitElement {
             ></ha-trigger-icon>`
       }
       <h3 slot="header">
-        ${describeTrigger(this.trigger, this.hass, this._entityReg)}
+        ${heading}
         ${
           target !== undefined || (descriptionHasTarget && !this._isNew)
             ? this._renderTargets(
@@ -608,6 +624,40 @@ export default class HaAutomationTriggerRow extends LitElement {
         }
       </ha-card>
     `;
+  }
+
+  /**
+   * Describes how a trigger fires across its targets ("Each", "First", "All").
+   * Behavior only has meaning with more than one target entity, which is also
+   * the condition under which the editor shows the field at all — the row must
+   * not advertise a setting the editor then refuses to show.
+   */
+  private _describeBehavior(
+    trigger: PlatformTrigger,
+    target?: HassServiceTarget
+  ): string | undefined {
+    const fields = this.triggerDescriptions[trigger.trigger]?.fields;
+    const fieldName = fields
+      ? Object.keys(fields).find((key) => {
+          const selector = fields[key].selector;
+          return selector && "automation_behavior" in selector;
+        })
+      : undefined;
+
+    if (!fieldName || getTargetEntityCount(target) <= 1) {
+      return undefined;
+    }
+
+    const behavior = trigger.options?.[fieldName];
+    if (typeof behavior !== "string") {
+      return undefined;
+    }
+    // Unknown values fall through to an empty string rather than a wrong label
+    return (
+      this.hass.localize("ui.panel.config.automation.editor.trigger_behavior", {
+        behavior,
+      }) || undefined
+    );
   }
 
   private _renderTargets = memoizeOne(
