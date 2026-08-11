@@ -62,6 +62,27 @@ export class DemoHaButton extends LitElement {
                           <ha-button
                             .appearance=${appearance}
                             .variant=${variant}
+                            size="xs"
+                          >
+                            <ha-svg-icon
+                              .path=${mdiHomeAssistant}
+                              slot="start"
+                            ></ha-svg-icon>
+                            ${titleCase(`${variant} ${appearance}`)}
+                            <ha-svg-icon
+                              .path=${mdiHome}
+                              slot="end"
+                            ></ha-svg-icon>
+                          </ha-button>
+                        `
+                      )}
+                    </div>
+                    <div>
+                      ${appearances.map(
+                        (appearance) => html`
+                          <ha-button
+                            .appearance=${appearance}
+                            .variant=${variant}
                             loading
                           >
                             <ha-svg-icon
