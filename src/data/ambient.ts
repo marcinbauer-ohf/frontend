@@ -52,3 +52,24 @@ export const ambientSuppressed = (hass: HomeAssistant): boolean =>
   !hass.config ||
   hass.kioskMode === true ||
   AMBIENT_OPTED_OUT_PANELS.has(hass.panelUrl);
+
+/**
+ * How long each timer should run for the given screen, in seconds. 0 means
+ * "do not arm".
+ *
+ * The auto-lock clock deliberately keeps counting while the ambient screen is
+ * up: idling into the screensaver and *then* locking is the normal path for a
+ * wall display, so stopping it the moment the screensaver appears means the
+ * display never locks at all.
+ */
+export const ambientTimers = (
+  screen: AmbientScreen,
+  config: AmbientConfig
+): { idle: number; lock: number } => ({
+  // The ambient screen only appears out of an idle app.
+  idle: screen === "none" ? config.idleTimeout : 0,
+  lock:
+    config.lockEnabled && screen !== "locked" && screen !== "updating"
+      ? config.autoLockTimeout
+      : 0,
+});

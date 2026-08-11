@@ -1,6 +1,8 @@
 import type { HassEntity } from "home-assistant-js-websocket";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { personIsHome } from "../../src/common/entity/person_is_home";
+import type { AmbientConfig } from "../../src/data/ambient";
+import { ambientTimers, DEFAULT_AMBIENT_CONFIG } from "../../src/data/ambient";
 import { AmbientUpdateWatcher } from "../../src/data/ambient-update";
 import type { HomeAssistant } from "../../src/types";
 
@@ -52,6 +54,40 @@ describe("personIsHome", () => {
     expect(
       personIsHome(hass, person("Office", { in_zones: ["zone.office"] }))
     ).toBe(false);
+  });
+});
+
+describe("ambientTimers", () => {
+  const config: AmbientConfig = {
+    ...DEFAULT_AMBIENT_CONFIG,
+    idleTimeout: 60,
+    autoLockTimeout: 300,
+    lockEnabled: true,
+  };
+
+  it("arms the idle timer only while nothing is up", () => {
+    expect(ambientTimers("none", config).idle).toBe(60);
+    expect(ambientTimers("idle", config).idle).toBe(0);
+    expect(ambientTimers("locked", config).idle).toBe(0);
+  });
+
+  // The bug this exists for: stopping the auto-lock clock when the screensaver
+  // appears means a wall display idles into the screensaver and never locks,
+  // because auto-lock is always the longer of the two timeouts.
+  it("keeps the auto-lock clock running while the screensaver is up", () => {
+    expect(ambientTimers("idle", config).lock).toBe(300);
+  });
+
+  it("does not re-arm auto-lock once locked, or during an update", () => {
+    expect(ambientTimers("locked", config).lock).toBe(0);
+    expect(ambientTimers("updating", config).lock).toBe(0);
+  });
+
+  it("arms nothing that is disabled", () => {
+    expect(ambientTimers("none", { ...config, lockEnabled: false }).lock).toBe(
+      0
+    );
+    expect(ambientTimers("none", { ...config, idleTimeout: 0 }).idle).toBe(0);
   });
 });
 
@@ -126,7 +162,6 @@ describe("AmbientUpdateWatcher", () => {
     expect(watcher.state).toMatchObject({
       phase: "installing",
       label: "Home Assistant Core",
-      version: "2026.8.0",
       progress: 43,
     });
   });

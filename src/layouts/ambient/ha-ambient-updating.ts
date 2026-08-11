@@ -2,7 +2,6 @@ import { mdiCheck } from "@mdi/js";
 import type { TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
-import { formatNumber } from "../../common/number/format_number";
 import { ambientStyles } from "../../components/ha-ambient-screen";
 import "../../components/ha-svg-icon";
 import type { AmbientUpdateState } from "../../data/ambient-update";
@@ -19,12 +18,12 @@ export class HaAmbientUpdating extends LitElement {
   @property({ attribute: false }) public state!: AmbientUpdateState;
 
   protected render(): TemplateResult {
-    const { phase, label, progress, preview } = this.state;
+    const { phase, progress, preview } = this.state;
     const settling = phase === "settling";
     const determinate = phase === "installing" && progress != null;
 
     return html`
-      <div class="mark ${settling ? "done" : "working"}">
+      <div class="mark ${settling ? "done" : ""}">
         ${
           settling
             ? html`<ha-svg-icon .path=${mdiCheck}></ha-svg-icon>`
@@ -36,28 +35,27 @@ export class HaAmbientUpdating extends LitElement {
       </div>
 
       <h1 class="ambient-title heading">${this._heading()}</h1>
+
       ${
-        label && !settling
-          ? html`<p class="ambient-secondary label">${label}</p>`
-          : nothing
+        settling
+          ? nothing
+          : html`
+              <div
+                class="progress ${determinate ? "determinate" : "indeterminate"}"
+                role="progressbar"
+                aria-label=${this._heading()}
+                aria-valuenow=${determinate ? progress! : nothing}
+              >
+                <div
+                  class="bar"
+                  style=${determinate ? `width: ${progress}%` : ""}
+                ></div>
+              </div>
+              <p class="ambient-secondary reassurance">
+                ${this.hass.localize("ui.ambient.updating.reassurance")}
+              </p>
+            `
       }
-
-      <div
-        class="progress ${determinate ? "determinate" : "indeterminate"}"
-        role="progressbar"
-        aria-label=${this._heading()}
-        aria-valuenow=${determinate ? progress! : nothing}
-      >
-        <div
-          class="bar"
-          style=${determinate ? `width: ${progress}%` : ""}
-        ></div>
-      </div>
-
-      <p class="ambient-secondary status">${this._status()}</p>
-      <p class="ambient-secondary reassurance">
-        ${this.hass.localize("ui.ambient.updating.reassurance")}
-      </p>
       ${
         preview
           ? html`<p class="ambient-hint preview">
@@ -79,28 +77,6 @@ export class HaAmbientUpdating extends LitElement {
       default:
         return this.hass.localize("ui.ambient.updating.updating_heading");
     }
-  }
-
-  private _status(): string {
-    const { phase, version, progress } = this.state;
-    if (phase === "settling") {
-      return this.hass.localize("ui.ambient.updating.finishing");
-    }
-    if (phase === "restarting") {
-      return this.hass.localize("ui.ambient.updating.reconnecting");
-    }
-    if (version && progress != null) {
-      return this.hass.localize("ui.ambient.updating.installing_progress", {
-        version,
-        progress: formatNumber(progress, this.hass.locale, {
-          maximumFractionDigits: 0,
-        }),
-      });
-    }
-    if (version) {
-      return this.hass.localize("ui.ambient.updating.installing", { version });
-    }
-    return this.hass.localize("ui.ambient.updating.working");
   }
 
   static styles = [
@@ -126,36 +102,18 @@ export class HaAmbientUpdating extends LitElement {
         width: 100%;
         height: 100%;
       }
-      .mark.working {
-        animation: ambient-pulse 2s ease-in-out infinite;
-      }
+      /* The logo animates itself — its three dots pulse in sequence. Scaling or
+         fading the whole mark on top of that just fights it. */
       .mark.done ha-svg-icon {
         --mdc-icon-size: 72px;
         color: var(--ha-color-fill-success-loud-resting);
-      }
-      @keyframes ambient-pulse {
-        0%,
-        100% {
-          opacity: 1;
-          transform: scale(1);
-        }
-        50% {
-          opacity: 0.6;
-          transform: scale(0.94);
-        }
       }
       .heading {
         --ha-ambient-title-size: 2.25rem;
         margin: 0;
       }
-      .label,
-      .status,
-      .reassurance,
-      .preview {
+      .reassurance {
         margin: 0;
-      }
-      .label {
-        font-size: 1.125rem;
       }
       .progress {
         width: 100%;
@@ -186,19 +144,26 @@ export class HaAmbientUpdating extends LitElement {
           transform: translateX(320%);
         }
       }
-      .status {
-        font-size: 1rem;
-        font-variant-numeric: tabular-nums;
-      }
       .reassurance {
         font-size: 0.9375rem;
         line-height: 1.5;
         margin-top: var(--ha-space-4);
       }
+      /* Out of the message, but still on screen: a preview is dismissable and a
+         real update is not, so the two must not look identical. */
+      .preview {
+        position: fixed;
+        top: max(var(--safe-area-inset-top, 0px), var(--ha-space-4));
+        inset-inline-end: max(
+          var(--safe-area-inset-right, 0px),
+          var(--ha-space-4)
+        );
+        margin: 0;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 0.75rem;
+      }
       @media (prefers-reduced-motion: reduce) {
-        .mark.working {
-          animation: none;
-        }
         .indeterminate .bar {
           animation: none;
           width: 100%;

@@ -96,11 +96,6 @@
         "updating_heading": "Updating your home",
         "restarting_heading": "Restarting your home",
         "ready_heading": "Your home is ready",
-        "installing": "Installing {version}",
-        "installing_progress": "Installing {version} — {progress}%",
-        "reconnecting": "Restarting your home. Reconnecting…",
-        "working": "Working on it…",
-        "finishing": "Finishing up…",
         "reassurance": "This can take a few minutes. Your devices keep running — the screen returns on its own once your home is back."
       }
     },

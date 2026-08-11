@@ -6,7 +6,11 @@ import { fireEvent } from "../../common/dom/fire_event";
 import { ShortcutManager } from "../../common/keyboard/shortcuts";
 import { ambientStyles } from "../../components/ha-ambient-screen";
 import type { AmbientConfig, AmbientScreen } from "../../data/ambient";
-import { ambientSuppressed, DEFAULT_AMBIENT_CONFIG } from "../../data/ambient";
+import {
+  ambientSuppressed,
+  ambientTimers,
+  DEFAULT_AMBIENT_CONFIG,
+} from "../../data/ambient";
 import type { AmbientUpdateState } from "../../data/ambient-update";
 import {
   AmbientUpdateWatcher,
@@ -310,19 +314,12 @@ export class HaAmbientLayer extends LitElement {
   private _resetTimers(): void {
     clearTimeout(this._idleTimeout);
     clearTimeout(this._lockTimeout);
-    if (this._screen !== "none") {
-      return;
+    const { idle, lock } = ambientTimers(this._screen, this._config);
+    if (idle > 0) {
+      this._idleTimeout = window.setTimeout(this._showIdle, idle * 1000);
     }
-    const { idleTimeout, autoLockTimeout, lockEnabled } = this._config;
-    if (idleTimeout > 0) {
-      this._idleTimeout = window.setTimeout(this._showIdle, idleTimeout * 1000);
-    }
-    // Auto-lock runs on its own, longer timeout.
-    if (lockEnabled && autoLockTimeout > 0) {
-      this._lockTimeout = window.setTimeout(
-        () => this.lock(),
-        autoLockTimeout * 1000
-      );
+    if (lock > 0) {
+      this._lockTimeout = window.setTimeout(() => this.lock(), lock * 1000);
     }
   }
 

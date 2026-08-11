@@ -13,9 +13,12 @@ export type AmbientUpdatePhase =
 
 export interface AmbientUpdateState {
   phase: AmbientUpdatePhase;
-  /** Friendly label of whatever is installing, e.g. "Home Assistant Core". */
+  /**
+   * Friendly label of whatever is installing, e.g. "Home Assistant Core". Not
+   * rendered — it only tells the screen whether a restart had an update behind
+   * it, which picks the heading.
+   */
   label?: string;
-  version?: string;
   /** null when the update reports no percentage — render indeterminate, never a fake bar. */
   progress?: number | null;
   /** Preview runs are dismissable and badged; the real flow is neither. */
@@ -46,10 +49,7 @@ export class AmbientUpdateWatcher {
   private _settlingTimeout?: number;
 
   /** The update entity vanishes once HA goes offline, so keep the last one seen. */
-  private _lastSeenInstall?: Pick<
-    AmbientUpdateState,
-    "label" | "version" | "progress"
-  >;
+  private _lastSeenInstall?: Pick<AmbientUpdateState, "label" | "progress">;
 
   /**
    * Whether we have seen core reach RUNNING in this session. Until then a
@@ -123,7 +123,6 @@ export class AmbientUpdateWatcher {
     if (installing) {
       this._lastSeenInstall = {
         label: installing.attributes.title || undefined,
-        version: installing.attributes.latest_version || undefined,
         progress: installing.attributes.update_percentage,
       };
       this._emit({
@@ -215,7 +214,6 @@ export class AmbientUpdateWatcher {
       phase,
       preview: true,
       label: "Home Assistant Core",
-      version: "2026.8.0",
       progress: phase === "installing" ? 43 : null,
     });
   }
