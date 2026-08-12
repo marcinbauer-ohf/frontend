@@ -412,6 +412,29 @@ export interface NumericThresholdSelector {
   } | null;
 }
 
+export type ThresholdType = "above" | "below" | "between" | "outside" | "any";
+
+export interface ThresholdValueEntry {
+  active_choice?: string;
+  number?: number;
+  entity?: string;
+  unit_of_measurement?: string;
+}
+
+export interface NumericThresholdValue {
+  type: ThresholdType;
+  value?: ThresholdValueEntry;
+  value_min?: ThresholdValueEntry;
+  value_max?: ThresholdValueEntry;
+}
+
+/** The threshold type each mode falls back to when the value omits one. */
+export const THRESHOLD_DEFAULT_TYPE: Record<ThresholdMode, ThresholdType> = {
+  crossed: "above",
+  changed: "any",
+  is: "above",
+};
+
 interface ObjectSelectorField {
   selector: Selector;
   label?: string;

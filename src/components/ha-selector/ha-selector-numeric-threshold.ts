@@ -6,8 +6,12 @@ import { mdiChartBellCurveCumulative } from "@mdi/js";
 import { fireEvent } from "../../common/dom/fire_event";
 import type {
   NumericThresholdSelector,
+  NumericThresholdValue,
   ThresholdMode,
+  ThresholdType,
+  ThresholdValueEntry,
 } from "../../data/selector";
+import { THRESHOLD_DEFAULT_TYPE } from "../../data/selector";
 import type { HomeAssistant } from "../../types";
 import "../ha-button-toggle-group";
 import "../ha-input-helper-text";
@@ -25,28 +29,6 @@ const iconThresholdBetween =
 
 const iconThresholdOutside =
   "M 2 2 L 2 22 L 22 22 L 22 20 L 4 20 L 4 19.046875 C 4.226574 19.041905 4.4812768 19.028419 4.7597656 19 C 5.8832145 18.8854 7.4011147 18.537974 9.0019531 17.609375 L 8.8847656 17.408203 C 9.320466 17.777433 9.8841605 18 10.5 18 C 11.880699 18 13 16.880699 13 15.5 C 13 14.119301 11.880699 13 10.5 13 C 9.1192914 13 8 14.119301 8 15.5 C 8 15.654727 8.0141099 15.806171 8.0410156 15.953125 L 7.9980469 15.876953 C 6.6882482 16.636752 5.4555097 16.918066 4.5566406 17.009766 C 4.3512557 17.030705 4.166436 17.040275 4 17.044922 L 4 2 L 2 2 z M 21.976562 4 C 21.965863 4.00017 21.951347 4.0014331 21.935547 4.0019531 C 21.903847 4.0030031 21.862047 4.0043225 21.810547 4.0078125 C 21.707247 4.0148425 21.564772 4.0273144 21.388672 4.0527344 C 21.036572 4.1035743 20.54829 4.2035846 19.962891 4.3964844 C 19.34193 4.6011277 18.613343 4.9149715 17.826172 5.3808594 C 17.441793 5.1398775 16.987134 5 16.5 5 C 15.119301 5 14 6.1192914 14 7.5 C 14 8.8807086 15.119301 10 16.5 10 C 17.880699 10 19 8.8807086 19 7.5 C 19 7.3403872 18.983669 7.1845035 18.955078 7.0332031 C 19.569666 6.6795942 20.126994 6.4493921 20.589844 6.296875 C 21.054643 6.1437252 21.426428 6.0689231 21.673828 6.0332031 C 21.797428 6.0153531 21.891466 6.0076962 21.947266 6.0039062 C 21.974966 6.0020263 21.992753 6.0003 22.001953 6 L 21.998047 4 L 21.976562 4 z";
-
-type ThresholdType = "above" | "below" | "between" | "outside" | "any";
-
-interface ThresholdValueEntry {
-  active_choice?: string;
-  number?: number;
-  entity?: string;
-  unit_of_measurement?: string;
-}
-
-interface NumericThresholdValue {
-  type: ThresholdType;
-  value?: ThresholdValueEntry;
-  value_min?: ThresholdValueEntry;
-  value_max?: ThresholdValueEntry;
-}
-
-const DEFAULT_TYPE: Record<ThresholdMode, ThresholdType> = {
-  crossed: "above",
-  changed: "any",
-  is: "above",
-};
 
 @customElement("ha-selector-numeric_threshold")
 export class HaNumericThresholdSelector extends LitElement {
@@ -73,7 +55,7 @@ export class HaNumericThresholdSelector extends LitElement {
   protected willUpdate(changedProperties: PropertyValues<this>): void {
     if (changedProperties.has("value") || changedProperties.has("selector")) {
       const mode = this._getMode();
-      this._type = this.value?.type || DEFAULT_TYPE[mode];
+      this._type = this.value?.type || THRESHOLD_DEFAULT_TYPE[mode];
     }
   }
 
@@ -84,7 +66,7 @@ export class HaNumericThresholdSelector extends LitElement {
       !this.value
     ) {
       const mode = this._getMode();
-      const type = DEFAULT_TYPE[mode];
+      const type = THRESHOLD_DEFAULT_TYPE[mode];
       fireEvent(this, "value-changed", { value: { type } });
     }
   }
@@ -118,7 +100,7 @@ export class HaNumericThresholdSelector extends LitElement {
 
   protected render() {
     const mode = this._getMode();
-    const type = this._type || DEFAULT_TYPE[mode];
+    const type = this._type || THRESHOLD_DEFAULT_TYPE[mode];
     const showSingleValue = type === "above" || type === "below";
     const showRangeValues = type === "between" || type === "outside";
     const unitOptions = this._getUnitOptions();
