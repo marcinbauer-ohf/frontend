@@ -56,8 +56,12 @@ import type {
 } from "../../../../data/automation";
 import { isCondition, testCondition } from "../../../../data/automation";
 import {
+  describeBehaviorOption,
   describeCondition,
+  describeOptions,
   describeForOption,
+  describeOffsetOption,
+  type RowParameter,
 } from "../../../../data/automation_i18n";
 import type { ConditionDescriptions } from "../../../../data/condition";
 import { CONDITION_BUILDING_BLOCKS } from "../../../../data/condition";
@@ -78,6 +82,9 @@ import type { HomeAssistant } from "../../../../types";
 import { isMac } from "../../../../util/is_mac";
 import { showEditorToast } from "../editor-toast";
 import "../ha-automation-editor-warning";
+import "../ha-automation-row-parameter";
+import type { ParameterChangedEvent } from "../ha-automation-row-parameter";
+import { INLINE_PARAMETERS_STORAGE_KEY } from "../inline-parameters";
 import { overflowStyles, rowStyles } from "../styles";
 import "../target/ha-automation-row-targets";
 import "./ha-automation-condition-editor";
@@ -141,6 +148,15 @@ export default class HaAutomationConditionRow extends LitElement {
   })
   public _clipboard?: AutomationClipboard;
 
+  // Set from the editor's menu. Subscribed rather than passed down so every row
+  // reacts to the toggle without threading a property through the whole tree.
+  @storage({
+    key: INLINE_PARAMETERS_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _inlineParameters = false;
+
   @state() private _yamlMode = false;
 
   @state() private _testing = false;
@@ -195,13 +211,71 @@ export default class HaAutomationConditionRow extends LitElement {
     const conditionTargetSpec =
       this.conditionDescriptions[this.condition.condition]?.target;
 
-    const forDuration =
-      this._getType(this.condition, this.conditionDescriptions) === "platform"
-        ? describeForOption(
-            this.hass,
-            (this.condition as PlatformCondition).options
-          )
-        : undefined;
+    const isPlatform =
+      this._getType(this.condition, this.conditionDescriptions) === "platform";
+
+    const forDuration = isPlatform
+      ? describeForOption(
+          this.hass,
+          (this.condition as PlatformCondition).options
+        )
+      : undefined;
+
+    // No core condition offsets today, but `offset` is excluded from
+    // describeOptions unconditionally, so without this one it would vanish
+    // rather than fall back to a labelled fragment.
+    const offsetDuration = isPlatform
+      ? describeOffsetOption(
+          this.hass,
+          (this.condition as PlatformCondition).options
+        )
+      : undefined;
+
+    const description = capitalizeFirstLetter(
+      describeCondition(this.condition, this.hass, this._entityReg)
+    );
+
+    const behavior = isPlatform
+      ? describeBehaviorOption(
+          this.hass,
+          this.conditionDescriptions[this.condition.condition]?.fields,
+          (this.condition as PlatformCondition).options,
+          target
+        )
+      : undefined;
+
+    // As text the behavior is kept in one run with the description, so the
+    // header's chip-sized flex gap does not open up around the separator. As a
+    // chip it needs that gap, so it moves out into the parameter list.
+    const heading =
+      behavior && !this._inlineParameters
+        ? `${description} · ${behavior.text}`
+        : description;
+
+    const setOptions = isPlatform
+      ? describeOptions(
+          this.hass,
+          "conditions",
+          this.condition.condition,
+          this.conditionDescriptions[this.condition.condition]?.fields,
+          (this.condition as PlatformCondition).options
+        )
+      : [];
+
+    const platformFields = isPlatform
+      ? this.conditionDescriptions[this.condition.condition]?.fields
+      : undefined;
+
+    // Behavior qualifies the targets ("any of these lights"), so it is rendered
+    // immediately before them and nothing separates the two. Everything else
+    // trails the targets as an independent fact.
+    const behaviorParameter = this._inlineParameters ? behavior : undefined;
+
+    const parameters = [
+      ...setOptions,
+      ...(offsetDuration ? [offsetDuration] : []),
+      ...(forDuration ? [forDuration] : []),
+    ];
 
     const noteTooltipText = truncateWithEllipsis(
       this.condition.note?.trim() || "",
@@ -234,9 +308,12 @@ export default class HaAutomationConditionRow extends LitElement {
             </div>`
       }
       <h3 slot="header">
-        ${capitalizeFirstLetter(
-          describeCondition(this.condition, this.hass, this._entityReg)
-        )}
+        ${heading}
+        ${
+          behaviorParameter
+            ? this._renderParameter(behaviorParameter, platformFields, true)
+            : nothing
+        }
         ${
           target !== undefined || (descriptionHasTarget && !this._isNew)
             ? this._renderTargets(
@@ -247,7 +324,9 @@ export default class HaAutomationConditionRow extends LitElement {
               )
             : nothing
         }
-        ${forDuration ? html`<span>${forDuration}</span>` : nothing}
+        ${parameters.map((parameter) =>
+          this._renderParameter(parameter, platformFields)
+        )}
         ${
           this.condition.note?.trim()
             ? html`
@@ -417,7 +496,7 @@ export default class HaAutomationConditionRow extends LitElement {
             : nothing
         }
         ${
-          !this.optionsInSidebar
+          !this.optionsInSidebar || this.narrow
             ? html`
                 <ha-dropdown-item
                   value="move_up"
@@ -778,6 +857,41 @@ export default class HaAutomationConditionRow extends LitElement {
       this._testing = false;
     }, 2500);
   };
+
+  private _renderParameter(
+    parameter: RowParameter,
+    fields: ConditionDescriptions[string]["fields"] | undefined,
+    filled = false
+  ) {
+    return html`
+      <ha-automation-row-parameter
+        .hass=${this.hass}
+        .parameter=${parameter}
+        .fields=${fields}
+        .options=${(this.condition as PlatformCondition).options}
+        kind="conditions"
+        .platform=${this.condition.condition}
+        .editable=${this._inlineParameters}
+        .disabled=${this.disabled}
+        .filled=${filled}
+        @parameter-changed=${this._parameterChanged}
+      ></ha-automation-row-parameter>
+    `;
+  }
+
+  private _parameterChanged(ev: CustomEvent<ParameterChangedEvent>) {
+    ev.stopPropagation();
+    const value = {
+      ...(this.condition as PlatformCondition),
+      options: ev.detail.options,
+    };
+    fireEvent(this, "value-changed", { value });
+
+    // The sidebar renders the same config, so it has to be told to re-read it
+    if (this._selected && this.optionsInSidebar) {
+      this.openSidebar(value);
+    }
+  }
 
   private _renameCondition = async (): Promise<void> => {
     const alias = await showPromptDialog(this, {

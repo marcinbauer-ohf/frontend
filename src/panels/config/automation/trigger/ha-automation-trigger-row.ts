@@ -58,16 +58,18 @@ import type {
 } from "../../../../data/automation";
 import { isTrigger, subscribeTrigger } from "../../../../data/automation";
 import {
+  describeBehaviorOption,
   describeForOption,
+  describeOptions,
   describeOffsetOption,
   describeTrigger,
+  type RowParameter,
 } from "../../../../data/automation_i18n";
 import { validateConfig } from "../../../../data/config";
 import { fullEntitiesContext } from "../../../../data/context";
 import type { DeviceTrigger } from "../../../../data/device/device_automation";
 import type { EntityRegistryEntry } from "../../../../data/entity/entity_registry";
 import type { TargetSelector } from "../../../../data/selector";
-import { getTargetEntityCount } from "../../../../data/target";
 import type { TriggerDescriptions } from "../../../../data/trigger";
 import { isTriggerList } from "../../../../data/trigger";
 import {
@@ -78,6 +80,9 @@ import type { HomeAssistant } from "../../../../types";
 import { isMac } from "../../../../util/is_mac";
 import { showEditorToast } from "../editor-toast";
 import "../ha-automation-editor-warning";
+import "../ha-automation-row-parameter";
+import type { ParameterChangedEvent } from "../ha-automation-row-parameter";
+import { INLINE_PARAMETERS_STORAGE_KEY } from "../inline-parameters";
 import { overflowStyles, rowStyles } from "../styles";
 import "../target/ha-automation-row-targets";
 import "./ha-automation-trigger-editor";
@@ -179,6 +184,15 @@ export default class HaAutomationTriggerRow extends LitElement {
   })
   public _clipboard?: AutomationClipboard;
 
+  // Set from the editor's menu. Subscribed rather than passed down so every row
+  // reacts to the toggle without threading a property through the whole tree.
+  @storage({
+    key: INLINE_PARAMETERS_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _inlineParameters = false;
+
   @state()
   @consume({ context: fullEntitiesContext, subscribe: true })
   _entityReg: EntityRegistryEntry[] = [];
@@ -248,12 +262,51 @@ export default class HaAutomationTriggerRow extends LitElement {
 
     const behavior =
       type === "platform"
-        ? this._describeBehavior(this.trigger as PlatformTrigger, target)
+        ? describeBehaviorOption(
+            this.hass,
+            this.triggerDescriptions[(this.trigger as PlatformTrigger).trigger]
+              ?.fields,
+            options,
+            target
+          )
         : undefined;
 
-    // Kept in one text run so the header's chip-sized flex gap does not open up
-    // around the separator
-    const heading = behavior ? `${description} · ${behavior}` : description;
+    // As text the behavior is kept in one run with the description, so the
+    // header's chip-sized flex gap does not open up around the separator. As a
+    // chip it needs that gap, so it moves out into the parameter list.
+    const heading =
+      behavior && !this._inlineParameters
+        ? `${description} · ${behavior.text}`
+        : description;
+
+    const setOptions =
+      type === "platform"
+        ? describeOptions(
+            this.hass,
+            "triggers",
+            (this.trigger as PlatformTrigger).trigger,
+            this.triggerDescriptions[(this.trigger as PlatformTrigger).trigger]
+              ?.fields,
+            options
+          )
+        : [];
+
+    const platformFields =
+      type === "platform"
+        ? this.triggerDescriptions[(this.trigger as PlatformTrigger).trigger]
+            ?.fields
+        : undefined;
+
+    // Behavior qualifies the targets ("each of these lights"), so it is rendered
+    // immediately before them and nothing separates the two. Everything else
+    // trails the targets as an independent fact.
+    const behaviorParameter = this._inlineParameters ? behavior : undefined;
+
+    const parameters = [
+      ...setOptions,
+      ...(offsetDuration ? [offsetDuration] : []),
+      ...(forDuration ? [forDuration] : []),
+    ];
 
     const noteTooltipText = truncateWithEllipsis(
       (type !== "list" &&
@@ -279,6 +332,16 @@ export default class HaAutomationTriggerRow extends LitElement {
       <h3 slot="header">
         ${heading}
         ${
+          behaviorParameter
+            ? this._renderParameter(
+                behaviorParameter,
+                platformFields,
+                options,
+                true
+              )
+            : nothing
+        }
+        ${
           target !== undefined || (descriptionHasTarget && !this._isNew)
             ? this._renderTargets(
                 target,
@@ -288,8 +351,9 @@ export default class HaAutomationTriggerRow extends LitElement {
               )
             : nothing
         }
-        ${offsetDuration ? html`<span>${offsetDuration}</span>` : nothing}
-        ${forDuration ? html`<span>${forDuration}</span>` : nothing}
+        ${parameters.map((parameter) =>
+          this._renderParameter(parameter, platformFields, options)
+        )}
         ${
           type !== "list" &&
           (this.trigger as Exclude<Trigger, TriggerList>).note?.trim()
@@ -460,7 +524,7 @@ export default class HaAutomationTriggerRow extends LitElement {
             : nothing
         }
         ${
-          !this.optionsInSidebar
+          !this.optionsInSidebar || this.narrow
             ? html`
                 <ha-dropdown-item
                   value="move_up"
@@ -624,40 +688,6 @@ export default class HaAutomationTriggerRow extends LitElement {
         }
       </ha-card>
     `;
-  }
-
-  /**
-   * Describes how a trigger fires across its targets ("Each", "First", "All").
-   * Behavior only has meaning with more than one target entity, which is also
-   * the condition under which the editor shows the field at all — the row must
-   * not advertise a setting the editor then refuses to show.
-   */
-  private _describeBehavior(
-    trigger: PlatformTrigger,
-    target?: HassServiceTarget
-  ): string | undefined {
-    const fields = this.triggerDescriptions[trigger.trigger]?.fields;
-    const fieldName = fields
-      ? Object.keys(fields).find((key) => {
-          const selector = fields[key].selector;
-          return selector && "automation_behavior" in selector;
-        })
-      : undefined;
-
-    if (!fieldName || getTargetEntityCount(target) <= 1) {
-      return undefined;
-    }
-
-    const behavior = trigger.options?.[fieldName];
-    if (typeof behavior !== "string") {
-      return undefined;
-    }
-    // Unknown values fall through to an empty string rather than a wrong label
-    return (
-      this.hass.localize("ui.panel.config.automation.editor.trigger_behavior", {
-        behavior,
-      }) || undefined
-    );
   }
 
   private _renderTargets = memoizeOne(
@@ -909,6 +939,42 @@ export default class HaAutomationTriggerRow extends LitElement {
         ></ha-yaml-editor>
       `,
     });
+  }
+
+  private _renderParameter(
+    parameter: RowParameter,
+    fields: TriggerDescriptions[string]["fields"] | undefined,
+    options: Record<string, unknown> | undefined,
+    filled = false
+  ) {
+    return html`
+      <ha-automation-row-parameter
+        .hass=${this.hass}
+        .parameter=${parameter}
+        .fields=${fields}
+        .options=${options}
+        kind="triggers"
+        .platform=${(this.trigger as PlatformTrigger).trigger}
+        .editable=${this._inlineParameters}
+        .disabled=${this.disabled}
+        .filled=${filled}
+        @parameter-changed=${this._parameterChanged}
+      ></ha-automation-row-parameter>
+    `;
+  }
+
+  private _parameterChanged(ev: CustomEvent<ParameterChangedEvent>) {
+    ev.stopPropagation();
+    const value = {
+      ...(this.trigger as PlatformTrigger),
+      options: ev.detail.options,
+    };
+    fireEvent(this, "value-changed", { value });
+
+    // The sidebar renders the same config, so it has to be told to re-read it
+    if (this._selected && this.optionsInSidebar) {
+      this.openSidebar(value);
+    }
   }
 
   private _renameTrigger = async (): Promise<void> => {

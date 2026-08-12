@@ -1,5 +1,9 @@
 import { TZDate } from "@date-fns/tz";
-import type { HassConfig, HassEntity } from "home-assistant-js-websocket";
+import type {
+  HassConfig,
+  HassEntity,
+  HassServiceTarget,
+} from "home-assistant-js-websocket";
 import { ensureArray } from "../common/array/ensure-array";
 import { createDurationData } from "../common/datetime/create_duration_data";
 import {
@@ -20,6 +24,8 @@ import {
   formatListWithOrs,
 } from "../common/string/format-list";
 import { hasTemplate } from "../common/string/has-template";
+import { truncateWithEllipsis } from "../common/string/truncate-with-ellipsis";
+import type { LocalizeKeys } from "../common/translations/localize";
 import type { HomeAssistant } from "../types";
 import type {
   Condition,
@@ -38,6 +44,16 @@ import {
   localizeDeviceAutomationTrigger,
 } from "./device/device_automation";
 import type { EntityRegistryEntry } from "./entity/entity_registry";
+import type {
+  NumberSelector,
+  NumericThresholdSelector,
+  NumericThresholdValue,
+  SelectSelector,
+  Selector,
+  ThresholdValueEntry,
+} from "./selector";
+import { THRESHOLD_DEFAULT_TYPE } from "./selector";
+import { getTargetEntityCount } from "./target";
 import type { FrontendLocaleData } from "./translation";
 import { getTriggerDomain, getTriggerObjectId, isTriggerList } from "./trigger";
 
@@ -98,35 +114,91 @@ export const describeOptionalDuration = (
   }
 };
 
+/**
+ * A single fragment of a row header, paired with the option keys that produced
+ * it. The keys are what an inline editor for the fragment has to change, so a
+ * fragment built from more than one option carries all of them.
+ */
+export interface RowParameter {
+  fields: string[];
+  text: string;
+}
+
 /** Describes the `for` option of a platform trigger or condition for a row header. */
 export const describeForOption = (
   hass: HomeAssistant,
   options?: Record<string, unknown>
-): string | undefined => {
+): RowParameter | undefined => {
   const duration = describeOptionalDuration(hass.locale, options?.for);
-  return duration
-    ? hass.localize("ui.panel.config.automation.editor.for_duration", {
-        duration,
-      })
-    : undefined;
+  if (!duration) {
+    return undefined;
+  }
+  return {
+    fields: ["for"],
+    text: hass.localize("ui.panel.config.automation.editor.for_duration", {
+      duration,
+    }),
+  };
 };
 
 /**
  * Describes the `offset` option of a platform trigger for a row header. It is
  * meaningless without `offset_type`, which says whether it applies before or
- * after the event.
+ * after the event — so both are edited together.
  */
 export const describeOffsetOption = (
   hass: HomeAssistant,
   options?: Record<string, unknown>
-): string | undefined => {
+): RowParameter | undefined => {
   const duration = describeOptionalDuration(hass.locale, options?.offset);
-  return duration
-    ? hass.localize("ui.panel.config.automation.editor.offset_duration", {
-        duration,
-        offsetType: (options?.offset_type as string | undefined) ?? "before",
+  if (!duration) {
+    return undefined;
+  }
+  return {
+    fields: ["offset", "offset_type"],
+    text: hass.localize("ui.panel.config.automation.editor.offset_duration", {
+      duration,
+      offsetType: (options?.offset_type as string | undefined) ?? "before",
+    }),
+  };
+};
+
+/**
+ * Describes how a platform trigger or condition treats its targets ("each",
+ * "first", "all" for triggers; "any", "all" for conditions).
+ *
+ * Behavior only has meaning with more than one target entity, which is also the
+ * condition under which the editors render the field at all — the row must not
+ * advertise a setting the editor then hides. The field is located by its
+ * selector rather than by name, matching how the editors find it.
+ */
+export const describeBehaviorOption = (
+  hass: HomeAssistant,
+  fields: Record<string, { selector?: Selector }> | undefined,
+  options: Record<string, unknown> | undefined,
+  target: HassServiceTarget | undefined
+): RowParameter | undefined => {
+  const fieldName = fields
+    ? Object.keys(fields).find((key) => {
+        const selector = fields[key].selector;
+        return selector && "automation_behavior" in selector;
       })
     : undefined;
+
+  if (!fieldName || getTargetEntityCount(target) <= 1) {
+    return undefined;
+  }
+
+  const behavior = options?.[fieldName];
+  if (typeof behavior !== "string") {
+    return undefined;
+  }
+  // Unknown values fall through to an empty string rather than a wrong label
+  const text = hass.localize(
+    "ui.panel.config.automation.editor.automation_behavior",
+    { behavior }
+  );
+  return text ? { fields: [fieldName], text } : undefined;
 };
 
 const localizeTimeString = (
@@ -161,6 +233,236 @@ const localizeTimeString = (
   } catch {
     return time;
   }
+};
+
+/** Options that already have their own dedicated fragment in the row header. */
+const SEPARATELY_DESCRIBED_OPTIONS = new Set(["for", "offset", "offset_type"]);
+
+/** Long free text would push the targets and durations off the row. */
+const MAX_OPTION_VALUE_LENGTH = 40;
+
+const describeSelectValue = (
+  hass: HomeAssistant,
+  selector: SelectSelector,
+  domain: string,
+  value: unknown
+): string => {
+  const translationKey = selector.select?.translation_key;
+  const localized = translationKey
+    ? hass.localize(
+        `component.${domain}.selector.${translationKey}.options.${value}` as LocalizeKeys
+      )
+    : undefined;
+  if (localized) {
+    return localized;
+  }
+  const option = selector.select?.options?.find((candidate) =>
+    typeof candidate === "string"
+      ? candidate === value
+      : candidate.value === value
+  );
+  if (option) {
+    return typeof option === "string" ? option : option.label;
+  }
+  return String(value);
+};
+
+/** One side of a threshold, which is either a fixed number or an entity. */
+const describeThresholdEntry = (
+  hass: HomeAssistant,
+  entry: ThresholdValueEntry | undefined,
+  fallbackUnit: string | undefined
+): string | undefined => {
+  if (!entry) {
+    return undefined;
+  }
+  if (entry.entity && entry.active_choice !== "number") {
+    const stateObj = hass.states[entry.entity];
+    return stateObj ? computeStateName(stateObj) : entry.entity;
+  }
+  if (entry.number === undefined) {
+    return undefined;
+  }
+  // Only selectors offering a unit choice store one on the value; the rest
+  // carry a fixed unit on the number config
+  const unit = entry.unit_of_measurement ?? fallbackUnit;
+  return unit ? `${entry.number} ${unit}` : String(entry.number);
+};
+
+const describeThreshold = (
+  hass: HomeAssistant,
+  selector: NumericThresholdSelector,
+  value: unknown
+): string | undefined => {
+  const threshold = value as NumericThresholdValue | undefined;
+  const mode = selector.numeric_threshold?.mode ?? "crossed";
+  // The editor falls back to the mode's default when the value omits a type
+  const type = threshold?.type ?? THRESHOLD_DEFAULT_TYPE[mode];
+
+  const fallbackUnit = selector.numeric_threshold?.number?.unit_of_measurement;
+
+  const bounds =
+    type === "between" || type === "outside"
+      ? [threshold?.value_min, threshold?.value_max]
+          .map((entry) => describeThresholdEntry(hass, entry, fallbackUnit))
+          .filter(Boolean)
+          .join(" – ")
+      : describeThresholdEntry(hass, threshold?.value, fallbackUnit);
+
+  if (!bounds) {
+    // A bare comparison word ("Any change") only restates the trigger name
+    return undefined;
+  }
+
+  // Deliberately not the selector's own labels: those are capitalized option
+  // names for a toggle group, and a translated string cannot be lowercased
+  // safely (German nouns, Turkish dotless i). Mid-row wording gets its own key.
+  return (
+    hass.localize("ui.panel.config.automation.editor.threshold_value", {
+      type,
+      value: bounds,
+    }) || bounds
+  );
+};
+
+const describeOptionValue = (
+  hass: HomeAssistant,
+  selector: Selector,
+  domain: string,
+  value: unknown
+): string | undefined => {
+  if ("numeric_threshold" in selector) {
+    return describeThreshold(hass, selector as NumericThresholdSelector, value);
+  }
+
+  if ("select" in selector) {
+    return formatListWithAnds(
+      hass.locale,
+      ensureArray(value).map((item) =>
+        describeSelectValue(hass, selector as SelectSelector, domain, item)
+      )
+    );
+  }
+
+  if ("number" in selector) {
+    const unit = (selector as NumberSelector).number?.unit_of_measurement;
+    return unit ? `${value} ${unit}` : String(value);
+  }
+
+  if ("duration" in selector) {
+    return describeOptionalDuration(hass.locale, value);
+  }
+
+  if ("time" in selector && typeof value === "string") {
+    return localizeTimeString(value, hass.locale, hass.config);
+  }
+
+  if ("entity" in selector && typeof value === "string") {
+    const stateObj = hass.states[value];
+    return stateObj ? computeStateName(stateObj) : value;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    return truncateWithEllipsis(String(value), MAX_OPTION_VALUE_LENGTH);
+  }
+
+  // Nested structures have no sensible one-line form
+  return undefined;
+};
+
+/**
+ * The backend-supplied name of a single option, as the editor's form labels it.
+ * Falls back to the raw key so an untranslated field is still identifiable.
+ */
+export const localizeOptionName = (
+  hass: HomeAssistant,
+  kind: "triggers" | "conditions",
+  platform: string,
+  fieldName: string
+): string => {
+  const domain =
+    kind === "triggers"
+      ? getTriggerDomain(platform)
+      : getConditionDomain(platform);
+  const name =
+    kind === "triggers"
+      ? getTriggerObjectId(platform)
+      : getConditionObjectId(platform);
+  return (
+    hass.localize(
+      `component.${domain}.${kind}.${name}.fields.${fieldName}.name` as LocalizeKeys
+    ) || fieldName
+  );
+};
+
+/**
+ * Describes the remaining user-set options of a platform trigger or condition
+ * as one fragment each, in the order the editor lists the fields.
+ *
+ * Only options the user actually set are shown: anything left at its default,
+ * fixed by a constant selector, or already covered by a dedicated fragment
+ * (`for`, `offset`, behavior) is skipped, so the row reports what was chosen
+ * rather than restating the whole form.
+ */
+export const describeOptions = (
+  hass: HomeAssistant,
+  kind: "triggers" | "conditions",
+  platform: string,
+  fields:
+    Record<string, { selector?: Selector; default?: unknown }> | undefined,
+  options: Record<string, unknown> | undefined
+): RowParameter[] => {
+  if (!fields || !options) {
+    return [];
+  }
+
+  const domain =
+    kind === "triggers"
+      ? getTriggerDomain(platform)
+      : getConditionDomain(platform);
+
+  const described: RowParameter[] = [];
+
+  for (const [fieldName, field] of Object.entries(fields)) {
+    const selector = field.selector;
+    if (
+      !selector ||
+      SEPARATELY_DESCRIBED_OPTIONS.has(fieldName) ||
+      "automation_behavior" in selector ||
+      "constant" in selector
+    ) {
+      continue;
+    }
+
+    const value = options[fieldName];
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+    if (field.default !== undefined && value === field.default) {
+      continue;
+    }
+
+    if ("boolean" in selector) {
+      // A flag has no value worth printing, so its name is what it contributes
+      if (value === true) {
+        described.push({
+          fields: [fieldName],
+          text: localizeOptionName(hass, kind, platform, fieldName),
+        });
+      }
+      continue;
+    }
+
+    // The row states values, not the form. Naming the option as well ("Twilight
+    // type: Nautical") repeats what the editor already labels, and reads worse
+    // than the value alone.
+    const describedValue = describeOptionValue(hass, selector, domain, value);
+    if (describedValue) {
+      described.push({ fields: [fieldName], text: describedValue });
+    }
+  }
+
+  return described;
 };
 
 const formatNumericLimitValue = (

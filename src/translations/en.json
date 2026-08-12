@@ -5144,7 +5144,12 @@
             "offset_duration": "{offsetType, select, \n after {{duration} after}\n other {{duration} before}\n}",
             "timeout_duration": "with a timeout of {duration}",
             "timeout_template": "with a templated timeout",
-            "trigger_behavior": "{behavior, select, \n each {each}\n first {first}\n all {all}\n other {}\n}",
+            "automation_behavior": "{behavior, select, \n each {each of}\n first {first of}\n all {all of}\n any {any of}\n other {}\n}",
+            "threshold_value": "{type, select, \n above {above {value}}\n below {below {value}}\n between {in range {value}}\n outside {outside range {value}}\n other {{value}}\n}",
+            "inline_parameters": {
+              "enable": "Edit parameters in rows",
+              "disable": "Stop editing parameters in rows"
+            },
             "description": {
               "label": "Description",
               "placeholder": "Optional description",

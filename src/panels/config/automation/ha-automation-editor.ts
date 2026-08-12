@@ -3,6 +3,7 @@ import {
   mdiAppleKeyboardCommand,
   mdiCog,
   mdiContentSave,
+  mdiCursorDefaultClick,
   mdiDebugStepOver,
   mdiDelete,
   mdiDotsVertical,
@@ -32,6 +33,8 @@ import { promiseTimeout } from "../../../common/util/promise-timeout";
 import "../../../components/ha-button";
 import "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
+import { storage } from "../../../common/decorators/storage";
+import { INLINE_PARAMETERS_STORAGE_KEY } from "./inline-parameters";
 import "../../../components/ha-icon";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-svg-icon";
@@ -124,6 +127,15 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
   private _manualEditor?: HaManualAutomationEditor;
 
   @query("ha-yaml-editor") private _yamlEditor?: HaYamlEditor;
+
+  // Experiment: render row parameters as editable chips instead of plain text.
+  // Rows subscribe to the same key, so flipping it here reaches all of them.
+  @storage({
+    key: INLINE_PARAMETERS_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _inlineParameters = false;
 
   private _configSubscriptions: Record<
     string,
@@ -415,6 +427,16 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
                 `
               : nothing
           }
+
+          <ha-dropdown-item value="toggle_inline_parameters">
+            ${this.hass.localize(
+              `ui.panel.config.automation.editor.inline_parameters.${this._inlineParameters ? "disable" : "enable"}`
+            )}
+            <ha-svg-icon
+              slot="icon"
+              .path=${mdiCursorDefaultClick}
+            ></ha-svg-icon>
+          </ha-dropdown-item>
 
           <ha-dropdown-item value="toggle_yaml_mode">
             ${this.hass.localize(
@@ -1223,6 +1245,9 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
         break;
       case "take_control":
         this._takeControl();
+        break;
+      case "toggle_inline_parameters":
+        this._inlineParameters = !this._inlineParameters;
         break;
       case "toggle_yaml_mode":
         if (this.mode === "gui") {
