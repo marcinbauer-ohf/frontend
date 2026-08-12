@@ -5,8 +5,23 @@ import { ensureArray } from "../../../common/array/ensure-array";
 import { storage } from "../../../common/decorators/storage";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { nextRender } from "../../../common/util/render-status";
+import type { HaSortableOptions } from "../../../components/ha-sortable";
 import type { AutomationClipboard } from "../../../data/automation";
 import type { Constructor, HomeAssistant } from "../../../types";
+
+/**
+ * Sort options shared by every automation row list.
+ *
+ * There is no drag handle: the whole row is the grab area. On a pointer device
+ * that is immediate, but on touch a press has to be held first, so that
+ * scrolling the list past a row never picks it up instead.
+ */
+export const ROW_SORT_OPTIONS: HaSortableOptions = {
+  delay: 500,
+  delayOnTouchOnly: true,
+  // Below this the press counts as a tap, not the start of a drag
+  touchStartThreshold: 4,
+};
 
 export const AutomationSortableListMixin = <T extends object>(
   superClass: Constructor<LitElement>

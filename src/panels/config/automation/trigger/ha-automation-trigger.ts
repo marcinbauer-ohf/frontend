@@ -1,13 +1,12 @@
 import { consume } from "@lit/context";
-import { mdiDragHorizontalVariant, mdiPlus } from "@mdi/js";
+import { mdiPlus } from "@mdi/js";
 import deepClone from "deep-clone-simple";
 import type { HassServiceTarget } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
-import { html, LitElement, nothing } from "lit";
+import { html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { repeat } from "lit/directives/repeat";
 import { fireEvent } from "../../../../common/dom/fire_event";
-import { stopPropagation } from "../../../../common/dom/stop_propagation";
 import "../../../../components/ha-button";
 import "../../../../components/ha-sortable";
 import "../../../../components/ha-svg-icon";
@@ -26,7 +25,10 @@ import {
   PASTE_VALUE,
   showAddAutomationElementDialog,
 } from "../show-add-automation-element-dialog";
-import { AutomationSortableListMixin } from "../ha-automation-sortable-list-mixin";
+import {
+  AutomationSortableListMixin,
+  ROW_SORT_OPTIONS,
+} from "../ha-automation-sortable-list-mixin";
 import { automationRowsStyles } from "../styles";
 import "./ha-automation-trigger-row";
 import type HaAutomationTriggerRow from "./ha-automation-trigger-row";
@@ -69,7 +71,7 @@ export default class HaAutomationTrigger extends AutomationSortableListMixin<Tri
   protected render() {
     return html`
       <ha-sortable
-        handle-selector=".handle"
+        .options=${ROW_SORT_OPTIONS}
         draggable-selector="ha-automation-trigger-row"
         .disabled=${this.disabled}
         group="triggers"
@@ -104,26 +106,6 @@ export default class HaAutomationTrigger extends AutomationSortableListMixin<Tri
                 .sortSelected=${this.rowSortSelected === idx}
                 @stop-sort-selection=${this.stopSortSelection}
               >
-                ${
-                  !this.disabled
-                    ? html`
-                        <div
-                          tabindex="0"
-                          class="handle ${
-                            this.rowSortSelected === idx ? "active" : ""
-                          }"
-                          slot="icons"
-                          @keydown=${this.handleDragKeydown}
-                          @click=${stopPropagation}
-                          .index=${idx}
-                        >
-                          <ha-svg-icon
-                            .path=${mdiDragHorizontalVariant}
-                          ></ha-svg-icon>
-                        </div>
-                      `
-                    : nothing
-                }
               </ha-automation-trigger-row>
             `
           )}

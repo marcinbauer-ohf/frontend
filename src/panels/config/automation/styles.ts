@@ -53,6 +53,24 @@ export const rowStyles = css`
     position: absolute;
   }
 
+  /*
+   * The overflow menu is revealed on hover so a resting list stays quiet. Only
+   * on pointer devices: without hover there is no way to bring it back, and it
+   * is the only route to move up/down now that the drag handle is gone.
+   * Opacity rather than visibility, so the button keeps its place in the layout
+   * and stays reachable by keyboard, which :focus-within then reveals.
+   */
+  @media (hover: hover) {
+    ha-dropdown[slot="icons"] {
+      opacity: 0;
+      transition: opacity var(--ha-animation-duration-fast, 100ms) ease-in-out;
+    }
+    :host(:hover) ha-dropdown[slot="icons"],
+    :host(:focus-within) ha-dropdown[slot="icons"] {
+      opacity: 1;
+    }
+  }
+
   .icon-badge-wrapper {
     position: relative;
     display: inline-flex;
@@ -226,23 +244,13 @@ export const automationRowsStyles = css`
     display: block;
     scroll-margin-top: 48px;
   }
-  .handle {
-    padding: 4px;
+  /* The row itself is the grab area now that there is no handle */
+  ha-automation-trigger-row,
+  ha-automation-condition-row,
+  ha-automation-action-row,
+  ha-automation-option-row {
     cursor: move; /* fallback if grab cursor is unsupported */
     cursor: grab;
-    border-radius: var(--ha-border-radius-pill);
-  }
-  .handle:focus {
-    outline: var(--wa-focus-ring);
-    background: var(--ha-color-fill-neutral-quiet-resting);
-  }
-  .handle.active {
-    outline: var(--wa-focus-ring);
-    background: var(--ha-color-fill-neutral-normal-active);
-  }
-  .handle ha-svg-icon {
-    pointer-events: none;
-    height: 24px;
   }
   .buttons {
     display: flex;

@@ -233,7 +233,7 @@ export default class HaAutomationOptionRow extends LitElement {
                 </ha-dropdown-item>
 
                 ${
-                  !this.optionsInSidebar
+                  !this.optionsInSidebar || this.narrow
                     ? html`
                         <ha-dropdown-item
                           value="move_up"
