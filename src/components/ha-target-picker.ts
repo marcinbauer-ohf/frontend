@@ -116,7 +116,8 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
 
   @property({ type: Boolean, reflect: true }) public disabled = false;
 
-  @property({ attribute: "add-on-top", type: Boolean }) public addOnTop = false;
+  @property({ attribute: "add-on-top", type: Boolean, reflect: true })
+  public addOnTop = false;
 
   @state() private _selectedSection?: TargetTypeFloorless;
 
@@ -211,6 +212,11 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
   };
 
   @state() private _pendingEntityId?: string;
+
+  // Opens the add-target search picker programmatically.
+  public openPicker() {
+    this._picker?.open();
+  }
 
   public willUpdate(changedProps: PropertyValues<this>) {
     super.willUpdate(changedProps);
@@ -1398,6 +1404,15 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
       overflow: hidden;
       border: var(--ha-border-width-sm) solid var(--divider-color);
       border-radius: var(--ha-border-radius-lg);
+    }
+    /* When the picker is on top, sit flush with the container top and
+       separate the add button from the value list below it. */
+    :host([add-on-top]) .add-target-wrapper {
+      margin-top: 0;
+    }
+    :host([add-on-top]) .items,
+    :host([add-on-top]) .item-groups {
+      margin-top: var(--ha-space-3);
     }
   `;
 }

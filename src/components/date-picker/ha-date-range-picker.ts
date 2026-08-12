@@ -1,6 +1,6 @@
 import "@home-assistant/webawesome/dist/components/popover/popover";
 import { consume, type ContextType } from "@lit/context";
-import { mdiCalendar } from "@mdi/js";
+import { mdiCalendar, mdiChevronLeft, mdiChevronRight } from "@mdi/js";
 import "cally";
 import { isThisYear } from "date-fns";
 import type { HassConfig } from "home-assistant-js-websocket/dist/types";
@@ -19,10 +19,12 @@ import { transform } from "../../common/decorators/transform";
 import { fireEvent } from "../../common/dom/fire_event";
 import { configContext, internationalizationContext } from "../../data/context";
 import type { HomeAssistantConfig } from "../../types";
+import "../chips/ha-assist-chip";
 import "../ha-bottom-sheet";
 import "../ha-icon-button";
 import "../ha-icon-button-next";
 import "../ha-icon-button-prev";
+import "../ha-svg-icon";
 import "../ha-textarea";
 import type { HaTextArea } from "../ha-textarea";
 import "./date-range-picker";
@@ -72,6 +74,10 @@ export class HaDateRangePicker extends LitElement {
   @property({ type: Boolean }) public disabled = false;
 
   @property({ type: Boolean }) public minimal = false;
+
+  // Render a single assist chip trigger showing the selected range, instead of
+  // the textarea + prev/next controls. Used by the history filter row.
+  @property({ type: Boolean }) public chip = false;
 
   @property({ attribute: "extended-presets", type: Boolean })
   public extendedPresets = false;
@@ -141,73 +147,115 @@ export class HaDateRangePicker extends LitElement {
   }
 
   protected render(): TemplateResult {
+    const rtl = computeRTL(
+      this._i18n.language,
+      this._i18n.translationMetadata.translations
+    );
+    const prevLabel = this._i18n.localize("ui.common.previous");
+    const nextLabel = this._i18n.localize("ui.common.next");
     return html`
       <div class="container">
         <div class="date-range-inputs">
           ${
-            !this.minimal
-              ? html`<ha-textarea
-                    id="field"
-                    rows="1"
-                    resize="auto"
-                    @click=${this._openPicker}
-                    @keydown=${this._handleKeydown}
-                    .value=${
-                      (isThisYear(this.startDate)
-                        ? formatShortDateTime(
-                            this.startDate,
-                            this._i18n.locale,
-                            this._hassConfig
-                          )
-                        : formatShortDateTimeWithYear(
-                            this.startDate,
-                            this._i18n.locale,
-                            this._hassConfig
-                          )) +
-                      (window.innerWidth >= 459 ? " - " : " - \n") +
-                      (isThisYear(this.endDate)
-                        ? formatShortDateTime(
-                            this.endDate,
-                            this._i18n.locale,
-                            this._hassConfig
-                          )
-                        : formatShortDateTimeWithYear(
-                            this.endDate,
-                            this._i18n.locale,
-                            this._hassConfig
-                          ))
-                    }
-                    .label=${
-                      this._i18n.localize(
-                        "ui.components.date-range-picker.start_date"
-                      ) +
-                      " - " +
-                      this._i18n.localize(
-                        "ui.components.date-range-picker.end_date"
-                      )
-                    }
+            this.chip
+              ? html`<div id="field" class="range-nav">
+                  <ha-assist-chip
+                    class="nav-arrow"
+                    .title=${prevLabel}
+                    aria-label=${prevLabel}
                     .disabled=${this.disabled}
-                    readonly
-                  ></ha-textarea>
-                  <ha-icon-button-prev
-                    .label=${this._i18n.localize("ui.common.previous")}
                     @click=${this._handlePrev}
                   >
-                  </ha-icon-button-prev>
-                  <ha-icon-button-next
-                    .label=${this._i18n.localize("ui.common.next")}
+                    <ha-svg-icon
+                      slot="icon"
+                      .path=${rtl ? mdiChevronRight : mdiChevronLeft}
+                    ></ha-svg-icon>
+                  </ha-assist-chip>
+                  <ha-assist-chip
+                    class="range-chip"
+                    @click=${this._openPicker}
+                    @keydown=${this._handleKeydown}
+                    .disabled=${this.disabled}
+                    .label=${this._rangeLabel()}
+                  >
+                    <ha-svg-icon slot="icon" .path=${mdiCalendar}></ha-svg-icon>
+                  </ha-assist-chip>
+                  <ha-assist-chip
+                    class="nav-arrow"
+                    .title=${nextLabel}
+                    aria-label=${nextLabel}
+                    .disabled=${this.disabled}
                     @click=${this._handleNext}
                   >
-                  </ha-icon-button-next>`
-              : html`<ha-icon-button
-                  @click=${this._openPicker}
-                  .disabled=${this.disabled}
-                  id="field"
-                  .label=${this._i18n.localize(
-                    "ui.components.date-range-picker.select_date_range"
-                  )}
-                  .path=${mdiCalendar}
-                ></ha-icon-button>`
+                    <ha-svg-icon
+                      slot="icon"
+                      .path=${rtl ? mdiChevronLeft : mdiChevronRight}
+                    ></ha-svg-icon>
+                  </ha-assist-chip>
+                </div>`
+              : !this.minimal
+                ? html`<ha-textarea
+                      id="field"
+                      rows="1"
+                      resize="auto"
+                      @click=${this._openPicker}
+                      @keydown=${this._handleKeydown}
+                      .value=${
+                        (isThisYear(this.startDate)
+                          ? formatShortDateTime(
+                              this.startDate,
+                              this._i18n.locale,
+                              this._hassConfig
+                            )
+                          : formatShortDateTimeWithYear(
+                              this.startDate,
+                              this._i18n.locale,
+                              this._hassConfig
+                            )) +
+                        (window.innerWidth >= 459 ? " - " : " - \n") +
+                        (isThisYear(this.endDate)
+                          ? formatShortDateTime(
+                              this.endDate,
+                              this._i18n.locale,
+                              this._hassConfig
+                            )
+                          : formatShortDateTimeWithYear(
+                              this.endDate,
+                              this._i18n.locale,
+                              this._hassConfig
+                            ))
+                      }
+                      .label=${
+                        this._i18n.localize(
+                          "ui.components.date-range-picker.start_date"
+                        ) +
+                        " - " +
+                        this._i18n.localize(
+                          "ui.components.date-range-picker.end_date"
+                        )
+                      }
+                      .disabled=${this.disabled}
+                      readonly
+                    ></ha-textarea>
+                    <ha-icon-button-prev
+                      .label=${this._i18n.localize("ui.common.previous")}
+                      @click=${this._handlePrev}
+                    >
+                    </ha-icon-button-prev>
+                    <ha-icon-button-next
+                      .label=${this._i18n.localize("ui.common.next")}
+                      @click=${this._handleNext}
+                    >
+                    </ha-icon-button-next>`
+                : html`<ha-icon-button
+                    @click=${this._openPicker}
+                    .disabled=${this.disabled}
+                    id="field"
+                    .label=${this._i18n.localize(
+                      "ui.components.date-range-picker.select_date_range"
+                    )}
+                    .path=${mdiCalendar}
+                  ></ha-icon-button>`
           }
         </div>
         ${
@@ -246,6 +294,18 @@ export class HaDateRangePicker extends LitElement {
         }
       </div>
     `;
+  }
+
+  private _rangeLabel(): string {
+    const format = (date: Date) =>
+      isThisYear(date)
+        ? formatShortDateTime(date, this._i18n.locale, this._hassConfig)
+        : formatShortDateTimeWithYear(
+            date,
+            this._i18n.locale,
+            this._hassConfig
+          );
+    return `${format(this.startDate)} – ${format(this.endDate)}`;
   }
 
   private _renderPicker() {
@@ -340,6 +400,13 @@ export class HaDateRangePicker extends LitElement {
     if (this.disabled) {
       return;
     }
+    // In chip mode the clickable chip is nested inside the popover anchor
+    // (#field / .range-nav). wa-popover treats its anchor as a toggle, so if
+    // the opening click bubbles up to the anchor it is immediately toggled
+    // closed again. Stop propagation so only our open logic runs.
+    if (this.chip) {
+      ev?.stopPropagation();
+    }
     if (this._pickerWrapperOpen) {
       ev?.stopImmediatePropagation();
       return;
@@ -416,6 +483,35 @@ export class HaDateRangePicker extends LitElement {
             ) - var(--ha-space-8)
         );
         overflow: hidden;
+      }
+
+      /* Segmented "range navigator" pill: ‹ | date range | › as one unit.
+         Built from assist chips so it matches the other filter chips' height. */
+      .range-nav {
+        display: inline-flex;
+        align-items: stretch;
+        border: 1px solid var(--outline-color);
+        border-radius: var(--ha-assist-chip-container-shape, 10px);
+        background: var(--ha-assist-chip-container-color, transparent);
+        overflow: hidden;
+      }
+      /* Blend every chip into the pill: no own outline, radius or background. */
+      .range-nav ha-assist-chip {
+        --md-assist-chip-outline-color: transparent;
+        --ha-assist-chip-container-shape: 0;
+        --ha-assist-chip-container-color: transparent;
+        display: flex;
+        align-items: center;
+      }
+      /* Icon-only stepper chips: square-ish, tight spacing, divider on the sides. */
+      .range-nav .nav-arrow {
+        --md-assist-chip-leading-space: var(--ha-space-2);
+        --md-assist-chip-trailing-space: var(--ha-space-2);
+        --md-assist-chip-with-leading-icon-leading-space: var(--ha-space-2);
+        --md-assist-chip-icon-label-space: 0;
+      }
+      .range-nav .range-chip {
+        border-inline: 1px solid var(--divider-color);
       }
     `,
   ];

@@ -25,6 +25,8 @@ const createI18n = (localize: LocalizeFunc) => ({
   localize,
   locale,
   language: "en",
+  // The picker reads this to resolve text direction; empty means LTR.
+  translationMetadata: { translations: {} },
 });
 
 // Localize behavior before the translation chunk has loaded.

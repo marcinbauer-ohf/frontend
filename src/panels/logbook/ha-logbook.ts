@@ -1,11 +1,14 @@
+import { mdiTextBoxOutline } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
+import { fireEvent } from "../../common/dom/fire_event";
 import { computeStateDomain } from "../../common/entity/compute_state_domain";
 import { throttle } from "../../common/util/throttle";
 import "../../components/ha-spinner";
+import "../../components/ha-svg-icon";
 import type { LogbookEntry, LogbookStreamMessage } from "../../data/logbook";
 import { subscribeLogbook } from "../../data/logbook";
 import type { TraceContexts } from "../../data/trace";
@@ -129,8 +132,16 @@ export class HaLogbook extends LitElement {
     }
 
     if (this._logbookEntries.length === 0) {
-      return html`<div class="no-entries">
-        ${this.hass.localize("ui.components.logbook.entries_not_found")}
+      return html`<div class="empty-state">
+        <div class="empty-state-content">
+          <ha-svg-icon
+            class="empty-state-icon"
+            .path=${mdiTextBoxOutline}
+          ></ha-svg-icon>
+          <h1>
+            ${this.hass.localize("ui.components.logbook.entries_not_found")}
+          </h1>
+        </div>
       </div>`;
     }
 
@@ -169,6 +180,18 @@ export class HaLogbook extends LitElement {
       this._getLogBookData();
     } else {
       this._throttleGetLogbookEntries();
+    }
+  }
+
+  protected updated(changedProps: PropertyValues): void {
+    super.updated(changedProps);
+    // Let the host (e.g. the activity panel) render its own empty state with a
+    // call to action instead of our plain "no activity" text.
+    if (changedProps.has("_logbookEntries")) {
+      fireEvent(this, "logbook-loaded", {
+        loading: this._logbookEntries === undefined,
+        empty: this._logbookEntries?.length === 0,
+      });
     }
   }
 
@@ -516,6 +539,37 @@ export class HaLogbook extends LitElement {
           color: var(--secondary-text-color);
         }
 
+        .empty-state {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          box-sizing: border-box;
+        }
+
+        .empty-state-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          gap: var(--ha-space-4);
+          max-width: 640px;
+          padding: var(--ha-space-8) var(--ha-space-4);
+          box-sizing: border-box;
+        }
+
+        .empty-state-icon {
+          --mdc-icon-size: var(--ha-space-16);
+          color: var(--secondary-text-color);
+        }
+
+        .empty-state-content h1 {
+          margin: 0;
+          font-size: var(--ha-font-size-xl);
+          font-weight: 500;
+        }
+
         .progress-wrapper {
           display: flex;
           justify-content: center;
@@ -530,5 +584,8 @@ export class HaLogbook extends LitElement {
 declare global {
   interface HTMLElementTagNameMap {
     "ha-logbook": HaLogbook;
+  }
+  interface HASSDomEvents {
+    "logbook-loaded": { loading: boolean; empty: boolean };
   }
 }

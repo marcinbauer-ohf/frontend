@@ -67,6 +67,12 @@ class HaLogbookRenderer extends LitElement {
 
   @state() private _showRelative = false;
 
+  // Index of the top-most visible entry, used to drive the floating (sticky)
+  // date header. The list is virtualized, so a CSS `position: sticky` header
+  // inside a row can't stick; instead one header is overlaid on the list and
+  // follows whichever day is currently at the top.
+  @state() private _firstVisibleIndex = 0;
+
   protected willUpdate(changedProps: PropertyValues<this>) {
     if (
       (!this.hasUpdated && this.virtualize) ||
@@ -92,6 +98,7 @@ class HaLogbookRenderer extends LitElement {
       changedProps.has("userIdToName") ||
       changedProps.has("systemUserIds") ||
       changedProps.has("_showRelative" as never) ||
+      changedProps.has("_firstVisibleIndex" as never) ||
       languageChanged
     );
   }
@@ -105,6 +112,10 @@ class HaLogbookRenderer extends LitElement {
       `;
     }
 
+    const floatingEntry = this.virtualize
+      ? this.entries[this._firstVisibleIndex]
+      : undefined;
+
     return html`
       <div
         class="container ha-scrollbar"
@@ -112,6 +123,13 @@ class HaLogbookRenderer extends LitElement {
         @logbook-toggle-time=${this._handleToggleTime}
         @logbook-entry-selected=${this._handleEntrySelected}
       >
+        ${
+          floatingEntry
+            ? html`<h4 class="date floating-date">
+                ${this._formatDateHeader(new Date(floatingEntry.when * 1000))}
+              </h4>`
+            : nothing
+        }
         ${
           this.virtualize
             ? html`<lit-virtualizer
@@ -229,6 +247,7 @@ class HaLogbookRenderer extends LitElement {
 
   @eventOptions({ passive: true })
   private _visibilityChanged(e: VisibilityChangedEvent) {
+    this._firstVisibleIndex = Math.max(0, e.first);
     fireEvent(this, "hass-logbook-live", {
       enable: e.first === 0,
     });
@@ -255,12 +274,26 @@ class HaLogbookRenderer extends LitElement {
           font-weight: var(--ha-font-weight-medium);
         }
 
+        /* Sticky day header overlaid on the virtualized list; it tracks the
+           top-most visible day. Matches the inline .date so they line up as
+           the inline headers scroll underneath it. */
+        .floating-date {
+          position: absolute;
+          top: 0;
+          inset-inline: 0;
+          z-index: 2;
+          margin: 0;
+          padding-bottom: var(--ha-space-2);
+          background-color: var(--card-background-color);
+        }
+
         .no-entries {
           text-align: center;
           color: var(--secondary-text-color);
         }
 
         .container {
+          position: relative;
           max-height: var(--logbook-max-height);
         }
 
