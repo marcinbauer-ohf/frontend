@@ -31,6 +31,7 @@ import "../../components/chips/ha-assist-chip";
 import "../../components/date-picker/ha-date-range-picker";
 import "../../components/ha-adaptive-dialog";
 import "../../components/ha-button";
+import "../../components/ha-card";
 import "../../components/ha-dialog-footer";
 import "../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
@@ -134,7 +135,28 @@ export class HaPanelLogbook extends LitElement {
           </ha-dropdown-item>
         </ha-dropdown>
 
-        <div class="content">${this._renderMain(targetCount, filterCount)}</div>
+        <div class="content">
+          ${
+            // Flush under the app bar on mobile; on desktop the feed sits in a
+            // centered card, with the detail sidebar as its own card beside it.
+            this.narrow
+              ? this._renderMain(targetCount, filterCount)
+              : html`<div class="results-row">
+                  <ha-card class="results">
+                    ${this._renderMain(targetCount, filterCount)}
+                  </ha-card>
+                  ${
+                    this._detailParams
+                      ? html`<ha-logbook-detail-sidebar
+                          .hass=${this.hass}
+                          .params=${this._detailParams}
+                          @close-sidebar=${this._closeSidebar}
+                        ></ha-logbook-detail-sidebar>`
+                      : nothing
+                  }
+                </div>`
+          }
+        </div>
       </ha-top-app-bar-fixed>
       ${
         this.narrow && this._showSources
@@ -248,15 +270,6 @@ export class HaPanelLogbook extends LitElement {
             @logbook-detail-requested=${this._detailRequested}
           ></ha-logbook>
         </div>
-        ${
-          this._detailParams
-            ? html`<ha-logbook-detail-sidebar
-                .hass=${this.hass}
-                .params=${this._detailParams}
-                @close-sidebar=${this._closeSidebar}
-              ></ha-logbook-detail-sidebar>`
-            : nothing
-        }
       </div>
     `;
   }
@@ -754,6 +767,36 @@ export class HaPanelLogbook extends LitElement {
           overflow: hidden;
         }
 
+        /* On desktop everything lives in a card; on mobile it is flush. */
+        :host(:not([narrow])) .content {
+          padding: var(--ha-space-4);
+        }
+
+        /* Constrained and centered like the automation editor content. The row
+           holds it so the card and the sidebar beside it share the bounds. */
+        .results-row {
+          display: flex;
+          flex: 1;
+          min-height: 0;
+          gap: var(--ha-space-4);
+          width: 100%;
+          max-width: var(--ha-automation-editor-width, 1540px);
+          margin-inline: auto;
+        }
+
+        .results {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+
+        /* Inside the card the toolbar matches the card surface (not greyish). */
+        :host(:not([narrow])) .toolbar {
+          background: var(--card-background-color);
+        }
+
         /* Toolbar lives in the content column so it shifts with the pane. */
         .toolbar {
           display: flex;
@@ -822,13 +865,11 @@ export class HaPanelLogbook extends LitElement {
         }
 
         /* Narrow enough to leave the feed readable at the 870px breakpoint
-           where the bottom sheet takes over. */
+           where the bottom sheet takes over. The row's gap and the content
+           padding space it, so it carries none of its own. */
         ha-logbook-detail-sidebar {
           flex: 0 0 clamp(320px, 30vw, 480px);
-          box-sizing: border-box;
-          padding-block: var(--ha-space-4);
-          padding-inline-end: var(--ha-space-4);
-          padding-inline-start: 0;
+          min-width: 0;
         }
 
         .log {
