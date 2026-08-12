@@ -17,11 +17,13 @@ import "./ha-logbook-entry";
 import type { LogbookEntrySelectedDetail } from "./ha-logbook-entry";
 import type { LogbookNameDetail } from "./logbook-entry-model";
 import { sameDay } from "./logbook-entry-model";
+import type { LogbookDetailDialogParams } from "./show-dialog-logbook-detail";
 import { showLogbookDetailDialog } from "./show-dialog-logbook-detail";
 
 declare global {
   interface HASSDomEvents {
     "hass-logbook-live": { enable: boolean };
+    "logbook-detail-requested": LogbookDetailDialogParams;
   }
 }
 
@@ -54,6 +56,9 @@ class HaLogbookRenderer extends LitElement {
 
   @property({ type: Boolean, attribute: "no-detail" }) public noDetail = false;
 
+  @property({ type: Boolean, attribute: "no-chevron" }) public noChevron =
+    false;
+
   @property({ type: String, attribute: "name-detail" })
   public nameDetail?: LogbookNameDetail;
 
@@ -83,6 +88,7 @@ class HaLogbookRenderer extends LitElement {
     return (
       changedProps.has("entries") ||
       changedProps.has("noDetail") ||
+      changedProps.has("noChevron") ||
       changedProps.has("userIdToName") ||
       changedProps.has("systemUserIds") ||
       changedProps.has("_showRelative" as never) ||
@@ -171,6 +177,7 @@ class HaLogbookRenderer extends LitElement {
           .showRelative=${this._showRelative}
           .showCause=${this.showCause}
           .noDetail=${this.noDetail}
+          .noChevron=${this.noChevron}
         ></ha-logbook-entry>
       </div>
     `;
@@ -180,14 +187,22 @@ class HaLogbookRenderer extends LitElement {
     this._showRelative = !this._showRelative;
   }
 
+  // A host that can show the detail itself (the panel's sidebar) claims the
+  // selection by calling preventDefault; everyone else gets the dialog.
   private _handleEntrySelected(ev: HASSDomEvent<LogbookEntrySelectedDetail>) {
     ev.stopPropagation();
-    showLogbookDetailDialog(this, {
+    const params: LogbookDetailDialogParams = {
       entry: ev.detail.item,
       traceContexts: this.traceContexts,
       userIdToName: this.userIdToName,
       systemUserIds: this.systemUserIds,
+    };
+    const request = fireEvent(this, "logbook-detail-requested", params, {
+      cancelable: true,
     });
+    if (!request.defaultPrevented) {
+      showLogbookDetailDialog(this, params);
+    }
   }
 
   private _formatDateHeader(date: Date): string {

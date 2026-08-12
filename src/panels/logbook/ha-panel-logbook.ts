@@ -6,7 +6,7 @@ import {
 } from "@mdi/js";
 import type { HassServiceTarget } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
-import { css, html, LitElement } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { fromUnixTime } from "date-fns";
@@ -36,7 +36,10 @@ import { resolveEntityIDs } from "../../data/selector";
 import { haStyle } from "../../resources/styles";
 import type { HomeAssistant } from "../../types";
 import "./ha-logbook";
+import "./ha-logbook-detail-sidebar";
+import type { LogbookDetailDialogParams } from "./show-dialog-logbook-detail";
 import { showAlertDialog } from "../../dialogs/generic/show-dialog-box";
+import type { HASSDomEvent } from "../../common/dom/fire_event";
 import { csvDownload, csvSafeString } from "../../util/csv";
 
 interface LogbookState {
@@ -58,6 +61,10 @@ export class HaPanelLogbook extends LitElement {
   private _showBack?: boolean;
 
   @state() private _targetPickerValue: HassServiceTarget = {};
+
+  // Set only when the detail is shown beside the feed; narrow screens let the
+  // dialog handle it instead.
+  @state() private _detailParams?: LogbookDetailDialogParams;
 
   // Remembers the last user-picked selection as a fallback for visits without
   // URL params. Kept separate from _targetPickerValue because localStorage is
@@ -107,36 +114,69 @@ export class HaPanelLogbook extends LitElement {
           </ha-dropdown-item>
         </ha-dropdown>
 
-        <div class="content">
-          <div class="filters">
-            <ha-date-range-picker
-              .startDate=${this._time.range[0]}
-              .endDate=${this._time.range[1]}
-              @value-changed=${this._dateRangeChanged}
-              time-picker
-            ></ha-date-range-picker>
+        <div class="layout">
+          <div class="content">
+            <div class="filters">
+              <ha-date-range-picker
+                .startDate=${this._time.range[0]}
+                .endDate=${this._time.range[1]}
+                @value-changed=${this._dateRangeChanged}
+                time-picker
+              ></ha-date-range-picker>
 
-            <ha-target-picker
+              <ha-target-picker
+                .hass=${this.hass}
+                .entityFilter=${this._filterFunc}
+                .value=${this._targetPickerValue}
+                add-on-top
+                @value-changed=${this._targetsChanged}
+                compact
+              ></ha-target-picker>
+            </div>
+
+            <ha-logbook
               .hass=${this.hass}
-              .entityFilter=${this._filterFunc}
-              .value=${this._targetPickerValue}
-              add-on-top
-              @value-changed=${this._targetsChanged}
-              compact
-            ></ha-target-picker>
+              .time=${this._time}
+              .entityIds=${this._getEntityIds()}
+              .narrow=${this.narrow}
+              show-cause
+              virtualize
+              ?no-chevron=${this._detailInSidebar}
+              @logbook-detail-requested=${this._detailRequested}
+            ></ha-logbook>
           </div>
-
-          <ha-logbook
-            .hass=${this.hass}
-            .time=${this._time}
-            .entityIds=${this._getEntityIds()}
-            .narrow=${this.narrow}
-            show-cause
-            virtualize
-          ></ha-logbook>
+          ${
+            this._detailParams
+              ? html`<ha-logbook-detail-sidebar
+                  .hass=${this.hass}
+                  .params=${this._detailParams}
+                  @close-sidebar=${this._closeSidebar}
+                ></ha-logbook-detail-sidebar>`
+              : nothing
+          }
         </div>
       </ha-top-app-bar-fixed>
     `;
+  }
+
+  // Whether there is room to show the detail beside the feed instead of over
+  // it. Also drives the rows' chevron: beside the feed a row is a selection,
+  // not a step into a separate view.
+  private get _detailInSidebar() {
+    return !this.narrow;
+  }
+
+  private _detailRequested(ev: HASSDomEvent<LogbookDetailDialogParams>) {
+    if (!this._detailInSidebar) {
+      // Let the renderer fall back to the dialog, a bottom sheet at this width.
+      return;
+    }
+    ev.preventDefault();
+    this._detailParams = ev.detail;
+  }
+
+  private _closeSidebar() {
+    this._detailParams = undefined;
   }
 
   private _filterFunc: HaEntityPickerEntityFilterFunc = (entity) =>
@@ -144,6 +184,12 @@ export class HaPanelLogbook extends LitElement {
 
   protected willUpdate(changedProps: PropertyValues<this>) {
     super.willUpdate(changedProps);
+
+    // Below the breakpoint the bottom sheet takes over, so drop the sidebar
+    // rather than leaving it squeezed beside the feed.
+    if (changedProps.has("narrow") && !this._detailInSidebar) {
+      this._detailParams = undefined;
+    }
 
     if (this.hasUpdated) {
       return;
@@ -366,17 +412,37 @@ export class HaPanelLogbook extends LitElement {
           --ha-generic-picker-max-width: 400px;
         }
 
-        .content {
+        .layout {
           display: flex;
-          flex-direction: column;
+          align-items: stretch;
           height: calc(
             100vh - var(--header-height, 0px) - var(
                 --safe-area-inset-top,
                 0px
               ) - var(--safe-area-inset-bottom, 0px)
           );
+        }
+
+        .content {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          min-width: 0;
+          height: 100%;
           overflow-x: hidden;
           padding: 0 0 16px;
+        }
+
+        /* Narrow enough to leave the feed readable at the 870px breakpoint
+           where the bottom sheet takes over. */
+        ha-logbook-detail-sidebar {
+          flex: 0 0 clamp(320px, 30vw, 480px);
+          box-sizing: border-box;
+          /* Top padding matches the filter row's, so the card starts level
+             with the controls across the feed. */
+          padding-block: var(--ha-space-4);
+          padding-inline-end: var(--ha-space-4);
+          padding-inline-start: 0;
         }
 
         ha-logbook {

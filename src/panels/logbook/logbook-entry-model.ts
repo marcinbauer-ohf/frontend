@@ -356,6 +356,8 @@ const computeLogbookValue = (
 export interface LogbookItem {
   category: LogbookEntryCategory;
   glyph: LogbookGlyph;
+  // The entity's own domain, or the integration that logged an entity-less row.
+  domain?: string;
   entityId?: string;
   name?: string;
   context?: string;
@@ -400,6 +402,7 @@ export const computeLogbookItem = (
   return {
     category,
     glyph: computeLogbookGlyph(entry, category, historicStateObj, domain),
+    domain,
     entityId: entry.entity_id,
     name: display?.primary ?? entry.name,
     context: display?.secondary,
