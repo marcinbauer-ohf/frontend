@@ -615,13 +615,49 @@ export class HaAutomationRowTargets extends LitElement {
       justify-content: center;
       align-items: center;
       border-radius: var(--ha-border-radius-md);
-      background: var(--ha-color-fill-neutral-normal-resting);
       padding: 0 var(--ha-space-2) 0 var(--ha-space-1);
       color: var(--ha-color-on-neutral-normal);
-      border: var(--ha-border-width-sm) solid
-        var(--ha-color-border-neutral-quiet);
+      /*
+       * A chip can be a <button>, and the UA's default buttonface then sits
+       * under the tint: lighter than the card in dark mode, darker in light.
+       * That, not the tint, was why these never matched the parameter chips.
+       */
+      background: none;
+      /*
+       * Transparent rather than removed: there is no global border-box reset,
+       * so dropping the border would make a target chip 2px shorter than the
+       * bordered parameter chips it sits beside.
+       */
+      border: var(--ha-border-width-sm) solid transparent;
       overflow: hidden;
       height: 32px;
+      position: relative;
+    }
+    /*
+     * A translucent layer of the text colour instead of fill-neutral-normal:
+     * that token is neutral-10 (#202020) in dark mode against a #1c1c1c card,
+     * so the chip read as outlined rather than filled. --primary-text-color
+     * inverts with the theme, so one layer works in both.
+     * (color-mix would say this directly but is not safe for our browser
+     * support -- see ha-logbook-entry.)
+     */
+    .target:not(.warning):not(.error)::before {
+      content: "";
+      transition: opacity var(--ha-animation-duration-fast, 100ms) ease-in-out;
+      position: absolute;
+      /* Negative so the tint covers the transparent border ring too */
+      inset: calc(-1 * var(--ha-border-width-sm));
+      background-color: var(--primary-text-color);
+      opacity: 0.11;
+      pointer-events: none;
+      border-radius: inherit;
+      z-index: 0;
+    }
+    /* Explicitly above the tint; relying on paint order alone left the label
+       sitting under it and washed out. */
+    .target > * {
+      position: relative;
+      z-index: 1;
     }
     .target.warning {
       background: var(--ha-color-fill-warning-normal-resting);
@@ -653,8 +689,8 @@ export class HaAutomationRowTargets extends LitElement {
     button.target {
       cursor: pointer;
     }
-    button.target:hover {
-      background: var(--ha-color-fill-neutral-normal-hover);
+    button.target:not(.warning):not(.error):hover::before {
+      opacity: 0.18;
     }
 
     ha-dropdown-item {
