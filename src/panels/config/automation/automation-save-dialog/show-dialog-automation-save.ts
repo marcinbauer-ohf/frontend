@@ -12,7 +12,6 @@ interface BaseRenameDialogParams {
   onClose: () => void;
   onDiscard?: () => void;
   saveText?: string;
-  description?: string;
   title?: string;
   hideInputs?: boolean;
 }

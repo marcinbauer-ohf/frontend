@@ -815,11 +815,6 @@ export class HaScriptEditor extends SubscribeMixin(
             ? "ui.panel.config.script.editor.leave.unsaved_confirm_title"
             : "ui.panel.config.script.editor.leave.unsaved_new_title"
         ),
-        description: this.hass.localize(
-          this.scriptId
-            ? "ui.panel.config.script.editor.leave.unsaved_confirm_text"
-            : "ui.panel.config.script.editor.leave.unsaved_new_text"
-        ),
         hideInputs: this.scriptId !== null,
       });
     });

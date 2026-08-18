@@ -1,10 +1,7 @@
-import { mdiPlus } from "@mdi/js";
 import type { CSSResultGroup } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { fireEvent } from "../../../../common/dom/fire_event";
-import "../../../../components/chips/ha-assist-chip";
-import "../../../../components/chips/ha-chip-set";
 import "../../../../components/ha-alert";
 import "../../../../components/ha-area-picker";
 import "../../../../components/ha-dialog";
@@ -15,7 +12,6 @@ import "../../../../components/ha-icon-picker";
 import "../../../../components/ha-labels-picker";
 import "../../../../components/ha-suggest-with-ai-button";
 import type { SuggestWithAIGenerateTask } from "../../../../components/ha-suggest-with-ai-button";
-import "../../../../components/ha-svg-icon";
 import "../../../../components/ha-textarea";
 import "../../../../components/input/ha-input";
 import "../../category/ha-category-picker";
@@ -27,12 +23,14 @@ import type { ScriptConfig } from "../../../../data/script";
 import type { HassDialog } from "../../../../dialogs/make-dialog-manager";
 import { DirtyStateProviderMixin } from "../../../../mixins/dirty-state-provider-mixin";
 import { haStyle, haStyleDialog } from "../../../../resources/styles";
-import type { HomeAssistant } from "../../../../types";
+import type { HomeAssistant, ValueChangedEvent } from "../../../../types";
 import {
   type MetadataSuggestionResult,
   generateMetadataSuggestionTask,
   processMetadataSuggestion,
 } from "../../common/suggest-metadata-ai";
+import type { AddMetaOption } from "../../common/ha-add-meta-button";
+import "../../common/ha-add-meta-button";
 import { buildEntityMetadataInspirations } from "../../common/suggest-metadata-inspirations";
 import type {
   EntityRegistryUpdate,
@@ -116,16 +114,43 @@ class DialogAutomationSave
     fireEvent(this, "dialog-closed", { dialog: this.localName });
   }
 
-  protected _renderOptionalChip(id: string, label: string) {
-    if (this._visibleOptionals.includes(id)) {
-      return nothing;
-    }
-
-    return html`
-      <ha-assist-chip id=${id} @click=${this._addOptional} label=${label}>
-        <ha-svg-icon slot="icon" .path=${mdiPlus}></ha-svg-icon>
-      </ha-assist-chip>
-    `;
+  private get _addMetaOptions(): AddMetaOption[] {
+    return [
+      {
+        id: "description",
+        label: this.hass.localize(
+          "ui.panel.config.automation.editor.dialog.add_description"
+        ),
+      },
+      ...(this._params?.domain === "script"
+        ? [
+            {
+              id: "icon",
+              label: this.hass.localize(
+                "ui.panel.config.automation.editor.dialog.add_icon"
+              ),
+            },
+          ]
+        : []),
+      {
+        id: "category",
+        label: this.hass.localize(
+          "ui.panel.config.automation.editor.dialog.add_category"
+        ),
+      },
+      {
+        id: "labels",
+        label: this.hass.localize(
+          "ui.panel.config.automation.editor.dialog.add_labels"
+        ),
+      },
+      {
+        id: "area",
+        label: this.hass.localize(
+          "ui.panel.config.automation.editor.dialog.add_area"
+        ),
+      },
+    ].filter((option) => !this._visibleOptionals.includes(option.id));
   }
 
   private get _isDiscardDialog(): boolean {
@@ -138,12 +163,13 @@ class DialogAutomationSave
     }
     return html`
       <ha-button
+        class="discard"
         slot="secondaryAction"
         appearance="plain"
         variant="danger"
         @click=${this._handleDiscard}
       >
-        ${this.hass.localize("ui.common.dont_save")}
+        ${this.hass.localize("ui.common.discard")}
       </ha-button>
     `;
   }
@@ -234,42 +260,13 @@ class DialogAutomationSave
           : nothing
       }
 
-      <ha-chip-set>
-        ${this._renderOptionalChip(
-          "description",
-          this.hass.localize(
-            "ui.panel.config.automation.editor.dialog.add_description"
-          )
+      <ha-add-meta-button
+        .options=${this._addMetaOptions}
+        .label=${this.hass.localize(
+          "ui.panel.config.automation.editor.dialog.add_details"
         )}
-        ${
-          this._params.domain === "script"
-            ? this._renderOptionalChip(
-                "icon",
-                this.hass.localize(
-                  "ui.panel.config.automation.editor.dialog.add_icon"
-                )
-              )
-            : nothing
-        }
-        ${this._renderOptionalChip(
-          "category",
-          this.hass.localize(
-            "ui.panel.config.automation.editor.dialog.add_category"
-          )
-        )}
-        ${this._renderOptionalChip(
-          "labels",
-          this.hass.localize(
-            "ui.panel.config.automation.editor.dialog.add_labels"
-          )
-        )}
-        ${this._renderOptionalChip(
-          "area",
-          this.hass.localize(
-            "ui.panel.config.automation.editor.dialog.add_area"
-          )
-        )}
-      </ha-chip-set>
+        @value-changed=${this._addOptional}
+      ></ha-add-meta-button>
     `;
   }
 
@@ -284,12 +281,19 @@ class DialogAutomationSave
         : "ui.common.save"
     );
 
+    // Without inputs the dialog is a plain confirmation: keep it compact and
+    // let it stay a centered box on small screens instead of going fullscreen.
+    const confirmOnly = this._params.hideInputs === true;
+
     return html`
       <ha-dialog
+        class=${confirmOnly ? "confirm" : ""}
         .open=${this._open}
         @closed=${this._dialogClosed}
         header-title=${this._params.title || title}
         .preventScrimClose=${this.isDirtyState}
+        .type=${confirmOnly ? "alert" : "standard"}
+        .width=${confirmOnly ? "small" : "medium"}
       >
         ${
           this._params.hideInputs
@@ -309,11 +313,6 @@ class DialogAutomationSave
                 )}</ha-alert
               >`
             : ""
-        }
-        ${
-          this._params.description
-            ? html`<p>${this._params.description}</p>`
-            : nothing
         }
         ${this._renderInputs()}
         <ha-dialog-footer slot="footer">
@@ -345,10 +344,9 @@ class DialogAutomationSave
     `;
   }
 
-  private _addOptional(ev) {
+  private _addOptional(ev: ValueChangedEvent<string>) {
     ev.stopPropagation();
-    const option: string = ev.target.id;
-    this._visibleOptionals = [...this._visibleOptionals, option];
+    this._visibleOptionals = [...this._visibleOptionals, ev.detail.value];
   }
 
   private _trackDirtyState() {
@@ -497,6 +495,9 @@ class DialogAutomationSave
           --dialog-content-padding: 0 var(--ha-space-6) var(--ha-space-6)
             var(--ha-space-6);
         }
+        ha-dialog.confirm {
+          --dialog-content-padding: 0;
+        }
 
         ha-textarea,
         ha-icon-picker,
@@ -508,9 +509,16 @@ class DialogAutomationSave
         ha-icon-picker,
         ha-category-picker,
         ha-labels-picker,
-        ha-area-picker,
-        ha-chip-set:has(> ha-assist-chip) {
+        ha-area-picker {
           margin-top: var(--ha-space-4);
+        }
+        ha-add-meta-button {
+          margin-top: var(--ha-space-2);
+        }
+        ha-button.discard {
+          margin-right: auto;
+          margin-inline-end: auto;
+          margin-inline-start: initial;
         }
         ha-alert {
           display: block;

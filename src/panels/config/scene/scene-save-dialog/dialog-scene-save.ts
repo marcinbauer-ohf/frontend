@@ -1,10 +1,7 @@
-import { mdiPlus } from "@mdi/js";
 import type { CSSResultGroup } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { fireEvent } from "../../../../common/dom/fire_event";
-import "../../../../components/chips/ha-assist-chip";
-import "../../../../components/chips/ha-chip-set";
 import "../../../../components/ha-alert";
 import "../../../../components/ha-area-picker";
 import "../../../../components/ha-domain-icon";
@@ -16,7 +13,6 @@ import "../../../../components/ha-icon-picker";
 import "../../../../components/ha-labels-picker";
 import "../../../../components/ha-suggest-with-ai-button";
 import type { SuggestWithAIGenerateTask } from "../../../../components/ha-suggest-with-ai-button";
-import "../../../../components/ha-svg-icon";
 import "../../../../components/input/ha-input";
 import "../../category/ha-category-picker";
 
@@ -24,13 +20,15 @@ import type { GenDataTaskResult } from "../../../../data/ai_task";
 import type { SceneConfig } from "../../../../data/scene";
 import { DirtyStateProviderMixin } from "../../../../mixins/dirty-state-provider-mixin";
 import { haStyleDialog } from "../../../../resources/styles";
-import type { HomeAssistant } from "../../../../types";
+import type { HomeAssistant, ValueChangedEvent } from "../../../../types";
 import {
   type MetadataSuggestionInclude,
   type MetadataSuggestionResult,
   generateMetadataSuggestionTask,
   processMetadataSuggestion,
 } from "../../common/suggest-metadata-ai";
+import type { AddMetaOption } from "../../common/ha-add-meta-button";
+import "../../common/ha-add-meta-button";
 import { buildEntityMetadataInspirations } from "../../common/suggest-metadata-inspirations";
 import type {
   EntityRegistryUpdate,
@@ -113,16 +111,21 @@ class DialogSceneSave extends DirtyStateProviderMixin<SceneSaveState>()(
     fireEvent(this, "dialog-closed", { dialog: this.localName });
   }
 
-  protected _renderOptionalChip(id: string, label: string) {
-    if (this._visibleOptionals.includes(id)) {
-      return nothing;
-    }
-
-    return html`
-      <ha-assist-chip id=${id} @click=${this._addOptional} label=${label}>
-        <ha-svg-icon slot="icon" .path=${mdiPlus}></ha-svg-icon>
-      </ha-assist-chip>
-    `;
+  private get _addMetaOptions(): AddMetaOption[] {
+    return [
+      {
+        id: "category",
+        label: this.hass.localize(
+          "ui.panel.config.scene.editor.dialog.add_category"
+        ),
+      },
+      {
+        id: "labels",
+        label: this.hass.localize(
+          "ui.panel.config.scene.editor.dialog.add_labels"
+        ),
+      },
+    ].filter((option) => !this._visibleOptionals.includes(option.id));
   }
 
   protected _renderInputs() {
@@ -182,16 +185,13 @@ class DialogSceneSave extends DirtyStateProviderMixin<SceneSaveState>()(
           : nothing
       }
 
-      <ha-chip-set>
-        ${this._renderOptionalChip(
-          "category",
-          this.hass.localize("ui.panel.config.scene.editor.dialog.add_category")
+      <ha-add-meta-button
+        .options=${this._addMetaOptions}
+        .label=${this.hass.localize(
+          "ui.panel.config.scene.editor.dialog.add_details"
         )}
-        ${this._renderOptionalChip(
-          "labels",
-          this.hass.localize("ui.panel.config.scene.editor.dialog.add_labels")
-        )}
-      </ha-chip-set>
+        @value-changed=${this._addOptional}
+      ></ha-add-meta-button>
     `;
   }
 
@@ -244,12 +244,13 @@ class DialogSceneSave extends DirtyStateProviderMixin<SceneSaveState>()(
             this._params.onDiscard
               ? html`
                   <ha-button
+                    class="discard"
                     slot="secondaryAction"
                     variant="danger"
                     appearance="plain"
                     @click=${this._handleDiscard}
                   >
-                    ${this.hass.localize("ui.common.dont_save")}
+                    ${this.hass.localize("ui.common.discard")}
                   </ha-button>
                 `
               : nothing
@@ -277,10 +278,9 @@ class DialogSceneSave extends DirtyStateProviderMixin<SceneSaveState>()(
     `;
   }
 
-  private _addOptional(ev) {
+  private _addOptional(ev: ValueChangedEvent<string>) {
     ev.stopPropagation();
-    const option: string = ev.target.id;
-    this._visibleOptionals = [...this._visibleOptionals, option];
+    this._visibleOptionals = [...this._visibleOptionals, ev.detail.value];
   }
 
   private _trackDirtyState() {
@@ -402,6 +402,11 @@ class DialogSceneSave extends DirtyStateProviderMixin<SceneSaveState>()(
         ha-area-picker {
           display: block;
           margin-bottom: var(--ha-space-5);
+        }
+        ha-button.discard {
+          margin-right: auto;
+          margin-inline-end: auto;
+          margin-inline-start: initial;
         }
         ha-alert {
           display: block;

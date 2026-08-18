@@ -507,7 +507,7 @@
       "name": "Name",
       "optional": "optional",
       "default": "Default",
-      "dont_save": "Don't save",
+      "discard": "Discard",
       "copy": "Copy",
       "show": "Show",
       "replace": "Replace",
@@ -5168,9 +5168,7 @@
             },
             "leave": {
               "unsaved_new_title": "Save new automation?",
-              "unsaved_new_text": "You can save your changes, or delete this automation. You can't undo this action.",
-              "unsaved_confirm_title": "Save changes?",
-              "unsaved_confirm_text": "You have made some changes in this automation. You can save these changes, or discard them and leave. You can't undo this action."
+              "unsaved_confirm_title": "Save changes?"
             },
             "icon": "Icon",
             "blueprint": {
@@ -6042,7 +6040,8 @@
               "add_icon": "Add icon",
               "add_category": "Add category",
               "add_labels": "Add labels",
-              "add_area": "Add area"
+              "add_area": "Add area",
+              "add_details": "Add details"
             },
             "paste_confirm": {
               "title": "Pasted automation",
@@ -6304,9 +6303,7 @@
             "link_available_actions": "Learn more about available actions",
             "leave": {
               "unsaved_new_title": "Save new script?",
-              "unsaved_new_text": "You can save your changes, or delete this script. You can't undo this action.",
-              "unsaved_confirm_title": "Save changes?",
-              "unsaved_confirm_text": "You have made some changes in this script. You can save these changes, or discard them and leave. You can't undo this action."
+              "unsaved_confirm_title": "Save changes?"
             },
             "paste_confirm": {
               "title": "Pasted script",
@@ -6379,7 +6376,8 @@
               "add_icon": "[%key:ui::panel::config::automation::editor::dialog::add_icon%]",
               "add_area": "[%key:ui::panel::config::automation::editor::dialog::add_area%]",
               "add_category": "[%key:ui::panel::config::automation::editor::dialog::add_category%]",
-              "add_labels": "[%key:ui::panel::config::automation::editor::dialog::add_labels%]"
+              "add_labels": "[%key:ui::panel::config::automation::editor::dialog::add_labels%]",
+              "add_details": "[%key:ui::panel::config::automation::editor::dialog::add_details%]"
             },
             "devices": {
               "header": "Devices",

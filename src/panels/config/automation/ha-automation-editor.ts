@@ -907,11 +907,6 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
             ? "ui.panel.config.automation.editor.leave.unsaved_confirm_title"
             : "ui.panel.config.automation.editor.leave.unsaved_new_title"
         ),
-        description: this.hass.localize(
-          this.automationId
-            ? "ui.panel.config.automation.editor.leave.unsaved_confirm_text"
-            : "ui.panel.config.automation.editor.leave.unsaved_new_text"
-        ),
         hideInputs: this.automationId !== null,
       });
     });
