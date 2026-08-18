@@ -158,3 +158,52 @@ export const goBack = async (fallbackPath?: string): Promise<void> => {
 
   await navigate(fallbackPath || "/", { replace: true });
 };
+
+export interface PopNavigationGuard {
+  /** Path of the guarded page, to tell a pop that leaves it from one that does not. */
+  path: string;
+  /** URL of the guarded page to restore, query and hash included. */
+  url: string;
+  /** Asks the user whether to leave. Called after the entry is restored. */
+  prompt: () => void;
+}
+
+let popNavigationGuard: PopNavigationGuard | undefined;
+
+/**
+ * A history pop cannot be canceled, so a page with unsaved changes registers a
+ * guard for it (Android back gesture, browser back button). See
+ * `blockGuardedPop`.
+ */
+export const setPopNavigationGuard = (guard: PopNavigationGuard) => {
+  popNavigationGuard = guard;
+};
+
+/** Releases the guard, so the next pop goes through. */
+export const clearPopNavigationGuard = (prompt: () => void) => {
+  if (popNavigationGuard?.prompt === prompt) {
+    popNavigationGuard = undefined;
+  }
+};
+
+/**
+ * Puts back the entry a pop left when the guarded page refuses to leave it, and
+ * lets the guard prompt. Returns whether the pop was blocked, in which case the
+ * router must ignore it. Pops that keep the path (dialog bookkeeping) are never
+ * blocked.
+ */
+export const blockGuardedPop = (): boolean => {
+  if (!popNavigationGuard || popNavigationGuard.path === currentPath()) {
+    return false;
+  }
+
+  // pushState instead of navigate(): the entry has to be back before the router
+  // reads the path, and navigate() defers to a microtask.
+  mainWindow.history.pushState(
+    buildHistoryState(undefined, currentPath()),
+    "",
+    popNavigationGuard.url
+  );
+  popNavigationGuard.prompt();
+  return true;
+};

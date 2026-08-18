@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { NavigateOptions } from "../../src/common/navigate";
-import { canGoBack, goBack, navigate } from "../../src/common/navigate";
+import {
+  blockGuardedPop,
+  canGoBack,
+  clearPopNavigationGuard,
+  goBack,
+  navigate,
+  setPopNavigationGuard,
+} from "../../src/common/navigate";
 
 // navigate() closes open dialogs before touching history.
 vi.mock("../../src/dialogs/make-dialog-manager", () => ({
@@ -88,5 +95,61 @@ describe("goBack", () => {
     await goBack();
 
     expect(window.location.pathname).toEqual("/");
+  });
+});
+
+describe("blockGuardedPop", () => {
+  const guard = {
+    path: "/config/automation/edit/1",
+    url: "/config/automation/edit/1?tab=actions",
+    prompt: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    guard.prompt.mockClear();
+    clearPopNavigationGuard(guard.prompt);
+    setEntry("/config/automation/dashboard");
+  });
+
+  it("does nothing without a guard", () => {
+    expect(blockGuardedPop()).toBe(false);
+    expect(guard.prompt).not.toHaveBeenCalled();
+  });
+
+  it("restores the guarded page and prompts when a pop left it", () => {
+    setPopNavigationGuard(guard);
+
+    expect(blockGuardedPop()).toBe(true);
+    expect(window.location.pathname + window.location.search).toEqual(
+      "/config/automation/edit/1?tab=actions"
+    );
+    expect(window.history.state).toMatchObject({
+      from: "/config/automation/dashboard",
+    });
+    expect(guard.prompt).toHaveBeenCalledOnce();
+  });
+
+  it("lets a pop that stays on the guarded page through", () => {
+    setEntry(guard.path);
+    setPopNavigationGuard(guard);
+
+    expect(blockGuardedPop()).toBe(false);
+    expect(guard.prompt).not.toHaveBeenCalled();
+  });
+
+  it("lets the pop through once the guard is released", () => {
+    setPopNavigationGuard(guard);
+    clearPopNavigationGuard(guard.prompt);
+
+    expect(blockGuardedPop()).toBe(false);
+    expect(window.location.pathname).toEqual("/config/automation/dashboard");
+  });
+
+  it("keeps the guard when another page releases its own", () => {
+    setPopNavigationGuard(guard);
+    clearPopNavigationGuard(vi.fn());
+
+    expect(blockGuardedPop()).toBe(true);
   });
 });
