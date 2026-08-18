@@ -11,7 +11,10 @@ import "../../components/ha-dialog";
 import "../../components/ha-dialog-footer";
 import "../../components/ha-icon-button";
 import "../../components/ha-yaml-editor";
-import type { ManualAutomationConfig } from "../../data/automation";
+import {
+  showAutomationEditor,
+  type ManualAutomationConfig,
+} from "../../data/automation";
 import "../../panels/config/automation/action/ha-automation-action-row";
 import "../../panels/config/automation/condition/ha-automation-condition-row";
 import "../../panels/config/automation/trigger/ha-automation-trigger-row";
@@ -43,6 +46,12 @@ export class DialogAssistAutomationPreview extends LitElement {
     this._params = params;
     this._open = true;
     this._yamlMode = false;
+    // The editor rows describe themselves with the config panel's strings, which
+    // are a lazily loaded fragment; without this they render as bare icons
+    // wherever the dialog is opened from outside that panel.
+    this.hass.loadFragmentTranslation("config").then(() => {
+      this.requestUpdate();
+    });
   }
 
   public closeDialog(): void {
@@ -56,6 +65,12 @@ export class DialogAssistAutomationPreview extends LitElement {
 
   private _toggleYamlMode(): void {
     this._yamlMode = !this._yamlMode;
+  }
+
+  /** Hands the draft to the real editor as an unsaved automation. */
+  private _openInEditor(): void {
+    showAutomationEditor(this._params!.config);
+    this.closeDialog();
   }
 
   protected render() {
@@ -97,6 +112,15 @@ export class DialogAssistAutomationPreview extends LitElement {
             : this._renderRows()
         }
         <ha-dialog-footer slot="footer">
+          <ha-button
+            slot="secondaryAction"
+            appearance="plain"
+            @click=${this._openInEditor}
+          >
+            ${this.hass.localize(
+              "ui.dialogs.voice_command.preview.automation.open_editor"
+            )}
+          </ha-button>
           <ha-button slot="primaryAction" @click=${this.closeDialog}>
             ${this.hass.localize("ui.common.close")}
           </ha-button>

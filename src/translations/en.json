@@ -1702,7 +1702,38 @@
           "session_allowed": "Allowed. I won't ask again in this conversation.",
           "denied": "Denied. I didn't do anything."
         },
-        "mock_help": "Design mockups, not real agent behavior:\n- `/permission [action]` — the agent asks before acting\n- `/preview dashboard` — a dashboard it changed\n- `/preview automation` — an automation it created\n- `/preview settings` — settings it changed\n- `/help` — this list",
+        "mock_help": "Design mockups, not real agent behavior:\n- `/permission [action]` — the agent asks before acting\n- `/preview dashboard` — a dashboard it changed\n- `/preview automation` — an automation it created\n- `/preview settings` — settings it changed\n- `/demo` — plays the scripted automation scene\n- `/demo cards` — answers composed as tiles, controls and switches\n- `/demo reasoning` — a conclusion drawn from several parts of the home\n- `/demo suggestion` — the home speaks up on its own\n- `/help` — this list",
+        "suggestion": {
+          "title": "Noticed a pattern",
+          "noticed": "For the past few weeks, the hallway lights and the thermostat have been turned down by hand around eleven each night.",
+          "proposal": "Want this to happen on its own? At 23:00 it would turn off the hallway lights and set the hallway thermostat to 17 °C. Nothing changes until you say so.",
+          "description": "Every night at 23:00, this turns off the hallway lights and sets the hallway thermostat to 17 °C.",
+          "local": "Noticed on this device. Nothing left your home.",
+          "accept": "Create and enable",
+          "adjust": "Adjust first",
+          "dismiss": "No thanks",
+          "accepted": "Created Wind down at eleven and enabled it. You can change or delete it any time.",
+          "dismissed": "Dismissed. I won't suggest this one again."
+        },
+        "reasoning": {
+          "ask": "Why was last month's energy bill so high?",
+          "answer": "Three things stacked up. It was 4 °C colder than the month before, so the heat pump ran about a third longer, which is most of the increase. The dryer went from twice a week to almost daily after the 8th. And the immersion heater stayed on for two days while the solar diverter was offline. Colder weather explains the bulk of it, the dryer the rest."
+        },
+        "cards": {
+          "countdown": {
+            "ask": "How long until the washing machine is done?",
+            "answer": "About {remaining} left on the rinse cycle."
+          },
+          "garage": {
+            "ask": "Is the garage still open?",
+            "answer_open": "Yes, it is still open. You can close it here:",
+            "answer_closed": "No, the garage is closed."
+          },
+          "devices": {
+            "ask": "What can I switch off downstairs?",
+            "answer": "{count, plural,\n  =0 {None of these are on right now.}\n  one {One of these is on right now.}\n  other {# of these are on right now.}\n}"
+          }
+        },
         "preview": {
           "dashboard": {
             "title": "Dashboard updated",
@@ -1711,14 +1742,16 @@
           },
           "automation": {
             "title": "Automation ready to create",
-            "summary": "Lamp on at sunset: 15 minutes before sunset, turn on the living room lamp at 40%.",
-            "description": "Every day, 15 minutes before sunset, this turns on the living room lamp at 40% brightness.",
+            "ask": "When I leave the house, arm the alarm and turn the heating down \u2014 but not on weekends.",
+            "summary": "Leaving home: when you leave, arm the alarm and set the thermostat to {temperature} \u00b0C, on weekdays only, and only if the living room window is closed.",
+            "description": "When you leave home on a weekday, and the living room window is closed, this arms the alarm and sets the thermostat to {temperature} \u00b0C.",
             "link": "Show automation",
             "show_yaml": "Show YAML",
             "show_ui": "Show visual editor",
+            "open_editor": "Open in editor",
             "create": "Create and enable",
             "discard": "Discard",
-            "created": "Created Lamp on at sunset and enabled it.",
+            "created": "Created Leaving home and enabled it.",
             "discarded": "Discarded. I didn't create anything."
           },
           "settings": {

@@ -8,12 +8,14 @@ import {
   mdiCommentProcessingOutline,
   mdiEyeOutline,
   mdiHammerWrench,
+  mdiLightbulbOnOutline,
   mdiMicrophone,
   mdiRobotOutline,
   mdiSend,
   mdiShieldCheckOutline,
   mdiStar,
   mdiViewDashboardOutline,
+  mdiWashingMachine,
   mdiWeb,
 } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
@@ -25,7 +27,10 @@ import { storage } from "../common/decorators/storage";
 import { transform } from "../common/decorators/transform";
 import { fireEvent } from "../common/dom/fire_event";
 import { stopPropagation } from "../common/dom/stop_propagation";
-import type { LocalizeFunc } from "../common/translations/localize";
+import type {
+  LocalizeFunc,
+  LocalizeKeys,
+} from "../common/translations/localize";
 import {
   ASSIST_AGENT_AVATARS_STORAGE_KEY,
   type AssistAgentAvatars,
@@ -47,6 +52,8 @@ import {
   type PipelineRunEvent,
 } from "../data/assist_pipeline";
 import type { IntegrationManifest } from "../data/integration";
+import type { LovelaceCardConfig } from "../data/lovelace/config/card";
+import "../panels/lovelace/cards/hui-card";
 import {
   configContext,
   connectionContext,
@@ -74,6 +81,7 @@ import type { HaDropdownSelectEvent } from "./ha-dropdown";
 import "./ha-dropdown-item";
 import "./ha-markdown";
 import "./ha-svg-icon";
+import "./ha-switch";
 import "./ha-tooltip";
 import "./ha-textarea";
 import type { HaTextArea } from "./ha-textarea";
@@ -95,6 +103,66 @@ const MOCK_PREVIEW_TRIGGER = "/preview";
 
 type MockPreviewKind = "dashboard" | "automation" | "settings";
 
+// ponytail: scripted scene for demos and screen recordings: "/demo" plays the
+// plain-language request and the drafted automation, and whatever is typed next
+// revises the draft in place. The revision only listens while a scene is on
+// screen, so it can't hijack a real conversation.
+const MOCK_DEMO_TRIGGER = "/demo";
+
+/** Beat between the scripted turns, so a recording reads at human speed. */
+const MOCK_DEMO_PAUSE_MS = 1200;
+
+const MOCK_DEMO_DEFAULT_TEMPERATURE = 16;
+
+// ponytail: "/demo cards" plays three questions whose answers are composed UI
+// rather than sentences. Everything here is styled from theme tokens only, so a
+// custom theme carries through; none of the controls call a service.
+const MOCK_DEMO_CARDS_ARG = "card";
+
+// ponytail: "/demo reasoning" plays the question no single entity answers — a
+// written conclusion drawn from several parts of the home, with one chart under
+// it. The chart is a real Lovelace card over this instance's own energy data.
+const MOCK_DEMO_REASONING_ARG = "reason";
+
+// ponytail: "/demo suggestion" plays the one scene that starts without a user
+// turn: the home noticed a nightly pattern and asks whether to automate it.
+// Nothing runs until a button is pressed, which is the whole point of the beat.
+const MOCK_DEMO_SUGGESTION_ARG = "sug";
+
+/** Beat before the unprompted suggestion lands, so it reads as arriving. */
+const MOCK_SUGGESTION_DELAY_MS = 2000;
+
+/** What the noticed pattern would become, shown before anything happens. */
+const MOCK_SUGGESTION_AUTOMATION = {
+  alias: "Wind down at eleven",
+  triggers: [{ trigger: "time", at: "23:00:00" }],
+  conditions: [],
+  actions: [
+    {
+      action: "light.turn_off",
+      target: { entity_id: "light.hallway" },
+    },
+    {
+      action: "climate.set_temperature",
+      target: { entity_id: "climate.hallway" },
+      data: { temperature: 17 },
+    },
+  ],
+  mode: "single",
+};
+
+/** Fallback tile, for instances with no timer entity to count down. */
+const MOCK_DEMO_COUNTDOWN = {
+  name: "Washing machine",
+  detail: "Rinse cycle",
+  remaining: "38:20",
+  /** Share of the cycle already done, for the bar. */
+  progress: 62,
+};
+
+/** How many device tiles the third answer composes. */
+const MOCK_DEMO_DEVICE_COUNT = 3;
+
 // Lists the mock triggers above. Keep the string in sync when one is added or
 // dropped — it goes away with them.
 const MOCK_HELP_TRIGGER = "/help";
@@ -108,19 +176,38 @@ const MOCK_PREVIEWS: Record<MockPreviewKind, { icon: string; path?: string }> =
     settings: { icon: mdiCog, path: "/config/general" },
   };
 
-const MOCK_PREVIEW_AUTOMATION = {
-  alias: "Lamp on at sunset",
-  triggers: [{ trigger: "sun", event: "sunset", offset: "-00:15:00" }],
-  conditions: [],
+/** The drafted automation, with the one detail the scripted revision changes. */
+const mockPreviewAutomation = (temperature: number) => ({
+  alias: "Leaving home",
+  triggers: [
+    {
+      trigger: "zone",
+      entity_id: "person.product_demo",
+      zone: "zone.home",
+      event: "leave",
+    },
+  ],
+  conditions: [
+    { condition: "time", weekday: ["mon", "tue", "wed", "thu", "fri"] },
+    {
+      condition: "state",
+      entity_id: "cover.living_room_window",
+      state: "closed",
+    },
+  ],
   actions: [
     {
-      action: "light.turn_on",
-      target: { entity_id: "light.living_room_lamp" },
-      data: { brightness_pct: 40 },
+      action: "alarm_control_panel.alarm_arm_away",
+      target: { entity_id: "alarm_control_panel.security" },
+    },
+    {
+      action: "climate.set_temperature",
+      target: { entity_id: "climate.ecobee" },
+      data: { temperature },
     },
   ],
   mode: "single",
-};
+});
 
 interface AssistMessage {
   who: string;
@@ -161,6 +248,12 @@ export const greetingTranslationLanguage = (
 
 @customElement("ha-assist-chat")
 export class HaAssistChat extends LitElement {
+  /**
+   * Only needed to render Lovelace cards in composed answers (see
+   * MOCK_DEMO_CARDS_ARG); everything else reads the narrow contexts below.
+   */
+  @property({ attribute: false }) public hass?: HomeAssistant;
+
   @property({ attribute: false }) public pipeline?: AssistPipeline;
 
   @property({ attribute: false }) public pipelines?: AssistPipeline[];
@@ -262,6 +355,12 @@ export class HaAssistChat extends LitElement {
   // ponytail: see MOCK_PERMISSION_TRIGGER. Conversation-scoped on purpose — a
   // grant that outlives the chat needs a backend store and a way to revoke it.
   private _mockPermissionGranted = false;
+
+  // ponytail: see MOCK_DEMO_TRIGGER. The draft card on screen and the one detail
+  // the scripted follow-up turn changes.
+  private _mockDemoMessage?: AssistMessage;
+
+  private _mockDemoTemperature = MOCK_DEMO_DEFAULT_TEMPERATURE;
 
   private _restoring = false;
 
@@ -496,6 +595,53 @@ export class HaAssistChat extends LitElement {
       pipeline,
       this._buildOverrides
     );
+  }
+
+  /**
+   * What an agent may do, as icons: control, build, and where its requests go.
+   * Shared by the chat footer (which adds the wording as tooltips), the agent
+   * list in the picker, and the picker's closed state.
+   */
+  private _capabilityIcons(
+    pipeline?: AssistPipeline
+  ): { icon: string; text: string }[] {
+    if (!pipeline) {
+      return [];
+    }
+    const controlHA = this._controlsHome(pipeline);
+    const locality = this._pipelineLocality(pipeline);
+    const partiallyLocal =
+      locality === "cloud" && !!pipeline.prefer_local_intents;
+
+    const icons = [
+      {
+        icon: controlHA ? mdiRobotOutline : mdiEyeOutline,
+        text: this._localize(
+          controlHA
+            ? "ui.dialogs.voice_command.disclaimer"
+            : "ui.dialogs.voice_command.disclaimer_no_control"
+        ),
+      },
+    ];
+    if (this._buildsHome(pipeline)) {
+      icons.push({
+        icon: mdiHammerWrench,
+        text: this._localize("ui.dialogs.voice_command.disclaimer_build"),
+      });
+    }
+    if (locality) {
+      icons.push({
+        icon: locality === "cloud" ? mdiWeb : mdiShieldCheckOutline,
+        text: this._localize(
+          locality === "local"
+            ? "ui.dialogs.voice_command.disclaimer_data_local"
+            : partiallyLocal
+              ? "ui.dialogs.voice_command.disclaimer_data_cloud_partial"
+              : "ui.dialogs.voice_command.disclaimer_data_cloud"
+        ),
+      });
+    }
+    return icons;
   }
 
   protected render(): TemplateResult {
@@ -736,51 +882,24 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
             </div>
           </div>
         </div>
-        <div class="disclaimer">
+        <div
+          class="disclaimer ${classMap({
+            hidden: this._conversation.length > 0,
+          })}"
+          aria-hidden=${this._conversation.length > 0 ? "true" : "false"}
+        >
           <span class="disclaimer-icons">
-            <ha-svg-icon
-              id="disclaimer-control-icon"
-              .path=${controlHA ? mdiRobotOutline : mdiEyeOutline}
-            ></ha-svg-icon>
-            <ha-tooltip for="disclaimer-control-icon">
-              ${this._localize(
-                controlHA
-                  ? "ui.dialogs.voice_command.disclaimer"
-                  : "ui.dialogs.voice_command.disclaimer_no_control"
-              )}
-            </ha-tooltip>
-            ${
-              buildHA
-                ? html`<ha-svg-icon
-                      id="disclaimer-build-icon"
-                      .path=${mdiHammerWrench}
-                    ></ha-svg-icon>
-                    <ha-tooltip for="disclaimer-build-icon">
-                      ${this._localize(
-                        "ui.dialogs.voice_command.disclaimer_build"
-                      )}
-                    </ha-tooltip>`
-                : nothing
-            }
-            ${
-              locality
-                ? html`<ha-svg-icon
-                      id="disclaimer-data-icon"
-                      .path=${
-                        locality === "cloud" ? mdiWeb : mdiShieldCheckOutline
-                      }
-                    ></ha-svg-icon>
-                    <ha-tooltip for="disclaimer-data-icon">
-                      ${this._localize(
-                        locality === "local"
-                          ? "ui.dialogs.voice_command.disclaimer_data_local"
-                          : partiallyLocal
-                            ? "ui.dialogs.voice_command.disclaimer_data_cloud_partial"
-                            : "ui.dialogs.voice_command.disclaimer_data_cloud"
-                      )}
-                    </ha-tooltip>`
-                : nothing
-            }
+            ${this._capabilityIcons(this.pipeline).map(
+              (capability, index) => html`
+                <ha-svg-icon
+                  id="disclaimer-icon-${index}"
+                  .path=${capability.icon}
+                ></ha-svg-icon>
+                <ha-tooltip for="disclaimer-icon-${index}"
+                  >${capability.text}</ha-tooltip
+                >
+              `
+            )}
           </span>
           <span class="disclaimer-text">
             ${this._localize(
@@ -825,12 +944,21 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
       >
         <ha-button
           slot="trigger"
-          appearance="plain"
+          appearance="filled"
           variant="neutral"
           size="s"
           .loading=${!this.pipelines}
         >
           ${this.pipeline?.name}
+          <!-- Same icons as the footer and the agent list, so the closed picker
+               still says what this agent may do. -->
+          ${this._capabilityIcons(this.pipeline).map(
+            (capability) =>
+              html`<ha-svg-icon
+                class="agent-capability"
+                .path=${capability.icon}
+              ></ha-svg-icon>`
+          )}
           <ha-svg-icon slot="end" .path=${mdiChevronDown}></ha-svg-icon>
         </ha-button>
         ${this.pipelines.map(
@@ -843,34 +971,13 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
               .value=${pipeline.id}
             >
               ${pipeline.name}
-              ${
-                this._controlsHome(pipeline)
-                  ? html`<ha-svg-icon
-                      class="agent-capability"
-                      .path=${mdiRobotOutline}
-                    ></ha-svg-icon>`
-                  : nothing
-              }
-              ${
-                this._buildsHome(pipeline)
-                  ? html`<ha-svg-icon
-                      class="agent-capability"
-                      .path=${mdiHammerWrench}
-                    ></ha-svg-icon>`
-                  : nothing
-              }
-              ${
-                this._pipelineLocality(pipeline)
-                  ? html`<ha-svg-icon
-                      class="agent-capability"
-                      .path=${
-                        this._pipelineLocality(pipeline) === "cloud"
-                          ? mdiWeb
-                          : mdiShieldCheckOutline
-                      }
-                    ></ha-svg-icon>`
-                  : nothing
-              }
+              ${this._capabilityIcons(pipeline).map(
+                (capability) =>
+                  html`<ha-svg-icon
+                    class="agent-capability"
+                    .path=${capability.icon}
+                  ></ha-svg-icon>`
+              )}
               ${
                 pipeline.id === this.preferredPipeline
                   ? html`<ha-svg-icon
@@ -1065,7 +1172,19 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
       thinking: "",
       tool_calls: {},
     };
-    message.text = html`
+    message.text = this._renderMockPreviewCard(kind, message);
+    this._addMessage(message);
+    if (kind === "automation") {
+      this._mockDemoMessage = message;
+    }
+  }
+
+  private _renderMockPreviewCard(
+    kind: MockPreviewKind,
+    message: AssistMessage
+  ) {
+    const path = MOCK_PREVIEWS[kind].path;
+    return html`
       <div class="preview">
         <div class="preview-header">
           <ha-svg-icon .path=${MOCK_PREVIEWS[kind].icon}></ha-svg-icon>
@@ -1076,11 +1195,13 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
           >
         </div>
         <div class="preview-summary">
-          ${this._localize(`ui.dialogs.voice_command.preview.${kind}.summary`)}
+          ${this._localize(`ui.dialogs.voice_command.preview.${kind}.summary`, {
+            temperature: this._mockDemoTemperature,
+          })}
         </div>
         ${
-          MOCK_PREVIEWS[kind].path
-            ? html`<a href=${MOCK_PREVIEWS[kind].path}>
+          path
+            ? html`<a href=${path}>
                 ${this._localize(`ui.dialogs.voice_command.preview.${kind}.link`)}
               </a>`
             : html`<button
@@ -1119,7 +1240,376 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
         }
       </div>
     `;
+  }
+
+  /**
+   * Plays the scripted request and draft. Whatever is typed next lands in
+   * `_reviseMockDemo`, which rewrites this same card.
+   */
+  private async _playMockDemo() {
+    this._mockDemoTemperature = MOCK_DEMO_DEFAULT_TEMPERATURE;
+    this._addMessage({
+      who: "user",
+      text: this._localize("ui.dialogs.voice_command.preview.automation.ask"),
+      thinking: "",
+      tool_calls: {},
+    });
+    const thinking: AssistMessage = {
+      who: "hass",
+      text: "…",
+      thinking: "",
+      tool_calls: {},
+    };
+    this._addMessage(thinking);
+    await new Promise((resolve) => {
+      setTimeout(resolve, MOCK_DEMO_PAUSE_MS);
+    });
+    thinking.text = this._renderMockPreviewCard("automation", thinking);
+    this._mockDemoMessage = thinking;
+    this.requestUpdate("_conversation");
+  }
+
+  /**
+   * Plays three questions whose answers are composed UI: a countdown tile, a
+   * yes/no with the control to act on it, and a list of devices with switches.
+   */
+  /** One scripted turn: the question, a beat of thinking, then the answer. */
+  private async _playScriptedTurn(
+    ask: LocalizeKeys,
+    render: () => TemplateResult,
+    thinkingMs = MOCK_DEMO_PAUSE_MS
+  ) {
+    this._addMessage({
+      who: "user",
+      text: this._localize(ask),
+      thinking: "",
+      tool_calls: {},
+    });
+    const answer: AssistMessage = {
+      who: "hass",
+      text: "…",
+      thinking: "",
+      tool_calls: {},
+    };
+    this._addMessage(answer);
+    await new Promise((resolve) => {
+      setTimeout(resolve, thinkingMs);
+    });
+    answer.text = render();
+    this.requestUpdate("_conversation");
+    await new Promise((resolve) => {
+      setTimeout(resolve, MOCK_DEMO_PAUSE_MS);
+    });
+  }
+
+  private async _playMockCardsDemo() {
+    await this._playScriptedTurn(
+      "ui.dialogs.voice_command.cards.countdown.ask",
+      () => this._renderMockCountdownCard()
+    );
+    await this._playScriptedTurn(
+      "ui.dialogs.voice_command.cards.garage.ask",
+      () => this._renderMockGarageCard()
+    );
+    await this._playScriptedTurn(
+      "ui.dialogs.voice_command.cards.devices.ask",
+      () => this._renderMockDevicesCard()
+    );
+  }
+
+  /**
+   * The question no entity answers: consumption, weather and what changed in
+   * the house, weighed against each other, with the chart that backs it up.
+   */
+  private async _playMockReasoningDemo() {
+    await this._playScriptedTurn(
+      "ui.dialogs.voice_command.reasoning.ask",
+      () => this._renderMockReasoningAnswer(),
+      // Holding several parts of the home in view takes a moment longer.
+      MOCK_DEMO_PAUSE_MS * 2
+    );
+  }
+
+  private _renderMockReasoningAnswer() {
+    const chart = this._mockReasoningChart();
+    return html`
+      <div class="answer">
+        <span
+          >${this._localize("ui.dialogs.voice_command.reasoning.answer")}</span
+        >
+        ${chart ? this._renderMockCard(chart) : nothing}
+      </div>
+    `;
+  }
+
+  /** A real chart over whatever energy data this instance records. */
+  private _mockReasoningChart(): LovelaceCardConfig | undefined {
+    const states = this._states ?? {};
+    const ids = Object.keys(states);
+    const energy = ids.find(
+      (id) =>
+        states[id].attributes.device_class === "energy" &&
+        ["total", "total_increasing"].includes(
+          states[id].attributes.state_class as string
+        )
+    );
+    if (energy) {
+      return {
+        type: "statistics-graph",
+        entities: [energy],
+        stat_types: ["change"],
+        period: "day",
+        days_to_show: 30,
+        chart_type: "bar",
+      };
+    }
+    // No long-term statistics to sum up: show the raw trace instead.
+    const power = ids.find(
+      (id) => states[id].attributes.device_class === "power"
+    );
+    return power
+      ? { type: "history-graph", entities: [power], hours_to_show: 168 }
+      : undefined;
+  }
+
+  /**
+   * Real entities for the composed answers, picked from this instance so the
+   * tiles below are live cards rather than pictures of cards.
+   */
+  private _mockDemoEntities() {
+    const states = this._states ?? {};
+    const ids = Object.keys(states);
+    const garage =
+      ids.find(
+        (id) =>
+          id.startsWith("cover.") &&
+          states[id].attributes.device_class === "garage"
+      ) ?? ids.find((id) => id.startsWith("cover."));
+    const devices = ids
+      .filter((id) => id.startsWith("switch."))
+      .slice(0, MOCK_DEMO_DEVICE_COUNT);
+    return {
+      timer: ids.find((id) => id.startsWith("timer.")),
+      garage,
+      devices: devices.length
+        ? devices
+        : ids
+            .filter((id) => id.startsWith("light."))
+            .slice(0, MOCK_DEMO_DEVICE_COUNT),
+    };
+  }
+
+  /**
+   * A Lovelace tile, the same element a dashboard renders. Needs the full hass
+   * object — the narrow contexts this component consumes can't drive a card —
+   * so the tiles are skipped where the chat is embedded without it.
+   */
+  private _renderMockCard(config: LovelaceCardConfig) {
+    if (!this.hass) {
+      return nothing;
+    }
+    return html`<hui-card
+      .hass=${this.hass}
+      .config=${config}
+      class="mock-lovelace-card"
+    ></hui-card>`;
+  }
+
+  private _renderMockCountdownCard() {
+    const timer = this._mockDemoEntities().timer;
+    return html`
+      <div class="answer">
+        <span
+          >${this._localize("ui.dialogs.voice_command.cards.countdown.answer", {
+            remaining: MOCK_DEMO_COUNTDOWN.remaining,
+          })}</span
+        >
+        ${
+          // A timer entity counts down for real; without one, fall back to a
+          // still tile so the beat still reads.
+          timer
+            ? this._renderMockCard({
+                type: "tile",
+                entity: timer,
+                features: [{ type: "timer-controls" }],
+              })
+            : html`<div class="mock-card">
+                <div class="mock-card-row">
+                  <ha-svg-icon .path=${mdiWashingMachine}></ha-svg-icon>
+                  <div class="mock-card-labels">
+                    <span class="mock-card-name"
+                      >${MOCK_DEMO_COUNTDOWN.name}</span
+                    >
+                    <span class="mock-card-detail"
+                      >${MOCK_DEMO_COUNTDOWN.detail}</span
+                    >
+                  </div>
+                  <span class="mock-countdown"
+                    >${MOCK_DEMO_COUNTDOWN.remaining}</span
+                  >
+                </div>
+                <div class="mock-progress">
+                  <div
+                    class="mock-progress-value"
+                    style=${`width: ${MOCK_DEMO_COUNTDOWN.progress}%`}
+                  ></div>
+                </div>
+              </div>`
+        }
+      </div>
+    `;
+  }
+
+  private _renderMockGarageCard() {
+    const garage = this._mockDemoEntities().garage;
+    // Yes or no comes from the real state, so the sentence can't contradict the
+    // tile sitting under it.
+    const open = !!garage && this._states?.[garage]?.state !== "closed";
+    return html`
+      <div class="answer">
+        <span
+          >${this._localize(
+            `ui.dialogs.voice_command.cards.garage.${open ? "answer_open" : "answer_closed"}`
+          )}</span
+        >
+        ${
+          garage
+            ? this._renderMockCard({
+                type: "tile",
+                entity: garage,
+                features: [{ type: "cover-open-close" }],
+              })
+            : nothing
+        }
+      </div>
+    `;
+  }
+
+  private _renderMockDevicesCard() {
+    const devices = this._mockDemoEntities().devices;
+    const onCount = devices.filter(
+      (entity) => this._states?.[entity]?.state === "on"
+    ).length;
+    return html`
+      <div class="answer">
+        <span
+          >${this._localize("ui.dialogs.voice_command.cards.devices.answer", {
+            count: onCount,
+          })}</span
+        >
+        ${devices.map((entity) =>
+          this._renderMockCard({
+            type: "tile",
+            entity,
+            features: [{ type: "toggle" }],
+          })
+        )}
+      </div>
+    `;
+  }
+
+  /**
+   * The one scene the home starts: after a beat, a suggestion arrives with no
+   * question asked. It only proposes — accept, adjust or dismiss decides.
+   */
+  private async _playMockSuggestionDemo() {
+    await new Promise((resolve) => {
+      setTimeout(resolve, MOCK_SUGGESTION_DELAY_MS);
+    });
+    const message: AssistMessage = {
+      who: "hass",
+      text: "",
+      thinking: "",
+      tool_calls: {},
+    };
+    message.text = this._renderMockSuggestionCard(message);
     this._addMessage(message);
+  }
+
+  private _renderMockSuggestionCard(message: AssistMessage) {
+    return html`
+      <div class="preview">
+        <div class="preview-header">
+          <ha-svg-icon .path=${mdiLightbulbOnOutline}></ha-svg-icon>
+          <span
+            >${this._localize("ui.dialogs.voice_command.suggestion.title")}</span
+          >
+        </div>
+        <div class="preview-summary">
+          ${this._localize("ui.dialogs.voice_command.suggestion.noticed")}
+        </div>
+        <div class="preview-summary">
+          ${this._localize("ui.dialogs.voice_command.suggestion.proposal")}
+        </div>
+        <div class="permission-actions">
+          <ha-button
+            size="s"
+            appearance="filled"
+            .message=${message}
+            .outcome=${"accepted"}
+            @click=${this._handleMockSuggestionDecision}
+          >
+            ${this._localize("ui.dialogs.voice_command.suggestion.accept")}
+          </ha-button>
+          <ha-button size="s" @click=${this._showMockSuggestionAutomation}>
+            ${this._localize("ui.dialogs.voice_command.suggestion.adjust")}
+          </ha-button>
+          <ha-button
+            size="s"
+            appearance="plain"
+            .message=${message}
+            .outcome=${"dismissed"}
+            @click=${this._handleMockSuggestionDecision}
+          >
+            ${this._localize("ui.dialogs.voice_command.suggestion.dismiss")}
+          </ha-button>
+        </div>
+        <!-- Says where the noticing happened, because an ambient feature that
+             quietly reached a cloud model would be the wrong default. -->
+        <div class="suggestion-note">
+          <ha-svg-icon .path=${mdiShieldCheckOutline}></ha-svg-icon>
+          <span
+            >${this._localize("ui.dialogs.voice_command.suggestion.local")}</span
+          >
+        </div>
+      </div>
+    `;
+  }
+
+  private _handleMockSuggestionDecision(ev: Event) {
+    const button = ev.currentTarget as unknown as {
+      message: AssistMessage;
+      outcome: "accepted" | "dismissed";
+    };
+    // Mutate in place so the message keeps its identity in _conversation.
+    button.message.text = this._localize(
+      `ui.dialogs.voice_command.suggestion.${button.outcome}`
+    );
+    this.requestUpdate("_conversation");
+  }
+
+  private _showMockSuggestionAutomation() {
+    fireEvent(this, "show-dialog", {
+      dialogTag: "dialog-assist-automation-preview",
+      dialogImport: () =>
+        import("../dialogs/assist-automation-preview/dialog-assist-automation-preview"),
+      dialogParams: {
+        config: MOCK_SUGGESTION_AUTOMATION,
+        description: this._localize(
+          "ui.dialogs.voice_command.suggestion.description"
+        ),
+      },
+    });
+  }
+
+  /** Rewrites the draft card in place, the way a follow-up turn would. */
+  private _reviseMockDemo(text: string) {
+    this._addMessage({ who: "user", text, thinking: "", tool_calls: {} });
+    const temperature = Number(text.match(/\d{1,2}/)?.[0]);
+    this._mockDemoTemperature = temperature || this._mockDemoTemperature;
+    const message = this._mockDemoMessage!;
+    message.text = this._renderMockPreviewCard("automation", message);
+    this.requestUpdate("_conversation");
   }
 
   private _handleMockAutomationDecision(ev: Event) {
@@ -1142,9 +1632,10 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
       dialogImport: () =>
         import("../dialogs/assist-automation-preview/dialog-assist-automation-preview"),
       dialogParams: {
-        config: MOCK_PREVIEW_AUTOMATION,
+        config: mockPreviewAutomation(this._mockDemoTemperature),
         description: this._localize(
-          "ui.dialogs.voice_command.preview.automation.description"
+          "ui.dialogs.voice_command.preview.automation.description",
+          { temperature: this._mockDemoTemperature }
         ),
       },
     });
@@ -1345,6 +1836,26 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
   private async _processText(text: string) {
     this._unloadAudio();
     this._processing = true;
+    // The scene supplies its own user turn, so the trigger never shows up.
+    if (text.toLowerCase().startsWith(MOCK_DEMO_TRIGGER)) {
+      const arg = text.slice(MOCK_DEMO_TRIGGER.length).trim().toLowerCase();
+      if (arg.startsWith(MOCK_DEMO_CARDS_ARG)) {
+        await this._playMockCardsDemo();
+      } else if (arg.startsWith(MOCK_DEMO_REASONING_ARG)) {
+        await this._playMockReasoningDemo();
+      } else if (arg.startsWith(MOCK_DEMO_SUGGESTION_ARG)) {
+        await this._playMockSuggestionDemo();
+      } else {
+        await this._playMockDemo();
+      }
+      this._processing = false;
+      return;
+    }
+    if (this._mockDemoMessage && !text.startsWith("/")) {
+      this._reviseMockDemo(text);
+      this._processing = false;
+      return;
+    }
     this._addMessage({ who: "user", text, thinking: "", tool_calls: {} });
     if (text.toLowerCase().startsWith(MOCK_PERMISSION_TRIGGER)) {
       this._addMockPermissionMessage(
@@ -1678,8 +2189,6 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
         }
         .agent-pill {
           display: flex;
-          --mdc-theme-on-primary: var(--text-primary-color);
-          --mdc-theme-primary: var(--primary-color);
         }
         .agent-pill ha-button {
           --ha-button-height: var(--ha-space-8);
@@ -1708,7 +2217,17 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
           gap: var(--ha-space-2);
           padding: 0 var(--ha-space-2);
           font-size: var(--ha-font-size-s);
+          line-height: var(--ha-line-height-normal);
           color: var(--secondary-text-color);
+          /* Reserve the two clamped lines so fading it out shifts nothing. */
+          height: calc(
+            2 * var(--ha-font-size-s) * var(--ha-line-height-normal)
+          );
+          transition: opacity var(--ha-animation-duration-normal) ease-out;
+        }
+        .disclaimer.hidden {
+          opacity: 0;
+          pointer-events: none;
         }
         .disclaimer-icons {
           display: inline-flex;
@@ -1893,6 +2412,76 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
         .preview-summary {
           font-size: var(--ha-font-size-m);
           color: var(--secondary-text-color);
+        }
+        .suggestion-note {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-1);
+          font-size: var(--ha-font-size-s);
+          color: var(--disabled-text-color);
+        }
+        .suggestion-note ha-svg-icon {
+          --mdc-icon-size: 14px;
+          flex-shrink: 0;
+        }
+        /* Composed answers (see MOCK_DEMO_CARDS_ARG). Theme tokens only, no
+           hardcoded colors, so a custom theme carries through. */
+        .answer {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-2);
+        }
+        .mock-card {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-2);
+          padding: var(--ha-space-3);
+          border-radius: var(--ha-border-radius-lg);
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+        }
+        .mock-card-row {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-3);
+        }
+        .mock-card-row ha-svg-icon {
+          --mdc-icon-size: 24px;
+          color: var(--secondary-text-color);
+          flex-shrink: 0;
+        }
+        .mock-card-labels {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+          flex: 1;
+        }
+        .mock-card-name {
+          font-size: var(--ha-font-size-m);
+        }
+        .mock-card-detail {
+          font-size: var(--ha-font-size-s);
+          color: var(--secondary-text-color);
+        }
+        .mock-countdown {
+          font-size: var(--ha-font-size-xl);
+          font-variant-numeric: tabular-nums;
+        }
+        .mock-progress {
+          height: 4px;
+          border-radius: var(--ha-border-radius-pill);
+          background: var(--divider-color);
+          overflow: hidden;
+        }
+        .mock-progress-value {
+          height: 100%;
+          border-radius: inherit;
+          background: var(--primary-color);
+        }
+        /* Real Lovelace tiles: same element a dashboard renders, so themes,
+           icon colors and features all come along. */
+        .mock-lovelace-card {
+          display: block;
         }
         .preview a,
         .preview-link {
