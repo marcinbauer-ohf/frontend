@@ -1,4 +1,9 @@
-import { mdiAlertCircleOutline, mdiPower } from "@mdi/js";
+import {
+  mdiAlertCircleOutline,
+  mdiHelpCircleOutline,
+  mdiLanDisconnect,
+  mdiPower,
+} from "@mdi/js";
 import type { HassEntity } from "home-assistant-js-websocket";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -28,8 +33,10 @@ import type { HomeAssistant } from "../../../types";
 import { actionHandler } from "../common/directives/action-handler-directive";
 import { handleAction } from "../common/handle-action";
 import { hasAction } from "../common/has-action";
+import { showMoreInfoDialog } from "../../../dialogs/more-info/show-ha-more-info-dialog";
 import { createEntityNotFoundWarning } from "../components/hui-warning";
 import type { LovelaceCard, LovelaceCardEditor } from "../types";
+import { getEntityDefaultTileIconAction } from "./hui-tile-card";
 import { resolveDeviceCardEntities } from "./device/device-card-entities";
 import "./device/hui-device-card-sparkline";
 import "../card-features/hui-card-feature";
@@ -58,20 +65,28 @@ const TOGGLEABLE_DOMAINS = new Set([
  * narrow inline position (see `hui-card-features`), and fall back to the
  * read-only value when the entity does not support the feature.
  */
-const FEATURE_CONTROLS: Record<string, LovelaceCardFeatureConfig> = {
-  climate: { type: "climate-hvac-modes" },
-  cover: { type: "cover-open-close" },
-  fan: { type: "fan-speed" },
-  humidifier: { type: "humidifier-toggle" },
-  lock: { type: "lock-commands" },
-  media_player: { type: "media-player-playback" },
+const FEATURE_CONTROLS: Record<string, LovelaceCardFeatureConfig[]> = {
+  // Most capable control first: a thermostat that can be given a target gets
+  // the temperature control, one that can only be switched between modes gets
+  // the mode picker.
+  climate: [{ type: "target-temperature" }, { type: "climate-hvac-modes" }],
+  cover: [{ type: "cover-open-close" }],
+  fan: [{ type: "fan-speed" }],
+  humidifier: [{ type: "humidifier-toggle" }],
+  // A dimmable light gets the brightness slider; on/off lights fall through to
+  // the toggle below. On/off is always reachable by tapping the icon.
+  light: [{ type: "light-brightness" }],
+  lock: [{ type: "lock-commands" }],
+  media_player: [{ type: "media-player-playback" }],
   // Features that require config carry it here; they render nothing without it.
-  vacuum: {
-    type: "vacuum-commands",
-    commands: ["start_pause", "stop", "return_home"],
-  },
-  valve: { type: "valve-open-close" },
-  water_heater: { type: "water-heater-operation-modes" },
+  vacuum: [
+    {
+      type: "vacuum-commands",
+      commands: ["start_pause", "stop", "return_home"],
+    },
+  ],
+  valve: [{ type: "valve-open-close" }],
+  water_heater: [{ type: "water-heater-operation-modes" }],
 };
 
 /** Domains that render a round action button (press-only). */
@@ -110,8 +125,30 @@ const SETTABLE_DOMAINS = new Set([
   "input_datetime",
 ]);
 
+/**
+ * The three ways an entity can fail to be trustworthy. They are deliberately
+ * kept apart: an unavailable entity cannot be reached, a disconnected one is
+ * fine but we cannot talk to Home Assistant right now, and an unknown one is
+ * reachable but has not reported a value yet. Showing all three as
+ * "unavailable" tells the user to go fix a device that is not broken.
+ */
+type ProblemKind = "unavailable" | "disconnected" | "unknown";
+
+const PROBLEM_ICON: Record<ProblemKind, string> = {
+  unavailable: mdiAlertCircleOutline,
+  disconnected: mdiLanDisconnect,
+  unknown: mdiHelpCircleOutline,
+};
+
+/** Why the entity cannot be trusted, and what that means for its controls. */
+const PROBLEM_REASON: Record<ProblemKind, LocalizeKeys> = {
+  unavailable: "ui.card.device.unavailable_reason",
+  disconnected: "ui.card.device.disconnected_reason",
+  unknown: "ui.card.device.unknown_reason",
+};
+
 const isUnavailableState = (stateObj?: HassEntity) =>
-  !stateObj || stateObj.state === UNAVAILABLE || stateObj.state === UNKNOWN;
+  !stateObj || stateObj.state === UNAVAILABLE;
 
 const formatUnavailableDuration = (
   lastChanged: string | undefined
@@ -151,6 +188,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     }
     this._config = {
       tap_action: { action: "more-info" },
+      hold_action: { action: "more-info" },
       ...config,
     };
   }
@@ -176,10 +214,56 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
 
   private _handleAction(ev: ActionHandlerEvent) {
     const entityId = this._resolveEntities(this.hass, this._config).hero;
+    // A device card opens the device, not just the entity it happens to
+    // feature — the dialog's device view is where the rest of the device is.
+    // An explicitly configured action still wins, so this only replaces the
+    // default more info.
+    if (
+      this._config!.device &&
+      ev.detail.action === "tap" &&
+      this._config!.tap_action?.action === "more-info" &&
+      !this._config!.entity
+    ) {
+      showMoreInfoDialog(this, {
+        entityId: null,
+        deviceId: this._config!.device,
+      });
+      return;
+    }
     handleAction(
       this,
       this.hass!,
       { entity: entityId, ...this._config! },
+      ev.detail.action!
+    );
+  }
+
+  /** "toggle" when tapping the icon is a meaningful primary action here. */
+  private _iconAction(entityId: string): "toggle" | "none" {
+    // Pressable domains already have their own button, so a second press
+    // target on the icon would only be a way to trigger a scene by accident.
+    if (PRESSABLE_DOMAINS.has(computeDomain(entityId))) {
+      return "none";
+    }
+    return getEntityDefaultTileIconAction(entityId) === "toggle"
+      ? "toggle"
+      : "none";
+  }
+
+  private _handleIconAction(ev: ActionHandlerEvent) {
+    ev.stopPropagation();
+    const entityId = this._resolveEntities(this.hass, this._config).hero;
+    if (
+      !entityId ||
+      this._iconAction(entityId) !== "toggle" ||
+      this._controlsDisabledFor(this.hass!.states[entityId])
+    ) {
+      return;
+    }
+    handleAction(
+      this,
+      this.hass!,
+      { entity: entityId, tap_action: { action: "toggle" } },
       ev.detail.action!
     );
   }
@@ -219,7 +303,8 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     }
 
     const domain = computeDomain(hero);
-    const unavailable = isUnavailableState(stateObj);
+    const problem = this._problem(stateObj);
+    const unavailable = problem === "unavailable";
     const active = stateActive(stateObj);
     const toggleable = TOGGLEABLE_DOMAINS.has(domain);
     const pressable = PRESSABLE_DOMAINS.has(domain);
@@ -251,7 +336,12 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     const cardClasses = {
       active: active && (toggleable || !!this._featureConfigFor(hero)),
       unavailable,
+      disconnected: problem === "disconnected",
     };
+
+    const iconInteractive =
+      this._iconAction(hero) === "toggle" &&
+      !this._controlsDisabledFor(stateObj);
 
     return html`
       <ha-card
@@ -262,7 +352,11 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
           class="primary"
           role="button"
           tabindex="0"
-          aria-label=${`${name}: ${this.hass.formatEntityState(stateObj)}`}
+          aria-label=${
+            problem
+              ? `${name}: ${this.hass.localize(PROBLEM_REASON[problem])}`
+              : `${name}: ${this.hass.formatEntityState(stateObj)}`
+          }
           .actionHandler=${actionHandler({
             hasHold: hasAction(this._config.hold_action),
             hasDoubleClick: hasAction(this._config.double_tap_action),
@@ -275,6 +369,17 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
               data-state=${stateObj.state}
               class=${classMap({ image: !!feedImage })}
               .imageUrl=${feedImage}
+              .interactive=${iconInteractive}
+              .label=${
+                iconInteractive
+                  ? this.hass.localize("ui.card.device.toggle_entity", { name })
+                  : undefined
+              }
+              .actionHandlerOptions=${{ hasHold: false, hasDoubleClick: false }}
+              @action=${this._handleIconAction}
+              @click=${stopPropagation}
+              @mousedown=${stopPropagation}
+              @touchstart=${stopPropagation}
             >
               ${
                 feedImage
@@ -292,47 +397,12 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
             <div class="text">
               ${areaName ? html`<p class="eyebrow">${areaName}</p>` : nothing}
               <p class="name">${name}</p>
-              ${
-                unavailable
-                  ? html`
-                      <div class="offline">
-                        <span class="offline-label">
-                          ${this.hass.localize("state.default.unavailable")}
-                        </span>
-                        ${
-                          formatUnavailableDuration(stateObj.last_changed)
-                            ? html`<span class="offline-dur"
-                                >${formatUnavailableDuration(
-                                  stateObj.last_changed
-                                )}</span
-                              >`
-                            : nothing
-                        }
-                      </div>
-                    `
-                  : html`
-                      <p class="state">
-                        <state-display
-                          .hass=${this.hass}
-                          .stateObj=${stateObj}
-                        ></state-display>
-                      </p>
-                    `
-              }
+              ${this._renderStatus(stateObj, problem)}
             </div>
 
-            ${
-              unavailable
-                ? html`<ha-svg-icon
-                    class="alert"
-                    .path=${mdiAlertCircleOutline}
-                  ></ha-svg-icon>`
-                : nothing
-            }
+            ${problem ? this._renderProblemIcon(problem) : nothing}
 
-            <div class="control">
-              ${unavailable ? nothing : this._renderControl(stateObj)}
-            </div>
+            <div class="control">${this._renderControl(stateObj)}</div>
           </div>
 
           ${
@@ -351,7 +421,12 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
 
         ${
           visible.length
-            ? html`<div class="secondary ${classMap({ dimmed: unavailable })}">
+            ? html`<div
+                class="secondary ${classMap({
+                  // An unknown hero says nothing about the other entities.
+                  dimmed: unavailable || problem === "disconnected",
+                })}"
+              >
                 ${visible.map((entityId) => this._renderRow(entityId))}
               </div>`
             : nothing
@@ -366,6 +441,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     const domain = computeDomain(entityId);
     const unavailable = isUnavailableState(stateObj);
     const active = stateActive(stateObj);
+    const stateLabel = this.hass!.formatEntityState(stateObj);
     const toggleable = TOGGLEABLE_DOMAINS.has(domain);
     // Device name only belongs on the hero — rows drop it and keep the rest.
     const name =
@@ -379,6 +455,13 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
           active: active && (toggleable || !!this._featureConfigFor(entityId)),
         })}"
         data-entity=${entityId}
+        role="button"
+        tabindex="0"
+        aria-label=${
+          unavailable
+            ? `${name}: ${this.hass!.localize(PROBLEM_REASON.unavailable)}`
+            : `${name}: ${stateLabel}`
+        }
         .actionHandler=${actionHandler({})}
         @action=${this._handleRowAction}
       >
@@ -390,10 +473,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
         <span class="row-name">${name}</span>
         ${
           unavailable
-            ? html`<ha-svg-icon
-                class="alert"
-                .path=${mdiAlertCircleOutline}
-              ></ha-svg-icon>`
+            ? this._renderProblemIcon("unavailable")
             : html`
                 ${
                   // A toggle already states the value, so only show it otherwise.
@@ -409,6 +489,77 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
                 ${this._renderControl(stateObj)}
               `
         }
+      </div>
+    `;
+  }
+
+  /** True while nothing on this card can reach Home Assistant. */
+  private get _disconnected(): boolean {
+    return this.hass?.connected === false;
+  }
+
+  /** True when a command for this entity could not arrive anywhere. */
+  private _controlsDisabledFor(stateObj?: HassEntity): boolean {
+    return isUnavailableState(stateObj) || this._disconnected;
+  }
+
+  /**
+   * What is wrong with an entity, worst first. Disconnected outranks unknown
+   * because a stale value is not the user's problem while the connection is
+   * down, and it applies to every entity on the card at once.
+   */
+  private _problem(stateObj?: HassEntity): ProblemKind | undefined {
+    if (isUnavailableState(stateObj)) {
+      return "unavailable";
+    }
+    if (this._disconnected) {
+      return "disconnected";
+    }
+    return stateObj!.state === UNKNOWN ? "unknown" : undefined;
+  }
+
+  private _renderProblemIcon(kind: ProblemKind) {
+    const reason = this.hass!.localize(PROBLEM_REASON[kind]);
+    return html`<ha-svg-icon
+      class="alert ${kind}"
+      .path=${PROBLEM_ICON[kind]}
+      title=${reason}
+      aria-label=${reason}
+    ></ha-svg-icon>`;
+  }
+
+  /**
+   * The line under the name: the live state, or what is wrong when the entity
+   * cannot be trusted. An unknown entity keeps the state line — "Unknown" is
+   * its value, and it is still controllable.
+   */
+  private _renderStatus(stateObj: HassEntity, problem?: ProblemKind) {
+    if (!problem || problem === "unknown") {
+      return html`
+        <p class="state" aria-live="polite">
+          <state-display
+            .hass=${this.hass}
+            .stateObj=${stateObj}
+          ></state-display>
+        </p>
+      `;
+    }
+
+    const duration =
+      problem === "unavailable"
+        ? formatUnavailableDuration(stateObj.last_changed)
+        : null;
+
+    return html`
+      <div class="offline ${problem}">
+        <span class="offline-label">
+          ${
+            problem === "unavailable"
+              ? this.hass!.localize("state.default.unavailable")
+              : this.hass!.localize("ui.card.device.disconnected")
+          }
+        </span>
+        ${duration ? html`<span class="offline-dur">${duration}</span>` : nothing}
       </div>
     `;
   }
@@ -430,19 +581,16 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
   private _featureConfigFor(
     entityId: string
   ): LovelaceCardFeatureConfig | undefined {
-    const config = FEATURE_CONTROLS[computeDomain(entityId)];
-    if (
-      !config ||
-      !this.hass ||
-      !supportsFeatureType(
-        this.hass,
+    if (!this.hass) {
+      return undefined;
+    }
+    return FEATURE_CONTROLS[computeDomain(entityId)]?.find((config) =>
+      supportsFeatureType(
+        this.hass!,
         { entity_id: entityId },
         config.type as UiFeatureType
       )
-    ) {
-      return undefined;
-    }
-    return config;
+    );
   }
 
   /**
@@ -451,6 +599,12 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
    * the hero and the rows so the two cannot drift apart.
    */
   private _renderControl(stateObj: HassEntity) {
+    // A control that cannot reach the device must not look operable. The status
+    // icon rendered beside it carries the reason, so this is not a silent drop.
+    if (this._controlsDisabledFor(stateObj)) {
+      return nothing;
+    }
+
     const domain = computeDomain(stateObj.entity_id);
 
     const featureConfig = this._featureConfigFor(stateObj.entity_id);
@@ -555,12 +709,16 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       flex: none;
       --tile-icon-color: var(--device-card-color);
       border-radius: var(--ha-border-radius-pill);
+      transition: background-color 180ms ease-in-out;
+    }
+    /* An interactive icon paints its own tinted shape (and brightens it on
+       hover), so only tint from the outside when it does not. */
+    ha-tile-icon:not([interactive]) {
       background-color: color-mix(
         in srgb,
         var(--device-card-color) 20%,
         transparent
       );
-      transition: background-color 180ms ease-in-out;
     }
     /* A photo — camera frame or media artwork — is unreadable cropped to a
        circle, so any entity picture gets a rounded square instead. */
@@ -572,10 +730,24 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       outline: 2px solid var(--primary-color);
       outline-offset: -2px;
     }
-    /* Active state is carried by the coloured icon, as on the tile card — no
-       full-row wash, which reads as muddy at this height. */
     .primary:hover {
       background-color: var(--secondary-background-color);
+    }
+    /* Active reads on the whole card, not just the icon — kept this faint so a
+       grid of them still scans, and so the text stays legible on top of it. */
+    ha-card.active .primary {
+      background-color: color-mix(
+        in srgb,
+        var(--device-card-color) 8%,
+        transparent
+      );
+    }
+    ha-card.active .primary:hover {
+      background-color: color-mix(
+        in srgb,
+        var(--device-card-color) 16%,
+        transparent
+      );
     }
 
     /* Unavailable */
@@ -587,6 +759,16 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       background-color: color-mix(
         in srgb,
         var(--warning-color) 7%,
+        transparent
+      );
+    }
+    /* Nothing is wrong with the device, so no warning colour — the card just
+       goes quiet until the connection is back. */
+    ha-card.disconnected .primary,
+    ha-card.disconnected.active .primary {
+      background-color: color-mix(
+        in srgb,
+        var(--disabled-color) 8%,
         transparent
       );
     }
@@ -638,6 +820,9 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       letter-spacing: 0.12em;
       color: var(--warning-color);
     }
+    .offline.disconnected .offline-label {
+      color: var(--secondary-text-color);
+    }
     .offline-dur {
       font-size: 12px;
       font-weight: 500;
@@ -648,6 +833,10 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     .alert {
       flex: none;
       color: var(--warning-color);
+    }
+    .alert.disconnected,
+    .alert.unknown {
+      color: var(--secondary-text-color);
     }
 
     .graph {
@@ -724,14 +913,14 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     /* Secondary rows */
     .secondary.dimmed {
       opacity: 0.4;
-      pointer-events: none;
     }
     .row {
       display: flex;
       align-items: center;
       gap: 12px;
       padding: 0 12px;
-      min-height: 40px;
+      /* Touch target floor — a row must stay tappable on a phone. */
+      min-height: 44px;
       border-top: 1px solid var(--divider-color);
       cursor: pointer;
       transition: background-color 180ms ease-in-out;
@@ -739,10 +928,14 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     .row:hover {
       background-color: var(--secondary-background-color);
     }
+    /* Dimmed, but still openable: more info is where the user finds out why an
+       entity is unavailable. */
     .row.unavailable {
       opacity: 0.5;
-      cursor: default;
-      pointer-events: none;
+    }
+    .row:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: -2px;
     }
     .row-icon {
       flex-shrink: 0;

@@ -92,7 +92,9 @@ import { moreInfoContext, type MoreInfoContext } from "./context";
 import "./controls/more-info-default";
 import type { FavoritesDialogContext } from "./favorites";
 import { getFavoritesDialogHandler } from "./favorites";
+import { deviceCardEntities } from "../../panels/lovelace/cards/device/device-card-entities";
 import "./ha-more-info-add-to";
+import "./ha-more-info-device";
 import "./ha-more-info-details";
 import "./ha-more-info-history-and-logbook";
 import "./ha-more-info-info";
@@ -101,6 +103,11 @@ import "./more-info-content";
 
 export interface MoreInfoDialogParams {
   entityId: string | null;
+  /**
+   * Open the dialog scoped to a device instead of a single entity. The device's
+   * featured entity is still loaded, so every entity-level view stays reachable.
+   */
+  deviceId?: string | null;
   view?: MoreInfoView;
   /** @deprecated Use `view` instead */
   tab?: MoreInfoView;
@@ -152,6 +159,8 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
 
   @state() private _entityId?: string | null;
 
+  @state() private _deviceId?: string | null;
+
   @state() private _data?: Record<string, any>;
 
   @provide({ context: moreInfoContext })
@@ -185,7 +194,16 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
   }
 
   public showDialog(params: MoreInfoDialogParams) {
-    this._entityId = params.entityId;
+    this._deviceId = params.deviceId ?? null;
+    // The device view features the same entity the device card does, so the two
+    // never disagree about what the device's primary control is.
+    // ponytail: a device with no usable entity cannot be opened, same as a
+    // missing entity id — the card offers no tap target in that case either.
+    this._entityId =
+      params.entityId ??
+      (this._deviceId
+        ? deviceCardEntities(this.hass, this._deviceId)[0]
+        : null);
     if (!this._entityId) {
       this.closeDialog();
       return;
@@ -235,6 +253,7 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
       replaceCurrentUrl(this._returnUrl);
     }
     this._entityId = undefined;
+    this._deviceId = undefined;
     this._parentEntityIds = [];
     this._entry = undefined;
     this._infoEditMode = false;
@@ -587,6 +606,10 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
     const isDefaultView = this._currView === DEFAULT_VIEW && !this._childView;
     const showCloseIcon =
       isDefaultView && this._parentEntityIds.length === 0 && !this._childView;
+    // The device sits at the root: going back from one of its entities lands
+    // here, and going back from here closes the dialog.
+    const showDeviceView =
+      !!this._deviceId && isDefaultView && this._parentEntityIds.length === 0;
 
     const context = stateObj
       ? getEntityContext(
@@ -617,9 +640,11 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
       : undefined;
     const areaName = context?.area ? computeAreaName(context.area) : undefined;
 
-    const breadcrumb = [areaName, deviceName, entityName].filter(
-      (v): v is string => Boolean(v)
-    );
+    const breadcrumb = (
+      showDeviceView
+        ? [areaName, deviceName]
+        : [areaName, deviceName, entityName]
+    ).filter((v): v is string => Boolean(v));
     const defaultTitle = breadcrumb.pop() || entityId;
     const addToTitle = this.hass.localize(
       "ui.dialogs.more_info_control.add_to.title",
@@ -747,14 +772,18 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
                 ${
                   !__DEMO__ && isAdmin
                     ? html`
-                        <ha-icon-button
-                          slot="headerActionItems"
-                          .label=${this.hass.localize(
-                            "ui.dialogs.more_info_control.settings"
-                          )}
-                          .path=${mdiCogOutline}
-                          @click=${this._goToSettings}
-                        ></ha-icon-button>
+                        ${
+                          showDeviceView
+                            ? nothing
+                            : html`<ha-icon-button
+                                slot="headerActionItems"
+                                .label=${this.hass.localize(
+                                  "ui.dialogs.more_info_control.settings"
+                                )}
+                                .path=${mdiCogOutline}
+                                @click=${this._goToSettings}
+                              ></ha-icon-button>`
+                        }
                         <ha-dropdown
                           slot="headerActionItems"
                           @closed=${stopPropagation}
@@ -768,7 +797,7 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
                           ></ha-icon-button>
 
                           ${
-                            this._shouldShowAddEntityTo()
+                            this._shouldShowAddEntityTo() && !showDeviceView
                               ? html`
                                   <ha-dropdown-item value="add_to">
                                     <ha-svg-icon
@@ -949,52 +978,58 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
                     : cache(
                         this._childView
                           ? childViewContent
-                          : this._currView === "info"
-                            ? html`
-                                <ha-more-info-info
-                                  .hass=${this.hass}
-                                  .entityId=${this._entityId}
-                                  .entry=${this._entry}
-                                  .editMode=${this._infoEditMode}
-                                  .data=${this._data}
-                                ></ha-more-info-info>
-                              `
-                            : this._currView === "history"
+                          : showDeviceView
+                            ? html`<ha-more-info-device
+                                .hass=${this.hass}
+                                .deviceId=${this._deviceId!}
+                                .primaryEntityId=${this._entityId!}
+                              ></ha-more-info-device>`
+                            : this._currView === "info"
                               ? html`
-                                  <ha-more-info-history-and-logbook
+                                  <ha-more-info-info
                                     .hass=${this.hass}
                                     .entityId=${this._entityId}
-                                  ></ha-more-info-history-and-logbook>
+                                    .entry=${this._entry}
+                                    .editMode=${this._infoEditMode}
+                                    .data=${this._data}
+                                  ></ha-more-info-info>
                                 `
-                              : this._currView === "related"
+                              : this._currView === "history"
                                 ? html`
-                                    <ha-related-items
+                                    <ha-more-info-history-and-logbook
                                       .hass=${this.hass}
-                                      .itemId=${entityId}
-                                      .itemType=${
-                                        SearchableDomains.has(domain)
-                                          ? (domain as ItemType)
-                                          : "entity"
-                                      }
-                                    ></ha-related-items>
+                                      .entityId=${this._entityId}
+                                    ></ha-more-info-history-and-logbook>
                                   `
-                                : this._currView === "add_to"
+                                : this._currView === "related"
                                   ? html`
-                                      <ha-more-info-add-to
-                                        .entityId=${entityId}
-                                        @add-to-action-selected=${this._goBack}
-                                      ></ha-more-info-add-to>
+                                      <ha-related-items
+                                        .hass=${this.hass}
+                                        .itemId=${entityId}
+                                        .itemType=${
+                                          SearchableDomains.has(domain)
+                                            ? (domain as ItemType)
+                                            : "entity"
+                                        }
+                                      ></ha-related-items>
                                     `
-                                  : this._currView === "details"
+                                  : this._currView === "add_to"
                                     ? html`
-                                        <ha-more-info-details
-                                          .hass=${this.hass}
-                                          .entry=${this._entry}
-                                          .params=${{ entityId }}
-                                          .yamlMode=${this._detailsYamlMode}
-                                        ></ha-more-info-details>
+                                        <ha-more-info-add-to
+                                          .entityId=${entityId}
+                                          @add-to-action-selected=${this._goBack}
+                                        ></ha-more-info-add-to>
                                       `
-                                    : nothing
+                                    : this._currView === "details"
+                                      ? html`
+                                          <ha-more-info-details
+                                            .hass=${this.hass}
+                                            .entry=${this._entry}
+                                            .params=${{ entityId }}
+                                            .yamlMode=${this._detailsYamlMode}
+                                          ></ha-more-info-details>
+                                        `
+                                      : nothing
                       )
                 }
               </div>

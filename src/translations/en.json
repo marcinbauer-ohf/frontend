@@ -160,7 +160,12 @@
         }
       },
       "device": {
-        "set": "[%key:ui::card::timer::actions::set%]"
+        "set": "[%key:ui::card::timer::actions::set%]",
+        "toggle_entity": "Toggle {name}",
+        "disconnected": "Disconnected",
+        "unavailable_reason": "Not available right now, so the controls are turned off",
+        "disconnected_reason": "Not connected to Home Assistant, so the controls are turned off",
+        "unknown_reason": "No value reported yet"
       },
       "cover": {
         "position": "Position",
@@ -1701,6 +1706,8 @@
           "last_action": "Last action",
           "last_triggered": "Last triggered"
         },
+        "device_not_found": "This device no longer exists",
+        "also_on_this_device": "Also on this device",
         "add_to": {
           "title": "Add {target} to…",
           "item": "Add to…",
@@ -10583,7 +10590,16 @@
                 "hidden": "Hidden",
                 "hidden_helper": "Left off this card. These stay active in Home Assistant and other cards can still use them.",
                 "disabled": "Disabled",
-                "disabled_helper": "Turned off everywhere in Home Assistant, not just on this card. Applied when you save."
+                "disabled_helper": "Turned off everywhere in Home Assistant, not just on this card. Applied when you save.",
+                "move_to": "Move to {section}",
+                "cannot_disable": "This entity can't be turned off from here because no integration manages it",
+                "disable_confirm_title": "Turn off in Home Assistant?",
+                "disable_confirm_text": "{name} stops updating and recording history everywhere, not just on this card. You can turn it back on here.",
+                "disable_confirm_last": "{name} is the last thing this device still reports. Turn it off and the device goes quiet everywhere, not just on this card.",
+                "disable_confirm_action": "Turn off",
+                "disable_failed": "Home Assistant rejected the change for {entities}. Nothing was changed for them.",
+                "reset": "Reset to defaults",
+                "reset_note": "Entities you turned off in Home Assistant stay off."
               }
             },
             "tile": {

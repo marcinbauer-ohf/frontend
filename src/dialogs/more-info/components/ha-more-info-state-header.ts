@@ -1,4 +1,5 @@
 import { consume } from "@lit/context";
+import type { HassEntity } from "home-assistant-js-websocket";
 import type { TemplateResult } from "lit";
 import { css, html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -7,13 +8,12 @@ import "../../../components/ha-relative-time";
 import type { HomeAssistantFormatters } from "../../../types";
 import { formattersContext } from "../../../data/context";
 import { UNAVAILABLE, UNKNOWN } from "../../../data/entity/entity";
-import type { LightEntity } from "../../../data/light";
 import { SENSOR_DEVICE_CLASS_TIMESTAMP } from "../../../data/sensor";
 import "../../../panels/lovelace/components/hui-timestamp-display";
 
 @customElement("ha-more-info-state-header")
 export class HaMoreInfoStateHeader extends LitElement {
-  @property({ attribute: false }) public stateObj!: LightEntity;
+  @property({ attribute: false }) public stateObj!: HassEntity;
 
   @property({ attribute: false }) public stateOverride?: string;
 
