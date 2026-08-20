@@ -270,6 +270,12 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
 
   private _handleRowAction(ev: ActionHandlerEvent) {
     const entityId = (ev.currentTarget as HTMLElement).dataset.entity;
+    // A row belongs to the device, so it opens the device view on that entity
+    // rather than a lone entity dialog with no way back to the rest.
+    if (this._config!.device && entityId) {
+      showMoreInfoDialog(this, { entityId, deviceId: this._config!.device });
+      return;
+    }
     handleAction(
       this,
       this.hass!,

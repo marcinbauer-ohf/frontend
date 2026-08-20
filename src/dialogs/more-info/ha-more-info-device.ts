@@ -7,24 +7,49 @@ import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
+import { styleMap } from "lit/directives/style-map";
 import { repeat } from "lit/directives/repeat";
 import memoizeOne from "memoize-one";
+import { fireEvent } from "../../common/dom/fire_event";
+import { computeDomain } from "../../common/entity/compute_domain";
 import { computeEntityName } from "../../common/entity/compute_entity_name";
 import { computeStateName } from "../../common/entity/compute_state_name";
+import { stateColorCss } from "../../common/entity/state_color";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import { stringCompare } from "../../common/string/compare";
 import "../../components/ha-alert";
 import "../../components/ha-button-toggle-group";
 import "../../components/ha-expansion-panel";
 import "../../components/ha-state-icon";
-import type { EntityRegistryDisplayEntry } from "../../data/entity/entity_registry";
+import "../../components/ha-button";
+import "../../components/list/ha-grouped-list";
+import type {
+  EntityRegistryDisplayEntry,
+  ExtEntityRegistryEntry,
+} from "../../data/entity/entity_registry";
+import { getExtendedEntityRegistryEntry } from "../../data/entity/entity_registry";
 import "../../state-display/state-display";
 import type { HomeAssistant, ToggleButton } from "../../types";
 import "./components/ha-more-info-state-header";
-import "./ha-more-info-history-and-logbook";
+import {
+  computeShowHistoryComponent,
+  computeShowLogBookComponent,
+  computeShowNewMoreInfo,
+  DOMAINS_NO_INFO,
+} from "./const";
+import { historyShowMoreUrl } from "./ha-more-info-history";
 import "./ha-more-info-info";
+import { logbookShowMoreUrl } from "./ha-more-info-logbook";
 import "./ha-more-info-settings";
+import "./more-info-content";
 import { stateMoreInfoType } from "./state_more_info_control";
+
+declare global {
+  interface HASSDomEvents {
+    /** Which of the device's entities the view is showing in full. */
+    "device-featured-entity-changed": { entityId: string };
+  }
+}
 
 type FeaturedView = "info" | "history" | "settings";
 
@@ -60,14 +85,55 @@ export class HaMoreInfoDevice extends LitElement {
   /** The entity shown at the top until the user picks another one. */
   @property({ attribute: false }) public primaryEntityId?: string;
 
+  /**
+   * Entity to open on, when the dialog was opened from one of the device's
+   * other entities rather than from the device itself.
+   */
+  @property({ attribute: false }) public initialEntityId?: string;
+
   @state() private _selectedEntityId?: string;
 
   @state() private _view: FeaturedView = "info";
 
+  /**
+   * Registry entry of the featured entity, which the settings view needs handed
+   * to it. Undefined means "still loading", null "no unique id".
+   */
+  @state() private _entry?: ExtEntityRegistryEntry | null;
+
+  private _entryEntityId?: string;
+
   protected willUpdate(changedProps: PropertyValues<this>) {
-    if (changedProps.has("deviceId") || changedProps.has("primaryEntityId")) {
-      this._selectedEntityId = undefined;
+    if (
+      changedProps.has("deviceId") ||
+      changedProps.has("primaryEntityId") ||
+      changedProps.has("initialEntityId")
+    ) {
+      // The device's own primary is not a selection: leaving it unselected is
+      // what lets a re-tap hand the view back to it.
+      this._selectedEntityId =
+        this.initialEntityId === this.primaryEntityId
+          ? undefined
+          : this.initialEntityId;
       this._view = "info";
+    }
+
+    if (this._view === "settings") {
+      this._loadEntry(this._selectedEntityId ?? this.primaryEntityId);
+    }
+  }
+
+  /** Loaded on demand: only the settings view needs it. */
+  private async _loadEntry(entityId?: string) {
+    if (!entityId || this._entryEntityId === entityId) {
+      return;
+    }
+    this._entryEntityId = entityId;
+    this._entry = undefined;
+    try {
+      this._entry = await getExtendedEntityRegistryEntry(this.hass, entityId);
+    } catch (_err) {
+      this._entry = null;
     }
   }
 
@@ -136,6 +202,11 @@ export class HaMoreInfoDevice extends LitElement {
     const view = views.some((v) => v.value === this._view)
       ? this._view
       : "info";
+    // The settings form is the longest thing in the dialog and its save action
+    // already sticks to the bottom of whatever scrolls it. A list of sibling
+    // entities on top of that is competition, not context — it stays one tap
+    // away on the other tabs.
+    const showList = others.length > 0 && view !== "settings";
 
     return html`
       <div
@@ -152,22 +223,21 @@ export class HaMoreInfoDevice extends LitElement {
           }
         </div>
         ${
-          others.length
+          showList
             ? html`
-                <ha-expansion-panel
-                  outlined
-                  left-chevron
-                  .header=${this.hass.localize(
-                    "ui.dialogs.more_info_control.also_on_this_device"
-                  )}
-                >
-                  <div class="entities">
+                <ha-expansion-panel class="entities">
+                  <span slot="header"
+                    >${this.hass.localize(
+                      "ui.dialogs.more_info_control.also_on_this_device"
+                    )}</span
+                  >
+                  <ha-grouped-list>
                     ${repeat(
                       others,
                       (entry) => entry.entity_id,
                       (entry) => this._renderRow(entry.entity_id)
                     )}
-                  </div>
+                  </ha-grouped-list>
                 </ha-expansion-panel>
               `
             : nothing
@@ -233,22 +303,31 @@ export class HaMoreInfoDevice extends LitElement {
         <ha-more-info-settings
           .hass=${this.hass}
           .entityId=${entityId}
+          .entry=${this._entry}
         ></ha-more-info-settings>
       `;
     }
 
     if (view === "history") {
-      return html`
-        <div class="pane">
-          <ha-more-info-history-and-logbook
-            .hass=${this.hass}
-            .entityId=${entityId}
-          ></ha-more-info-history-and-logbook>
-        </div>
-      `;
+      return this._renderHistory(entityId);
     }
 
-    if (!readOnly) {
+    const stateObj = this.hass.states[entityId];
+
+    // `ha-more-info-info` leads with the legacy `state-card-content` row — the
+    // entity's name with its state beside it — for every domain that has not
+    // been redesigned yet, and stacks history under it. The device view already
+    // names the entity in its header and keeps history in its own tab, so those
+    // domains take the same presentation as a plain reading and get their
+    // control below it. Domains with a redesigned more info bring their own
+    // header and control, and the ones with no info at all (a camera stream)
+    // need the wrapper's own layout.
+    const legacyControl =
+      !readOnly &&
+      !computeShowNewMoreInfo(stateObj) &&
+      !DOMAINS_NO_INFO.includes(computeDomain(entityId));
+
+    if (!readOnly && !legacyControl) {
       return html`
         <ha-more-info-info
           .hass=${this.hass}
@@ -257,15 +336,113 @@ export class HaMoreInfoDevice extends LitElement {
       `;
     }
 
-    // Nothing to operate, so the reading itself is the content: give it the
-    // room a control would have had. Its history lives in the history tab, the
-    // same place a controllable entity keeps it.
+    // With nothing to operate the reading itself is the content: give it the
+    // room a control would have had, with the icon standing in for the control
+    // a light or a cover would have shown. Its history lives in the history
+    // tab, the same place a controllable entity keeps it.
+    return html`
+      <div class="pane reading">
+        <div
+          class="reading-icon"
+          style=${styleMap({ "--reading-icon-color": stateColorCss(stateObj) })}
+        >
+          <ha-state-icon
+            .hass=${this.hass}
+            .stateObj=${stateObj}
+          ></ha-state-icon>
+        </div>
+        <ha-more-info-state-header
+          .stateObj=${stateObj}
+        ></ha-more-info-state-header>
+        ${
+          legacyControl
+            ? html`
+                <more-info-content
+                  .hass=${this.hass}
+                  .stateObj=${stateObj}
+                ></more-info-content>
+              `
+            : nothing
+        }
+      </div>
+    `;
+  }
+
+  /**
+   * History and activity, each in its own framed box titled by the frame
+   * itself, with "show more" as an action in that title row.
+   *
+   * ponytail: `ha-grouped-list` frames rows and marks itself up as a list, and
+   * a chart is not a row. Swap for row items if the activity entries ever get
+   * rendered here directly.
+   */
+  private _renderHistory(entityId: string) {
+    const history = computeShowHistoryComponent(this.hass, entityId);
+    const logbook = computeShowLogBookComponent(this.hass, entityId);
+
+    if (!history && !logbook) {
+      return html`
+        <div class="pane empty">
+          ${this.hass.localize("ui.dialogs.more_info_control.nothing_recorded")}
+        </div>
+      `;
+    }
+
     return html`
       <div class="pane">
-        <ha-more-info-state-header
-          .stateObj=${this.hass.states[entityId]}
-        ></ha-more-info-state-header>
+        ${
+          history
+            ? html`
+                <ha-grouped-list
+                  .header=${this.hass.localize(
+                    "ui.dialogs.more_info_control.history"
+                  )}
+                >
+                  <ha-more-info-history
+                    hide-header
+                    .hass=${this.hass}
+                    .entityId=${entityId}
+                  ></ha-more-info-history>
+                  ${this._renderShowMore(historyShowMoreUrl(entityId))}
+                </ha-grouped-list>
+              `
+            : nothing
+        }
+        ${
+          logbook
+            ? html`
+                <ha-grouped-list
+                  .header=${this.hass.localize(
+                    "ui.dialogs.more_info_control.logbook"
+                  )}
+                >
+                  <ha-more-info-logbook
+                    hide-header
+                    .hass=${this.hass}
+                    .entityId=${entityId}
+                  ></ha-more-info-logbook>
+                  ${this._renderShowMore(logbookShowMoreUrl(entityId))}
+                </ha-grouped-list>
+              `
+            : nothing
+        }
       </div>
+    `;
+  }
+
+  /**
+   * Rendered last inside the frame on purpose: it lands in the header slot, and
+   * the frame's hairline rule keys off light-DOM sibling order.
+   */
+  private _renderShowMore(href: string) {
+    // The demo has no history or logbook panel to send anyone to.
+    if (__DEMO__) {
+      return nothing;
+    }
+    return html`
+      <ha-button slot="header-action" appearance="plain" size="s" .href=${href}>
+        ${this.hass.localize("ui.dialogs.more_info_control.show_more")}
+      </ha-button>
     `;
   }
 
@@ -311,6 +488,10 @@ export class HaMoreInfoDevice extends LitElement {
       this._selectedEntityId === entityId ? undefined : entityId;
     // The tab belonged to the entity that was showing, not to this one.
     this._view = "info";
+    // The dialog header names what is on show, so it needs to know.
+    fireEvent(this, "device-featured-entity-changed", {
+      entityId: this._selectedEntityId ?? this.primaryEntityId ?? "",
+    });
   }
 
   static styles = css`
@@ -334,13 +515,13 @@ export class HaMoreInfoDevice extends LitElement {
     .layout.split {
       --device-view-height: min(75vh, 700px);
       --device-view-featured-min: 280px;
-      /* Panel summary row plus its bottom margin. */
-      --device-view-chrome: 72px;
+      /* Group heading row plus its bottom margin. */
+      --device-view-chrome: 56px;
       height: var(--device-view-height);
     }
     .layout.split.has-bar {
-      /* Panel summary and margin, plus the tab bar under it. */
-      --device-view-chrome: 128px;
+      /* Group heading and margin, plus the tab bar under it. */
+      --device-view-chrome: 112px;
     }
     .layout.has-bar ha-expansion-panel {
       margin-bottom: var(--ha-space-2);
@@ -363,18 +544,83 @@ export class HaMoreInfoDevice extends LitElement {
       display: block;
       margin-bottom: var(--ha-space-4);
     }
+    .pane.reading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: var(--ha-space-8);
+    }
+    .reading-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 80px;
+      height: 80px;
+      margin-bottom: var(--ha-space-5);
+      border-radius: var(--ha-border-radius-circle);
+      color: var(--reading-icon-color, var(--state-icon-color));
+      background-color: color-mix(
+        in srgb,
+        var(--reading-icon-color, var(--state-icon-color)) 20%,
+        transparent
+      );
+      --mdc-icon-size: 40px;
+    }
+    /* The domain control that follows a reading wants the full width, not the
+       column's centering. */
+    .pane.reading more-info-content {
+      align-self: stretch;
+      margin-top: var(--ha-space-4);
+    }
+    .pane.empty {
+      color: var(--secondary-text-color);
+      text-align: center;
+      padding-top: var(--ha-space-8);
+    }
+    ha-grouped-list {
+      display: block;
+    }
+    ha-grouped-list + ha-grouped-list {
+      margin-top: var(--ha-space-4);
+    }
+    /* Both bring the dialog's own generous inset; inside a frame they only need
+       to clear its border. */
+    ha-more-info-history {
+      display: block;
+      padding: var(--ha-space-2) 0;
+      --more-info-history-padding-inline: var(--ha-space-3);
+    }
+    ha-more-info-logbook {
+      display: block;
+      --logbook-horizontal-padding: var(--ha-space-3);
+    }
     .bar {
       flex: none;
       padding: 0 var(--ha-space-6) var(--ha-space-6);
     }
+    /* Dressed as a grouped list: the summary is the group heading and the rows
+       sit in the component's own frame, so the list reads as part of the view
+       instead of an outlined card floating in it. */
     ha-expansion-panel {
       flex: none;
       display: block;
       margin: 0 var(--ha-space-6) var(--ha-space-6);
+      color: var(--secondary-text-color);
       --expansion-panel-content-padding: 0;
-      --expansion-panel-summary-padding: 0 var(--ha-space-2);
+      --expansion-panel-summary-padding: 0 var(--ha-space-1) 0
+        calc(var(--ha-space-3) + var(--ha-border-width-sm));
     }
-    .entities {
+    ha-expansion-panel::part(summary) {
+      min-height: 0;
+      padding-block: var(--ha-space-1);
+      margin-bottom: var(--ha-space-1);
+    }
+    ha-expansion-panel [slot="header"] {
+      font-size: var(--ha-font-size-m);
+      font-weight: var(--ha-font-weight-medium);
+      color: var(--secondary-text-color);
+    }
+    .entities ha-grouped-list::part(base) {
       max-height: max(
         96px,
         calc(
@@ -384,7 +630,6 @@ export class HaMoreInfoDevice extends LitElement {
         )
       );
       overflow-y: auto;
-      padding: 0 var(--ha-space-2) var(--ha-space-2);
     }
     .row {
       display: flex;
@@ -392,9 +637,9 @@ export class HaMoreInfoDevice extends LitElement {
       gap: var(--ha-space-3);
       width: 100%;
       min-height: 44px;
-      padding: var(--ha-space-1) var(--ha-space-2);
+      padding: var(--ha-space-1)
+        var(--ha-row-item-padding-inline, var(--ha-space-3));
       border: none;
-      border-radius: var(--ha-border-radius-md);
       background: none;
       color: var(--primary-text-color);
       font-family: inherit;

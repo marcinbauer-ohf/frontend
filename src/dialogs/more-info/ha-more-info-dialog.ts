@@ -161,6 +161,9 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
 
   @state() private _deviceId?: string | null;
 
+  /** Which of the device's entities the device view has on show. */
+  @state() private _deviceEntityId?: string;
+
   @state() private _data?: Record<string, any>;
 
   @provide({ context: moreInfoContext })
@@ -195,15 +198,17 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
 
   public showDialog(params: MoreInfoDialogParams) {
     this._deviceId = params.deviceId ?? null;
+    // Opened from one of the device's other entities: the device still leads
+    // with its own primary, and the view opens on the one that was clicked.
+    this._deviceEntityId =
+      this._deviceId && params.entityId ? params.entityId : undefined;
     // The device view features the same entity the device card does, so the two
     // never disagree about what the device's primary control is.
     // ponytail: a device with no usable entity cannot be opened, same as a
     // missing entity id — the card offers no tap target in that case either.
-    this._entityId =
-      params.entityId ??
-      (this._deviceId
-        ? deviceCardEntities(this.hass, this._deviceId)[0]
-        : null);
+    this._entityId = this._deviceId
+      ? (deviceCardEntities(this.hass, this._deviceId)[0] ?? params.entityId)
+      : params.entityId;
     if (!this._entityId) {
       this.closeDialog();
       return;
@@ -217,6 +222,10 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
     this._currView = view;
     this._initialView = view;
     this._childViewStack = [];
+    // The dialog element is cached and reused for every open, so an unfinished
+    // back stack from a previous one would still be here — and a non-empty one
+    // means "drilled into an entity", which hides the device view.
+    this._parentEntityIds = [];
     this._infoEditMode = false;
     this._detailsYamlMode = false;
 
@@ -254,6 +263,7 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
     }
     this._entityId = undefined;
     this._deviceId = undefined;
+    this._deviceEntityId = undefined;
     this._parentEntityIds = [];
     this._entry = undefined;
     this._infoEditMode = false;
@@ -640,9 +650,28 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
       : undefined;
     const areaName = context?.area ? computeAreaName(context.area) : undefined;
 
+    // Inside the device view the breadcrumb gains a level once one of the
+    // device's entities is on show, so the header names it with the device
+    // above it instead of still claiming to be the device.
+    const deviceEntityObj =
+      showDeviceView &&
+      this._deviceEntityId &&
+      this._deviceEntityId !== this._entityId
+        ? this.hass.states[this._deviceEntityId]
+        : undefined;
+    const deviceEntityName = deviceEntityObj
+      ? computeEntityName(
+          deviceEntityObj,
+          this.hass.entities,
+          this.hass.devices
+        )
+      : undefined;
+
     const breadcrumb = (
       showDeviceView
-        ? [areaName, deviceName]
+        ? deviceEntityName
+          ? [areaName, deviceName, deviceEntityName]
+          : [areaName, deviceName]
         : [areaName, deviceName, entityName]
     ).filter((v): v is string => Boolean(v));
     const defaultTitle = breadcrumb.pop() || entityId;
@@ -756,7 +785,9 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
           isDefaultView
             ? html`
                 ${
-                  this._shouldShowHistory(domain)
+                  // The device view has a history tab of its own, so the header
+                  // would only be a second door to the same place.
+                  this._shouldShowHistory(domain) && !showDeviceView
                     ? html`
                         <ha-icon-button
                           slot="headerActionItems"
@@ -983,6 +1014,10 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
                                 .hass=${this.hass}
                                 .deviceId=${this._deviceId!}
                                 .primaryEntityId=${this._entityId!}
+                                .initialEntityId=${this._deviceEntityId}
+                                @device-featured-entity-changed=${
+                                  this._deviceEntityChanged
+                                }
                               ></ha-more-info-device>`
                             : this._currView === "info"
                               ? html`
@@ -1074,6 +1109,11 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
       this._infoEditMode = false;
       this._detailsYamlMode = false;
     }
+  }
+
+  private _deviceEntityChanged(ev: CustomEvent<{ entityId: string }>) {
+    ev.stopPropagation();
+    this._deviceEntityId = ev.detail.entityId || undefined;
   }
 
   private _entryUpdated(ev: CustomEvent<ExtEntityRegistryEntry>) {

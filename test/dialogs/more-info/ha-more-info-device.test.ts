@@ -98,6 +98,7 @@ const fakeHass = (): HomeAssistant =>
 interface DialogInternals {
   hass: HomeAssistant;
   showDialog: (params: { entityId: string | null; deviceId?: string }) => void;
+  _deviceEntityId?: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention -- private dialog internals
   _handleMoreInfoEvent: (ev: CustomEvent) => void;
   // eslint-disable-next-line @typescript-eslint/naming-convention -- private dialog internals
@@ -145,12 +146,36 @@ describe("ha-more-info-device", () => {
     ] as HaExpansionPanel[];
 
     expect(panels).toHaveLength(1);
-    expect(panels[0].header).toBe(
+    // The heading is slotted so the view can style it like a grouped list's.
+    expect(panels[0].querySelector('[slot="header"]')!.textContent).toBe(
       "ui.dialogs.more_info_control.also_on_this_device"
     );
+    expect(panels[0].querySelector("ha-grouped-list")).not.toBeNull();
     // Closed on open: the entity on top is what the dialog was opened for.
     expect(panels[0].expanded).toBe(false);
     expect(panels[0].secondary).toBeUndefined();
+  });
+
+  it("opens on the entity it was asked to feature", async () => {
+    const el = document.createElement(
+      "ha-more-info-device"
+    ) as HaMoreInfoDevice;
+    el.hass = fakeHass();
+    el.deviceId = DEVICE;
+    el.primaryEntityId = PRIMARY;
+    el.initialEntityId = SENSOR;
+    document.body.append(el);
+    await el.updateComplete;
+
+    expect(
+      el.shadowRoot!.querySelector<
+        HTMLElement & { stateObj: { entity_id: string } }
+      >("ha-more-info-state-header")!.stateObj.entity_id
+    ).toBe(SENSOR);
+    // The row it opened on is marked, so a re-tap is an obvious way back.
+    expect(
+      el.shadowRoot!.querySelector<HTMLButtonElement>(".row.selected")!.value
+    ).toBe(SENSOR);
   });
 
   it("selects a row into the featured slot and back out on a re-tap", async () => {
@@ -159,11 +184,16 @@ describe("ha-more-info-device", () => {
 
     row.click();
     await el.updateComplete;
-    // A sensor has no control, so it gets the big state header instead.
+    // A sensor has no control, so it gets its icon and the big state header.
     expect(
       el.shadowRoot!.querySelector<
         HTMLElement & { stateObj: { entity_id: string } }
       >("ha-more-info-state-header")!.stateObj.entity_id
+    ).toBe(row.value);
+    expect(
+      el.shadowRoot!.querySelector<
+        HTMLElement & { stateObj: { entity_id: string } }
+      >(".reading-icon ha-state-icon")!.stateObj.entity_id
     ).toBe(row.value);
     expect(el.shadowRoot!.querySelector("ha-more-info-info")).toBeNull();
     expect(row.classList.contains("selected")).toBe(true);
@@ -175,6 +205,45 @@ describe("ha-more-info-device", () => {
         "ha-more-info-info"
       )!.entityId
     ).toBe(PRIMARY);
+  });
+
+  it("gives a not-yet-redesigned domain the reading treatment and its control", async () => {
+    // `ha-more-info-info` would lead with the legacy name-and-state row for
+    // these, which the header above it already says.
+    const UPDATE = "update.firmware";
+    const hass = fakeHass();
+    (hass.entities as any)[UPDATE] = { entity_id: UPDATE, device_id: DEVICE };
+    (hass.states as any)[UPDATE] = {
+      entity_id: UPDATE,
+      state: "off",
+      attributes: {
+        friendly_name: "Firmware",
+        installed_version: "1.0",
+        latest_version: "1.0",
+        in_progress: false,
+        supported_features: 0,
+      },
+      last_changed: "2024-01-01T00:00:00.000Z",
+      last_updated: "2024-01-01T00:00:00.000Z",
+      context: { id: "1", user_id: null, parent_id: null },
+    };
+    const el = document.createElement(
+      "ha-more-info-device"
+    ) as HaMoreInfoDevice;
+    el.hass = hass;
+    el.deviceId = DEVICE;
+    el.primaryEntityId = UPDATE;
+    document.body.append(el);
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector("ha-more-info-info")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector(".pane.reading ha-more-info-state-header")
+    ).not.toBeNull();
+    // The control the domain does have still comes along.
+    expect(
+      el.shadowRoot!.querySelector(".pane.reading more-info-content")
+    ).not.toBeNull();
   });
 
   it("keeps the same tabs whichever entity is featured", async () => {
@@ -203,9 +272,52 @@ describe("ha-more-info-device", () => {
     expect(
       el.shadowRoot!.querySelector("ha-more-info-state-header")
     ).not.toBeNull();
-    expect(
-      el.shadowRoot!.querySelector("ha-more-info-history-and-logbook")
-    ).toBeNull();
+    expect(el.shadowRoot!.querySelector("ha-more-info-history")).toBeNull();
+    expect(el.shadowRoot!.querySelector("ha-more-info-logbook")).toBeNull();
+  });
+
+  it("tells the dialog which entity the header should name", async () => {
+    const el = await renderView();
+    const changes: string[] = [];
+    el.addEventListener("device-featured-entity-changed", (ev) =>
+      changes.push((ev as CustomEvent<{ entityId: string }>).detail.entityId)
+    );
+    const row = el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".row")[0];
+
+    row.click();
+    await el.updateComplete;
+    row.click();
+    await el.updateComplete;
+
+    // Selecting names the row's entity; re-tapping hands the header back to
+    // the entity the device leads with.
+    expect(changes).toEqual([row.value, PRIMARY]);
+  });
+
+  it("frames history in the history tab", async () => {
+    const el = await renderView();
+
+    el.shadowRoot!.querySelector("ha-button-toggle-group")!.dispatchEvent(
+      new CustomEvent("value-changed", { detail: { value: "history" } })
+    );
+    await el.updateComplete;
+
+    const frames = el.shadowRoot!.querySelectorAll(".featured ha-grouped-list");
+    expect(frames).toHaveLength(1);
+    expect((frames[0] as HTMLElement & { header?: string }).header).toBe(
+      "ui.dialogs.more_info_control.history"
+    );
+
+    // The component's own heading gives way to the frame's, and "show more"
+    // becomes an action in that heading.
+    const history = frames[0].querySelector<
+      HTMLElement & { hideHeader: boolean }
+    >("ha-more-info-history")!;
+    expect(history.hideHeader).toBe(true);
+    const showMore = frames[0].querySelector<HTMLElement & { href: string }>(
+      "ha-button[slot='header-action']"
+    )!;
+    expect(showMore.href).toContain("/history?");
   });
 
   it("leaves out the featured, hidden, and disabled entities", async () => {
@@ -254,6 +366,36 @@ describe("more info dialog device scope", () => {
 
     expect(dialog._deviceId).toBe(DEVICE);
     expect(dialog._entityId).toBe(PRIMARY);
+    expect(dialog._deviceEntityId).toBeUndefined();
+  });
+
+  it("opens on the clicked entity when a card row asks for it", () => {
+    const dialog = document.createElement(
+      "ha-more-info-dialog"
+    ) as unknown as DialogInternals;
+    dialog.hass = fakeHass();
+    dialog.showDialog({ entityId: SENSOR, deviceId: DEVICE });
+
+    // Still the device's view, still led by the device's own primary, but
+    // showing the entity that was clicked.
+    expect(dialog._deviceId).toBe(DEVICE);
+    expect(dialog._entityId).toBe(PRIMARY);
+    expect(dialog._deviceEntityId).toBe(SENSOR);
+  });
+
+  it("opens fresh even when the reused dialog was left drilled in", () => {
+    const dialog = openOnDevice();
+    dialog._handleMoreInfoEvent(
+      new CustomEvent("hass-more-info", { detail: { entityId: SENSOR } })
+    );
+
+    // Same element, opened again from a card row: a leftover back stack would
+    // keep the dialog on the single-entity view instead of the device.
+    dialog.showDialog({ entityId: SENSOR, deviceId: DEVICE });
+
+    expect(dialog._parentEntityIds).toEqual([]);
+    expect(dialog._entityId).toBe(PRIMARY);
+    expect(dialog._deviceEntityId).toBe(SENSOR);
   });
 
   it("returns to the device after drilling into one of its entities", () => {

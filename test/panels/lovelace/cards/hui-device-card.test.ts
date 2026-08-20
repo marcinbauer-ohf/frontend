@@ -20,6 +20,7 @@ vi.hoisted(() => {
 
 const DEVICE = "dev1";
 const LIGHT = "light.desk";
+const SENSOR = "sensor.power";
 
 type FakeHass = HomeAssistant & { callService: ReturnType<typeof vi.fn> };
 
@@ -31,6 +32,14 @@ type FakeHass = HomeAssistant & { callService: ReturnType<typeof vi.fn> };
 const fakeHass = (state: string): FakeHass =>
   ({
     states: {
+      [SENSOR]: {
+        entity_id: SENSOR,
+        state: "12",
+        attributes: { friendly_name: "Power", device_class: "power" },
+        last_changed: "2024-01-01T00:00:00.000Z",
+        last_updated: "2024-01-01T00:00:00.000Z",
+        context: { id: "1", user_id: null, parent_id: null },
+      },
       [LIGHT]: {
         entity_id: LIGHT,
         state,
@@ -43,7 +52,10 @@ const fakeHass = (state: string): FakeHass =>
         context: { id: "1", user_id: null, parent_id: null },
       },
     },
-    entities: { [LIGHT]: { entity_id: LIGHT, device_id: DEVICE } },
+    entities: {
+      [LIGHT]: { entity_id: LIGHT, device_id: DEVICE },
+      [SENSOR]: { entity_id: SENSOR, device_id: DEVICE },
+    },
     devices: { [DEVICE]: { id: DEVICE, name: "Desk lamp", area_id: "office" } },
     areas: { office: { area_id: "office", name: "Office" } },
     connected: true,
@@ -118,6 +130,25 @@ describe("hui-device-card", () => {
     expect(hass.callService).toHaveBeenCalledWith("light", "turn_on", {
       entity_id: LIGHT,
     });
+  });
+
+  it("opens the device view on the entity of the row that was tapped", async () => {
+    const card = await renderCard(fakeHass("on"));
+    const params: unknown[] = [];
+    card.addEventListener("hass-more-info", (ev) =>
+      params.push((ev as CustomEvent).detail)
+    );
+
+    const row = card.shadowRoot!.querySelector(".secondary .row")!;
+    row.dispatchEvent(
+      new CustomEvent("action", {
+        detail: { action: "tap" },
+        bubbles: true,
+        composed: true,
+      })
+    );
+
+    expect(params).toEqual([{ entityId: SENSOR, deviceId: DEVICE }]);
   });
 
   it("removes the control and states the reason when unavailable", async () => {

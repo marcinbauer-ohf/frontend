@@ -15,6 +15,7 @@ import { HaListBase } from "./ha-list-base";
  * facts and `ha-list-item-button` for navigable rows.
  *
  * @slot - List items (`<ha-list-item-*>`).
+ * @slot header-action - Trailing content of the header, for a "show more" link or another action.
  *
  * @csspart header - The header above the frame.
  * @csspart base - The framed `<div role="list">`.
@@ -35,8 +36,9 @@ export class HaGroupedList extends HaListBase {
     return html`
       ${
         this.header
-          ? html`<div part="header" class="header" id="header">
-              ${this.header}
+          ? html`<div part="header" class="header">
+              <span class="header-text" id="header">${this.header}</span>
+              <slot name="header-action"></slot>
             </div>`
           : nothing
       }
@@ -59,13 +61,25 @@ export class HaGroupedList extends HaListBase {
       }
 
       .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--ha-space-2);
         margin: 0 0 var(--ha-space-1);
-        margin-inline-start: calc(
-          var(--ha-row-item-padding-inline) + var(--ha-border-width-sm)
-        );
+        margin-inline: calc(
+            var(--ha-row-item-padding-inline) + var(--ha-border-width-sm)
+          )
+          0;
         font-size: var(--ha-font-size-m);
         font-weight: var(--ha-font-weight-medium);
         color: var(--secondary-text-color);
+      }
+
+      .header-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .base {
@@ -74,7 +88,10 @@ export class HaGroupedList extends HaListBase {
         overflow: hidden;
       }
 
-      ::slotted(:not(:first-child)) {
+      /* Scoped to the default slot so header-action content is never treated
+         as a row. Place it last in the light DOM: the hairline rule keys off
+         sibling order. */
+      slot:not([name])::slotted(:not(:first-child)) {
         border-top: var(--ha-border-width-sm) solid var(--divider-color);
       }
     `,

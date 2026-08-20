@@ -60,8 +60,12 @@ export class HuiCardElementEditor extends HuiTypedElementEditor<LovelaceCardConf
 
   protected renderConfigElement(): TemplateResult {
     const displayedTabs: string[] = ["config"];
-    if (this.showVisibilityTab) displayedTabs.push("visibility");
-    if (this._showLayoutTab) displayedTabs.push("layout");
+    // The device card's editor is the whole editor: it stages entity registry
+    // changes that are applied on save, so it keeps the dialog to itself.
+    if (this.configElementType !== "device") {
+      if (this.showVisibilityTab) displayedTabs.push("visibility");
+      if (this._showLayoutTab) displayedTabs.push("layout");
+    }
 
     if (displayedTabs.length === 1) return super.renderConfigElement();
 

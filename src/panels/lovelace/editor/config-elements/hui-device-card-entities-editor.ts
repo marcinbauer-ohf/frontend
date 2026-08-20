@@ -402,7 +402,6 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
                 ></ha-domain-icon>`
         }
         <span slot="headline">${row.name}</span>
-        <span slot="supporting-text">${row.entityId}</span>
         <div slot="end" class="actions">
           ${
             // One button per other section: the same move a drag makes, for
@@ -624,11 +623,10 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
     ha-md-list-item {
       --md-list-item-top-space: 0;
       --md-list-item-bottom-space: 0;
-      --md-list-item-two-line-container-height: 56px;
+      --md-list-item-one-line-container-height: 48px;
     }
     ha-md-list.disabled ha-md-list-item {
       --md-list-item-label-text-color: var(--disabled-text-color);
-      --md-list-item-supporting-text-color: var(--disabled-text-color);
     }
     .empty {
       margin: 0;

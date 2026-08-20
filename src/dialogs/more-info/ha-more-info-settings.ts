@@ -18,7 +18,12 @@ export class HaMoreInfoSettings extends LitElement {
 
   @property({ attribute: false }) public entityId!: string;
 
-  @state() private entry?: EntityRegistryEntry | ExtEntityRegistryEntry | null;
+  /**
+   * Registry entry of the entity, supplied by the host. Undefined means it is
+   * still loading, null that the entity has no unique id to configure.
+   */
+  @property({ attribute: false }) public entry?:
+    EntityRegistryEntry | ExtEntityRegistryEntry | null;
 
   @state() private _settingsElementTag?: string;
 
