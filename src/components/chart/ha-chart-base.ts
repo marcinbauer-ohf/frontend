@@ -654,6 +654,14 @@ export class HaChartBase extends LitElement {
       this.chart.on("click", (e: ECElementEvent) => {
         fireEvent(this, "chart-click", e);
       });
+      // What the pointer is on, for a host that reads the hovered point out
+      // somewhere of its own rather than only in the tooltip.
+      this.chart.on("mouseover", (e: ECElementEvent) => {
+        fireEvent(this, "chart-mouseover", e);
+      });
+      this.chart.on("mouseout", () => {
+        fireEvent(this, "chart-mouseout", undefined);
+      });
       this.chart.on("sankeyroam", () => {
         const option = this.chart!.getOption();
         const series = option.series as any[];
@@ -1739,6 +1747,8 @@ declare global {
     "dataset-hidden": { id: string };
     "dataset-unhidden": { id: string };
     "chart-click": ECElementEvent;
+    "chart-mouseover": ECElementEvent;
+    "chart-mouseout": undefined;
     "legend-label-click": { id: string };
     "chart-zoom": {
       start: number;

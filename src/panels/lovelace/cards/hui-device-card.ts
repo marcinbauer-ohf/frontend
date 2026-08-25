@@ -1,5 +1,6 @@
 import {
   mdiAlertCircleOutline,
+  mdiChevronRight,
   mdiHelpCircleOutline,
   mdiLanDisconnect,
   mdiPower,
@@ -26,7 +27,6 @@ import "../../../components/ha-card";
 import "../../../components/ha-state-icon";
 import "../../../components/ha-svg-icon";
 import "../../../components/tile/ha-tile-icon";
-import "../../../components/entity/ha-entity-toggle";
 import "../../../state-display/state-display";
 import type { ActionHandlerEvent } from "../../../data/lovelace/action_handler";
 import type { HomeAssistant } from "../../../types";
@@ -35,11 +35,20 @@ import { handleAction } from "../common/handle-action";
 import { hasAction } from "../common/has-action";
 import { showMoreInfoDialog } from "../../../dialogs/more-info/show-ha-more-info-dialog";
 import { createEntityNotFoundWarning } from "../components/hui-warning";
+import type { LovelaceCardPath } from "../editor/lovelace-path";
 import type { LovelaceCard, LovelaceCardEditor } from "../types";
 import { getEntityDefaultTileIconAction } from "./hui-tile-card";
-import { resolveDeviceCardEntities } from "./device/device-card-entities";
+import {
+  deviceCardEntities,
+  PRESSABLE_DOMAINS,
+  resolveDeviceCardEntities,
+  PRESS_LABEL,
+  PRESS_SERVICE,
+  SETTABLE_DOMAINS,
+  supportsSparkline,
+} from "./device/device-card-entities";
 import "./device/hui-device-card-sparkline";
-import "../card-features/hui-card-feature";
+import "../card-features/hui-card-features";
 import {
   supportsFeatureType,
   type UiFeatureType,
@@ -50,14 +59,6 @@ import type {
 } from "../card-features/types";
 import type { DeviceCardConfig } from "./types";
 
-/** Domains that render a pill toggle instead of a read-only value. */
-const TOGGLEABLE_DOMAINS = new Set([
-  "light",
-  "switch",
-  "input_boolean",
-  "siren",
-]);
-
 /**
  * Domains whose control is not on/off, so a toggle would misrepresent them: a
  * cover has positions, a radiator has modes, a fan has speeds. They reuse the
@@ -65,6 +66,9 @@ const TOGGLEABLE_DOMAINS = new Set([
  * narrow inline position (see `hui-card-features`), and fall back to the
  * read-only value when the entity does not support the feature.
  */
+/** On or off, rendered the way every other dashboard card renders it. */
+const TOGGLE_FEATURE: LovelaceCardFeatureConfig = { type: "toggle" };
+
 const FEATURE_CONTROLS: Record<string, LovelaceCardFeatureConfig[]> = {
   // Most capable control first: a thermostat that can be given a target gets
   // the temperature control, one that can only be switched between modes gets
@@ -88,42 +92,6 @@ const FEATURE_CONTROLS: Record<string, LovelaceCardFeatureConfig[]> = {
   valve: [{ type: "valve-open-close" }],
   water_heater: [{ type: "water-heater-operation-modes" }],
 };
-
-/** Domains that render a round action button (press-only). */
-const PRESSABLE_DOMAINS = new Set([
-  "button",
-  "input_button",
-  "scene",
-  "script",
-  "automation",
-]);
-
-/** The action verb for each pressable domain, so the button is not just a name. */
-const PRESS_LABEL: Record<string, LocalizeKeys> = {
-  button: "ui.card.button.press",
-  input_button: "ui.card.button.press",
-  scene: "ui.card.scene.activate",
-  script: "ui.card.script.run",
-  automation: "ui.card.automation.trigger",
-};
-
-/**
- * Domains holding a value the user sets rather than a measurement. They get a
- * "Set" button (the real control lives in more info) and never a sparkline —
- * graphing a setpoint over time is meaningless even though it has a unit.
- */
-const SETTABLE_DOMAINS = new Set([
-  "number",
-  "input_number",
-  "select",
-  "input_select",
-  "text",
-  "input_text",
-  "date",
-  "time",
-  "datetime",
-  "input_datetime",
-]);
 
 /**
  * The three ways an entity can fail to be trustworthy. They are deliberately
@@ -174,11 +142,23 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
   }
 
   public static getStubConfig(hass: HomeAssistant): DeviceCardConfig {
-    const deviceId = Object.keys(hass.devices)[0];
+    // The first device in the registry is as likely as not a service or a
+    // diagnostics-only one, which would preview as a warning. Lead with a
+    // device this card can actually draw.
+    const deviceId =
+      Object.keys(hass.devices).find(
+        (id) => deviceCardEntities(hass, id).length > 0
+      ) ?? Object.keys(hass.devices)[0];
     return { type: "device", device: deviceId ?? "" };
   }
 
   @property({ attribute: false }) public hass?: HomeAssistant;
+
+  /**
+   * Where this card sits in the dashboard config, handed over by the layout.
+   * Without it the card cannot point anyone at its own editor.
+   */
+  @property({ attribute: false }) public path?: LovelaceCardPath;
 
   @state() private _config?: DeviceCardConfig;
 
@@ -216,17 +196,21 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     const entityId = this._resolveEntities(this.hass, this._config).hero;
     // A device card opens the device, not just the entity it happens to
     // feature — the dialog's device view is where the rest of the device is.
-    // An explicitly configured action still wins, so this only replaces the
-    // default more info.
+    // It opens on the featured entity, whether that is the device's own
+    // primary or one chosen in the editor, so the dialog leads with what the
+    // card leads with. An explicitly configured action still wins, so this
+    // only replaces the default more info.
     if (
       this._config!.device &&
       ev.detail.action === "tap" &&
-      this._config!.tap_action?.action === "more-info" &&
-      !this._config!.entity
+      this._config!.tap_action?.action === "more-info"
     ) {
       showMoreInfoDialog(this, {
-        entityId: null,
+        entityId: entityId ?? null,
         deviceId: this._config!.device,
+        deviceEntityOrder: this._entityOrder(),
+        // Only a card the layout gave a path to can be edited from there.
+        deviceCardEdit: this.path ? this._editCard : undefined,
       });
       return;
     }
@@ -236,6 +220,21 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       { entity: entityId, ...this._config! },
       ev.detail.action!
     );
+  }
+
+  /** Ask the dashboard to open this card's editor. */
+  private _editCard = () => {
+    fireEvent(this, "ll-edit-card", { path: this.path! });
+  };
+
+  /**
+   * The entities in the order the card shows them, hero first. The dialog lists
+   * the same device and cannot work this out for itself: the editor's own order
+   * lives in the card's config.
+   */
+  private _entityOrder(): string[] {
+    const { hero, visible } = this._resolveEntities(this.hass, this._config);
+    return hero ? [hero, ...visible] : visible;
   }
 
   /** "toggle" when tapping the icon is a meaningful primary action here. */
@@ -251,6 +250,8 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
   }
 
   private _handleIconAction(ev: ActionHandlerEvent) {
+    // The icon keeps the pointer events to itself either way, so the card
+    // cannot act on the same tap twice.
     ev.stopPropagation();
     const entityId = this._resolveEntities(this.hass, this._config).hero;
     if (
@@ -258,6 +259,9 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       this._iconAction(entityId) !== "toggle" ||
       this._controlsDisabledFor(this.hass!.states[entityId])
     ) {
+      // Nothing to toggle, so the tap belongs to the card: dropping it would
+      // leave a dead spot in the middle of it.
+      this._handleAction(ev);
       return;
     }
     handleAction(
@@ -273,7 +277,12 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     // A row belongs to the device, so it opens the device view on that entity
     // rather than a lone entity dialog with no way back to the rest.
     if (this._config!.device && entityId) {
-      showMoreInfoDialog(this, { entityId, deviceId: this._config!.device });
+      showMoreInfoDialog(this, {
+        entityId,
+        deviceId: this._config!.device,
+        deviceEntityOrder: this._entityOrder(),
+        deviceCardEdit: this.path ? this._editCard : undefined,
+      });
       return;
     }
     handleAction(
@@ -290,11 +299,21 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     }
 
     const { hero, visible } = this._resolveEntities(this.hass, this._config);
+    const device = this._config.device
+      ? this.hass.devices[this._config.device]
+      : undefined;
 
+    // "Entity not found" is the wrong thing to say here: the card is about a
+    // device, which may be perfectly fine while having nothing this card can
+    // put on it.
     if (!hero) {
       return html`
         <hui-warning .hass=${this.hass}>
-          ${createEntityNotFoundWarning(this.hass, this._config.device ?? "")}
+          ${this.hass.localize(
+            device
+              ? "ui.card.device.nothing_to_show"
+              : "ui.card.device.device_not_found"
+          )}
         </hui-warning>
       `;
     }
@@ -312,15 +331,8 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     const problem = this._problem(stateObj);
     const unavailable = problem === "unavailable";
     const active = stateActive(stateObj);
-    const toggleable = TOGGLEABLE_DOMAINS.has(domain);
-    const pressable = PRESSABLE_DOMAINS.has(domain);
-    const settable = SETTABLE_DOMAINS.has(domain);
-    const unit = stateObj.attributes.unit_of_measurement as string | undefined;
-    const isNumeric = unit != null && !toggleable && !pressable && !settable;
+    const isNumeric = supportsSparkline(stateObj);
 
-    const device = this._config.device
-      ? this.hass.devices[this._config.device]
-      : undefined;
     const name =
       this._config.name ||
       (device && computeDeviceName(device)) ||
@@ -340,7 +352,11 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     const color = active ? stateColorCss(stateObj) : undefined;
 
     const cardClasses = {
-      active: active && (toggleable || !!this._featureConfigFor(hero)),
+      // Lit up when its control shows that state: a feature or a toggle.
+      active:
+        active &&
+        (!!this._featureConfigFor(hero) ||
+          supportsFeatureType(this.hass, { entity_id: hero }, "toggle")),
       unavailable,
       disconnected: problem === "disconnected",
     };
@@ -348,6 +364,13 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     const iconInteractive =
       this._iconAction(hero) === "toggle" &&
       !this._controlsDisabledFor(stateObj);
+    // Nothing to operate: the same branches `_renderControl` takes to decide
+    // there is no control to draw. A tinted shape behind the icon says the
+    // icon does something, so a reading gets the icon on its own.
+    const readOnly =
+      !this._featureConfigFor(hero) &&
+      !PRESSABLE_DOMAINS.has(domain) &&
+      !supportsFeatureType(this.hass, { entity_id: hero }, "toggle");
 
     return html`
       <ha-card
@@ -373,7 +396,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
             <ha-tile-icon
               data-domain=${domain}
               data-state=${stateObj.state}
-              class=${classMap({ image: !!feedImage })}
+              class=${classMap({ image: !!feedImage, plain: readOnly })}
               .imageUrl=${feedImage}
               .interactive=${iconInteractive}
               .label=${
@@ -408,7 +431,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
 
             ${problem ? this._renderProblemIcon(problem) : nothing}
 
-            <div class="control">${this._renderControl(stateObj)}</div>
+            <div class="control">${this._renderControl(stateObj, true)}</div>
           </div>
 
           ${
@@ -448,7 +471,10 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     const unavailable = isUnavailableState(stateObj);
     const active = stateActive(stateObj);
     const stateLabel = this.hass!.formatEntityState(stateObj);
-    const toggleable = TOGGLEABLE_DOMAINS.has(domain);
+    // A toggle states the value itself, whichever domain it belongs to.
+    const toggleable =
+      !PRESSABLE_DOMAINS.has(domain) &&
+      supportsFeatureType(this.hass!, { entity_id: entityId }, "toggle");
     // Device name only belongs on the hero — rows drop it and keep the rest.
     const name =
       computeEntityName(stateObj, this.hass!.entities, this.hass!.devices) ||
@@ -458,7 +484,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       <div
         class="row ${classMap({
           unavailable,
-          active: active && (toggleable || !!this._featureConfigFor(entityId)),
+          active: active && toggleable,
         })}"
         data-entity=${entityId}
         role="button"
@@ -583,28 +609,68 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     }
   )(new Map());
 
-  /** The card feature this entity's domain uses, when the entity supports it. */
+  private _featureLists = new WeakMap<
+    LovelaceCardFeatureConfig,
+    LovelaceCardFeatureConfig[]
+  >();
+
+  /**
+   * `hui-card-features` takes a list, and a fresh array on every render would
+   * make it throw away and re-create the feature element.
+   */
+  private _featureList(
+    config: LovelaceCardFeatureConfig
+  ): LovelaceCardFeatureConfig[] {
+    let list = this._featureLists.get(config);
+    if (!list) {
+      list = [config];
+      this._featureLists.set(config, list);
+    }
+    return list;
+  }
+
+  /**
+   * The card feature this entity's control is: the one the card is configured
+   * with, or the most capable one its domain offers that the entity supports.
+   * A configured feature the entity cannot do falls back the same way, so a
+   * card that outlives a device's capabilities still shows a control.
+   */
   private _featureConfigFor(
     entityId: string
   ): LovelaceCardFeatureConfig | undefined {
     if (!this.hass) {
       return undefined;
     }
-    return FEATURE_CONTROLS[computeDomain(entityId)]?.find((config) =>
+    const supported = (type: string) =>
       supportsFeatureType(
         this.hass!,
         { entity_id: entityId },
-        config.type as UiFeatureType
-      )
-    );
+        type as UiFeatureType
+      );
+    const domainConfigs = FEATURE_CONTROLS[computeDomain(entityId)];
+    const chosen = this._config?.feature;
+
+    if (chosen && supported(chosen)) {
+      // The domain's own entry carries the config a feature needs, if it has
+      // one; anything else the picker offers needs nothing but its type.
+      return (
+        domainConfigs?.find((config) => config.type === chosen) ??
+        // A type from a config file rather than from the picker: the feature
+        // itself rejects a config it cannot use.
+        ({ type: chosen } as LovelaceCardFeatureConfig)
+      );
+    }
+
+    return domainConfigs?.find((config) => supported(config.type));
   }
 
   /**
-   * The control an entity gets: a domain feature, a toggle, a press button, or
-   * a "Set" button that opens more info where the real editor lives. Shared by
-   * the hero and the rows so the two cannot drift apart.
+   * The control an entity gets: a toggle, a press button, or a "Set" button
+   * that opens more info where the real editor lives — plus, for the featured
+   * entity only, its domain feature. Shared by the hero and the rows so the
+   * two cannot drift apart.
    */
-  private _renderControl(stateObj: HassEntity) {
+  private _renderControl(stateObj: HassEntity, featured = false) {
     // A control that cannot reach the device must not look operable. The status
     // icon rendered beside it carries the reason, so this is not a silent drop.
     if (this._controlsDisabledFor(stateObj)) {
@@ -613,24 +679,33 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
 
     const domain = computeDomain(stateObj.entity_id);
 
-    const featureConfig = this._featureConfigFor(stateObj.entity_id);
+    // Only the entity on top gets a domain feature: a slider or a mode picker
+    // squeezed into a row is a control the user cannot aim at, and the row
+    // already opens the device view on that entity, where the full control is.
+    const featureConfig =
+      (featured ? this._featureConfigFor(stateObj.entity_id) : undefined) ??
+      // On or off is a control a row can hold: unlike a slider or a mode
+      // picker there is nothing to aim at, and the dashboard already has a
+      // shape for it.
+      (!PRESSABLE_DOMAINS.has(domain) &&
+      supportsFeatureType(
+        this.hass!,
+        { entity_id: stateObj.entity_id },
+        "toggle"
+      )
+        ? TOGGLE_FEATURE
+        : undefined);
+
     if (featureConfig) {
-      return html`<hui-card-feature
+      return html`<hui-card-features
         class="feature"
         .hass=${this.hass}
         .context=${this._featureContext(stateObj.entity_id)}
-        .feature=${featureConfig}
+        .features=${this._featureList(featureConfig)}
         .position=${"inline"}
         @click=${stopPropagation}
         @action=${stopPropagation}
-      ></hui-card-feature>`;
-    }
-
-    if (TOGGLEABLE_DOMAINS.has(domain)) {
-      return html`<ha-entity-toggle
-        .hass=${this.hass}
-        .stateObj=${stateObj}
-      ></ha-entity-toggle>`;
+      ></hui-card-features>`;
     }
 
     if (PRESSABLE_DOMAINS.has(domain)) {
@@ -646,16 +721,14 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       </button>`;
     }
 
+    // A value that is set rather than switched has no control a row can hold:
+    // the row already opens the place it is set in, so it says so with a
+    // chevron and leaves the tap to the row.
     if (SETTABLE_DOMAINS.has(domain)) {
-      return html`<button
-        class="action-button"
-        data-entity=${stateObj.entity_id}
-        @click=${this._handleSet}
-        @mousedown=${stopPropagation}
-        @touchstart=${stopPropagation}
-      >
-        ${this.hass!.localize("ui.card.device.set")}
-      </button>`;
+      return html`<ha-svg-icon
+        class="row-chevron"
+        .path=${mdiChevronRight}
+      ></ha-svg-icon>`;
     }
 
     return nothing;
@@ -666,18 +739,10 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     const entityId = (ev.currentTarget as HTMLElement).dataset.entity;
     if (!entityId) return;
     const domain = computeDomain(entityId);
-    // button/input_button fire `press`; scene/script/automation use `turn_on`.
-    const service =
-      domain === "button" || domain === "input_button" ? "press" : "turn_on";
-    this.hass!.callService(domain, service, { entity_id: entityId });
+    this.hass!.callService(domain, PRESS_SERVICE[domain], {
+      entity_id: entityId,
+    });
     forwardHaptic(this, "light");
-  }
-
-  private _handleSet(ev: Event) {
-    ev.stopPropagation();
-    const entityId = (ev.currentTarget as HTMLElement).dataset.entity;
-    if (!entityId) return;
-    fireEvent(this, "hass-more-info", { entityId });
   }
 
   static styles = css`
@@ -726,6 +791,11 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
         transparent
       );
     }
+    /* A reading has no control anywhere on the card, so its icon is a picture
+       of what the value is of rather than something to press. */
+    ha-tile-icon.plain {
+      background-color: transparent;
+    }
     /* A photo — camera frame or media artwork — is unreadable cropped to a
        circle, so any entity picture gets a rounded square instead. */
     ha-tile-icon.image {
@@ -738,6 +808,14 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     }
     .primary:hover {
       background-color: var(--secondary-background-color);
+    }
+    /* Not a control: the row is the target, so the chevron only says where the
+       tap goes. */
+    .row-chevron {
+      flex: none;
+      color: var(--secondary-text-color);
+      --mdc-icon-size: 20px;
+      pointer-events: none;
     }
     /* Active reads on the whole card, not just the icon — kept this faint so a
        grid of them still scans, and so the text stays legible on top of it. */
@@ -849,31 +927,39 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       display: block;
     }
 
+    /* The control column of the hero. It carries the width rather than the
+       feature inside it: a percentage against a shrink-to-fit box resolves
+       against the box's own content, which collapses the control to a sliver. */
     .control {
       display: flex;
-      flex: none;
+      flex: 0 1 auto;
+      width: 50%;
+      max-width: 184px;
+      min-width: 0;
       align-items: center;
     }
     .control:empty {
       display: none;
     }
 
-    /* Reads as an action, not as state: accent coloured so it carries the same
-       weight as the toggle it sits in place of. */
-    /* The domain control sits where the toggle would, kept row-height and
-       narrow so the entity name keeps the space it needs. */
+    /* The wrapper, position and tokens the tile card gives an inline feature,
+       so a humidifier or a cover here is the control the rest of the dashboard
+       shows. Only the width is ours: a tile gives a feature half its body,
+       while here it shares a row with the entity name. */
     .feature {
-      display: flex;
       flex: 0 1 auto;
+      width: 50%;
+      max-width: 184px;
       min-width: 0;
-      max-width: 168px;
-      --feature-height: 30px;
-      --feature-border-radius: var(--ha-border-radius-pill);
-      --feature-button-spacing: 4px;
+      /* In a row the feature sizes itself against the row; in the hero the
+         control column above has already done that. */
+      --feature-height: var(--ha-space-9);
+      --feature-button-min-width: 40px;
       --feature-color: var(--device-card-color, var(--state-icon-color));
     }
-    .feature > * {
+    .control .feature {
       width: 100%;
+      max-width: none;
     }
     .action-button {
       display: flex;
@@ -898,7 +984,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       transition: background-color 180ms ease-in-out;
     }
     .action-button.icon-only {
-      width: 30px;
+      width: 40px;
       padding: 0;
     }
     .action-button:hover {
@@ -943,9 +1029,11 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       outline: 2px solid var(--primary-color);
       outline-offset: -2px;
     }
+    /* The same resting grey the hero icon has: a row that is not doing anything
+       should not be the only blue thing on the card. */
     .row-icon {
       flex-shrink: 0;
-      color: var(--state-icon-color);
+      color: var(--state-inactive-color);
       --mdc-icon-size: 20px;
     }
     .row.active .row-icon {

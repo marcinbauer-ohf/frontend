@@ -17,11 +17,11 @@ export const moreInfoControlStyle = css`
   }
 
   .controls:not(:last-child) {
-    margin-bottom: var(--ha-space-6);
+    margin-bottom: var(--more-info-controls-spacing, var(--ha-space-6));
   }
 
   .controls > *:not(:last-child) {
-    margin-bottom: var(--ha-space-6);
+    margin-bottom: var(--more-info-controls-spacing, var(--ha-space-6));
   }
 
   .buttons {

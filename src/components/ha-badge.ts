@@ -14,6 +14,9 @@ export class HaBadge extends LitElement {
 
   @property({ type: Boolean, attribute: "icon-only" }) iconOnly = false;
 
+  /** Selection state, for a badge that acts as a button in a set of them. */
+  @property({ type: Boolean }) public pressed?: boolean;
+
   protected render() {
     const label = this.label;
 
@@ -23,6 +26,11 @@ export class HaBadge extends LitElement {
           "icon-only": this.iconOnly,
         })}"
         role=${ifDefined(this.type === "button" ? "button" : undefined)}
+        aria-pressed=${ifDefined(
+          this.type === "button" && this.pressed !== undefined
+            ? String(this.pressed)
+            : undefined
+        )}
         tabindex=${ifDefined(this.type === "button" ? "0" : undefined)}
       >
         <ha-ripple .disabled=${this.type !== "button"}></ha-ripple>
@@ -57,14 +65,14 @@ export class HaBadge extends LitElement {
       align-items: center;
       justify-content: center;
       gap: var(--ha-space-2);
-      height: var(--ha-badge-size, 36px);
-      min-width: var(--ha-badge-size, 36px);
+      height: var(--ha-badge-size, 40px);
+      min-width: var(--ha-badge-size, 40px);
       padding: 0px 12px;
       box-sizing: border-box;
       width: auto;
       border-radius: var(
         --ha-badge-border-radius,
-        calc(var(--ha-badge-size, 36px) / 2)
+        calc(var(--ha-badge-size, 40px) / 2)
       );
       background: var(
         --ha-card-background,
@@ -95,6 +103,17 @@ export class HaBadge extends LitElement {
       align-items: flex-start;
       padding-inline-start: initial;
       text-align: center;
+      /* A badge is as wide as its content up to whatever the host allows; past
+         that the text is cut with an ellipsis rather than wrapped onto a second
+         line, which would make one badge taller than the rest of the row. */
+      min-width: 0;
+    }
+    .label,
+    .content {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .label {
       font-size: var(--ha-font-size-xs);
@@ -105,15 +124,15 @@ export class HaBadge extends LitElement {
       color: var(--secondary-text-color);
     }
     .content {
-      font-size: var(--ha-badge-font-size, var(--ha-font-size-s));
+      font-size: var(--ha-badge-font-size, var(--ha-font-size-m));
       font-style: normal;
       font-weight: var(--ha-font-weight-medium);
       line-height: var(--ha-line-height-condensed);
       letter-spacing: 0.1px;
-      color: var(--primary-text-color);
+      color: var(--ha-badge-content-color, var(--primary-text-color));
     }
     ::slotted([slot="icon"]) {
-      --mdc-icon-size: var(--ha-badge-icon-size, 18px);
+      --mdc-icon-size: var(--ha-badge-icon-size, 20px);
       color: var(--badge-color);
       line-height: 0;
       margin-left: -4px;

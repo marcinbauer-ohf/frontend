@@ -23,6 +23,9 @@ export const cardFeatureStyles = css`
   }
   ha-control-button-group > ha-control-button {
     flex-basis: 20px;
+    /* A floor for hosts that squeeze a button group into a row, where the
+       buttons would otherwise shrink below their icons. */
+    min-width: var(--feature-button-min-width, 0);
     --control-button-padding: 0px;
   }
   ha-control-button {

@@ -100,6 +100,13 @@ export class StateHistoryCharts extends LitElement {
 
   @property({ type: String }) public height?: string;
 
+  /** Height of one timeline row in px, for a host that wants a taller row. */
+  @property({ attribute: false }) public rowHeight?: number;
+
+  /** Drop the charts' tooltips, for a host that states the hovered point. */
+  @property({ attribute: "hide-tooltip", type: Boolean }) public hideTooltip =
+    false;
+
   @property({ attribute: "expand-legend", type: Boolean })
   public expandLegend?: boolean;
 
@@ -238,6 +245,8 @@ export class StateHistoryCharts extends LitElement {
         .paddingYAxis=${this._maxYWidth}
         .chartIndex=${index}
         .clickForMoreInfo=${this.clickForMoreInfo}
+        .rowHeight=${this.rowHeight}
+        ?hide-tooltip=${this.hideTooltip}
         @y-width-changed=${this._yWidthChanged}
         @chart-zoom-with-index=${this._handleTimelineSync}
         ?hide-reset-button=${this.syncCharts}

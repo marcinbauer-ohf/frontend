@@ -30,7 +30,12 @@ export class MoreInfoLogbook extends LitElement {
   @property({ type: Boolean, attribute: "hide-header" }) public hideHeader =
     false;
 
-  private _time = { recent: 86400 };
+  /** How far back the list reaches. */
+  @property({ attribute: "hours-to-show", type: Number }) public hoursToShow =
+    24;
+
+  /** One object per range, so the list is not re-subscribed on every render. */
+  private _timeFor = memoizeOne((hours: number) => ({ recent: hours * 3600 }));
 
   private _entityIdAsList = memoizeOne((entityId: string) => [entityId]);
 
@@ -61,7 +66,7 @@ export class MoreInfoLogbook extends LitElement {
       }
       <ha-logbook
         .hass=${this.hass}
-        .time=${this._time}
+        .time=${this._timeFor(this.hoursToShow)}
         .entityIds=${this._entityIdAsList(this.entityId)}
         name-detail="none"
         narrow
@@ -76,8 +81,11 @@ export class MoreInfoLogbook extends LitElement {
       haStyle,
       css`
         ha-logbook {
-          --logbook-max-height: 250px;
-          --logbook-horizontal-padding: var(--ha-space-6);
+          --logbook-max-height: var(--more-info-logbook-max-height, 250px);
+          --logbook-horizontal-padding: var(
+            --more-info-logbook-padding-inline,
+            var(--ha-space-6)
+          );
         }
         @media all and (max-width: 450px), all and (max-height: 500px) {
           ha-logbook {

@@ -69,14 +69,14 @@ class MoreInfoHumidifier extends LitElement {
           this.stateObj.attributes.current_humidity != null
             ? html`
                 <div>
-                  <p class="label">
-                    ${this._formatters.formatEntityAttributeName(
+                  <p class="value">
+                    ${this._formatters.formatEntityAttributeValue(
                       this.stateObj,
                       "current_humidity"
                     )}
                   </p>
-                  <p class="value">
-                    ${this._formatters.formatEntityAttributeValue(
+                  <p class="label">
+                    ${this._formatters.formatEntityAttributeName(
                       this.stateObj,
                       "current_humidity"
                     )}
@@ -232,18 +232,21 @@ class MoreInfoHumidifier extends LitElement {
           text-align: center;
           color: var(--primary-text-color);
         }
-        .current .label {
-          opacity: 0.8;
-          font-size: var(--ha-font-size-m);
-          line-height: var(--ha-line-height-condensed);
-          letter-spacing: 0.4px;
-          margin-bottom: var(--ha-space-1);
-        }
+        /* The reading, then what it is: the same pair, sizes and colours this
+           dialog gives every other hero value, as ha-more-info-state-header
+           does for a plain state. */
         .current .value {
-          font-size: var(--ha-font-size-xl);
-          font-weight: var(--ha-font-weight-medium);
+          font-size: 36px;
+          font-weight: var(--ha-font-weight-normal);
           line-height: var(--ha-line-height-condensed);
           direction: ltr;
+        }
+        .current .label {
+          color: var(--secondary-text-color);
+          font-size: var(--ha-font-size-l);
+          font-weight: var(--ha-font-weight-medium);
+          line-height: var(--ha-line-height-normal);
+          letter-spacing: 0.1px;
         }
       `,
     ];

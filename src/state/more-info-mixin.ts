@@ -45,8 +45,9 @@ export default <T extends Constructor<HassBaseEl>>(superClass: T) =>
         this,
         "ha-more-info-dialog",
         {
-          entityId: ev.detail.entityId,
-          deviceId: ev.detail.deviceId,
+          // Everything the caller asked for, then the parts this handler works
+          // out for itself. Listing the fields instead dropped every new one.
+          ...ev.detail,
           view,
           large:
             ev.detail.large ??
@@ -55,8 +56,6 @@ export default <T extends Constructor<HassBaseEl>>(superClass: T) =>
                   computeDomain(ev.detail.entityId)
                 )
               : false),
-          data: ev.detail.data,
-          hash: ev.detail.hash,
           returnUrl,
         },
         () => import("../dialogs/more-info/ha-more-info-dialog"),

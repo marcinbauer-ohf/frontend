@@ -16,6 +16,13 @@ import { MIN_TIME_BETWEEN_UPDATES } from "./ha-chart-base";
 import { sideTooltipPosition } from "./chart-tooltip-position";
 import "./ha-chart-tooltip-marker";
 import { computeTimelineColor } from "./timeline-color";
+import { computeCssValue } from "../../resources/css-variables";
+import type { TimelineSegment } from "./state-history-chart-timeline-data";
+import {
+  aggregateSegments,
+  BUCKET_WIDTH,
+  dataPoint,
+} from "./state-history-chart-timeline-data";
 import type { HaECOption, HaECSeries } from "../../resources/echarts/echarts";
 import echarts from "../../resources/echarts/echarts";
 import { luminosity } from "../../common/color/rgb";
@@ -26,6 +33,16 @@ import { fireEvent, type HASSDomEvent } from "../../common/dom/fire_event";
 const ROW_HEIGHT = 30;
 const ROW_HEIGHT_INSIDE_LABELS = 64;
 const GRID_BOTTOM = 30;
+const BAR_HEIGHT = 20;
+/**
+ * The narrowest a band can be drawn and still be something a pointer can land
+ * on. Below this the row says nothing you can read or hover, which is what the
+ * aggregated view is for.
+ */
+const MIN_SEGMENT_WIDTH = 6;
+
+/** Of a row the host has made tall, how much of it the bar takes. */
+const FILLED_ROW = 0.8;
 
 @customElement("state-history-chart-timeline")
 export class StateHistoryChartTimeline extends LitElement {
@@ -63,6 +80,19 @@ export class StateHistoryChartTimeline extends LitElement {
   @property({ attribute: "hide-reset-button", type: Boolean })
   public hideResetButton?: boolean;
 
+  /**
+   * Height of one row in px. A host that gives the row a block of its own means
+   * the bar to fill it, rather than to sit in the middle of it as a band.
+   */
+  @property({ attribute: false }) public rowHeight?: number;
+
+  /**
+   * Drop the tooltip. For a host that states the hovered band itself, where a
+   * tooltip would say the same thing twice.
+   */
+  @property({ attribute: "hide-tooltip", type: Boolean }) public hideTooltip =
+    false;
+
   @state() private _chartData: CustomSeriesOption[] = [];
 
   @state() private _chartOptions?: HaECOption;
@@ -72,21 +102,29 @@ export class StateHistoryChartTimeline extends LitElement {
   private _width = 0;
 
   private _resize = new ResizeController(this, {
-    skipInitial: true,
     callback: (entries) => entries[0]?.contentRect.width,
   });
+
+  /** Columns the aggregated view has room for, at the measured width. */
+  private _buckets = 0;
 
   private _chartTime: Date = new Date();
 
   protected render() {
+    const rowHeight =
+      this.rowHeight ??
+      (this.insideLabels ? ROW_HEIGHT_INSIDE_LABELS : ROW_HEIGHT);
+
     return html`
       <ha-chart-base
         .hass=${this.hass}
         .options=${this._chartOptions}
-        .height=${`${this.data.length * (this.insideLabels ? ROW_HEIGHT_INSIDE_LABELS : ROW_HEIGHT) + GRID_BOTTOM}px`}
+        .height=${`${this.data.length * rowHeight + GRID_BOTTOM}px`}
         .data=${this._chartData as HaECSeries}
         small-controls
         @chart-click=${this._handleChartClick}
+        @chart-mouseover=${this._handleChartHover}
+        @chart-mouseout=${this._handleChartOut}
         @chart-zoom=${this._handleDataZoom}
         .hideResetButton=${this.hideResetButton}
       ></ha-chart-base>
@@ -97,14 +135,20 @@ export class StateHistoryChartTimeline extends LitElement {
     const categoryIndex = api.value(0);
     const start = api.coord([api.value(1), categoryIndex]);
     const end = api.coord([api.value(2), categoryIndex]);
-    const height = 20;
+    const yStart = api.value(6) as number;
+    const yEnd = api.value(7) as number;
     const coordSys = params.coordSys as any;
+    // A row with a block of its own is filled; the default row keeps the band
+    // it has always drawn.
+    const barHeight = this.rowHeight
+      ? (coordSys.height / Math.max(1, this.data.length)) * FILLED_ROW
+      : BAR_HEIGHT;
     const rectShape = echarts.graphic.clipRectByRect(
       {
         x: start[0],
-        y: start[1] - height / 2,
+        y: start[1] - barHeight / 2 + yStart * barHeight,
         width: end[0] - start[0],
-        height: height,
+        height: (yEnd - yStart) * barHeight,
       },
       {
         x: coordSys.x,
@@ -122,6 +166,11 @@ export class StateHistoryChartTimeline extends LitElement {
         fill: api.value(4) as string,
       },
     };
+    if (yEnd - yStart < 1) {
+      // A stacked slice is a proportion of a column, not a span with room for
+      // its own name.
+      return rect;
+    }
     const text = (api.value(3) as string).replaceAll("\n", " ");
     const textWidth = measureTextWidth(text, 12);
     const LABEL_PADDING = 4;
@@ -151,7 +200,9 @@ export class StateHistoryChartTimeline extends LitElement {
     const { value, name, seriesName, color } = Array.isArray(params)
       ? params[0]
       : params;
-    const durationInMs = value![2] - value![1];
+    // An aggregated rectangle is drawn across its whole column but stands for
+    // only the part of it its state held.
+    const durationInMs = (value![8] as number) ?? value![2] - value![1];
     const formattedDuration = `${this.hass.localize(
       "ui.components.history_charts.duration"
     )}: ${millisecondsToDuration(durationInMs)}`;
@@ -180,11 +231,21 @@ export class StateHistoryChartTimeline extends LitElement {
   };
 
   public willUpdate(changedProps: PropertyValues) {
+    const buckets = Math.max(
+      1,
+      Math.round((this._resize.value ?? this.clientWidth) / BUCKET_WIDTH)
+    );
+    // Compared as columns rather than as pixels, so a resize only redraws when
+    // it actually changes how the row is divided.
+    const bucketsChanged = buckets !== this._buckets;
+    this._buckets = buckets;
+
     if (
       this.isConnected &&
       (changedProps.has("startTime") ||
         changedProps.has("endTime") ||
         changedProps.has("data") ||
+        bucketsChanged ||
         this._chartTime <
           new Date(this.endTime.getTime() - MIN_TIME_BETWEEN_UPDATES))
     ) {
@@ -302,6 +363,7 @@ export class StateHistoryChartTimeline extends LitElement {
         right: rtl ? plotPadding : 1,
       },
       tooltip: {
+        show: !this.hideTooltip,
         renderMode: "html",
         position: sideTooltipPosition,
         confine: true,
@@ -334,8 +396,21 @@ export class StateHistoryChartTimeline extends LitElement {
     this._chartTime = new Date();
     const startTime = this.startTime;
     const endTime = this.endTime;
+    // What a millisecond is worth on screen, which is what decides whether a
+    // band has room to be drawn at all.
+    const pxPerMs =
+      (this._resize.value ?? this.clientWidth) /
+      Math.max(1, endTime.getTime() - startTime.getTime());
     const datasets: CustomSeriesOption[] = [];
     const names = this.names || {};
+    const otherState: TimelineSegment = {
+      state: this.hass.localize("ui.components.history_charts.other_states"),
+      color: computeCssValue("--disabled-color", computedStyles) || "#bdbdbd",
+      // Never labelled: a pooled state is only ever drawn as a stacked slice.
+      textColor: "#fff",
+      start: 0,
+      end: 0,
+    };
     // stateHistory is a list of lists of sorted state objects
     stateHistory.forEach((stateInfo) => {
       let newLastChanged: Date;
@@ -346,7 +421,27 @@ export class StateHistoryChartTimeline extends LitElement {
         ? names[stateInfo.entity_id] || stateInfo.name || stateInfo.entity_id
         : "";
 
-      const dataRow: unknown[] = [];
+      const segments: TimelineSegment[] = [];
+      const addSegment = (
+        rawState: string,
+        localized: string,
+        from: Date,
+        to: Date
+      ) => {
+        const color = computeTimelineColor(
+          rawState,
+          computedStyles,
+          this.hass.states[stateInfo.entity_id]
+        );
+        segments.push({
+          state: localized,
+          color,
+          textColor: luminosity(hex2rgb(color)) > 0.5 ? "#000" : "#fff",
+          start: from.getTime(),
+          end: to.getTime(),
+        });
+      };
+
       stateInfo.data.forEach((entityState) => {
         let newState: string | null = entityState.state;
         const timeStamp = new Date(entityState.last_changed);
@@ -365,24 +460,12 @@ export class StateHistoryChartTimeline extends LitElement {
         } else if (newState !== prevState) {
           newLastChanged = new Date(entityState.last_changed);
 
-          const color = computeTimelineColor(
+          addSegment(
             prevState,
-            computedStyles,
-            this.hass.states[stateInfo.entity_id]
+            locState || prevState,
+            prevLastChanged,
+            newLastChanged
           );
-          dataRow.push({
-            value: [
-              stateInfo.entity_id,
-              prevLastChanged,
-              newLastChanged,
-              locState,
-              color,
-              luminosity(hex2rgb(color)) > 0.5 ? "#000" : "#fff",
-            ],
-            itemStyle: {
-              color,
-            },
-          });
 
           prevState = newState;
           locState = entityState.state_localize;
@@ -391,30 +474,57 @@ export class StateHistoryChartTimeline extends LitElement {
       });
 
       if (prevState !== null) {
-        const color = computeTimelineColor(
-          prevState,
-          computedStyles,
-          this.hass.states[stateInfo.entity_id]
-        );
-        dataRow.push({
-          value: [
-            stateInfo.entity_id,
-            prevLastChanged,
-            endTime,
-            locState,
-            color,
-            luminosity(hex2rgb(color)) > 0.5 ? "#000" : "#fff",
-          ],
-          itemStyle: {
-            color,
-          },
-        });
+        addSegment(prevState, locState || prevState, prevLastChanged, endTime);
       }
+
+      // Either more state changes than the row has columns, or a single change
+      // too narrow to see or point at: both mean the row cannot be read as a
+      // run of bands, so it is drawn as proportions instead. One two-second
+      // blip among hours of steady state is the second case — a sliver nobody
+      // can hover, next to bands that had all the room they needed.
+      // ponytail: bucketed against the whole window, so zooming in widens the
+      // columns rather than resolving them. Recompute from the zoom range if
+      // reading an aggregated row up close turns out to matter.
+      const tooNarrow = segments.some(
+        (segment) => (segment.end - segment.start) * pxPerMs < MIN_SEGMENT_WIDTH
+      );
+      const dataRow =
+        (segments.length > this._buckets || tooNarrow) && endTime > startTime
+          ? aggregateSegments(
+              stateInfo.entity_id,
+              segments,
+              startTime.getTime(),
+              endTime.getTime(),
+              this._buckets,
+              otherState
+            )
+          : segments.map((segment) =>
+              dataPoint(
+                stateInfo.entity_id,
+                segment,
+                segment.start,
+                segment.end,
+                0,
+                1,
+                segment.end - segment.start
+              )
+            );
+
       datasets.push({
         id: stateInfo.entity_id,
         data: dataRow,
         name: entityDisplay,
-        dimensions: ["id", "start", "end", "name", "color", "textColor"],
+        dimensions: [
+          "id",
+          "start",
+          "end",
+          "name",
+          "color",
+          "textColor",
+          "yStart",
+          "yEnd",
+          "duration",
+        ],
         type: "custom",
         encode: {
           x: [1, 2],
@@ -428,6 +538,48 @@ export class StateHistoryChartTimeline extends LitElement {
 
     this._chartData = datasets;
   }
+
+  /**
+   * What the pointer is on, for a host that states the hovered span itself —
+   * the same reading a line's hovered point gives, so a timeline and a line
+   * answer "what was it then" in the same place.
+   */
+  private _handleChartHover = (
+    ev: HASSDomEvent<HASSDomEvents["chart-mouseover"]>
+  ) => {
+    const value = ev.detail.value as unknown[] | undefined;
+    if (!Array.isArray(value)) {
+      return;
+    }
+    const start = Number(value[1]);
+    const data = (this._chartData[ev.detail.seriesIndex ?? 0]?.data ?? []) as {
+      value: unknown[];
+    }[];
+    // Every state of the column under the pointer, not only the slice it is
+    // exactly on: an aggregated column is one span of time divided between
+    // states, and that division is what there is to read.
+    const column = data.filter((item) => Number(item.value[1]) === start);
+    fireEvent(
+      this,
+      "graph-point-hovered",
+      (column.length ? column.map((item) => item.value) : [value]).map(
+        (band) => ({
+          entityId: String(band[0]),
+          // The band's own label, already localized, the span it covers, how
+          // much of that span it actually held, and the colour it is drawn in.
+          value: String(band[3]),
+          timestamp: Number(band[1]),
+          endTimestamp: Number(band[2]),
+          duration: Number(band[8]),
+          color: String(band[4]),
+        })
+      )
+    );
+  };
+
+  private _handleChartOut = () => {
+    fireEvent(this, "graph-point-hovered", undefined);
+  };
 
   private _handleChartClick(
     e: HASSDomEvent<HASSDomEvents["chart-click"]>

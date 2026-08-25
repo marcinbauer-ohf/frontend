@@ -200,6 +200,9 @@ export class HaControlSelect extends LitElement {
     :host {
       display: block;
       --control-select-color: var(--primary-color);
+      /* Reads on a fully opaque selected option; a host that tints the
+         selection down owes itself a colour that reads on that instead. */
+      --control-select-selected-color: white;
       --control-select-focused-opacity: 0.2;
       --control-select-selected-opacity: 1;
       --control-select-background: var(--disabled-color);
@@ -303,7 +306,7 @@ export class HaControlSelect extends LitElement {
       opacity: var(--control-select-focused-opacity);
     }
     .option.selected {
-      color: white;
+      color: var(--control-select-selected-color);
     }
     .option.selected::before {
       opacity: var(--control-select-selected-opacity);

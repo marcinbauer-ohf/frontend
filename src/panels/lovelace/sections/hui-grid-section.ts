@@ -115,6 +115,9 @@ export class GridSection extends LitElement implements LovelaceSectionElement {
                 this.index!,
                 idx,
               ];
+              // Not only for editing: a card that offers a way into its own
+              // editor needs to know where it lives whatever mode we are in.
+              card.path = cardPath;
               return html`
                 <div
                   style=${styleMap({
@@ -204,7 +207,9 @@ export class GridSection extends LitElement implements LovelaceSectionElement {
   }
 
   private _addCard() {
-    fireEvent(this, "ll-create-card", { suggested: ["tile", "heading"] });
+    fireEvent(this, "ll-create-card", {
+      suggested: ["tile", "device", "heading"],
+    });
   }
 
   static get styles(): CSSResultGroup {

@@ -6,6 +6,7 @@ import { classMap } from "lit/directives/class-map";
 import { repeat } from "lit/directives/repeat";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../../../../common/dom/fire_event";
+import { computeDeviceName } from "../../../../common/entity/compute_device_name";
 import { computeEntityPickerDisplay } from "../../../../common/entity/compute_entity_name_display";
 import "../../../../components/entity/state-badge";
 import "../../../../components/ha-button";
@@ -15,6 +16,7 @@ import "../../../../components/ha-ripple";
 import "../../../../components/ha-section-title";
 import "../../../../components/ha-svg-icon";
 import type { LovelaceCardConfig } from "../../../../data/lovelace/config/card";
+import { resolveDeviceCardEntities } from "../../cards/device/device-card-entities";
 import { haStyleScrollbar } from "../../../../resources/styles";
 import type { HomeAssistant } from "../../../../types";
 import {
@@ -34,6 +36,8 @@ export class HuiSuggestionPicker extends LitElement {
   public prioritizedCardTypes?: string[];
 
   @state() private _entityId?: string;
+
+  @state() private _deviceId?: string;
 
   @state() private _narrow = false;
 
@@ -88,8 +92,42 @@ export class HuiSuggestionPicker extends LitElement {
     }
   );
 
+  /**
+   * The device itself, twice: just its featured entity, then everything the
+   * device reports. Hiding is stored per entity, the way the card's editor
+   * stores it, so a later firmware update adding entities does not silently
+   * change what the simple one shows.
+   */
+  private _deviceSuggestions = memoizeOne(
+    (deviceId: string): CardSuggestions => {
+      const config = { type: "device", device: deviceId };
+      const { hero, visible } = resolveDeviceCardEntities(this.hass, config);
+      const all: CardSuggestion = {
+        label: this.hass.localize(
+          "ui.panel.lovelace.editor.card.device.suggestions.all_entities"
+        ),
+        config,
+      };
+      if (!hero || !visible.length) {
+        return { core: [all], custom: [] };
+      }
+      return {
+        core: [
+          {
+            label: this.hass.localize(
+              "ui.panel.lovelace.editor.card.device.suggestions.featured_only"
+            ),
+            config: { ...config, hidden_entities: visible },
+          },
+          all,
+        ],
+        custom: [],
+      };
+    }
+  );
+
   protected render() {
-    const hasEntity = !!this._entityId;
+    const hasEntity = !!this._entityId || !!this._deviceId;
     // Tree is rendered unconditionally so its state (filter, expanded
     // branches, fuse index) survives the desktop/mobile and tree/suggestions
     // switches.
@@ -101,7 +139,9 @@ export class HuiSuggestionPicker extends LitElement {
           class="tree"
           .hass=${this.hass}
           .selectedEntityId=${this._entityId}
+          .selectedDeviceId=${this._deviceId}
           @entity-picked=${this._handleEntityPicked}
+          @device-picked=${this._handleDevicePicked}
         ></hui-suggestion-entity-tree>
       </div>
       <div class=${classMap({ main: true, hidden: !showMain })}>
@@ -118,7 +158,13 @@ export class HuiSuggestionPicker extends LitElement {
     if (!hasEntity) return this._renderEmptyState();
     const { core, custom } = this._suggestions();
     return html`
-      ${this._narrow ? this._renderSelectedEntity() : nothing}
+      ${
+        this._narrow
+          ? this._deviceId
+            ? this._renderSelectedDevice()
+            : this._renderSelectedEntity()
+          : nothing
+      }
       <ha-section-title>
         ${this.hass.localize(
           "ui.panel.lovelace.editor.cardpicker.suggestions_title"
@@ -193,6 +239,28 @@ export class HuiSuggestionPicker extends LitElement {
     `;
   }
 
+  private _renderSelectedDevice(): TemplateResult {
+    const device = this.hass.devices[this._deviceId!];
+    return html`
+      <ha-section-title>
+        ${this.hass.localize(
+          "ui.panel.lovelace.editor.cardpicker.selected_device"
+        )}
+      </ha-section-title>
+      <ha-combo-box-item compact class="selected-entity">
+        <span slot="headline">
+          ${device ? computeDeviceName(device) : this._deviceId}
+        </span>
+        <ha-icon-button
+          slot="end"
+          .label=${this.hass.localize("ui.common.clear")}
+          .path=${mdiClose}
+          @click=${this._clearEntity}
+        ></ha-icon-button>
+      </ha-combo-box-item>
+    `;
+  }
+
   private _renderEmptyState(): TemplateResult {
     return html`
       <div class="content-empty">
@@ -247,6 +315,9 @@ export class HuiSuggestionPicker extends LitElement {
   }
 
   private _suggestions(): CardSuggestions {
+    if (this._deviceId) {
+      return this._deviceSuggestions(this._deviceId);
+    }
     return this._computeSuggestions(
       this._entityId,
       (this.prioritizedCardTypes ?? []).join("|")
@@ -259,10 +330,17 @@ export class HuiSuggestionPicker extends LitElement {
 
   private _handleEntityPicked(ev: CustomEvent<{ entityId: string }>): void {
     this._entityId = ev.detail.entityId;
+    this._deviceId = undefined;
+  }
+
+  private _handleDevicePicked(ev: CustomEvent<{ deviceId: string }>): void {
+    this._deviceId = ev.detail.deviceId;
+    this._entityId = undefined;
   }
 
   private _clearEntity(): void {
     this._entityId = undefined;
+    this._deviceId = undefined;
   }
 
   private _pickSuggestion(

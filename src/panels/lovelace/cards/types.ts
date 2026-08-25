@@ -695,6 +695,13 @@ export interface DeviceCardConfig extends LovelaceCardConfig {
   device?: string;
   /** Explicit primary entity. Overrides the auto-picked device primary. */
   entity?: string;
+  /**
+   * Which card feature the primary entity's control is. One of the tile card's
+   * feature types; the entity's domain has more than one worth showing (a cover
+   * can be buttons, a slider or its favourite positions). Defaults to the most
+   * capable one the entity supports.
+   */
+  feature?: string;
   /** Explicit secondary rows. Overrides the auto-collected device entities. */
   entities?: string[];
   /** Device entities kept off this card only. Still active in Home Assistant. */

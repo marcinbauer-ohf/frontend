@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import "../../../../src/panels/lovelace/cards/hui-device-card";
+import "../../../../src/panels/lovelace/cards/hui-card";
 import type { HuiDeviceCard } from "../../../../src/panels/lovelace/cards/hui-device-card";
 import type { DeviceCardConfig } from "../../../../src/panels/lovelace/cards/types";
 import type { HomeAssistant } from "../../../../src/types";
@@ -81,6 +82,19 @@ const renderCard = async (hass: FakeHass) => {
   return card;
 };
 
+/** The card under a config of its own, for the cases with nothing to render. */
+const renderConfig = async (hass: FakeHass, config: DeviceCardConfig) => {
+  const card = document.createElement("hui-device-card") as HuiDeviceCard;
+  card.setConfig(config);
+  card.hass = hass;
+  document.body.append(card);
+  await card.updateComplete;
+  return card;
+};
+
+const warning = (card: HuiDeviceCard) =>
+  card.shadowRoot!.querySelector("hui-warning")!.textContent!.trim();
+
 const tapIcon = (card: HuiDeviceCard) =>
   card.shadowRoot!.querySelector("ha-tile-icon")!.dispatchEvent(
     new CustomEvent("action", {
@@ -108,6 +122,23 @@ describe("hui-device-card", () => {
 
   afterEach(() => {
     document.body.innerHTML = "";
+  });
+
+  it("says what is actually wrong when it has nothing to feature", async () => {
+    const hass = fakeHass("on");
+
+    expect(
+      await renderConfig(hass, { type: "device", device: "gone" }).then(warning)
+    ).toBe("ui.card.device.device_not_found");
+
+    // A real device whose every entity has been hidden away.
+    expect(
+      await renderConfig(hass, {
+        type: "device",
+        device: DEVICE,
+        hidden_entities: [LIGHT, SENSOR],
+      }).then(warning)
+    ).toBe("ui.card.device.nothing_to_show");
   });
 
   it("shows the primary entity state as a human string", async () => {
@@ -148,7 +179,185 @@ describe("hui-device-card", () => {
       })
     );
 
-    expect(params).toEqual([{ entityId: SENSOR, deviceId: DEVICE }]);
+    // The card hands over the order it shows the device in, so the dialog
+    // lists the same entities the same way round.
+    expect(params).toEqual([
+      {
+        entityId: SENSOR,
+        deviceId: DEVICE,
+        deviceEntityOrder: [LIGHT, SENSOR],
+      },
+    ]);
+  });
+
+  it("opens the device view on the entity the card features", async () => {
+    const hass = fakeHass("on");
+    // A card whose featured entity was chosen in the editor, which is stored
+    // as `entity` — it is still a device card and still opens the device.
+    const card = await renderConfig(hass, {
+      type: "device",
+      device: DEVICE,
+      entity: SENSOR,
+    });
+    const params: unknown[] = [];
+    card.addEventListener("hass-more-info", (ev) =>
+      params.push((ev as CustomEvent).detail)
+    );
+
+    card.shadowRoot!.querySelector(".primary")!.dispatchEvent(
+      new CustomEvent("action", {
+        detail: { action: "tap" },
+        bubbles: true,
+        composed: true,
+      })
+    );
+
+    expect(params).toEqual([
+      {
+        entityId: SENSOR,
+        deviceId: DEVICE,
+        deviceEntityOrder: [SENSOR, LIGHT],
+      },
+    ]);
+  });
+
+  it("takes the path the layout hands its wrapper", async () => {
+    const wrapper = document.createElement("hui-card");
+    wrapper.hass = fakeHass("on");
+    wrapper.config = { type: "device", device: DEVICE };
+    wrapper.path = [0, 1, 2];
+    document.body.append(wrapper);
+    await wrapper.updateComplete;
+
+    // hui-card renders into itself, so the card element is its first child.
+    expect((wrapper.firstElementChild as HuiDeviceCard).path).toEqual([
+      0, 1, 2,
+    ]);
+  });
+
+  it("offers the card's own editor to the device dialog, once it has a path", async () => {
+    const card = await renderCard(fakeHass("on"));
+    const params: { deviceCardEdit?: () => void }[] = [];
+    card.addEventListener("hass-more-info", (ev) =>
+      params.push((ev as CustomEvent).detail)
+    );
+    const edits: unknown[] = [];
+    card.addEventListener("ll-edit-card", (ev) =>
+      edits.push((ev as CustomEvent).detail)
+    );
+
+    // A card the layout never placed cannot say where its config is.
+    card.shadowRoot!.querySelector(".primary")!.dispatchEvent(
+      new CustomEvent("action", {
+        detail: { action: "tap" },
+        bubbles: true,
+        composed: true,
+      })
+    );
+    expect(params[0].deviceCardEdit).toBeUndefined();
+
+    card.path = [1, 2, 3];
+    card.shadowRoot!.querySelector(".primary")!.dispatchEvent(
+      new CustomEvent("action", {
+        detail: { action: "tap" },
+        bubbles: true,
+        composed: true,
+      })
+    );
+
+    params[1].deviceCardEdit!();
+    expect(edits).toEqual([{ path: [1, 2, 3] }]);
+  });
+
+  it("lets a tap on an icon it cannot toggle open the device", async () => {
+    const hass = fakeHass("on");
+    const card = await renderConfig(hass, {
+      type: "device",
+      device: DEVICE,
+      entity: SENSOR,
+    });
+    const params: unknown[] = [];
+    card.addEventListener("hass-more-info", (ev) =>
+      params.push((ev as CustomEvent).detail)
+    );
+
+    tapIcon(card);
+
+    expect(hass.callService).not.toHaveBeenCalled();
+    expect(params).toEqual([
+      {
+        entityId: SENSOR,
+        deviceId: DEVICE,
+        deviceEntityOrder: [SENSOR, LIGHT],
+      },
+    ]);
+  });
+
+  it("keeps domain features on the featured entity and out of the rows", async () => {
+    const COVER = "cover.blind";
+    const withCover = () => {
+      const hass = fakeHass("on");
+      (hass.states as any)[COVER] = {
+        entity_id: COVER,
+        state: "open",
+        // Enough of a cover to support the open/close feature.
+        attributes: { friendly_name: "Blind", supported_features: 3 },
+        last_changed: "2024-01-01T00:00:00.000Z",
+        last_updated: "2024-01-01T00:00:00.000Z",
+        context: { id: "1", user_id: null, parent_id: null },
+      };
+      (hass.entities as any)[COVER] = { entity_id: COVER, device_id: DEVICE };
+      return hass;
+    };
+
+    // As a row, a cover is a reading: its buttons live in the device view the
+    // row opens.
+    const asRow = await renderConfig(withCover(), {
+      type: "device",
+      device: DEVICE,
+    });
+    expect(
+      asRow.shadowRoot!.querySelector(".secondary hui-card-features")
+    ).toBeNull();
+    const row = asRow.shadowRoot!.querySelector<HTMLElement>(
+      `.row[data-entity="${COVER}"]`
+    )!;
+    expect(row.querySelector(".row-value")).not.toBeNull();
+
+    // Featured, the same cover gets its control.
+    const asHero = await renderConfig(withCover(), {
+      type: "device",
+      device: DEVICE,
+      entity: COVER,
+    });
+    expect(
+      asHero.shadowRoot!.querySelector(".control hui-card-features")
+    ).not.toBeNull();
+  });
+
+  it("leaves a read-only hero's icon off a background", async () => {
+    const hass = fakeHass("on");
+    // A sensor has no toggle, no press and no domain feature, so the card has
+    // no control anywhere on it.
+    const card = await renderConfig(hass, {
+      type: "device",
+      device: DEVICE,
+      entity: SENSOR,
+    } as DeviceCardConfig);
+
+    expect(
+      card
+        .shadowRoot!.querySelector("ha-tile-icon")!
+        .classList.contains("plain")
+    ).toBe(true);
+
+    // The light does have one, so its icon keeps the shape behind it.
+    const controllable = await renderCard(fakeHass("on"));
+    expect(
+      controllable
+        .shadowRoot!.querySelector("ha-tile-icon")!
+        .classList.contains("plain")
+    ).toBe(false);
   });
 
   it("removes the control and states the reason when unavailable", async () => {

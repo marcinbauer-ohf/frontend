@@ -14,6 +14,7 @@ import {
   subscribeHistoryStatesTimeWindow,
 } from "../../data/history";
 import type {
+  StatisticPeriod,
   Statistics,
   StatisticsMetaData,
   StatisticsTypes,
@@ -50,6 +51,20 @@ export class MoreInfoHistory extends LitElement {
    * component and provide both themselves.
    */
   @property({ type: Boolean, attribute: "hide-header" }) public hideHeader =
+    false;
+
+  /** How far back the chart reaches. */
+  @property({ attribute: "hours-to-show", type: Number }) public hoursToShow =
+    24;
+
+  /** Bucket size, for an entity whose history comes from statistics. */
+  @property({ attribute: false }) public period: StatisticPeriod = "5minute";
+
+  /** Height of one timeline row in px, for a host that wants a taller row. */
+  @property({ attribute: false }) public rowHeight?: number;
+
+  /** Drop the chart's tooltip, for a host that states the hovered point. */
+  @property({ attribute: "hide-tooltip", type: Boolean }) public hideTooltip =
     false;
 
   @state() private _stateHistory?: HistoryResult;
@@ -136,6 +151,8 @@ export class MoreInfoHistory extends LitElement {
                     .isLoadingData=${!this._stateHistory}
                     .showNames=${false}
                     .clickForMoreInfo=${false}
+                    .rowHeight=${this.rowHeight}
+                    ?hide-tooltip=${this.hideTooltip}
                   ></state-history-charts>`
           }`
         : ""
@@ -145,7 +162,11 @@ export class MoreInfoHistory extends LitElement {
   protected willUpdate(changedProps: PropertyValues<this>): void {
     super.willUpdate(changedProps);
 
-    if (changedProps.has("entityId")) {
+    if (
+      changedProps.has("entityId") ||
+      changedProps.has("hoursToShow") ||
+      changedProps.has("period")
+    ) {
       this._stateHistory = undefined;
       this._statistics = undefined;
 
@@ -230,10 +251,10 @@ export class MoreInfoHistory extends LitElement {
     const _metadata = this._getStatisticsMetaData([this.entityId]);
     const _statistics = fetchStatistics(
       this.hass!,
-      subHours(new Date(), 24),
+      subHours(new Date(), this.hoursToShow),
       undefined,
       [this.entityId],
-      "5minute",
+      this.period,
       undefined,
       statTypes
     );
@@ -287,7 +308,7 @@ export class MoreInfoHistory extends LitElement {
           this.hass!.localize
         );
       },
-      24,
+      this.hoursToShow,
       [this.entityId]
     ).catch((err) => {
       this._subscribed = undefined;

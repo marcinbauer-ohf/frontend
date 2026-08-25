@@ -1,4 +1,6 @@
+import type { HassEntity } from "home-assistant-js-websocket";
 import { computeDomain } from "../../../../common/entity/compute_domain";
+import type { LocalizeKeys } from "../../../../common/translations/localize";
 import type { HomeAssistant } from "../../../../types";
 import type { DeviceCardConfig } from "../types";
 
@@ -20,13 +22,85 @@ export const DOMAIN_PRIORITY = [
   "sensor",
 ];
 
+/** Domains that render a pill toggle instead of a read-only value. */
+export const TOGGLEABLE_DOMAINS = new Set([
+  "light",
+  "switch",
+  "input_boolean",
+  "siren",
+]);
+
+/** Domains that render a round action button (press-only). */
+export const PRESSABLE_DOMAINS = new Set([
+  "button",
+  "input_button",
+  "scene",
+  "script",
+  "automation",
+]);
+
+/** The service that fires each of them: they do not share one. */
+export const PRESS_SERVICE: Record<string, string> = {
+  button: "press",
+  input_button: "press",
+  scene: "turn_on",
+  script: "turn_on",
+  automation: "trigger",
+};
+
+/** The action verb for each, so the button is not just a name. */
+export const PRESS_LABEL: Record<string, LocalizeKeys> = {
+  button: "ui.card.button.press",
+  input_button: "ui.card.button.press",
+  scene: "ui.card.scene.activate",
+  script: "ui.card.script.run",
+  automation: "ui.card.automation.trigger",
+};
+
+/**
+ * Domains holding a value the user sets rather than a measurement. They get a
+ * "Set" button (the real control lives in more info) and never a sparkline —
+ * graphing a setpoint over time is meaningless even though it has a unit.
+ */
+export const SETTABLE_DOMAINS = new Set([
+  "number",
+  "input_number",
+  "select",
+  "input_select",
+  "text",
+  "input_text",
+  "date",
+  "time",
+  "datetime",
+  "input_datetime",
+]);
+
+/**
+ * Whether the card would draw a graph for this entity: it has to carry a
+ * measurement rather than a state, a command or a setting. Shared with the
+ * editor, which offers the graph option only where it does something.
+ */
+export const supportsSparkline = (stateObj: HassEntity): boolean => {
+  const domain = computeDomain(stateObj.entity_id);
+  return (
+    stateObj.attributes.unit_of_measurement != null &&
+    !TOGGLEABLE_DOMAINS.has(domain) &&
+    !PRESSABLE_DOMAINS.has(domain) &&
+    !SETTABLE_DOMAINS.has(domain)
+  );
+};
+
 export interface ResolvedEntities {
   hero?: string;
   visible: string[];
   hidden: string[];
 }
 
-const priorityOf = (entityId: string) => {
+/**
+ * How far up the card an entity's domain puts it. Exported because the device
+ * more info view lists the same entities and has to agree on their order.
+ */
+export const domainPriority = (entityId: string) => {
   const idx = DOMAIN_PRIORITY.indexOf(computeDomain(entityId));
   return idx === -1 ? DOMAIN_PRIORITY.length : idx;
 };
@@ -50,7 +124,7 @@ export const deviceCardEntities = (
         hass.states[entry.entity_id]
     )
     .map((entry) => entry.entity_id)
-    .sort((a, b) => priorityOf(a) - priorityOf(b));
+    .sort((a, b) => domainPriority(a) - domainPriority(b));
 
 /**
  * Split a device card config into the sections the card renders.

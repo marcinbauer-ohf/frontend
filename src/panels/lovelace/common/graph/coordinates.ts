@@ -9,7 +9,7 @@ const calcPoints = (
 ) => {
   // handling empty history (for example unavailable for long time)
   if (history.length === 0) {
-    return { points: [], yAxisOrigin: height };
+    return { points: [], yAxisOrigin: height, minY: 0, maxY: 0 };
   }
 
   let yAxisOrigin = height;
@@ -47,7 +47,9 @@ const calcPoints = (
     return [x, y];
   });
   points.push([width, points[points.length - 1][1]]);
-  return { points, yAxisOrigin };
+  // The padded bounds the drawing actually spans, so a caller that labels an
+  // axis labels the line it drew rather than the data it started from.
+  return { points, yAxisOrigin, minY, maxY };
 };
 
 export const coordinates = (
@@ -67,7 +69,13 @@ export const coordinates = (
     limits?.maxX,
     useMean
   );
-  return calcPoints(sampledData, width, height, limits);
+  // The sampled series is handed back beside the pixel points, index for
+  // index, so a caller that lets the user point at the line can say which
+  // value and moment a point stands for.
+  return {
+    ...calcPoints(sampledData, width, height, limits),
+    sampled: sampledData,
+  };
 };
 
 export const coordinatesMinimalResponseCompressedState = (
@@ -79,7 +87,7 @@ export const coordinatesMinimalResponseCompressedState = (
   useMean = false
 ) => {
   if (!history?.length) {
-    return { points: [], yAxisOrigin: 0 };
+    return { points: [], yAxisOrigin: 0, sampled: [], minY: 0, maxY: 0 };
   }
   const mappedHistory: [number, number][] = history.map((item) => [
     // With minimal response and compressed state, we don't have last_changed,

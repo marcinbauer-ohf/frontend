@@ -160,12 +160,13 @@
         }
       },
       "device": {
-        "set": "[%key:ui::card::timer::actions::set%]",
         "toggle_entity": "Toggle {name}",
         "disconnected": "Disconnected",
         "unavailable_reason": "Not available right now, so the controls are turned off",
         "disconnected_reason": "Not connected to Home Assistant, so the controls are turned off",
-        "unknown_reason": "No value reported yet"
+        "unknown_reason": "No value reported yet",
+        "device_not_found": "This device is no longer in Home Assistant",
+        "nothing_to_show": "This device has nothing to show: its entities are hidden, disabled, or diagnostics"
       },
       "cover": {
         "position": "Position",
@@ -1129,6 +1130,7 @@
         "no_history_found": "No state history found.",
         "error": "Unable to load history",
         "duration": "Duration",
+        "other_states": "Other states",
         "source_history": "Source: History",
         "source_stats": "Source: Long term statistics",
         "zoom_reset": "Reset zoom",
@@ -1707,8 +1709,17 @@
           "last_triggered": "Last triggered"
         },
         "device_not_found": "This device no longer exists",
-        "also_on_this_device": "Also on this device",
+        "automation_unavailable": "This automation cannot be shown here",
+        "device_manufacturer": "Device manufacturer",
+        "device_settings": "Device settings",
+        "edit_card": "Edit card",
+        "entity_settings": "Entity settings",
+        "configure_entities": "Configure device entities",
+        "on_this_device": "On this device",
+        "view": "View",
         "nothing_recorded": "Nothing is recorded for this entity",
+        "compare_hint": "Hold alt or option and click to add to the graph",
+        "featured": "Featured on the card",
         "add_to": {
           "title": "Add {target} to…",
           "item": "Add to…",
@@ -10589,10 +10600,14 @@
               "description": "This card shows a device as a single tile: a primary entity with its control, plus its remaining entities as compact rows.",
               "show_area": "Show area",
               "show_graph": "Show history graph",
+              "show_graph_unavailable": "The featured entity has no measurement to graph",
+              "suggestions": {
+                "featured_only": "Featured entity only",
+                "all_entities": "All entities"
+              },
               "interactions": "Interactions",
               "hours_to_show": "Hours to show",
               "sections": {
-                "empty": "Drag entities here",
                 "hero": "Featured",
                 "hero_helper": "Shown large at the top of the card. Only one entity fits here.",
                 "visible": "Visible",
@@ -10608,8 +10623,9 @@
                 "disable_confirm_last": "{name} is the last thing this device still reports. Turn it off and the device goes quiet everywhere, not just on this card.",
                 "disable_confirm_action": "Turn off",
                 "disable_failed": "Home Assistant rejected the change for {entities}. Nothing was changed for them.",
+                "hero_feature": "Featured control",
                 "reset": "Reset to defaults",
-                "reset_note": "Entities you turned off in Home Assistant stay off."
+                "drag_hint": "Drag entities between these groups to choose what the card shows, and drag them within a group to reorder."
               }
             },
             "tile": {
@@ -11096,6 +11112,9 @@
             "no_search_results_title": "No entity matches your search",
             "no_search_results_description": "Try a different keyword.",
             "selected_entity": "Selected entity",
+            "selected_device": "Selected device",
+            "expand": "[%key:ui::components::data-table::expand%]",
+            "collapse": "[%key:ui::components::data-table::collapse%]",
             "suggestions_title": "Suggestions",
             "community_title": "Community",
             "not_found": "Can't find the card you want?",

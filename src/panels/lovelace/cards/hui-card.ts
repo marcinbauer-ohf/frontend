@@ -12,6 +12,7 @@ import { getConfigEntityId } from "../common/get-config-entity-id";
 import { checkConditionsMet } from "../common/validate-condition";
 import { tryCreateCardElement } from "../create-element/create-card-element";
 import { createErrorCardElement } from "../create-element/create-element-base";
+import type { LovelaceCardPath } from "../editor/lovelace-path";
 import type { LovelaceCard, LovelaceGridOptions } from "../types";
 
 declare global {
@@ -32,6 +33,9 @@ export class HuiCard extends ConditionalListenerMixin<LovelaceCardConfig>(
   @property({ attribute: false }) public hass?: HomeAssistant;
 
   @property({ attribute: false }) public layout?: string;
+
+  /** Where this card sits in the dashboard config, when the layout knows. */
+  @property({ attribute: false }) public path?: LovelaceCardPath;
 
   private _elementConfig?: LovelaceCardConfig;
 
@@ -133,6 +137,7 @@ export class HuiCard extends ConditionalListenerMixin<LovelaceCardConfig>(
       this._element.hass = this.hass;
     }
     this._element.layout = this.layout;
+    this._element.path = this.path;
     this._element.preview = this.preview;
     // For backwards compatibility
     (this._element as any).editMode = this.preview;
@@ -223,6 +228,9 @@ export class HuiCard extends ConditionalListenerMixin<LovelaceCardConfig>(
           console.error(this.config?.type, e);
           this._loadElement({ type: "error" });
         }
+      }
+      if (changedProps.has("path")) {
+        this._element.path = this.path;
       }
       if (changedProps.has("layout")) {
         try {

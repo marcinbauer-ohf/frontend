@@ -108,6 +108,18 @@ export interface MoreInfoDialogParams {
    * featured entity is still loaded, so every entity-level view stays reachable.
    */
   deviceId?: string | null;
+  /**
+   * The device's entities in the order the caller shows them. A device card
+   * knows an order the dialog does not — the one set in its editor — so it
+   * hands it over rather than letting the two disagree.
+   */
+  deviceEntityOrder?: string[];
+  /**
+   * Opens the editor of the card the dialog was opened from. Set by a device
+   * card that knows where it sits in the dashboard, so the dialog can offer a
+   * way to the card's own configuration.
+   */
+  deviceCardEdit?: () => void;
   view?: MoreInfoView;
   /** @deprecated Use `view` instead */
   tab?: MoreInfoView;
@@ -164,6 +176,10 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
   /** Which of the device's entities the device view has on show. */
   @state() private _deviceEntityId?: string;
 
+  @state() private _deviceEntityOrder?: string[];
+
+  @state() private _deviceCardEdit?: () => void;
+
   @state() private _data?: Record<string, any>;
 
   @provide({ context: moreInfoContext })
@@ -202,12 +218,18 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
     // with its own primary, and the view opens on the one that was clicked.
     this._deviceEntityId =
       this._deviceId && params.entityId ? params.entityId : undefined;
+    this._deviceEntityOrder = params.deviceEntityOrder;
+    this._deviceCardEdit = params.deviceCardEdit;
     // The device view features the same entity the device card does, so the two
-    // never disagree about what the device's primary control is.
+    // never disagree about what the device's primary control is. The caller
+    // leads its order with its own primary, which is the only place a card's
+    // configured hero — or a hidden default one — is known.
     // ponytail: a device with no usable entity cannot be opened, same as a
     // missing entity id — the card offers no tap target in that case either.
     this._entityId = this._deviceId
-      ? (deviceCardEntities(this.hass, this._deviceId)[0] ?? params.entityId)
+      ? (params.deviceEntityOrder?.[0] ??
+        deviceCardEntities(this.hass, this._deviceId)[0] ??
+        params.entityId)
       : params.entityId;
     if (!this._entityId) {
       this.closeDialog();
@@ -264,6 +286,8 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
     this._entityId = undefined;
     this._deviceId = undefined;
     this._deviceEntityId = undefined;
+    this._deviceEntityOrder = undefined;
+    this._deviceCardEdit = undefined;
     this._parentEntityIds = [];
     this._entry = undefined;
     this._infoEditMode = false;
@@ -403,6 +427,17 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
 
   private _goToHistory() {
     this._setView("history");
+  }
+
+  /**
+   * Hand over to the card's own editor. The dialog closes first: the editor is a
+   * dialog of its own, and a device view of a card that may no longer list the
+   * same entities is not a way back worth keeping.
+   */
+  private _editDeviceCard(): void {
+    const edit = this._deviceCardEdit!;
+    this.closeDialog();
+    edit();
   }
 
   private _goToSettings(): void {
@@ -801,6 +836,23 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
                     : nothing
                 }
                 ${
+                  // The card the device was opened from is the one place its
+                  // entities and their order are configured, so the device view
+                  // leads back to it.
+                  showDeviceView && this._deviceCardEdit
+                    ? html`
+                        <ha-icon-button
+                          slot="headerActionItems"
+                          .label=${this.hass.localize(
+                            "ui.dialogs.more_info_control.edit_card"
+                          )}
+                          .path=${mdiPencilOutline}
+                          @click=${this._editDeviceCard}
+                        ></ha-icon-button>
+                      `
+                    : nothing
+                }
+                ${
                   !__DEMO__ && isAdmin
                     ? html`
                         ${
@@ -1015,6 +1067,7 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
                                 .deviceId=${this._deviceId!}
                                 .primaryEntityId=${this._entityId!}
                                 .initialEntityId=${this._deviceEntityId}
+                                .entityOrder=${this._deviceEntityOrder}
                                 @device-featured-entity-changed=${
                                   this._deviceEntityChanged
                                 }

@@ -1,4 +1,3 @@
-import { mdiGestureTap } from "@mdi/js";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
@@ -14,11 +13,19 @@ import {
 } from "superstruct";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import "../../../../components/ha-form/ha-form";
+import "../../../../components/ha-switch";
+import type { HaSwitch } from "../../../../components/ha-switch";
+import "../../../../components/item/ha-list-item-base";
+import "../../../../components/list/ha-grouped-list";
 import type {
   HaFormSchema,
   SchemaUnion,
 } from "../../../../components/ha-form/types";
 import type { HomeAssistant } from "../../../../types";
+import {
+  resolveDeviceCardEntities,
+  supportsSparkline,
+} from "../../cards/device/device-card-entities";
 import type { DeviceCardConfig } from "../../cards/types";
 import type { LovelaceCardEditor } from "../../types";
 import { actionConfigStruct } from "../structs/action-struct";
@@ -28,7 +35,11 @@ import {
   type UiAction,
 } from "../../components/hui-action-editor";
 import "./hui-device-card-entities-editor";
-import type { HuiDeviceCardEntitiesEditor } from "./hui-device-card-entities-editor";
+import {
+  DEVICE_CARD_ENTITY_KEYS,
+  type DeviceCardEntitiesValue,
+  type HuiDeviceCardEntitiesEditor,
+} from "./hui-device-card-entities-editor";
 
 const TAP_ACTIONS: UiAction[] = [
   "more-info",
@@ -37,11 +48,17 @@ const TAP_ACTIONS: UiAction[] = [
   "none",
 ];
 
+/** Card options that are on unless turned off, rendered as switch rows. */
+const OPTIONS = ["show_area", "show_graph"] as const;
+
+type BooleanOption = (typeof OPTIONS)[number];
+
 const cardConfigStruct = assign(
   baseLovelaceCardConfig,
   object({
     device: optional(string()),
     entity: optional(string()),
+    feature: optional(string()),
     entities: optional(array(string())),
     hidden_entities: optional(array(string())),
     name: optional(string()),
@@ -77,58 +94,14 @@ export class HuiDeviceCardEditor
     () =>
       [
         { name: "device", selector: { device: {} } },
-        { name: "name", selector: { text: {} } },
-        {
-          name: "",
-          type: "grid",
-          schema: [
-            { name: "show_area", selector: { boolean: {} } },
-            { name: "show_graph", selector: { boolean: {} } },
-          ],
-        },
       ] as const satisfies HaFormSchema[]
   );
 
-  // Rendered below the entity sections, so the sections stay next to the
-  // device picker they belong to.
-  private _interactionsSchema = memoizeOne(
-    () =>
-      [
-        {
-          name: "interactions",
-          type: "expandable",
-          flatten: true,
-          iconPath: mdiGestureTap,
-          schema: [
-            {
-              name: "tap_action",
-              selector: {
-                ui_action: {
-                  actions: TAP_ACTIONS,
-                  default_action: "more-info",
-                },
-              },
-            },
-            {
-              name: "",
-              type: "optional_actions",
-              flatten: true,
-              schema: (["hold_action", "double_tap_action"] as const).map(
-                (action) => ({
-                  name: action,
-                  selector: {
-                    ui_action: {
-                      actions: TAP_ACTIONS,
-                      default_action: "none" as const,
-                    },
-                  },
-                })
-              ),
-            },
-          ],
-        },
-      ] as const satisfies HaFormSchema[]
-  );
+  /**
+   * ponytail: no actions section. A device card's tap opens the device, which
+   * is the whole point of it; `tap_action` and friends stay in the struct so a
+   * YAML config that sets them still validates and still works.
+   */
 
   protected render() {
     if (!this.hass || !this._config) {
@@ -143,6 +116,9 @@ export class HuiDeviceCardEditor
         .computeLabel=${this._computeLabelCallback}
         @value-changed=${this._valueChanged}
       ></ha-form>
+      <ha-grouped-list>
+        ${OPTIONS.map((option) => this._renderOption(option))}
+      </ha-grouped-list>
       ${
         this._config.device
           ? html`
@@ -155,14 +131,65 @@ export class HuiDeviceCardEditor
             `
           : nothing
       }
-      <ha-form
-        .hass=${this.hass}
-        .data=${this._config}
-        .schema=${this._interactionsSchema()}
-        .computeLabel=${this._computeLabelCallback}
-        @value-changed=${this._valueChanged}
-      ></ha-form>
     `;
+  }
+
+  /**
+   * Both default to on, so the switch reads the effective value rather than
+   * whether the key happens to be stored.
+   */
+  private _renderOption(option: BooleanOption) {
+    // Nothing to switch on when the card would never draw the graph anyway.
+    const unavailable = option === "show_graph" && !this._graphApplies();
+
+    return html`
+      <ha-list-item-base>
+        <span slot="headline">
+          ${this.hass!.localize(
+            `ui.panel.lovelace.editor.card.device.${option}`
+          )}
+        </span>
+        ${
+          unavailable
+            ? html`<span slot="supporting-text">
+                ${this.hass!.localize(
+                  "ui.panel.lovelace.editor.card.device.show_graph_unavailable"
+                )}
+              </span>`
+            : nothing
+        }
+        <ha-switch
+          slot="end"
+          data-option=${option}
+          .checked=${!unavailable && this._config![option] !== false}
+          .disabled=${unavailable}
+          @change=${this._optionToggled}
+        ></ha-switch>
+      </ha-list-item-base>
+    `;
+  }
+
+  /** True when the featured entity carries a measurement the card can graph. */
+  private _graphApplies(): boolean {
+    if (!this._config!.device) {
+      return true;
+    }
+    const { hero } = resolveDeviceCardEntities(this.hass!, this._config!);
+    const stateObj = hero ? this.hass!.states[hero] : undefined;
+    return !!stateObj && supportsSparkline(stateObj);
+  }
+
+  /** On is the default, so it is stored as the absence of the key. */
+  private _optionToggled(ev: Event): void {
+    const target = ev.target as HaSwitch & { dataset: { option: string } };
+    const option = target.dataset.option as BooleanOption;
+    const config = { ...this._config! };
+    if (target.checked) {
+      delete config[option];
+    } else {
+      config[option] = false;
+    }
+    fireEvent(this, "config-changed", { config });
   }
 
   /** Forwarded by the edit-card dialog on save to apply staged registry writes. */
@@ -176,24 +203,26 @@ export class HuiDeviceCardEditor
 
   private _entitiesChanged(ev: CustomEvent): void {
     ev.stopPropagation();
-    fireEvent(this, "config-changed", {
-      config: { ...this._config, ...ev.detail.value },
+    const value = ev.detail.value as DeviceCardEntitiesValue;
+    const config = { ...this._config!, ...value };
+    // A key the panel dropped is a key it cleared — "reset to automatic" says
+    // so by handing back a value without it. A spread alone would carry the old
+    // one straight back in, which is why reset appeared to do nothing.
+    DEVICE_CARD_ENTITY_KEYS.forEach((key) => {
+      if (!(key in value)) {
+        delete config[key];
+      }
     });
+    fireEvent(this, "config-changed", { config });
   }
 
   private _computeLabelCallback = (
-    schema:
-      | SchemaUnion<ReturnType<typeof this._schema>>
-      | SchemaUnion<ReturnType<typeof this._interactionsSchema>>
+    schema: SchemaUnion<ReturnType<typeof this._schema>>
   ) => {
     switch (schema.name) {
       case "device":
         return this.hass!.localize(
           "ui.panel.lovelace.editor.card.generic.device"
-        );
-      case "name":
-        return this.hass!.localize(
-          "ui.panel.lovelace.editor.card.generic.name"
         );
       default:
         return (

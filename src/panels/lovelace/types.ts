@@ -3,6 +3,7 @@ import type { LocalizeFunc } from "../../common/translations/localize";
 import type { HaFormSchema } from "../../components/ha-form/types";
 import type { LovelaceBadgeConfig } from "../../data/lovelace/config/badge";
 import type { LovelaceCardConfig } from "../../data/lovelace/config/card";
+import type { LovelaceCardPath } from "./editor/lovelace-path";
 import type {
   LovelaceConfig,
   LovelaceRawConfig,
@@ -69,6 +70,11 @@ export interface LovelaceCard extends HTMLElement {
   hass?: HomeAssistant;
   preview?: boolean;
   layout?: string;
+  /**
+   * Where the card sits in the dashboard config, when the layout around it
+   * knows. A card needs it to ask for its own editor.
+   */
+  path?: LovelaceCardPath;
   connectedWhileHidden?: boolean;
   getCardSize(): number | Promise<number>;
   /** @deprecated Use `getGridOptions` instead */
