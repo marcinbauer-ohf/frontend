@@ -106,10 +106,14 @@ export const domainPriority = (entityId: string) => {
 };
 
 /**
- * Entities of a device the card is willing to show, most interesting first.
- * Registry-hidden, config/diagnostic and stateless (disabled) entities are
- * dropped — the editor's hidden/disabled sections are the card config's own
- * concern and are applied by `resolveDeviceCardEntities`.
+ * Entities of a device the card could show, most interesting first.
+ * Registry-hidden and stateless (disabled) entities are dropped, and so are
+ * config entities: how a device is set up is not what it is doing.
+ *
+ * A diagnostic stays. It is a reading — a battery, a signal strength — and the
+ * device more info view lists it, so the card's editor has to be able to put it
+ * on the card. It sorts after the entities the device is actually for, and
+ * `resolveDeviceCardEntities` keeps it off the card until it is asked for.
  */
 export const deviceCardEntities = (
   hass: HomeAssistant,
@@ -120,11 +124,16 @@ export const deviceCardEntities = (
       (entry) =>
         entry.device_id === deviceId &&
         !entry.hidden &&
-        entry.entity_category == null &&
+        entry.entity_category !== "config" &&
         hass.states[entry.entity_id]
     )
     .map((entry) => entry.entity_id)
-    .sort((a, b) => domainPriority(a) - domainPriority(b));
+    .sort(
+      (a, b) =>
+        Number(hass.entities[a].entity_category != null) -
+          Number(hass.entities[b].entity_category != null) ||
+        domainPriority(a) - domainPriority(b)
+    );
 
 /**
  * Split a device card config into the sections the card renders.
@@ -154,7 +163,21 @@ export const resolveDeviceCardEntities = (
     config.device ? deviceCardEntities(hass, config.device) : []
   ).filter((id) => !isExcluded(id));
 
-  const hero = config.entity ?? candidates.find((id) => !hiddenIds.has(id));
+  // What the device says about itself rather than what it is for: a battery or
+  // a voltage starts off the card, so a contact sensor is a door and not four
+  // rows of housekeeping. Naming it in the config is what puts it on — which is
+  // what dragging it out of the editor's hidden section does.
+  const named = new Set(
+    [config.entity, ...(config.entities ?? [])].filter(
+      (id): id is string => !!id
+    )
+  );
+  const offByDefault = (entityId: string) =>
+    !named.has(entityId) && hass.entities[entityId]?.entity_category != null;
+
+  const hero =
+    config.entity ??
+    candidates.find((id) => !hiddenIds.has(id) && !offByDefault(id));
 
   const available = (entityId: string) =>
     entityId !== hero && !hiddenIds.has(entityId) && !isExcluded(entityId);
@@ -166,9 +189,15 @@ export const resolveDeviceCardEntities = (
         (id) => available(id) && !!hass.states[id]
       ),
       ...candidates.filter(
-        (id) => available(id) && !config.entities?.includes(id)
+        (id) =>
+          available(id) && !config.entities?.includes(id) && !offByDefault(id)
       ),
     ],
-    hidden: [...hiddenIds].filter((id) => !isExcluded(id)),
+    hidden: [
+      ...hiddenIds,
+      ...candidates.filter(
+        (id) => offByDefault(id) && !hiddenIds.has(id) && id !== hero
+      ),
+    ].filter((id) => !isExcluded(id)),
   };
 };

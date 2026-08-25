@@ -1709,7 +1709,6 @@
           "last_triggered": "Last triggered"
         },
         "device_not_found": "This device no longer exists",
-        "automation_unavailable": "This automation cannot be shown here",
         "device_manufacturer": "Device manufacturer",
         "device_settings": "Device settings",
         "edit_card": "Edit card",

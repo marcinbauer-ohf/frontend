@@ -108,6 +108,13 @@ export class StateHistoryChartTimeline extends LitElement {
   /** Columns the aggregated view has room for, at the measured width. */
   private _buckets = 0;
 
+  /**
+   * Each row's runs of state, before the aggregated view pools any of them.
+   * What a row was at a given moment is looked up here rather than off the
+   * drawn rectangles, which for a busy row stand for several states at once.
+   */
+  private _segments = new Map<string, TimelineSegment[]>();
+
   private _chartTime: Date = new Date();
 
   protected render() {
@@ -196,6 +203,13 @@ export class StateHistoryChartTimeline extends LitElement {
     return rect;
   };
 
+  /** What a row was at a moment, from the runs the drawing was made of. */
+  private _stateAt(entityId: string, at: number): TimelineSegment | undefined {
+    return this._segments
+      .get(entityId)
+      ?.find((segment) => at >= segment.start && at < segment.end);
+  }
+
   private _renderTooltip = (params: TooltipPositionCallbackParams) => {
     const { value, name, seriesName, color } = Array.isArray(params)
       ? params[0]
@@ -211,15 +225,42 @@ export class StateHistoryChartTimeline extends LitElement {
       this.hass.language,
       this.hass.translationMetadata.translations
     );
-    return html`${
-        seriesName
-          ? html`<h4 style="text-align: center; margin: 0;">${seriesName}</h4>`
-          : nothing
-      }<ha-chart-tooltip-marker
-        .color=${String(color ?? "")}
+    // Rows are read against each other, so a band answers for every row at the
+    // moment it covers, not only for the one under the pointer. Taken at the
+    // middle of the band: its edges are exactly where the other rows are most
+    // likely to be changing too.
+    const at = (Number(value![1]) + Number(value![2])) / 2;
+    const others = this.data
+      .filter((stateInfo) => stateInfo.entity_id !== value![0])
+      .map((stateInfo) => {
+        const segment = this._stateAt(stateInfo.entity_id, at);
+        return segment
+          ? {
+              name:
+                this.names?.[stateInfo.entity_id] ||
+                stateInfo.name ||
+                stateInfo.entity_id,
+              segment,
+            }
+          : undefined;
+      })
+      .filter((row) => row !== undefined);
+
+    const row = (label: string, dotColor: string, reading: string) => html`
+      <ha-chart-tooltip-marker
+        .color=${dotColor}
         .rtl=${rtl}
       ></ha-chart-tooltip-marker
-      >${name}<br />${formatDateTimeWithSeconds(
+      >${others.length ? html`${label}: ` : nothing}${reading}<br />
+    `;
+
+    return html`${
+        seriesName && !others.length
+          ? html`<h4 style="text-align: center; margin: 0;">${seriesName}</h4>`
+          : nothing
+      }${row(seriesName ?? "", String(color ?? ""), String(name ?? ""))}${others.map(
+        (other) => row(other.name, other.segment.color, other.segment.state)
+      )}${formatDateTimeWithSeconds(
         new Date(value![1]),
         this.hass.locale,
         this.hass.config
@@ -402,6 +443,7 @@ export class StateHistoryChartTimeline extends LitElement {
       (this._resize.value ?? this.clientWidth) /
       Math.max(1, endTime.getTime() - startTime.getTime());
     const datasets: CustomSeriesOption[] = [];
+    this._segments.clear();
     const names = this.names || {};
     const otherState: TimelineSegment = {
       state: this.hass.localize("ui.components.history_charts.other_states"),
@@ -422,6 +464,7 @@ export class StateHistoryChartTimeline extends LitElement {
         : "";
 
       const segments: TimelineSegment[] = [];
+      this._segments.set(stateInfo.entity_id, segments);
       const addSegment = (
         rawState: string,
         localized: string,

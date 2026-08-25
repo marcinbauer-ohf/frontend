@@ -19,27 +19,6 @@ vi.hoisted(() => {
   });
 });
 
-const AUTOMATION = "automation.lights_on";
-
-vi.mock("../../../src/data/search", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  findRelated: vi.fn(async () => ({ automation: [AUTOMATION] })),
-}));
-
-vi.mock("../../../src/data/automation", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  getAutomationStateConfig: vi.fn(async () => ({
-    config: {
-      alias: "Lights on",
-      triggers: [{ trigger: "state", entity_id: "binary_sensor.motion" }],
-      conditions: [],
-      actions: [
-        { action: "light.turn_on", target: { entity_id: "light.desk" } },
-      ],
-    },
-  })),
-}));
-
 const DEVICE = "dev1";
 const PRIMARY = "light.desk";
 const SENSOR = "sensor.power";
@@ -95,18 +74,6 @@ const fakeHass = (): HomeAssistant =>
       ])
     ),
     states: Object.fromEntries([
-      // Not one of the device's entities: something that refers to it.
-      [
-        AUTOMATION,
-        {
-          entity_id: AUTOMATION,
-          state: "on",
-          attributes: { friendly_name: "Lights on", id: "1" },
-          last_changed: "2024-01-01T00:00:00.000Z",
-          last_updated: "2024-01-01T00:00:00.000Z",
-          context: { id: "1", user_id: null, parent_id: null },
-        },
-      ],
       ...ENTITIES.filter((e) => !e.stateless).map((e) => [
         e.entityId,
         {
@@ -198,13 +165,11 @@ describe("ha-more-info-device", () => {
       ),
     ].find((candidate) => candidate.value === entityId)!;
 
-  /** The device's own chips, in render order — related ones come after them. */
+  /** The device's chips, in render order. */
   const chipOrder = (el: HaMoreInfoDevice) =>
-    [
-      ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>(
-        ".chips .chip:not(.related)"
-      ),
-    ].map((chip) => chip.value);
+    [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".chips .chip")].map(
+      (chip) => chip.value
+    );
 
   const renderView = async () => {
     const el = document.createElement(
@@ -636,6 +601,36 @@ describe("ha-more-info-device", () => {
     expect(changes).toEqual([SENSOR, PRIMARY]);
   });
 
+  it("names the record it is showing even when it is the only one", async () => {
+    const el = await renderView();
+    // A numeric sensor is a continuous reading: a chart of it says everything
+    // an activity list would, so it has no activity.
+    el.hass = {
+      ...el.hass,
+      states: {
+        ...el.hass.states,
+        [SENSOR]: {
+          ...el.hass.states[SENSOR],
+          state: "42",
+          attributes: { friendly_name: SENSOR, unit_of_measurement: "W" },
+        },
+      },
+    } as unknown as HomeAssistant;
+    rowFor(el, SENSOR).click();
+    el.shadowRoot!.querySelector(".bar ha-control-select")!.dispatchEvent(
+      new CustomEvent("value-changed", { detail: { value: "history" } })
+    );
+    await el.updateComplete;
+
+    // Nothing to switch to, so the card says what is in it as a heading rather
+    // than as a control that does nothing.
+    expect(el.shadowRoot!.querySelector(".record")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector(".record-heading")!.textContent!.trim()
+    ).toBe("ui.dialogs.more_info_control.history");
+    expect(el.shadowRoot!.querySelector("ha-more-info-logbook")).toBeNull();
+  });
+
   it("shows one record of the past at a time, with the settings for it", async () => {
     const el = await renderView();
 
@@ -755,6 +750,63 @@ describe("ha-more-info-device", () => {
     ]);
   });
 
+  it("draws an alt-clicked reading as a second row of the timeline", async () => {
+    const el = await renderView();
+    // Two word-valued readings: neither has a line, so what they share is the
+    // timeline's rows.
+    rowFor(el, SENSOR).click();
+    await el.updateComplete;
+
+    const timeline = () =>
+      el.shadowRoot!.querySelector<
+        HTMLElement & { entityId: string; compareEntityIds: string[] }
+      >(".chart-timeline")!;
+    expect(timeline().entityId).toBe(SENSOR);
+
+    rowFor(el, DIAGNOSTIC).dispatchEvent(
+      new MouseEvent("click", { altKey: true })
+    );
+    await el.updateComplete;
+    expect(timeline().entityId).toBe(SENSOR);
+    expect(timeline().compareEntityIds).toEqual([DIAGNOSTIC]);
+    expect(rowFor(el, DIAGNOSTIC).classList.contains("compared")).toBe(true);
+  });
+
+  it("keeps a line and a timeline out of one another's drawing", async () => {
+    const el = await renderView();
+    // A number is drawn as a line and a word as bands: there is no one box
+    // that holds both.
+    el.hass = {
+      ...el.hass,
+      states: {
+        ...el.hass.states,
+        [SENSOR]: {
+          ...el.hass.states[SENSOR],
+          state: "42",
+          attributes: { friendly_name: SENSOR, unit_of_measurement: "W" },
+        },
+      },
+    } as unknown as HomeAssistant;
+    rowFor(el, SENSOR).click();
+    await el.updateComplete;
+
+    // DIAGNOSTIC has no unit, so it is a timeline and cannot join the line.
+    rowFor(el, DIAGNOSTIC).dispatchEvent(
+      new MouseEvent("click", { altKey: true })
+    );
+    await el.updateComplete;
+    // The modifier had nothing to do, so it was just a click: the timeline is
+    // featured in its own right, with nothing drawn beside it.
+    expect(rowFor(el, DIAGNOSTIC).classList.contains("selected")).toBe(true);
+    expect(rowFor(el, DIAGNOSTIC).classList.contains("compared")).toBe(false);
+    expect(el.shadowRoot!.querySelector(".chart-line")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<
+        HTMLElement & { compareEntityIds: string[] }
+      >(".chart-timeline")!.compareEntityIds
+    ).toEqual([]);
+  });
+
   it("draws an alt-clicked entity on the featured entity's line", async () => {
     const el = await renderView();
     // Two numeric readings, which is what there is a line to compare.
@@ -840,7 +892,7 @@ describe("ha-more-info-device", () => {
     expect(el.shadowRoot!.querySelector("ha-more-info-history")).not.toBeNull();
   });
 
-  it("draws the same chart on the charts tab, and reads a hovered band out", async () => {
+  it("draws the same chart on the charts tab, and states nothing over it", async () => {
     const el = await renderView();
     el.hass = {
       ...el.hass,
@@ -863,13 +915,20 @@ describe("ha-more-info-device", () => {
     // reading is the same line here as on the info tab.
     expect(el.shadowRoot!.querySelector(".chart-line")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("ha-more-info-history")).toBeNull();
-    // Which means it can be pointed at, so it has a header to report into.
+    // The card is the whole tab here, so the chart is all of it — the value is
+    // stated on the info tab, where the reading is the subject.
     expect(
       el.shadowRoot!.querySelector("ha-more-info-state-header")
-    ).not.toBeNull();
+    ).toBeNull();
+  });
+
+  it("says what stretch of time a hovered band covers, and how long it held", async () => {
+    const el = await renderView();
+    rowFor(el, SENSOR).click();
+    await el.updateComplete;
 
     // A band covers a stretch of time, and says how much of it it held.
-    el.shadowRoot!.querySelector(".chart-line")!.dispatchEvent(
+    el.shadowRoot!.querySelector(".chart-timeline")!.dispatchEvent(
       new CustomEvent("graph-point-hovered", {
         detail: [
           {
@@ -971,16 +1030,30 @@ describe("ha-more-info-device", () => {
         "ha-list-item-button"
       ),
     ];
-    // Name order here: this list is for finding an entity, not for reading the
-    // device off.
+    // Grouped the way the device page groups them — what the device does, then
+    // what it reports, then how it is set up and how it is doing — and A to Z
+    // inside each group, since this list is for finding an entity.
     expect(entityRows.map((row) => row.entityId)).toEqual([
-      MOTION,
       PRIMARY,
-      CONFIG,
+      MOTION,
       DISABLED,
       HIDDEN,
       SENSOR,
+      CONFIG,
       DIAGNOSTIC,
+    ]);
+
+    // Which group each row is in, said on the row rather than headed above it.
+    expect(
+      entityRows.map((row) => row.querySelector(".group")!.textContent!.trim())
+    ).toEqual([
+      "ui.panel.config.devices.entities.control",
+      "ui.panel.config.devices.entities.sensor",
+      "ui.panel.config.devices.entities.sensor",
+      "ui.panel.config.devices.entities.sensor",
+      "ui.panel.config.devices.entities.sensor",
+      "ui.panel.config.devices.entities.config",
+      "ui.panel.config.devices.entities.diagnostic",
     ]);
 
     // Both open as views of this dialog, so one back arrow lands here again.
@@ -989,7 +1062,9 @@ describe("ha-more-info-device", () => {
       views.push((ev as CustomEvent).detail)
     );
     deviceRows[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    entityRows[5].dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    entityRows
+      .find((row) => row.entityId === SENSOR)!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
     expect(views).toEqual([
       {
@@ -1005,52 +1080,6 @@ describe("ha-more-info-device", () => {
         viewParams: { entityId: SENSOR },
       },
     ]);
-  });
-
-  it("puts what refers to the device at the end of the strip, as a preview", async () => {
-    const el = await renderView();
-    // The related lookup and the config fetch are both round trips.
-    await new Promise((resolve) => {
-      setTimeout(resolve, 0);
-    });
-    await el.updateComplete;
-
-    const related = el.shadowRoot!.querySelector<
-      HTMLElement & { value: string }
-    >(".chip.related")!;
-    expect(related).not.toBeNull();
-    expect(related.value).toBe(AUTOMATION);
-    // After the device's own chips, with a rule between the two.
-    expect(el.shadowRoot!.querySelector(".chip-divider")).not.toBeNull();
-    expect(chipOrder(el)).not.toContain(AUTOMATION);
-
-    related.click();
-    await new Promise((resolve) => {
-      setTimeout(resolve, 0);
-    });
-    await el.updateComplete;
-
-    // What it says, in words, and nothing to operate: it is not the device's.
-    const pane = el.shadowRoot!.querySelector(".pane.reading.related")!;
-    expect(pane).not.toBeNull();
-    expect(pane.querySelector(".reading-icon")).toBeNull();
-    expect(pane.querySelector("more-info-content")).toBeNull();
-    const groups = [
-      ...pane.querySelectorAll<HTMLElement & { header: string }>(
-        "ha-grouped-list"
-      ),
-    ].map((group) => group.header);
-    expect(groups).toEqual([
-      "ui.panel.config.automation.editor.triggers.header",
-      "ui.panel.config.automation.editor.actions.header",
-    ]);
-    expect(pane.querySelectorAll("ha-list-item-base")).toHaveLength(2);
-
-    // Back to one of the device's own entities, and the preview is gone.
-    rowFor(el, SENSOR).click();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".pane.reading.related")).toBeNull();
-    expect(rowFor(el, SENSOR).classList.contains("selected")).toBe(true);
   });
 
   it("pins the entity the card leads with, wherever the strip is", async () => {

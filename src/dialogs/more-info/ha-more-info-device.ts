@@ -9,7 +9,6 @@ import {
   mdiInformationOutline,
   mdiMenuDown,
 } from "@mdi/js";
-import { consume } from "@lit/context";
 import { ResizeController } from "@lit-labs/observers/resize-controller";
 import type { HassEntity } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
@@ -32,8 +31,11 @@ import { computeFloorName } from "../../common/entity/compute_floor_name";
 import { computeEntityName } from "../../common/entity/compute_entity_name";
 import { computeStateName } from "../../common/entity/compute_state_name";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
-import { ensureArray } from "../../common/array/ensure-array";
 import { stringCompare } from "../../common/string/compare";
+import {
+  ENTITY_GROUPS,
+  computeEntityGroup,
+} from "../../common/entity/entity_group";
 import {
   domainPriority,
   PRESS_LABEL,
@@ -59,18 +61,8 @@ import "../../components/item/ha-list-item-base";
 import "../../components/item/ha-list-item-button";
 import "../../components/item/ha-list-item-value";
 import "../../components/list/ha-grouped-list";
-import {
-  getAutomationStateConfig,
-  normalizeAutomationConfig,
-  type AutomationConfig,
-} from "../../data/automation";
-import { describeCondition, describeTrigger } from "../../data/automation_i18n";
-import { describeAction } from "../../data/script_i18n";
-import type { Action } from "../../data/script";
 import { getConfigEntries } from "../../data/config_entries";
 import { domainToName } from "../../data/integration";
-import { fullEntitiesContext } from "../../data/context";
-import { findRelated } from "../../data/search";
 import type { DeviceRegistryEntry } from "../../data/device/device_registry";
 import {
   fetchDiagnosticHandler,
@@ -79,7 +71,6 @@ import {
 } from "../../data/diagnostics";
 import type {
   EntityRegistryDisplayEntry,
-  EntityRegistryEntry,
   ExtEntityRegistryEntry,
 } from "../../data/entity/entity_registry";
 import { getSignedPath } from "../../data/auth";
@@ -120,10 +111,20 @@ declare global {
   interface HASSDomEvents {
     /** Which of the device's entities the view is showing in full. */
     "device-featured-entity-changed": { entityId: string };
+    /** Whether the pane has been scrolled past the value it leads with. */
+    "device-hero-hidden-changed": { hidden: boolean };
   }
 }
 
 type FeaturedView = "info" | "history" | "settings";
+
+/**
+ * How far the pane has to be scrolled for the value it leads with to be gone.
+ * ponytail: a fixed depth rather than measuring the header, which sits in a
+ * nested shadow root for every domain that brings its own. Measure it if a
+ * header ever gets much taller than this.
+ */
+const HERO_HIDDEN_SCROLL = 96;
 
 /** The two readings of an entity's past, in the order they are offered. */
 const RECORDS = ["history", "logbook"] as const;
@@ -225,25 +226,6 @@ export class HaMoreInfoDevice extends LitElement {
 
   @state() private _selectedEntityId?: string;
 
-  /**
-   * Automations that refer to this device, and which of them is being looked
-   * at. They are not the device's own entities — they are things elsewhere in
-   * the config that mention it — so they sit at the end of the strip and get a
-   * read-only preview rather than a control.
-   */
-  @state() private _automations?: string[];
-
-  @state() private _selectedAutomation?: string;
-
-  @state() private _automationConfig?: AutomationConfig;
-
-  private _automationConfigFor?: string;
-
-  /** Needed to name the entities an automation's steps refer to. */
-  @state()
-  @consume({ context: fullEntitiesContext, subscribe: true })
-  private _entityRegistry?: EntityRegistryEntry[];
-
   @state() private _view: FeaturedView = "info";
 
   /**
@@ -325,11 +307,11 @@ export class HaMoreInfoDevice extends LitElement {
 
   @query(".featured") private _featuredPane?: HTMLElement;
 
-  /** What the pane is showing: an entity of the device, or something related. */
+  private _heroHidden = false;
+
+  /** Which of the device's entities the pane is showing. */
   private get _featuredId(): string | undefined {
-    return (
-      this._selectedAutomation ?? this._selectedEntityId ?? this.primaryEntityId
-    );
+    return this._selectedEntityId ?? this.primaryEntityId;
   }
 
   protected willUpdate(changedProps: PropertyValues<this>) {
@@ -353,7 +335,6 @@ export class HaMoreInfoDevice extends LitElement {
     if (changedProps.has("deviceId")) {
       this._view = "info";
       this._compareEntityIds = [];
-      this._loadAutomations();
     }
 
     if (this._view === "settings") {
@@ -447,6 +428,14 @@ export class HaMoreInfoDevice extends LitElement {
       // rather than as ending there.
       this._fadeBottom =
         pane.scrollHeight - pane.clientHeight - pane.scrollTop > 1;
+
+      // Scrolled past its value, the pane no longer says what the entity reads
+      // — so the header states it instead, next to the name it already has.
+      const heroHidden = pane.scrollTop > HERO_HIDDEN_SCROLL;
+      if (heroHidden !== this._heroHidden) {
+        this._heroHidden = heroHidden;
+        fireEvent(this, "device-hero-hidden-changed", { hidden: heroHidden });
+      }
     }
 
     const strip = this._chipStrip;
@@ -591,21 +580,6 @@ export class HaMoreInfoDevice extends LitElement {
                       (entry) => entry.entity_id,
                       (entry) => this._renderChip(entry.entity_id)
                     )}
-                    ${
-                      // Past the end of the device: a rule, then what refers to
-                      // it. Same strip, because it is the same question — what
-                      // else is there — but plainly not one of its entities.
-                      this._automations?.length
-                        ? html`
-                            <div class="chip-divider"></div>
-                            ${repeat(
-                              this._automations,
-                              (entityId) => entityId,
-                              (entityId) => this._renderRelatedChip(entityId)
-                            )}
-                          `
-                        : nothing
-                    }
                   </div>
                   ${
                     // Only worth a menu when the strip cannot show every entity
@@ -704,12 +678,6 @@ export class HaMoreInfoDevice extends LitElement {
 
     if (view === "history") {
       return this._renderHistory(entityId);
-    }
-
-    // Not one of the device's entities: what there is to show is what it says
-    // about the device, not a control for it.
-    if (entityId === this._selectedAutomation) {
-      return this._renderAutomationPreview(entityId);
     }
 
     const stateObj = this.hass.states[entityId];
@@ -895,8 +863,12 @@ export class HaMoreInfoDevice extends LitElement {
   }
 
   /**
-   * Every entity of the device, in name order — including the ones hidden from
-   * the list above, which is exactly where you would go to unhide them.
+   * Every entity of the device — including the ones hidden from the list above,
+   * which is exactly where you would go to unhide them — grouped the way the
+   * device page groups them: what the device does, then what it reports, then
+   * how it is set up and how it is doing. One list rather than a box each: the
+   * group is stated on the row, and A to Z inside it is what makes a named
+   * entity findable.
    */
   private _settableEntities = memoizeOne(
     (
@@ -905,12 +877,15 @@ export class HaMoreInfoDevice extends LitElement {
     ): EntityRegistryDisplayEntry[] =>
       Object.values(entities)
         .filter((entry) => entry.device_id === deviceId)
-        .sort((a, b) =>
-          stringCompare(
-            this._entityLabel(a),
-            this._entityLabel(b),
-            this.hass.locale.language
-          )
+        .sort(
+          (a, b) =>
+            ENTITY_GROUPS.indexOf(computeEntityGroup(a)) -
+              ENTITY_GROUPS.indexOf(computeEntityGroup(b)) ||
+            stringCompare(
+              this._entityLabel(a),
+              this._entityLabel(b),
+              this.hass.locale.language
+            )
         )
   );
 
@@ -945,6 +920,16 @@ export class HaMoreInfoDevice extends LitElement {
             : html`<ha-svg-icon slot="start" .path=${mdiCancel}></ha-svg-icon>`
         }
         <span slot="headline">${this._entityLabel(entry)}</span>
+        <!--
+          What kind of thing it is to the device, in the words the device page
+          heads its boxes with — which is what tells two rows of the same name
+          apart, a battery level from a battery-low.
+        -->
+        <span slot="end" class="group">
+          ${this.hass.localize(
+            `ui.panel.config.devices.entities.${computeEntityGroup(entry)}`
+          )}
+        </span>
         <ha-svg-icon slot="end" .path=${mdiChevronRight}></ha-svg-icon>
       </ha-list-item-button>
     `;
@@ -1173,27 +1158,24 @@ export class HaMoreInfoDevice extends LitElement {
 
     // Two readings of the same past, one at a time: the chart and the list say
     // the same thing in different shapes, and stacking them halves both. What
-    // is not available is not offered, so a device with only one of them shows
-    // that one with no toggle at all.
+    // is not available is not offered — but the one that is still names itself,
+    // as the only option there is, so the card says what is in it either way.
     const activity = logbook && (!history || this._record === "logbook");
+    const records = RECORDS.filter((value) =>
+      value === "history" ? history : logbook
+    );
     const line = !activity && this._isLine(entityId);
 
     return html`
       <div class="pane history">
-        ${
-          // The chart is pointed at here the same way it is on the info tab, so
-          // it needs the same place to say what is under the pointer. A list
-          // has nothing to point at.
-          activity ? nothing : this._renderHeaders(entityId, line, true)
-        }
-        <div class="record-card ${classMap({ tall: activity })}">
+        <div class="record-card">
           <div class="record-bar">
             ${
-              history && logbook
+              records.length > 1
                 ? html`
                     <ha-control-select
                       class="record"
-                      .options=${RECORDS.map((value) => ({
+                      .options=${records.map((value) => ({
                         value,
                         label: this.hass.localize(
                           `ui.dialogs.more_info_control.${value}`
@@ -1203,7 +1185,15 @@ export class HaMoreInfoDevice extends LitElement {
                       @value-changed=${this._recordChanged}
                     ></ha-control-select>
                   `
-                : nothing
+                : records.length
+                  ? // Nothing to switch to, so nothing to press: the card says
+                    // what is in it and leaves it at that.
+                    html`<h2 class="record-heading">
+                      ${this.hass.localize(
+                        `ui.dialogs.more_info_control.${records[0]}`
+                      )}
+                    </h2>`
+                  : nothing
             }
             <div class="record-actions">
               ${
@@ -1357,164 +1347,6 @@ export class HaMoreInfoDevice extends LitElement {
     `;
   }
 
-  /**
-   * Something that refers to the device rather than something it provides: the
-   * same chip, outlined instead of filled, because picking it shows what it
-   * says rather than a control.
-   */
-  private _renderRelatedChip(entityId: string) {
-    const stateObj = this.hass.states[entityId];
-    const selected = entityId === this._selectedAutomation;
-
-    return html`
-      <div class="chip-slot">
-        <ha-badge
-          class="chip related ${classMap({ selected })}"
-          type="button"
-          .value=${entityId}
-          .pressed=${selected}
-          @click=${this._selectRelated}
-          @keydown=${this._relatedKeydown}
-        >
-          <ha-state-icon
-            slot="icon"
-            .hass=${this.hass}
-            .stateObj=${stateObj}
-          ></ha-state-icon>
-          ${this._entityName(stateObj)}
-        </ha-badge>
-      </div>
-    `;
-  }
-
-  private _relatedKeydown(ev: KeyboardEvent) {
-    if (ev.key !== "Enter" && ev.key !== " ") {
-      return;
-    }
-    ev.preventDefault();
-    this._selectRelated(ev);
-  }
-
-  private _selectRelated(ev: Event) {
-    if (this._dragScroll.scrolled) {
-      return;
-    }
-    const entityId = (ev.currentTarget as HTMLElement & { value: string })
-      .value;
-    this._selectedAutomation = entityId;
-    // The preview is what there is to see of it, and that is the info tab.
-    this._view = "info";
-    this.hass.loadFragmentTranslation("config");
-    this._loadAutomationConfig(entityId);
-    // The dialog header names what is on show, so it needs to know.
-    fireEvent(this, "device-featured-entity-changed", { entityId });
-  }
-
-  /** What refers to this device, which is not something the device reports. */
-  private async _loadAutomations() {
-    const deviceId = this.deviceId;
-    this._automations = undefined;
-    this._selectedAutomation = undefined;
-    if (__DEMO__) {
-      return;
-    }
-    try {
-      const related = await findRelated(this.hass, "device", deviceId);
-      if (this.deviceId !== deviceId) {
-        return;
-      }
-      // Only ones with a state: a related automation that has been removed is
-      // no longer anything to look at.
-      this._automations = related.automation?.filter(
-        (entityId) => this.hass.states[entityId]
-      );
-    } catch (_err) {
-      // Nothing related, or not ours to ask.
-    }
-  }
-
-  private async _loadAutomationConfig(entityId: string) {
-    if (this._automationConfigFor === entityId) {
-      return;
-    }
-    this._automationConfigFor = entityId;
-    this._automationConfig = undefined;
-    try {
-      const { config } = await getAutomationStateConfig(this.hass, entityId);
-      if (this._automationConfigFor === entityId) {
-        this._automationConfig = normalizeAutomationConfig(config);
-      }
-    } catch (_err) {
-      // Not readable — an automation this user is not allowed to see, or one
-      // the backend cannot hand over.
-    }
-  }
-
-  /**
-   * What the automation says, as its steps read in words. Read-only on purpose:
-   * this is here to answer "what does this device take part in", and editing it
-   * is a page of its own with a history of its own.
-   */
-  private _renderAutomationPreview(entityId: string) {
-    const config = this._automationConfig;
-    const registry = this._entityRegistry ?? [];
-    const steps: [string, string[]][] = config
-      ? [
-          [
-            "ui.panel.config.automation.editor.triggers.header",
-            ensureArray(config.triggers ?? []).map((trigger) =>
-              describeTrigger(trigger, this.hass, registry)
-            ),
-          ],
-          [
-            "ui.panel.config.automation.editor.conditions.header",
-            ensureArray(config.conditions ?? []).map((condition) =>
-              describeCondition(condition, this.hass, registry)
-            ),
-          ],
-          [
-            "ui.panel.config.automation.editor.actions.header",
-            ensureArray(config.actions ?? []).map((action) =>
-              describeAction(this.hass, registry, action as Action)
-            ),
-          ],
-        ]
-      : [];
-
-    return html`
-      <div class="pane reading related" data-entity=${entityId}>
-        ${this._renderHeaders(entityId, false, false)}
-        <div class="reading-control">
-          ${
-            this._automationConfigFor === entityId && !config
-              ? html`<div class="empty">
-                  ${this.hass.localize(
-                    "ui.dialogs.more_info_control.automation_unavailable"
-                  )}
-                </div>`
-              : steps
-                  .filter(([, lines]) => lines.length)
-                  .map(
-                    ([header, lines]) => html`
-                      <ha-grouped-list
-                        .header=${this.hass.localize(header as LocalizeKeys)}
-                      >
-                        ${lines.map(
-                          (line) => html`
-                            <ha-list-item-base>
-                              <span slot="headline">${line}</span>
-                            </ha-list-item-base>
-                          `
-                        )}
-                      </ha-grouped-list>
-                    `
-                  )
-          }
-        </div>
-      </div>
-    `;
-  }
-
   /** The same pick as a chip, for the entities the strip cannot fit. */
   private _renderListItem(entityId: string) {
     const stateObj = this.hass.states[entityId];
@@ -1610,7 +1442,14 @@ export class HaMoreInfoDevice extends LitElement {
         }));
 
     return html`
-      <div class="headers ${classMap({ compare: rows.length > 1 })}">
+      <div
+        class="headers ${classMap({
+          compare: rows.length > 1,
+          // Only a timeline states a span under the value, so only there is
+          // there a second line to keep room for.
+          spans: hoverable && !lines,
+        })}"
+      >
         ${rows.map((row) => this._renderStateHeader(row))}
       </div>
     `;
@@ -1650,6 +1489,7 @@ export class HaMoreInfoDevice extends LitElement {
         class="chart-timeline"
         .hass=${this.hass}
         .entityId=${entityId}
+        .compareEntityIds=${this._compareEntityIds}
         .hoursToShow=${this._hours}
         .rowHeight=${TIMELINE_ROW_HEIGHT}
         @graph-point-hovered=${this._graphHovered}
@@ -1782,8 +1622,7 @@ export class HaMoreInfoDevice extends LitElement {
     if (
       entityId === featuredId ||
       !featuredId ||
-      !this._comparable(featuredId) ||
-      !this._comparable(entityId)
+      !this._comparableWith(featuredId, entityId)
     ) {
       return false;
     }
@@ -1796,8 +1635,19 @@ export class HaMoreInfoDevice extends LitElement {
 
   /** Whether the entity has a line of its own to draw or be drawn on. */
   private _comparable(entityId: string): boolean {
+    return computeShowHistoryComponent(this.hass, entityId);
+  }
+
+  /**
+   * Whether two entities can share a drawing. Numbers go on one another's line
+   * and words go on one another's timeline, but a number has no band and a word
+   * has no height, so the two kinds do not mix in one box.
+   */
+  private _comparableWith(entityId: string, other: string): boolean {
     return (
-      computeShowHistoryComponent(this.hass, entityId) && this._isLine(entityId)
+      this._comparable(entityId) &&
+      this._comparable(other) &&
+      this._isLine(entityId) === this._isLine(other)
     );
   }
 
@@ -1812,12 +1662,12 @@ export class HaMoreInfoDevice extends LitElement {
 
   private _feature(entityId: string) {
     this._selectedEntityId = entityId;
-    this._selectedAutomation = undefined;
-    // Its own line is the featured one now, so it is no longer a comparison —
-    // and an entity with no line at all has nothing to compare against.
-    this._compareEntityIds = this._comparable(entityId)
-      ? this._compareEntityIds.filter((id) => id !== entityId)
-      : [];
+    // Its own drawing is the featured one now, so it is no longer a comparison.
+    // Whatever the new one cannot share a drawing with goes too — an entity
+    // with nothing to draw drops all of them.
+    this._compareEntityIds = this._compareEntityIds.filter(
+      (id) => id !== entityId && this._comparableWith(entityId, id)
+    );
     // The dialog header names what is on show, so it needs to know.
     fireEvent(this, "device-featured-entity-changed", { entityId });
   }
@@ -1894,21 +1744,26 @@ export class HaMoreInfoDevice extends LitElement {
       gap: var(--ha-space-4);
       margin-bottom: var(--ha-space-4);
     }
-    /*
-     * Every reading here is the same shape whatever the pointer is on: one line
-     * of value at one size, and two lines under it. Pointing at a chart turns
-     * one reading into two or three and back again, and a block that changed
-     * height with them moved the whole pane each time.
-     */
+    /* One reading is stated exactly as a light states its own: same size, same
+       wrap, same line under it. A reading is not a lesser kind of entity, so it
+       is not written in a smaller hand. */
     .headers ha-more-info-state-header {
       display: block;
       flex: 1;
       min-width: 0;
-      /* Two or three values across a dialog cannot each have the width one has
-         to itself, so they are all drawn at the size that fits. */
+    }
+    /* Two or three values across a dialog cannot each have the width one has to
+       itself, so together they are drawn at the size that fits, each held to
+       one line. */
+    .headers.compare ha-more-info-state-header {
       --more-info-state-header-font-size: var(--ha-font-size-3xl);
-      --more-info-state-header-detail-lines: 2;
       --more-info-state-header-white-space: nowrap;
+    }
+    /* Pointing at a timeline states the stretch of time under the value, which
+       is two lines where the last-changed is one: room for both, or the whole
+       pane moves every time the pointer crosses a band. */
+    .headers.spans ha-more-info-state-header {
+      --more-info-state-header-detail-lines: 2;
     }
     /* The name and state sit exactly where a controllable entity has them —
        same inset, top of the pane — so switching between the two moves only
@@ -1972,21 +1827,21 @@ export class HaMoreInfoDevice extends LitElement {
       align-self: stretch;
       height: 240px;
     }
+    /* Nothing is stated over the chart here, so the room that would have gone
+       to a value goes to the drawing: a line has no height of its own and
+       reads better the more of it there is. A timeline's bands are a fixed
+       height, so that one keeps its own. */
+    .pane.history .chart-line {
+      flex: 1 1 auto;
+      height: auto;
+      min-height: 240px;
+    }
     /* The frame is the inset on the charts tab; on the info tab the pane is. */
     .pane.reading .chart-timeline {
       --more-info-history-padding-inline: 0;
     }
     /* A preview is read top to bottom, not centred like a control, and its
        lists want the width of the pane. */
-    .pane.reading.related .reading-control {
-      align-items: stretch;
-      gap: var(--ha-space-4);
-      margin-block: 0;
-    }
-    .pane.reading.related .empty {
-      color: var(--secondary-text-color);
-      text-align: center;
-    }
     /* The domain control that follows a reading wants the width of a control,
        centred like the rest of the column rather than stretched across it. */
     .pane.reading hui-card-feature {
@@ -2075,6 +1930,16 @@ export class HaMoreInfoDevice extends LitElement {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    /* The group a row belongs to, stated rather than headed: quiet enough that
+       the list still reads as names, close enough to the chevron to belong to
+       the row and not to the next one. */
+    .pane.device .group {
+      color: var(--secondary-text-color);
+      white-space: nowrap;
+    }
+    .pane.device ha-list-item-button::part(end) {
+      gap: var(--ha-space-3);
+    }
     /* An action, not a destination. */
     .action span[slot="headline"],
     .pane.device .action ha-svg-icon[slot="start"] {
@@ -2098,17 +1963,11 @@ export class HaMoreInfoDevice extends LitElement {
     .record-card {
       display: flex;
       flex-direction: column;
-      flex: 0 1 auto;
+      flex: 1 1 auto;
       min-height: 0;
       border: var(--ha-border-width-sm) solid var(--divider-color);
       border-radius: var(--ha-card-border-radius, var(--ha-border-radius-lg));
       overflow: hidden;
-    }
-    /* A list is as long as the device has been busy, so it takes the height the
-       pane has rather than scrolling inside a box a third of it tall. A chart
-       is a fixed block and would only gain empty space below it. */
-    .record-card.tall {
-      flex: 1 1 auto;
     }
     /* Which record, and what of it: the switch takes the width it needs and
        the settings for what is showing sit at the far end. */
@@ -2122,6 +1981,7 @@ export class HaMoreInfoDevice extends LitElement {
     .record-content {
       display: flex;
       flex-direction: column;
+      flex: 1 1 auto;
       min-height: 0;
       overflow-y: auto;
       padding-block: var(--ha-space-3);
@@ -2129,6 +1989,16 @@ export class HaMoreInfoDevice extends LitElement {
          on top of it. */
       --more-info-history-padding-inline: var(--ha-space-3);
       --more-info-logbook-padding-inline: var(--ha-space-3);
+    }
+    /* Named rather than offered: the same words the switch would have carried,
+       at the weight the settings tab titles its boxes with. */
+    .record-heading {
+      flex: none;
+      margin: 0;
+      padding-inline-start: var(--ha-space-1);
+      font-size: var(--ha-font-size-m);
+      font-weight: var(--ha-font-weight-medium);
+      color: var(--secondary-text-color);
     }
     .record {
       flex: none;
@@ -2317,18 +2187,6 @@ export class HaMoreInfoDevice extends LitElement {
       --badge-color: var(--compared-color);
     }
     /* Where the device ends and what refers to it begins. */
-    .chip-divider {
-      flex: none;
-      align-self: stretch;
-      width: var(--ha-border-width-sm);
-      margin-inline: var(--ha-space-1);
-      background-color: var(--divider-color);
-    }
-    /* Outlined rather than filled: it is a way out to something else, not one
-       more thing the device reports. */
-    .chip.related {
-      border-style: dashed;
-    }
     .chip.selected {
       --ha-badge-content-color: var(--primary-text-color);
       --badge-color: var(--primary-color);

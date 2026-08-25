@@ -92,7 +92,7 @@ import { moreInfoContext, type MoreInfoContext } from "./context";
 import "./controls/more-info-default";
 import type { FavoritesDialogContext } from "./favorites";
 import { getFavoritesDialogHandler } from "./favorites";
-import { deviceCardEntities } from "../../panels/lovelace/cards/device/device-card-entities";
+import { resolveDeviceCardEntities } from "../../panels/lovelace/cards/device/device-card-entities";
 import "./ha-more-info-add-to";
 import "./ha-more-info-device";
 import "./ha-more-info-details";
@@ -176,6 +176,9 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
   /** Which of the device's entities the device view has on show. */
   @state() private _deviceEntityId?: string;
 
+  /** Set while the device view has scrolled past the value it leads with. */
+  @state() private _deviceHeroHidden = false;
+
   @state() private _deviceEntityOrder?: string[];
 
   @state() private _deviceCardEdit?: () => void;
@@ -228,7 +231,10 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
     // missing entity id — the card offers no tap target in that case either.
     this._entityId = this._deviceId
       ? (params.deviceEntityOrder?.[0] ??
-        deviceCardEntities(this.hass, this._deviceId)[0] ??
+        resolveDeviceCardEntities(this.hass, {
+          type: "device",
+          device: this._deviceId,
+        }).hero ??
         params.entityId)
       : params.entityId;
     if (!this._entityId) {
@@ -702,6 +708,16 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
         )
       : undefined;
 
+    // What the view leads with, for the header to state once the pane has been
+    // scrolled past it.
+    const heroObj =
+      showDeviceView && this._deviceHeroHidden
+        ? this.hass.states[this._deviceEntityId ?? this._entityId!]
+        : undefined;
+    const heroState = heroObj
+      ? this.hass.formatEntityState(heroObj)
+      : undefined;
+
     const breadcrumb = (
       showDeviceView
         ? deviceEntityName
@@ -814,7 +830,13 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
                   `
               : nothing
           }
-          <p class="main">${title}</p>
+          <p class="main">
+            ${title}${
+              heroState
+                ? html`<span class="hero-state"> • ${heroState}</span>`
+                : nothing
+            }
+          </p>
         </span>
         ${
           isDefaultView
@@ -1071,6 +1093,9 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
                                 @device-featured-entity-changed=${
                                   this._deviceEntityChanged
                                 }
+                                @device-hero-hidden-changed=${
+                                  this._deviceHeroHiddenChanged
+                                }
                               ></ha-more-info-device>`
                             : this._currView === "info"
                               ? html`
@@ -1167,6 +1192,11 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
   private _deviceEntityChanged(ev: CustomEvent<{ entityId: string }>) {
     ev.stopPropagation();
     this._deviceEntityId = ev.detail.entityId || undefined;
+  }
+
+  private _deviceHeroHiddenChanged(ev: CustomEvent<{ hidden: boolean }>) {
+    ev.stopPropagation();
+    this._deviceHeroHidden = ev.detail.hidden;
   }
 
   private _entryUpdated(ev: CustomEvent<ExtEntityRegistryEntry>) {
@@ -1288,6 +1318,26 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
           color: var(--primary-text-color);
           font-size: var(--ha-font-size-xl);
           line-height: var(--ha-line-height-condensed);
+        }
+
+        /* The value the pane has been scrolled past, after the same dot that
+           separates any other two facts. It arrives rather than appears: the
+           name it follows has not changed, only what is left to say about it. */
+        .title .hero-state {
+          color: var(--secondary-text-color);
+          animation: hero-state-in 180ms ease-in-out;
+        }
+
+        @keyframes hero-state-in {
+          from {
+            opacity: 0;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .title .hero-state {
+            animation: none;
+          }
         }
 
         .title .breadcrumb {

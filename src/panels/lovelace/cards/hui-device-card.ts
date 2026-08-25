@@ -39,7 +39,6 @@ import type { LovelaceCardPath } from "../editor/lovelace-path";
 import type { LovelaceCard, LovelaceCardEditor } from "../types";
 import { getEntityDefaultTileIconAction } from "./hui-tile-card";
 import {
-  deviceCardEntities,
   PRESSABLE_DOMAINS,
   resolveDeviceCardEntities,
   PRESS_LABEL,
@@ -147,7 +146,8 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     // device this card can actually draw.
     const deviceId =
       Object.keys(hass.devices).find(
-        (id) => deviceCardEntities(hass, id).length > 0
+        (id) =>
+          resolveDeviceCardEntities(hass, { type: "device", device: id }).hero
       ) ?? Object.keys(hass.devices)[0];
     return { type: "device", device: deviceId ?? "" };
   }

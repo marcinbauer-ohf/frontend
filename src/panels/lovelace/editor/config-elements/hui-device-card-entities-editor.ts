@@ -3,7 +3,7 @@ import {
   mdiDragHorizontalVariant,
   mdiEye,
   mdiEyeOff,
-  mdiStar,
+  mdiPin,
 } from "@mdi/js";
 import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import { css, html, LitElement, nothing } from "lit";
@@ -69,7 +69,10 @@ const NOT_A_CONTROL = new Set<UiFeatureType>(["trend-graph"]);
  * sends a row there, so the control and its destination read as the same thing.
  */
 const SECTION_ICON: Record<Section, string> = {
-  hero: mdiStar,
+  // A pin, the same mark the device view puts on the entity the card leads
+  // with — a star is what a dashboard marks a favourite with, and this is not
+  // that.
+  hero: mdiPin,
   visible: mdiEye,
   hidden: mdiEyeOff,
   disabled: mdiCancel,

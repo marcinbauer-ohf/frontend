@@ -47,6 +47,17 @@ export class MoreInfoHistory extends LitElement {
   @property({ attribute: false }) public entityId!: string;
 
   /**
+   * More entities to draw beside `entityId`, as rows of the same timeline, for
+   * reading them against each other.
+   */
+  @property({ attribute: false }) public compareEntityIds?: string[];
+
+  /** Every entity on the chart, the one it is of first. */
+  private get _entityIds(): string[] {
+    return [this.entityId, ...(this.compareEntityIds ?? [])];
+  }
+
+  /**
    * Drop the heading and the "show more" link. For hosts that frame this
    * component and provide both themselves.
    */
@@ -149,7 +160,7 @@ export class MoreInfoHistory extends LitElement {
                     .hass=${this.hass}
                     .historyData=${this._stateHistory}
                     .isLoadingData=${!this._stateHistory}
-                    .showNames=${false}
+                    .showNames=${!!this.compareEntityIds?.length}
                     .clickForMoreInfo=${false}
                     .rowHeight=${this.rowHeight}
                     ?hide-tooltip=${this.hideTooltip}
@@ -164,6 +175,7 @@ export class MoreInfoHistory extends LitElement {
 
     if (
       changedProps.has("entityId") ||
+      changedProps.has("compareEntityIds") ||
       changedProps.has("hoursToShow") ||
       changedProps.has("period")
     ) {
@@ -271,6 +283,7 @@ export class MoreInfoHistory extends LitElement {
   private async _getStateHistory(): Promise<void> {
     if (
       isComponentLoaded(this.hass.config, "recorder") &&
+      !this.compareEntityIds?.length &&
       computeDomain(this.entityId) === "sensor"
     ) {
       const stateObj = this.hass.states[this.entityId];
@@ -304,12 +317,12 @@ export class MoreInfoHistory extends LitElement {
         this._stateHistory = computeHistory(
           this.hass!,
           combinedHistory,
-          [this.entityId],
+          this._entityIds,
           this.hass!.localize
         );
       },
       this.hoursToShow,
-      [this.entityId]
+      this._entityIds
     ).catch((err) => {
       this._subscribed = undefined;
       this._error = err;

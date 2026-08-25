@@ -60,11 +60,11 @@ describe("resolveDeviceCardEntities", () => {
     });
   });
 
-  it("excludes registry-hidden, config/diagnostic, stateless and other devices", () => {
+  it("excludes registry-hidden, config, stateless and other devices", () => {
     const hass = fakeHass([
       { entityId: "light.desk" },
       { entityId: "sensor.hidden", hidden: true },
-      { entityId: "sensor.diagnostic", category: "diagnostic" },
+      { entityId: "sensor.config", category: "config" },
       { entityId: "sensor.disabled", stateless: true },
       { entityId: "sensor.other_device", deviceId: "dev2" },
     ]);
@@ -73,6 +73,47 @@ describe("resolveDeviceCardEntities", () => {
       hero: "light.desk",
       visible: [],
       hidden: [],
+    });
+  });
+
+  it("offers diagnostics to the editor but keeps them off the card", () => {
+    const hass = fakeHass([
+      { entityId: "binary_sensor.door" },
+      { entityId: "sensor.battery", category: "diagnostic" },
+      { entityId: "sensor.voltage", category: "diagnostic" },
+    ]);
+
+    expect(resolve(hass)).toEqual({
+      hero: "binary_sensor.door",
+      visible: [],
+      hidden: ["sensor.battery", "sensor.voltage"],
+    });
+  });
+
+  it("puts a diagnostic on the card once the config names it", () => {
+    const hass = fakeHass([
+      { entityId: "binary_sensor.door" },
+      { entityId: "sensor.battery", category: "diagnostic" },
+      { entityId: "sensor.voltage", category: "diagnostic" },
+    ]);
+
+    expect(resolve(hass, { entities: ["sensor.battery"] })).toEqual({
+      hero: "binary_sensor.door",
+      visible: ["sensor.battery"],
+      hidden: ["sensor.voltage"],
+    });
+  });
+
+  it("leads with a diagnostic when it is the only thing the device has", () => {
+    const hass = fakeHass([
+      { entityId: "sensor.battery", category: "diagnostic" },
+      { entityId: "sensor.voltage", category: "diagnostic" },
+    ]);
+
+    expect(resolve(hass, { entity: "sensor.battery" })).toEqual({
+      hero: "sensor.battery",
+      visible: [],
+      hidden: ["sensor.voltage"],
     });
   });
 
