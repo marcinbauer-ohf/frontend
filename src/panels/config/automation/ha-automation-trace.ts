@@ -619,6 +619,9 @@ export class HaAutomationTrace extends LitElement {
         }
 
         .graph {
+          /* Nodes are card colored, like the rows in the editor, so the graph
+             sits on the page background. */
+          background-color: var(--primary-background-color);
           border-right: 1px solid var(--divider-color);
           max-width: 50%;
           box-sizing: border-box;

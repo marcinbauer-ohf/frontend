@@ -1,8 +1,6 @@
 import {
-  mdiAbTesting,
   mdiArrowDecision,
   mdiArrowUp,
-  mdiAsterisk,
   mdiCallMissed,
   mdiCallReceived,
   mdiCallSplit,
@@ -11,7 +9,6 @@ import {
   mdiChevronDown,
   mdiChevronUp,
   mdiClose,
-  mdiCodeBraces,
   mdiCodeBrackets,
   mdiFormatListNumbered,
   mdiRefresh,
@@ -23,8 +20,15 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query } from "lit/decorators";
 import { ensureArray } from "../../common/array/ensure-array";
 import { fireEvent } from "../../common/dom/fire_event";
-import type { Condition, Trigger } from "../../data/automation";
-import { flattenTriggers } from "../../data/automation";
+import type {
+  Condition,
+  PlatformTrigger,
+  Trigger,
+} from "../../data/automation";
+import {
+  expandConditionWithShorthand,
+  flattenTriggers,
+} from "../../data/automation";
 import type {
   Action,
   ChooseAction,
@@ -37,7 +41,6 @@ import type {
   WaitAction,
   WaitForTriggerAction,
 } from "../../data/script";
-import { getActionType } from "../../data/script";
 import type {
   ChooseActionTraceStep,
   ConditionTraceStep,
@@ -45,12 +48,16 @@ import type {
   TraceExtended,
 } from "../../data/trace";
 import "../ha-icon-button";
+import "../ha-condition-icon";
 import "../ha-service-icon";
+import "../ha-trigger-icon";
 import "./hat-graph-branch";
 import { BRANCH_HEIGHT, NODE_SIZE, SPACING } from "./hat-graph-const";
 import "./hat-graph-node";
 import "./hat-graph-spacer";
 import { ACTION_ICONS } from "../../data/action";
+import { CONDITION_BUILDING_BLOCKS } from "../../data/condition";
+import { getAutomationActionType } from "../../panels/config/automation/action/ha-automation-action-row";
 
 type NodeType = "trigger" | "condition" | "action" | "chooseOption" | undefined;
 
@@ -104,11 +111,18 @@ export class HatScriptGraph extends LitElement {
         ?not-triggered=${notTriggered}
         @focus=${this._selectNode(config, path, "trigger")}
         ?active=${this.selected === path}
-        .iconPath=${mdiAsterisk}
         .notEnabled=${"enabled" in config && config.enabled === false}
         .error=${this.trace.trace[path]?.some((tr) => tr.error)}
         tabindex=${tracked ? "0" : "-1"}
-      ></hat-graph-node>
+      >
+        <ha-trigger-icon
+          slot="icon"
+          .trigger=${
+            (config as PlatformTrigger).trigger ??
+            (config as PlatformTrigger).platform
+          }
+        ></ha-trigger-icon>
+      </hat-graph-node>
     `;
   }
 
@@ -122,10 +136,7 @@ export class HatScriptGraph extends LitElement {
   }
 
   private _typeRenderers = {
-    condition: this._renderConditionNode,
-    and: this._renderConditionNode,
-    or: this._renderConditionNode,
-    not: this._renderConditionNode,
+    condition: this._renderConditionActionNode,
     service: this._renderServiceNode,
     wait_template: this._renderWaitNode,
     wait_for_trigger: this._renderWaitNode,
@@ -143,17 +154,24 @@ export class HatScriptGraph extends LitElement {
     graphStart = false,
     disabled = false
   ) {
-    const type =
-      Object.keys(this._typeRenderers).find((key) => key in node) || "other";
+    const type = getAutomationActionType(node) ?? "other";
     this.renderedNodes[path] = { config: node, path, type: "action" };
     if (this.trace && path in this.trace.trace) {
       this.trackedNodes[path] = this.renderedNodes[path];
     }
-    return this._typeRenderers[type].bind(this)(
+    return (this._typeRenderers[type] ?? this._renderOtherNode).bind(this)(
       node,
       path,
       graphStart,
       disabled
+    );
+  }
+
+  // A branch can be missing the result that names it (parallel runs can drop
+  // it), so fall back to whether any of its steps were traced.
+  private _hasTracedSteps(pathPrefix: string) {
+    return Object.keys(this.trace.trace).some((tracePath) =>
+      tracePath.startsWith(pathPrefix)
     );
   }
 
@@ -171,7 +189,8 @@ export class HatScriptGraph extends LitElement {
             : trc.result.choice
         )
       : [];
-    const trackDefault = tracePath.includes("default");
+    const trackDefault =
+      tracePath.includes("default") || this._hasTracedSteps(`${path}/default/`);
     return html`
       <hat-graph-branch
         tabindex=${trace === undefined ? "-1" : "0"}
@@ -183,6 +202,7 @@ export class HatScriptGraph extends LitElement {
         <hat-graph-node
           .graphStart=${graphStart}
           .iconPath=${mdiArrowDecision}
+          building-block
           ?track=${trace !== undefined}
           ?active=${this.selected === path}
           .notEnabled=${disabled || config.enabled === false}
@@ -195,7 +215,9 @@ export class HatScriptGraph extends LitElement {
           config.choose
             ? ensureArray(config.choose)?.map((branch, i) => {
                 const branchPath = `${path}/choose/${i}`;
-                const trackThis = tracePath.includes(i);
+                const trackThis =
+                  tracePath.includes(i) ||
+                  this._hasTracedSteps(`${branchPath}/sequence/`);
                 this.renderedNodes[branchPath] = {
                   config: branch,
                   path: branchPath,
@@ -280,6 +302,8 @@ export class HatScriptGraph extends LitElement {
         break;
       }
     }
+    trackThen = trackThen || this._hasTracedSteps(`${path}/then/`);
+    trackElse = trackElse || this._hasTracedSteps(`${path}/else/`);
     return html`
       <hat-graph-branch
         tabindex=${trace === undefined ? "-1" : "0"}
@@ -291,6 +315,7 @@ export class HatScriptGraph extends LitElement {
         <hat-graph-node
           .graphStart=${graphStart}
           .iconPath=${mdiCallSplit}
+          building-block
           ?track=${trace !== undefined}
           ?active=${this.selected === path}
           .notEnabled=${disabled || config.enabled === false}
@@ -339,12 +364,31 @@ export class HatScriptGraph extends LitElement {
     `;
   }
 
-  private _renderConditionNode(
+  // A condition used as an action shows the generic condition icon, like the
+  // action row in the editor does.
+  private _renderConditionActionNode(
     node: Condition,
     path: string,
     graphStart = false,
     disabled = false
   ) {
+    return this._renderConditionNode(
+      node,
+      path,
+      graphStart,
+      disabled,
+      ACTION_ICONS.condition
+    );
+  }
+
+  private _renderConditionNode(
+    node: Condition,
+    path: string,
+    graphStart = false,
+    disabled = false,
+    iconPath?: string
+  ) {
+    const condition = expandConditionWithShorthand(node).condition;
     const trace = this.trace.trace[path] as ConditionTraceStep[] | undefined;
     let track = false;
     let trackPass = false;
@@ -379,9 +423,21 @@ export class HatScriptGraph extends LitElement {
           ?track=${track}
           ?active=${this.selected === path}
           .notEnabled=${disabled || node.enabled === false}
-          .iconPath=${mdiAbTesting}
+          .iconPath=${iconPath}
+          ?building-block=${
+            !iconPath && CONDITION_BUILDING_BLOCKS.includes(condition)
+          }
           nofocus
-        ></hat-graph-node>
+        >
+          ${
+            iconPath
+              ? nothing
+              : html`<ha-condition-icon
+                  slot="icon"
+                  .condition=${condition}
+                ></ha-condition-icon>`
+          }
+        </hat-graph-node>
         <div
           style=${`width: ${NODE_SIZE + SPACING}px;`}
           graph-start
@@ -418,6 +474,7 @@ export class HatScriptGraph extends LitElement {
         <hat-graph-node
           .graphStart=${graphStart}
           .iconPath=${mdiRefresh}
+          building-block
           ?track=${path in this.trace.trace}
           ?active=${this.selected === path}
           .notEnabled=${disabled || node.enabled === false}
@@ -484,7 +541,12 @@ export class HatScriptGraph extends LitElement {
     return html`
       <hat-graph-node
         .graphStart=${graphStart}
-        .iconPath=${mdiCodeBraces}
+        .iconPath=${
+          ACTION_ICONS[
+            "wait_for_trigger" in node ? "wait_for_trigger" : "wait_template"
+          ]
+        }
+        ?building-block=${"wait_for_trigger" in node}
         @focus=${this._selectNode(node, path, "action")}
         ?track=${path in this.trace.trace}
         ?active=${this.selected === path}
@@ -514,6 +576,7 @@ export class HatScriptGraph extends LitElement {
           <hat-graph-node
             .graphStart=${graphStart}
             .iconPath=${mdiFormatListNumbered}
+            building-block
             ?track=${path in this.trace.trace}
             ?active=${this.selected === path}
             .notEnabled=${disabled || node.enabled === false}
@@ -551,6 +614,7 @@ export class HatScriptGraph extends LitElement {
         <hat-graph-node
           .graphStart=${graphStart}
           .iconPath=${mdiShuffleDisabled}
+          building-block
           ?track=${path in this.trace.trace}
           ?active=${this.selected === path}
           .notEnabled=${disabled || node.enabled === false}
@@ -591,7 +655,9 @@ export class HatScriptGraph extends LitElement {
     return html`
       <hat-graph-node
         .graphStart=${graphStart}
-        .iconPath=${ACTION_ICONS[getActionType(node)] || mdiCodeBrackets}
+        .iconPath=${
+          ACTION_ICONS[getAutomationActionType(node)!] || mdiCodeBrackets
+        }
         @focus=${this._selectNode(node, path, "action")}
         ?track=${path in this.trace.trace}
         ?active=${this.selected === path}
@@ -764,18 +830,36 @@ export class HatScriptGraph extends LitElement {
         display: flex;
         flex-direction: row;
         overflow: hidden;
-        --stroke-clr: var(--stroke-color, var(--secondary-text-color));
+        --stroke-clr: var(
+          --stroke-color,
+          var(--ha-color-border-neutral-normal)
+        );
+        --connector-clr: var(
+          --connector-color,
+          var(--ha-color-border-neutral-loud)
+        );
         --active-clr: var(--active-color, var(--primary-color));
-        --track-clr: var(--track-color, var(--accent-color));
+        --track-clr: var(
+          --track-color,
+          var(--ha-color-fill-success-loud-resting)
+        );
         --hover-clr: var(--hover-color, var(--primary-color));
         --disabled-clr: var(--disabled-color, var(--disabled-text-color));
+        --disabled-background-clr: var(
+          --disabled-background-color,
+          var(--ha-color-fill-neutral-quiet-resting)
+        );
         --disabled-active-clr: rgba(var(--rgb-primary-color), 0.5);
         --disabled-hover-clr: rgba(var(--rgb-primary-color), 0.7);
         --default-trigger-color: 3, 169, 244;
         --rgb-trigger-color: var(--trigger-color, var(--default-trigger-color));
-        --background-clr: var(--background-color, white);
-        --default-icon-clr: var(--icon-color, black);
-        --icon-clr: var(--stroke-clr);
+        /* Same chain as ha-card, so nodes match the editor rows. */
+        --background-clr: var(
+          --ha-card-background,
+          var(--card-background-color)
+        );
+        --default-icon-clr: var(--icon-color, var(--primary-text-color));
+        --icon-clr: var(--secondary-text-color);
 
         --hat-graph-spacing: ${SPACING}px;
         --hat-graph-node-size: ${NODE_SIZE}px;
