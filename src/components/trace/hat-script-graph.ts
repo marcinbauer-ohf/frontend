@@ -56,7 +56,6 @@ import { BRANCH_HEIGHT, NODE_SIZE, SPACING } from "./hat-graph-const";
 import "./hat-graph-node";
 import "./hat-graph-spacer";
 import { ACTION_ICONS } from "../../data/action";
-import { CONDITION_BUILDING_BLOCKS } from "../../data/condition";
 import { getAutomationActionType } from "../../panels/config/automation/action/ha-automation-action-row";
 
 type NodeType = "trigger" | "condition" | "action" | "chooseOption" | undefined;
@@ -86,6 +85,10 @@ export class HatScriptGraph extends LitElement {
 
   public trackedNodes: Record<string, NodeInfo> = {};
 
+  private _hasError(path: string) {
+    return !!this.trace?.trace[path]?.some((tr) => tr.error);
+  }
+
   private _selectNode(config, path, type?) {
     return () => {
       fireEvent(this, "graph-node-selected", { config, path, type });
@@ -107,12 +110,13 @@ export class HatScriptGraph extends LitElement {
     return html`
       <hat-graph-node
         graph-start
+        type="trigger"
         ?track=${track}
         ?not-triggered=${notTriggered}
         @focus=${this._selectNode(config, path, "trigger")}
         ?active=${this.selected === path}
         .notEnabled=${"enabled" in config && config.enabled === false}
-        .error=${this.trace.trace[path]?.some((tr) => tr.error)}
+        .error=${this._hasError(path)}
         tabindex=${tracked ? "0" : "-1"}
       >
         <ha-trigger-icon
@@ -175,6 +179,18 @@ export class HatScriptGraph extends LitElement {
     );
   }
 
+  /**
+   * A branch is only finished if its last configured step was reached. A run
+   * that raised part way through leaves the later steps untraced, so the paths
+   * leaving the branch must not be drawn as taken.
+   */
+  private _branchFinished(pathPrefix: string, steps: unknown[]) {
+    return (
+      steps.length === 0 ||
+      `${pathPrefix}${steps.length - 1}` in this.trace.trace
+    );
+  }
+
   private _renderChooseNode(
     config: ChooseAction,
     path: string,
@@ -206,7 +222,7 @@ export class HatScriptGraph extends LitElement {
           ?track=${trace !== undefined}
           ?active=${this.selected === path}
           .notEnabled=${disabled || config.enabled === false}
-          .error=${this.trace.trace[path]?.some((tr) => tr.error)}
+          .error=${this._hasError(path)}
           slot="head"
           nofocus
         ></hat-graph-node>
@@ -227,8 +243,19 @@ export class HatScriptGraph extends LitElement {
                   this.trackedNodes[branchPath] =
                     this.renderedNodes[branchPath];
                 }
+                const branchSteps = ensureArray<Action>(branch.sequence ?? []);
                 return html`
-                  <div class="graph-container" ?track=${trackThis}>
+                  <div
+                    class="graph-container"
+                    ?track=${trackThis}
+                    ?unfinished=${
+                      trackThis &&
+                      !this._branchFinished(
+                        `${branchPath}/sequence/`,
+                        branchSteps
+                      )
+                    }
+                  >
                     <hat-graph-node
                       .iconPath=${
                         !trace || trackThis
@@ -319,12 +346,23 @@ export class HatScriptGraph extends LitElement {
           ?track=${trace !== undefined}
           ?active=${this.selected === path}
           .notEnabled=${disabled || config.enabled === false}
+          .error=${this._hasError(path)}
           slot="head"
           nofocus
         ></hat-graph-node>
         ${
           config.else
-            ? html`<div class="graph-container" ?track=${trackElse}>
+            ? html`<div
+                class="graph-container"
+                ?track=${trackElse}
+                ?unfinished=${
+                  trackElse &&
+                  !this._branchFinished(
+                    `${path}/else/`,
+                    ensureArray<Action>(config.else ?? [])
+                  )
+                }
+              >
                 <hat-graph-node
                   .iconPath=${mdiCallMissed}
                   ?track=${trackElse}
@@ -343,7 +381,17 @@ export class HatScriptGraph extends LitElement {
               </div>`
             : html`<hat-graph-spacer ?track=${trackElse}></hat-graph-spacer>`
         }
-        <div class="graph-container" ?track=${trackThen}>
+        <div
+          class="graph-container"
+          ?track=${trackThen}
+          ?unfinished=${
+            trackThen &&
+            !this._branchFinished(
+              `${path}/then/`,
+              ensureArray<Action>(config.then ?? [])
+            )
+          }
+        >
           <hat-graph-node
             .iconPath=${mdiCallReceived}
             ?track=${trackThen}
@@ -419,14 +467,14 @@ export class HatScriptGraph extends LitElement {
       >
         <hat-graph-node
           .graphStart=${graphStart}
+          type="condition"
           slot="head"
           ?track=${track}
           ?active=${this.selected === path}
           .notEnabled=${disabled || node.enabled === false}
+          .error=${this._hasError(path)}
           .iconPath=${iconPath}
-          ?building-block=${
-            !iconPath && CONDITION_BUILDING_BLOCKS.includes(condition)
-          }
+          building-block
           nofocus
         >
           ${
@@ -446,6 +494,7 @@ export class HatScriptGraph extends LitElement {
         <div ?track=${trackPass}></div>
         <hat-graph-node
           .iconPath=${mdiClose}
+          type="condition"
           nofocus
           ?track=${trackFailed}
           ?active=${this.selected === path}
@@ -478,6 +527,7 @@ export class HatScriptGraph extends LitElement {
           ?track=${path in this.trace.trace}
           ?active=${this.selected === path}
           .notEnabled=${disabled || node.enabled === false}
+          .error=${this._hasError(path)}
           slot="head"
           nofocus
         ></hat-graph-node>
@@ -517,7 +567,7 @@ export class HatScriptGraph extends LitElement {
         ?track=${path in this.trace.trace}
         ?active=${this.selected === path}
         .notEnabled=${disabled || node.enabled === false}
-        .error=${this.trace.trace[path]?.some((tr) => tr.error)}
+        .error=${this._hasError(path)}
         tabindex=${this.trace && path in this.trace.trace ? "0" : "-1"}
       >
         ${
@@ -551,7 +601,7 @@ export class HatScriptGraph extends LitElement {
         ?track=${path in this.trace.trace}
         ?active=${this.selected === path}
         .notEnabled=${disabled || node.enabled === false}
-        .error=${this.trace.trace[path]?.some((tr) => tr.error)}
+        .error=${this._hasError(path)}
         tabindex=${this.trace && path in this.trace.trace ? "0" : "-1"}
       ></hat-graph-node>
     `;
@@ -580,6 +630,7 @@ export class HatScriptGraph extends LitElement {
             ?track=${path in this.trace.trace}
             ?active=${this.selected === path}
             .notEnabled=${disabled || node.enabled === false}
+            .error=${this._hasError(path)}
             slot="head"
             nofocus
           ></hat-graph-node>
@@ -618,30 +669,40 @@ export class HatScriptGraph extends LitElement {
           ?track=${path in this.trace.trace}
           ?active=${this.selected === path}
           .notEnabled=${disabled || node.enabled === false}
+          .error=${this._hasError(path)}
           slot="head"
           nofocus
         ></hat-graph-node>
-        ${ensureArray<Action>(node.parallel).map((action, i) =>
-          "sequence" in action
-            ? html`<div ?track=${path in this.trace.trace}>
-                ${ensureArray<Action>(
-                  (action as ManualScriptConfig).sequence
-                ).map((sAction, j) =>
-                  this._renderActionNode(
-                    sAction,
-                    `${path}/parallel/${i}/sequence/${j}`,
-                    false,
-                    disabled || node.enabled === false
-                  )
-                )}
-              </div>`
-            : this._renderActionNode(
-                action,
-                `${path}/parallel/${i}/sequence/0`,
+        ${ensureArray<Action>(node.parallel).map((action, i) => {
+          if (!("sequence" in action)) {
+            return this._renderActionNode(
+              action,
+              `${path}/parallel/${i}/sequence/0`,
+              false,
+              disabled || node.enabled === false
+            );
+          }
+          const branchSteps = ensureArray<Action>(
+            (action as ManualScriptConfig).sequence
+          );
+          const branchPrefix = `${path}/parallel/${i}/sequence/`;
+          const started = this._hasTracedSteps(branchPrefix);
+          return html`<div
+            ?track=${started}
+            ?unfinished=${
+              started && !this._branchFinished(branchPrefix, branchSteps)
+            }
+          >
+            ${branchSteps.map((sAction, j) =>
+              this._renderActionNode(
+                sAction,
+                `${path}/parallel/${i}/sequence/${j}`,
                 false,
                 disabled || node.enabled === false
               )
-        )}
+            )}
+          </div>`;
+        })}
       </hat-graph-branch>
     `;
   }
@@ -661,7 +722,7 @@ export class HatScriptGraph extends LitElement {
         @focus=${this._selectNode(node, path, "action")}
         ?track=${path in this.trace.trace}
         ?active=${this.selected === path}
-        .error=${this.trace.trace[path]?.some((tr) => tr.error)}
+        .error=${this._hasError(path)}
         .notEnabled=${disabled || node.enabled === false}
       ></hat-graph-node>
     `;
@@ -844,15 +905,12 @@ export class HatScriptGraph extends LitElement {
           var(--ha-color-fill-success-loud-resting)
         );
         --hover-clr: var(--hover-color, var(--primary-color));
-        --disabled-clr: var(--disabled-color, var(--disabled-text-color));
-        --disabled-background-clr: var(
-          --disabled-background-color,
-          var(--ha-color-fill-neutral-quiet-resting)
+        --disabled-clr: var(
+          --disabled-color,
+          var(--ha-color-border-neutral-loud)
         );
         --disabled-active-clr: rgba(var(--rgb-primary-color), 0.5);
         --disabled-hover-clr: rgba(var(--rgb-primary-color), 0.7);
-        --default-trigger-color: 3, 169, 244;
-        --rgb-trigger-color: var(--trigger-color, var(--default-trigger-color));
         /* Same chain as ha-card, so nodes match the editor rows. */
         --background-clr: var(
           --ha-card-background,

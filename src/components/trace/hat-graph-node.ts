@@ -18,8 +18,6 @@ const BADGE_RADIUS = 8;
 /** Point on the rounded corner arc, so the badge straddles the node border. */
 const BADGE_X = NODE_SIZE / 2 - NODE_RADIUS + NODE_RADIUS / Math.SQRT2;
 const BADGE_Y = -BADGE_X;
-/** Mirrors the disabled bar on the automation rows. */
-const DISABLED_BAR_HEIGHT = 10;
 /** The repeat count sits centered on the bottom edge. */
 const COUNT_BADGE_Y = NODE_SIZE / 2;
 const COUNT_BADGE_RADIUS = 9;
@@ -34,7 +32,7 @@ export class HatGraphNode extends LitElement {
 
   @property({ type: Boolean, reflect: true }) public disabled = false;
 
-  @property({ type: Boolean }) public error = false;
+  @property({ type: Boolean, reflect: true }) public error = false;
 
   @property({ attribute: "not-enabled", reflect: true, type: Boolean })
   notEnabled = false;
@@ -53,6 +51,13 @@ export class HatGraphNode extends LitElement {
 
   @property({ reflect: true, type: Number }) badge?: number;
 
+  /**
+   * Which part of the automation this step is. Tints the node fill: the stroke
+   * and icon already carry run state, so type has to live somewhere else.
+   */
+  @property({ reflect: true })
+  type: "trigger" | "condition" | "action" = "action";
+
   protected updated(changedProps: PropertyValues<this>) {
     if (changedProps.has("noFocus")) {
       if (!this.hasAttribute("tabindex") && !this.noFocus) {
@@ -69,7 +74,6 @@ export class HatGraphNode extends LitElement {
     const size = this.buildingBlock ? BUILDING_BLOCK_SIZE : NODE_SIZE;
     const iconSize = this.buildingBlock ? BUILDING_BLOCK_ICON_SIZE : ICON_SIZE;
     // A rotated building block is wider than its side.
-    const halfWidth = this.buildingBlock ? size / Math.SQRT2 : size / 2;
     return html`
       <svg
         class=${isSafari ? "safari" : ""}
@@ -163,13 +167,12 @@ export class HatGraphNode extends LitElement {
           ${
             this.notEnabled
               ? svg`
-          <rect
-            class="disabled-bar"
-            x=${-halfWidth}
-            y=${-halfWidth}
-            width=${halfWidth * 2}
-            height=${DISABLED_BAR_HEIGHT}
-            clip-path="url(#shape)"
+          <line
+            class="strike"
+            x1=${-iconSize / 2}
+            y1="0"
+            x2=${iconSize / 2}
+            y2="0"
           />
           `
               : nothing
@@ -198,6 +201,14 @@ export class HatGraphNode extends LitElement {
       --stroke-clr: var(--track-clr);
       --icon-clr: var(--default-icon-clr);
     }
+    /* A step that raised is drawn red, but only the node itself: the run did
+       reach it, so the connector above it stays on the tracked path colour. */
+    :host([error]) {
+      --icon-clr: var(--default-icon-clr);
+    }
+    :host([error]) rect {
+      --stroke-clr: var(--error-color);
+    }
     :host([active]) rect {
       --stroke-clr: var(--active-clr);
       --icon-clr: var(--default-icon-clr);
@@ -210,20 +221,34 @@ export class HatGraphNode extends LitElement {
       --stroke-clr: var(--hover-clr);
       --icon-clr: var(--default-icon-clr);
     }
+    /* Shape says decision-or-step, fill says which part of the automation.
+       Kept quiet: the stroke and icon already carry run state. */
+    :host([type="trigger"]) rect {
+      --node-fill-clr: var(--ha-color-fill-primary-quiet-resting);
+    }
     :host([not-triggered]) rect {
       stroke-dasharray: 4 3;
     }
     :host([not-enabled]) {
-      --stroke-clr: var(--disabled-clr);
+      --stroke-clr: var(--ha-color-border-neutral-normal);
+      --icon-clr: var(--ha-color-text-disabled);
     }
-    :host([not-enabled]) .icon-wrapper,
-    :host([not-enabled]) .error,
-    :host([not-enabled]) .number {
-      opacity: 0.5;
-    }
+    /* One step off the surface in whichever direction the theme runs: #e5e5e5
+       on a white node body, #282828 on a near black one. */
     :host([not-enabled]) rect {
-      fill: var(--disabled-background-clr);
-      stroke-opacity: 0.5;
+      fill: var(--secondary-background-color);
+    }
+    /* Not the whole node group: SVG composites group opacity as a unit, which
+       would fade the error and count badges along with the rest. The body is
+       left at full strength so the grey does not wash out. */
+    :host([not-enabled]) .icon-wrapper,
+    :host([not-enabled]) .strike {
+      opacity: 0.6;
+    }
+    .strike {
+      stroke: var(--icon-clr);
+      stroke-width: 2;
+      stroke-linecap: round;
     }
     :host([not-enabled][active]) rect {
       --stroke-clr: var(--disabled-active-clr);
@@ -256,7 +281,7 @@ export class HatGraphNode extends LitElement {
       stroke-dasharray: none;
     }
     rect {
-      fill: var(--background-clr);
+      fill: var(--node-fill-clr, var(--background-clr));
       stroke: var(--circle-clr, var(--stroke-clr));
     }
     .error circle {
@@ -278,10 +303,6 @@ export class HatGraphNode extends LitElement {
     }
     path.icon {
       fill: var(--icon-clr);
-    }
-    :host([not-enabled]) .disabled-bar {
-      fill: var(--ha-color-fill-neutral-normal-hover);
-      stroke: none;
     }
     foreignObject {
       width: 24px;

@@ -11,6 +11,9 @@ interface BranchConfig {
   start: boolean;
   end: boolean;
   track: boolean;
+  // A branch the run entered but never finished, because a step in it raised.
+  // Its incoming curve is tracked, everything leaving it is not.
+  trackEnd: boolean;
 }
 
 /**
@@ -51,7 +54,7 @@ export class HatGraphBranch extends LitElement {
     this._trackObserver.observe(this, {
       subtree: true,
       attributes: true,
-      attributeFilter: ["track"],
+      attributeFilter: ["track", "unfinished"],
     });
   }
 
@@ -86,6 +89,7 @@ export class HatGraphBranch extends LitElement {
         start: c.hasAttribute("graph-start"),
         end: c.hasAttribute("graph-end"),
         track: c.hasAttribute("track"),
+        trackEnd: c.hasAttribute("track") && !c.hasAttribute("unfinished"),
       });
       total_width += width;
       heights.push(height);
@@ -140,7 +144,7 @@ export class HatGraphBranch extends LitElement {
             return svg`
                     <path
                       class=${classMap({
-                        track: branch.track,
+                        track: branch.trackEnd,
                       })}
                       d="
                         M ${branch.x} ${branch.height}
@@ -161,7 +165,7 @@ export class HatGraphBranch extends LitElement {
                   return svg`
                   <path
                     class=${classMap({
-                      track: branch.track,
+                      track: branch.trackEnd,
                     })}
                     d="
                       M ${branch.x} 0

@@ -184,9 +184,16 @@ export class HaAutomationRow extends LitElement {
       outline-offset: -2px;
       outline-width: 2px;
     }
-    :host([disabled]) .row {
-      border-top-right-radius: var(--ha-border-radius-square);
-      border-top-left-radius: var(--ha-border-radius-square);
+    :host([disabled]) .row,
+    :host([disabled]) ::slotted([slot="leading-icon"]) {
+      color: var(--ha-color-text-disabled);
+    }
+    :host([disabled]) .leading-icon-wrapper {
+      opacity: 0.6;
+    }
+    :host([disabled]) ::slotted([slot="header"]) {
+      opacity: 0.6;
+      text-decoration: line-through;
     }
     .header {
       position: relative;
