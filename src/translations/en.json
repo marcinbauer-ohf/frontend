@@ -4923,6 +4923,17 @@
               "all_exposed_entities": "All shared entities",
               "accessible_entities_count": "{number} {number, plural,\n  one {entity}\n  other {entities}\n}"
             },
+            "mcp": {
+              "title": "Model Context Protocol",
+              "short_description": "Connect AI agents to your home",
+              "description": "Add one of the URLs below to your AI agent. See the {documentation} for agent-specific instructions.",
+              "documentation": "documentation",
+              "your_api": "Your MCP API",
+              "individual_apis": "Individual MCP APIs",
+              "assist_api": "Assist",
+              "configure": "Configure",
+              "copy_url": "Copy URL"
+            },
             "pipeline": {
               "link_learn_how_it_works": "[%key:ui::panel::config::cloud::account::remote::link_learn_how_it_works%]",
               "provider": "Home Assistant",

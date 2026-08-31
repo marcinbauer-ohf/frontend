@@ -14,6 +14,8 @@ const EXPOSE_HREF =
 
 const AI_TASKS_HREF = "/config/ai-tasks";
 
+const MCP_HREF = "/config/voice-assistants/mcp";
+
 @customElement("general-pref")
 export class GeneralPref extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
@@ -40,6 +42,8 @@ export class GeneralPref extends LitElement {
       : 0;
     const assistLoaded = isComponentLoaded(this.hass.config, "assist_pipeline");
     const aiTaskLoaded = isComponentLoaded(this.hass.config, "ai_task");
+    // Non-admins still get the Assist endpoint, so this is not admin-gated.
+    const mcpLoaded = isComponentLoaded(this.hass.config, "mcp_server");
 
     return html`
       <ha-card outlined>
@@ -92,6 +96,25 @@ export class GeneralPref extends LitElement {
                               "ui.panel.config.ai_tasks.description"
                             )
                       }
+                    </span>
+                    <ha-icon-next slot="end"></ha-icon-next>
+                  </ha-list-item-button>
+                `
+              : nothing
+          }
+          ${
+            mcpLoaded
+              ? html`
+                  <ha-list-item-button href=${MCP_HREF}>
+                    <span slot="headline">
+                      ${this.hass.localize(
+                        "ui.panel.config.voice_assistants.assistants.mcp.title"
+                      )}
+                    </span>
+                    <span slot="supporting-text">
+                      ${this.hass.localize(
+                        "ui.panel.config.voice_assistants.assistants.mcp.short_description"
+                      )}
                     </span>
                     <ha-icon-next slot="end"></ha-icon-next>
                   </ha-list-item-button>

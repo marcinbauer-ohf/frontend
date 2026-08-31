@@ -73,14 +73,17 @@ export class HaConfigVoiceAssistantsAssistants extends LitElement {
     return html`
       <hass-tabs-subpage
         .hass=${this.hass}
-        back-path="/config"
+        .backPath=${
+          this._searchParms.has("historyBack") ? undefined : "/config"
+        }
         .route=${this.route}
         .tabs=${[voiceAssistantTabs[0]]}
       >
         <div class="content">
           ${
             isComponentLoaded(this.hass.config, "assist_pipeline") ||
-            isComponentLoaded(this.hass.config, "ai_task")
+            isComponentLoaded(this.hass.config, "ai_task") ||
+            isComponentLoaded(this.hass.config, "mcp_server")
               ? html`
                   <general-pref
                     .hass=${this.hass}

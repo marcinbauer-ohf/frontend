@@ -24,7 +24,6 @@ import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { consumeLocalize } from "../common/decorators/consume-context-entry";
 import { storage } from "../common/decorators/storage";
-import { transform } from "../common/decorators/transform";
 import { fireEvent } from "../common/dom/fire_event";
 import { stopPropagation } from "../common/dom/stop_propagation";
 import type {
@@ -58,7 +57,6 @@ import {
   configContext,
   connectionContext,
   entitiesContext,
-  internationalizationContext,
   statesContext,
 } from "../data/context";
 import { showAlertDialog } from "../dialogs/generic/show-dialog-box";
@@ -69,7 +67,6 @@ import type {
   HomeAssistant,
   HomeAssistantConfig,
   HomeAssistantConnection,
-  HomeAssistantInternationalization,
 } from "../types";
 import { AudioRecorder } from "../util/audio-recorder";
 import { findAvailableLanguage } from "../util/common-translation";
@@ -297,13 +294,6 @@ export class HaAssistChat extends LitElement {
   @state()
   @consumeLocalize()
   private _localize!: LocalizeFunc;
-
-  @state()
-  @consume({ context: internationalizationContext, subscribe: true })
-  @transform<HomeAssistantInternationalization, string>({
-    transformer: ({ language }) => language,
-  })
-  private _language!: string;
 
   @state()
   @consume({ context: statesContext, subscribe: true })
