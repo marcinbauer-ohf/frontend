@@ -110,7 +110,6 @@ export class HatScriptGraph extends LitElement {
     return html`
       <hat-graph-node
         graph-start
-        type="trigger"
         ?track=${track}
         ?not-triggered=${notTriggered}
         @focus=${this._selectNode(config, path, "trigger")}
@@ -467,7 +466,6 @@ export class HatScriptGraph extends LitElement {
       >
         <hat-graph-node
           .graphStart=${graphStart}
-          type="condition"
           slot="head"
           ?track=${track}
           ?active=${this.selected === path}
@@ -494,7 +492,6 @@ export class HatScriptGraph extends LitElement {
         <div ?track=${trackPass}></div>
         <hat-graph-node
           .iconPath=${mdiClose}
-          type="condition"
           nofocus
           ?track=${trackFailed}
           ?active=${this.selected === path}

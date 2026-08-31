@@ -51,13 +51,6 @@ export class HatGraphNode extends LitElement {
 
   @property({ reflect: true, type: Number }) badge?: number;
 
-  /**
-   * Which part of the automation this step is. Tints the node fill: the stroke
-   * and icon already carry run state, so type has to live somewhere else.
-   */
-  @property({ reflect: true })
-  type: "trigger" | "condition" | "action" = "action";
-
   protected updated(changedProps: PropertyValues<this>) {
     if (changedProps.has("noFocus")) {
       if (!this.hasAttribute("tabindex") && !this.noFocus) {
@@ -221,11 +214,6 @@ export class HatGraphNode extends LitElement {
       --stroke-clr: var(--hover-clr);
       --icon-clr: var(--default-icon-clr);
     }
-    /* Shape says decision-or-step, fill says which part of the automation.
-       Kept quiet: the stroke and icon already carry run state. */
-    :host([type="trigger"]) rect {
-      --node-fill-clr: var(--ha-color-fill-primary-quiet-resting);
-    }
     :host([not-triggered]) rect {
       stroke-dasharray: 4 3;
     }
@@ -281,7 +269,7 @@ export class HatGraphNode extends LitElement {
       stroke-dasharray: none;
     }
     rect {
-      fill: var(--node-fill-clr, var(--background-clr));
+      fill: var(--background-clr);
       stroke: var(--circle-clr, var(--stroke-clr));
     }
     .error circle {
