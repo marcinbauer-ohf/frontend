@@ -5,7 +5,8 @@ import { customElement, property, state } from "lit/decorators";
 import { copyToClipboard } from "../../../common/util/copy-clipboard";
 import "../../../components/ha-card";
 import "../../../components/ha-icon-button";
-import "../../../components/item/ha-row-item";
+import "../../../components/item/ha-list-item-base";
+import "../../../components/list/ha-grouped-list";
 import type { ConfigEntry } from "../../../data/config_entries";
 import { getConfigEntries } from "../../../data/config_entries";
 import type { LLMApi } from "../../../data/llm";
@@ -73,32 +74,41 @@ export class McpPref extends LitElement {
     return html`
       <ha-card outlined>
         <div class="card-content">
-          ${this.hass.localize(
-            "ui.panel.config.voice_assistants.assistants.mcp.description",
-            {
-              documentation: html`<a
-                href=${documentationUrl(this.hass, "/integrations/mcp_server/")}
-                target="_blank"
-                rel="noreferrer"
-                >${this.hass.localize(
-                  "ui.panel.config.voice_assistants.assistants.mcp.documentation"
-                )}</a
-              >`,
-            }
-          )}
+          <div class="description">
+            ${this.hass.localize(
+              "ui.panel.config.voice_assistants.assistants.mcp.description",
+              {
+                documentation: html`<a
+                  href=${documentationUrl(this.hass, "/integrations/mcp_server/")}
+                  target="_blank"
+                  rel="noreferrer"
+                  >${this.hass.localize(
+                    "ui.panel.config.voice_assistants.assistants.mcp.documentation"
+                  )}</a
+                >`,
+              }
+            )}
+          </div>
+          ${
+            this._entry
+              ? html`<ha-grouped-list>
+                  ${this._renderOwnApi(this._entry)}
+                </ha-grouped-list>`
+              : nothing
+          }
+          <ha-grouped-list
+            .header=${this.hass.localize(
+              "ui.panel.config.voice_assistants.assistants.mcp.individual_apis"
+            )}
+          >
+            ${this._individualApis().map((api) =>
+              this._renderRow(
+                api.name,
+                this.hass.hassUrl(`${MCP_API_PATH}/${api.id}`)
+              )
+            )}
+          </ha-grouped-list>
         </div>
-        ${this._entry ? this._renderOwnApi(this._entry) : nothing}
-        <h2 class="section-header">
-          ${this.hass.localize(
-            "ui.panel.config.voice_assistants.assistants.mcp.individual_apis"
-          )}
-        </h2>
-        ${this._individualApis().map((api) =>
-          this._renderRow(
-            api.name,
-            this.hass.hassUrl(`${MCP_API_PATH}/${api.id}`)
-          )
-        )}
       </ha-card>
     `;
   }
@@ -124,7 +134,7 @@ export class McpPref extends LitElement {
 
   private _renderRow(headline: string, url: string, start?: TemplateResult) {
     return html`
-      <ha-row-item>
+      <ha-list-item-base>
         <span slot="headline">${headline}</span>
         <span slot="supporting-text" class="url">${url}</span>
         <div slot="end" class="actions">
@@ -138,7 +148,7 @@ export class McpPref extends LitElement {
             @click=${this._copyUrl}
           ></ha-icon-button>
         </div>
-      </ha-row-item>
+      </ha-list-item-base>
     `;
   }
 
@@ -149,7 +159,9 @@ export class McpPref extends LitElement {
     }
     await copyToClipboard(url);
     showToast(this, {
-      message: this.hass.localize("ui.common.copied_clipboard"),
+      message: this.hass.localize(
+        "ui.panel.config.voice_assistants.assistants.mcp.copied_url"
+      ),
     });
   }
 
@@ -166,14 +178,12 @@ export class McpPref extends LitElement {
 
   static styles = css`
     .card-content {
-      padding: var(--ha-space-4);
-      color: var(--secondary-text-color);
+      display: flex;
+      flex-direction: column;
+      gap: var(--ha-space-5);
     }
-    .section-header {
-      font-size: var(--ha-font-size-m);
-      font-weight: var(--ha-font-weight-medium);
-      margin: var(--ha-space-4) 0 0;
-      padding: 0 var(--ha-space-4);
+    .description {
+      color: var(--secondary-text-color);
     }
     .url {
       word-break: break-all;

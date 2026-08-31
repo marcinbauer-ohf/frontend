@@ -4932,7 +4932,8 @@
               "individual_apis": "Individual MCP APIs",
               "assist_api": "Assist",
               "configure": "Configure",
-              "copy_url": "Copy URL"
+              "copy_url": "Copy URL",
+              "copied_url": "Copied URL to clipboard"
             },
             "pipeline": {
               "link_learn_how_it_works": "[%key:ui::panel::config::cloud::account::remote::link_learn_how_it_works%]",

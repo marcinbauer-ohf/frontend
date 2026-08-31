@@ -27,12 +27,12 @@ import "../../../components/ha-button";
 import "../../../components/ha-card";
 import "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
-import "../../../components/ha-expansion-panel";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-icon-next";
 import "../../../components/ha-svg-icon";
 import "../../../components/item/ha-list-item-base";
 import "../../../components/item/ha-list-item-button";
+import "../../../components/list/ha-grouped-list";
 import "../../../components/list/ha-list-base";
 import "../../../components/ha-switch";
 import type { HaSwitch } from "../../../components/ha-switch";
@@ -354,42 +354,41 @@ export class AssistPref extends LitElement {
             `
           : nothing
       }
-      <div class="agents">
-        <ha-expansion-panel expanded no-collapse>
-          <div slot="header" class="agents-heading">
-            ${this.hass.localize(
-              "ui.panel.config.voice_assistants.assistants.pipeline.agents"
-            )}
-          </div>
-          ${
-            this._pipelines.length === 0
-              ? html`<div class="empty-body">
-                  <span class="empty-text"
-                    >${this.hass.localize(
-                      "ui.panel.config.voice_assistants.assistants.pipeline.no_agents"
-                    )}</span
-                  >
-                </div>`
-              : html`<ha-list-base>
-                  ${this._pipelines.map(
-                    (pipeline) => html`
-                      <ha-list-item-button
-                        .id=${pipeline.id}
-                        @click=${this._editPipeline}
+      <ha-grouped-list
+        class="agents"
+        .header=${this.hass.localize(
+          "ui.panel.config.voice_assistants.assistants.pipeline.agents"
+        )}
+      >
+        ${
+          this._pipelines.length === 0
+            ? html`<ha-list-item-base class="empty">
+                <span slot="headline"
+                  >${this.hass.localize(
+                    "ui.panel.config.voice_assistants.assistants.pipeline.no_agents"
+                  )}</span
+                >
+              </ha-list-item-base>`
+            : html`<ha-list-base>
+                ${this._pipelines.map(
+                  (pipeline) => html`
+                    <ha-list-item-button
+                      .id=${pipeline.id}
+                      @click=${this._editPipeline}
+                    >
+                      <span slot="start" class="agent-avatar"
+                        >${this._renderAgentAvatar(pipeline)}</span
                       >
-                        <span slot="start" class="agent-avatar"
-                          >${this._renderAgentAvatar(pipeline)}</span
-                        >
-                        <span slot="headline">
-                          ${pipeline.name}
-                          ${
+                      <span slot="headline">
+                        ${pipeline.name}
+                        ${
                             this._preferred === pipeline.id
                               ? html`<ha-svg-icon
                                   .path=${mdiStar}
                                 ></ha-svg-icon>`
                               : ""
                           }
-                          ${
+                        ${
                             this._controlsHome(pipeline)
                               ? html`<ha-svg-icon
                                     id=${`agent-control-${pipeline.id}`}
@@ -405,7 +404,7 @@ export class AssistPref extends LitElement {
                                   </ha-tooltip>`
                               : ""
                           }
-                          ${
+                        ${
                             this._buildsHome(pipeline)
                               ? html`<ha-svg-icon
                                     id=${`agent-build-${pipeline.id}`}
@@ -421,85 +420,84 @@ export class AssistPref extends LitElement {
                                   </ha-tooltip>`
                               : ""
                           }
-                          ${this._renderAgentLocality(pipeline)}
-                        </span>
-                        <span slot="supporting-text">
-                          ${formatLanguageCode(pipeline.language, this.hass.locale)}
-                        </span>
-                        <ha-dropdown
-                          slot="end"
-                          placement="bottom-end"
-                          @click=${stopPropagation}
-                          @wa-select=${this._handlePipelineMenuAction}
-                        >
-                          <ha-icon-button
-                            slot="trigger"
-                            .label=${this.hass!.localize(
+                        ${this._renderAgentLocality(pipeline)}
+                      </span>
+                      <span slot="supporting-text">
+                        ${formatLanguageCode(pipeline.language, this.hass.locale)}
+                      </span>
+                      <ha-dropdown
+                        slot="end"
+                        placement="bottom-end"
+                        @click=${stopPropagation}
+                        @wa-select=${this._handlePipelineMenuAction}
+                      >
+                        <ha-icon-button
+                          slot="trigger"
+                          .label=${this.hass!.localize(
                               "ui.panel.lovelace.editor.menu.open"
                             )}
-                            .path=${mdiDotsVertical}
-                          ></ha-icon-button>
-                          <ha-dropdown-item value="talk" .data=${pipeline.id}>
-                            ${this.hass!.localize(
+                          .path=${mdiDotsVertical}
+                        ></ha-icon-button>
+                        <ha-dropdown-item value="talk" .data=${pipeline.id}>
+                          ${this.hass!.localize(
                               "ui.panel.config.voice_assistants.assistants.pipeline.start_conversation"
                             )}
-                            <ha-svg-icon
-                              slot="icon"
-                              .path=${mdiCommentProcessingOutline}
-                            ></ha-svg-icon>
-                          </ha-dropdown-item>
-                          <ha-dropdown-item
-                            value="set-preferred"
-                            .data=${pipeline.id}
-                            .disabled=${this._preferred === pipeline.id}
-                          >
-                            ${this.hass.localize(
+                          <ha-svg-icon
+                            slot="icon"
+                            .path=${mdiCommentProcessingOutline}
+                          ></ha-svg-icon>
+                        </ha-dropdown-item>
+                        <ha-dropdown-item
+                          value="set-preferred"
+                          .data=${pipeline.id}
+                          .disabled=${this._preferred === pipeline.id}
+                        >
+                          ${this.hass.localize(
                               "ui.panel.config.voice_assistants.assistants.pipeline.detail.set_as_preferred"
                             )}
-                            <ha-svg-icon
-                              slot="icon"
-                              .path=${mdiStar}
-                            ></ha-svg-icon>
-                          </ha-dropdown-item>
-                          <ha-dropdown-item value="debug" .data=${pipeline.id}>
-                            ${this.hass.localize(
+                          <ha-svg-icon
+                            slot="icon"
+                            .path=${mdiStar}
+                          ></ha-svg-icon>
+                        </ha-dropdown-item>
+                        <ha-dropdown-item value="debug" .data=${pipeline.id}>
+                          ${this.hass.localize(
                               "ui.panel.config.voice_assistants.assistants.pipeline.detail.debug"
                             )}
-                            <ha-svg-icon
-                              slot="icon"
-                              .path=${mdiBug}
-                            ></ha-svg-icon>
-                          </ha-dropdown-item>
-                          <ha-dropdown-item
-                            value="duplicate"
-                            .data=${pipeline.id}
-                          >
-                            ${this.hass.localize("ui.common.duplicate")}
-                            <ha-svg-icon
-                              slot="icon"
-                              .path=${mdiContentDuplicate}
-                            ></ha-svg-icon>
-                          </ha-dropdown-item>
-                          <wa-divider></wa-divider>
-                          <ha-dropdown-item
-                            variant="danger"
-                            value="delete"
-                            .data=${pipeline.id}
-                          >
-                            ${this.hass.localize("ui.common.delete")}
-                            <ha-svg-icon
-                              slot="icon"
-                              .path=${mdiTrashCan}
-                            ></ha-svg-icon>
-                          </ha-dropdown-item>
-                        </ha-dropdown>
-                      </ha-list-item-button>
-                    `
-                  )}
-                </ha-list-base>`
-          }
-        </ha-expansion-panel>
-      </div>
+                          <ha-svg-icon
+                            slot="icon"
+                            .path=${mdiBug}
+                          ></ha-svg-icon>
+                        </ha-dropdown-item>
+                        <ha-dropdown-item
+                          value="duplicate"
+                          .data=${pipeline.id}
+                        >
+                          ${this.hass.localize("ui.common.duplicate")}
+                          <ha-svg-icon
+                            slot="icon"
+                            .path=${mdiContentDuplicate}
+                          ></ha-svg-icon>
+                        </ha-dropdown-item>
+                        <wa-divider></wa-divider>
+                        <ha-dropdown-item
+                          variant="danger"
+                          value="delete"
+                          .data=${pipeline.id}
+                        >
+                          ${this.hass.localize("ui.common.delete")}
+                          <ha-svg-icon
+                            slot="icon"
+                            .path=${mdiTrashCan}
+                          ></ha-svg-icon>
+                        </ha-dropdown-item>
+                      </ha-dropdown>
+                    </ha-list-item-button>
+                  `
+                )}
+              </ha-list-base>`
+        }
+      </ha-grouped-list>
       <ha-button
         appearance="filled"
         @click=${this._addPipeline}
@@ -854,37 +852,11 @@ export class AssistPref extends LitElement {
       margin: 16px 16px 0;
     }
     .agents {
+      display: block;
       margin: 16px 16px 0;
-      border: 2px solid var(--divider-color);
-      border-radius: var(--ha-border-radius-lg);
-      overflow: hidden;
     }
-    .agents ha-expansion-panel {
-      --expansion-panel-content-padding: 0;
-    }
-    .agents ha-expansion-panel::part(summary) {
-      background-color: var(--ha-color-surface-low);
-      padding: var(--ha-space-1) var(--ha-space-2);
+    .agents .empty [slot="headline"] {
       color: var(--secondary-text-color);
-      min-height: unset;
-    }
-    .agents-heading {
-      font-size: var(--ha-font-size-m);
-      font-weight: var(--ha-font-weight-bold);
-    }
-    .empty-body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 88px;
-      margin: 4px 8px 8px;
-      padding: 16px;
-      border-radius: var(--ha-border-radius-md);
-      background-color: var(--ha-color-fill-neutral-quiet-resting);
-    }
-    .empty-text {
-      color: var(--secondary-text-color);
-      text-align: center;
     }
     .casita {
       display: flex;
