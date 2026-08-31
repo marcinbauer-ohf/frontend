@@ -5263,6 +5263,10 @@
             "home": "Home",
             "unassigned": "Unassigned",
             "time_sun": "Time and sun",
+            "recently_selected": "Recently selected",
+            "recently_used_triggers": "Recently used triggers",
+            "recently_used_conditions": "Recently used conditions",
+            "recently_used_actions": "Recently used actions",
             "blocks": "Blocks",
             "tabs": {
               "target": "By target",

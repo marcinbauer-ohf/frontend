@@ -12,6 +12,7 @@ import { repeat } from "lit/directives/repeat";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import { stopPropagation } from "../../../../common/dom/stop_propagation";
+import "../../../../components/ha-button";
 import "../../../../components/ha-svg-icon";
 import "../../../../components/ha-tooltip";
 import "../../../../components/item/ha-list-item-button";
@@ -20,7 +21,10 @@ import type { ConfigEntry } from "../../../../data/config_entries";
 import type { LabelRegistryEntry } from "../../../../data/label/label_registry";
 import { haStyleScrollbar } from "../../../../resources/styles";
 import type { HomeAssistant } from "../../../../types";
-import type { AddAutomationElementListItem } from "../add-automation-element-dialog";
+import type {
+  AddAutomationElementListItem,
+  AddAutomationElementSection,
+} from "../add-automation-element-dialog";
 import { getTargetIcon } from "../target/get_target_icon";
 
 type Target = [string, string | undefined, string | undefined];
@@ -29,10 +33,7 @@ type Target = [string, string | undefined, string | undefined];
 export class HaAutomationAddItems extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
-  @property({ attribute: false }) public items?: {
-    title: string;
-    items: AddAutomationElementListItem[];
-  }[];
+  @property({ attribute: false }) public items?: AddAutomationElementSection[];
 
   @property() public error?: string;
 
@@ -89,19 +90,42 @@ export class HaAutomationAddItems extends LitElement {
                   this.items,
                   (_, index) => `item-group-${index}`,
                   (itemGroup) =>
-                    this._renderItemList(itemGroup.title, itemGroup.items)
+                    this._renderItemList(
+                      itemGroup.title,
+                      itemGroup.items,
+                      itemGroup.clearable
+                    )
                 )
       }
     </div>`;
   }
 
-  private _renderItemList(title, items?: AddAutomationElementListItem[]) {
+  private _renderItemList(
+    title,
+    items?: AddAutomationElementListItem[],
+    clearable?: boolean
+  ) {
     if (!items || !items.length) {
       return nothing;
     }
 
     return html`
-      <div class="items-title">${title}</div>
+      <div class="items-title">
+        ${title}
+        ${
+          clearable
+            ? html`<ha-button
+                class="clear-recent"
+                appearance="plain"
+                variant="neutral"
+                size="s"
+                @click=${this._clearRecent}
+              >
+                ${this.hass.localize("ui.common.clear")}
+              </ha-button>`
+            : nothing
+        }
+      </div>
       <ha-list-base>
         ${repeat(
           items,
@@ -181,6 +205,10 @@ export class HaAutomationAddItems extends LitElement {
       <div class="label">${target[2]}</div>
     </div>`;
   });
+
+  private _clearRecent() {
+    fireEvent(this, "clear-recent-items");
+  }
 
   private _selected(ev) {
     const item = ev.currentTarget;
@@ -272,6 +300,14 @@ export class HaAutomationAddItems extends LitElement {
         flex-wrap: wrap;
       }
 
+      ha-button.clear-recent {
+        margin-inline-start: auto;
+        margin-inline-end: calc(-1 * var(--ha-space-2));
+        --ha-button-height: var(--ha-space-6);
+        --wa-form-control-padding-inline: var(--ha-space-2);
+        font-size: var(--ha-font-size-s);
+      }
+
       .items-title {
         position: sticky;
         display: flex;
@@ -339,5 +375,8 @@ export class HaAutomationAddItems extends LitElement {
 declare global {
   interface HTMLElementTagNameMap {
     "ha-automation-add-items": HaAutomationAddItems;
+  }
+  interface HASSDomEvents {
+    "clear-recent-items": undefined;
   }
 }
