@@ -56,6 +56,7 @@ import { BRANCH_HEIGHT, NODE_SIZE, SPACING } from "./hat-graph-const";
 import "./hat-graph-node";
 import "./hat-graph-spacer";
 import { ACTION_ICONS } from "../../data/action";
+import { CONDITION_BUILDING_BLOCKS } from "../../data/condition";
 import { getAutomationActionType } from "../../panels/config/automation/action/ha-automation-action-row";
 
 type NodeType = "trigger" | "condition" | "action" | "chooseOption" | undefined;
@@ -472,7 +473,9 @@ export class HatScriptGraph extends LitElement {
           .notEnabled=${disabled || node.enabled === false}
           .error=${this._hasError(path)}
           .iconPath=${iconPath}
-          building-block
+          ?building-block=${
+            !iconPath && CONDITION_BUILDING_BLOCKS.includes(condition)
+          }
           nofocus
         >
           ${
