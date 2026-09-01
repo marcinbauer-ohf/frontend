@@ -1307,6 +1307,11 @@ export class HaSceneEditor extends PreventUnsavedMixin(
           display: block;
           margin-top: 8px;
         }
+        /* Floor for the mode bar: on a tall window with little content the
+           bar follows the content, but never rises above the halfway mark. */
+        #root {
+          min-height: 50vh;
+        }
         div[slot="meta"] {
           display: flex;
           align-items: center;
@@ -1359,12 +1364,18 @@ export class HaSceneEditor extends PreventUnsavedMixin(
           flex-wrap: wrap;
           gap: var(--ha-space-2);
         }
-        /* ── Bottom mode bar ─────────────────────────────── */
+        /* ── Mode bar ────────────────────────────────────────
+           Sticks to the bottom of the viewport while there is content
+           below it, and settles just under the last row on short scenes
+           instead of stranding itself at the bottom of a tall window. */
         .mode-bar {
-          position: fixed;
+          position: sticky;
           bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom));
-          left: 50%;
-          transform: translateX(-50%);
+          width: max-content;
+          max-width: 100%;
+          box-sizing: border-box;
+          margin: var(--ha-space-4) auto
+            calc(var(--ha-space-4) + var(--safe-area-inset-bottom));
           display: flex;
           align-items: center;
           gap: var(--ha-space-2);
@@ -1465,10 +1476,6 @@ export class HaSceneEditor extends PreventUnsavedMixin(
         .testing-chip.unavailable {
           background-color: var(--ha-color-fill-neutral-quiet-resting);
           color: var(--ha-color-on-neutral-quiet);
-        }
-        /* Padding for content above mode bar */
-        #root {
-          padding-bottom: calc(80px + var(--safe-area-inset-bottom));
         }
       `,
     ];
