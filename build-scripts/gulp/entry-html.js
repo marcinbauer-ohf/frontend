@@ -25,6 +25,8 @@ const SAFARI_TO_MACOS = {
   16: [11, 0, 0],
   17: [12, 0, 0],
   18: [13, 0, 0],
+  // Safari jumped from 18 to 26; 26 runs on macOS Sonoma (14) and later
+  26: [14, 0, 0],
 };
 
 const getCommonTemplateVars = () => {
