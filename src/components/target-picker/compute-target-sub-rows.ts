@@ -1,4 +1,5 @@
 import { getDeviceAreaId } from "../../common/entity/context/get_device_context";
+import { getEntityAreaId } from "../../common/entity/context/get_entity_context";
 import type {
   ExtractFromTargetResultReferenced,
   TargetType,
@@ -113,18 +114,14 @@ export const computeTargetSubRows = (
             devicesInAreas.push(...areaDevices);
 
             nextEntries.referenced_devices = rootsOf(areaDevices);
+            // An entity belongs to the area it is assigned to, falling back
+            // to its device's area. Anything looser puts entities under
+            // areas they are not in.
             nextEntries.referenced_entities =
-              entries.referenced_entities.filter((entityId) => {
-                const entity = entityRegistry[entityId];
-                if (!entity) {
-                  return false;
-                }
-                return (
-                  entity.area_id === rowItem ||
-                  !entity.device_id ||
-                  areaDevices.includes(entity.device_id)
-                );
-              });
+              entries.referenced_entities.filter(
+                (entityId) =>
+                  getEntityAreaId(entityId, entityRegistry, devices) === rowItem
+              );
 
             return nextEntries;
           }
