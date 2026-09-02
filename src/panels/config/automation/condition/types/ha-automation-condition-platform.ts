@@ -1,4 +1,4 @@
-import { mdiAlertOutline, mdiHelpCircleOutline } from "@mdi/js";
+import { mdiAlertOutline } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -191,29 +191,6 @@ export class HaPlatformCondition extends LitElement {
       : this._manifest?.documentation;
 
     return html`
-      <div class="description">
-        ${description ? html`<p>${description}</p>` : nothing}
-        ${
-          documentationLink
-            ? html`<a
-                href=${documentationLink}
-                title=${this.hass.localize(
-                  "ui.components.service-control.integration_doc"
-                )}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <ha-icon-button
-                  .path=${mdiHelpCircleOutline}
-                  class="help-icon"
-                  .label=${this.hass.localize(
-                    "ui.components.service-control.integration_doc"
-                  )}
-                ></ha-icon-button>
-              </a>`
-            : nothing
-        }
-      </div>
       ${
         conditionDesc && "target" in conditionDesc
           ? html`<ha-selector
@@ -246,6 +223,27 @@ export class HaPlatformCondition extends LitElement {
                 conditionName
               )
             )
+      }
+      ${
+        description || documentationLink
+          ? html`<div class="description">
+              <p>
+                ${description}
+                ${
+                  documentationLink
+                    ? html`<a
+                        href=${documentationLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        >${this.hass.localize(
+                          "ui.panel.config.common.learn_more"
+                        )}</a
+                      >`
+                    : nothing
+                }
+              </p>
+            </div>`
+          : nothing
       }
     `;
   }
@@ -671,19 +669,18 @@ export class HaPlatformCondition extends LitElement {
     .checkbox-spacer {
       width: 32px;
     }
-    .help-icon {
-      color: var(--secondary-text-color);
-    }
     .description {
-      justify-content: space-between;
-      display: flex;
-      align-items: center;
-      padding-right: 2px;
-      padding-inline-end: 2px;
-      padding-inline-start: initial;
+      border-top: var(
+        --service-control-items-border-top,
+        1px solid var(--divider-color)
+      );
+      color: var(--secondary-text-color);
     }
     .description p {
       direction: ltr;
+    }
+    .description a {
+      color: var(--primary-color);
     }
     .clickable {
       cursor: pointer;

@@ -1,4 +1,3 @@
-import { mdiHelpCircleOutline } from "@mdi/js";
 import type {
   HassService,
   HassServices,
@@ -514,32 +513,6 @@ export class HaServiceControl extends LitElement {
           ></ha-service-picker>`
     }
     ${
-      this.hideDescription
-        ? nothing
-        : html`
-            <div class="description">
-              ${description ? html`<p>${description}</p>` : ""}
-              ${
-                documentationLink
-                  ? html` <a
-                      href=${documentationLink}
-                      title=${this.hass.localize(
-                        "ui.components.service-control.integration_doc"
-                      )}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <ha-icon-button
-                        .path=${mdiHelpCircleOutline}
-                        class="help-icon"
-                      ></ha-icon-button>
-                    </a>`
-                  : nothing
-              }
-            </div>
-          `
-    }
-    ${
       serviceData && "target" in serviceData
         ? html`<ha-selector
             class="target-selector"
@@ -627,6 +600,27 @@ export class HaServiceControl extends LitElement {
                 </ha-expansion-panel>`
               : nothing;
           })
+    }
+    ${
+      !this.hideDescription && (description || documentationLink)
+        ? html`<div class="description">
+            <p>
+              ${description}
+              ${
+                documentationLink
+                  ? html`<a
+                      href=${documentationLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      >${this.hass.localize(
+                        "ui.panel.config.common.learn_more"
+                      )}</a
+                    >`
+                  : nothing
+              }
+            </p>
+          </div>`
+        : nothing
     } `;
   }
 
@@ -1064,19 +1058,18 @@ export class HaServiceControl extends LitElement {
     .clickable {
       cursor: pointer;
     }
-    .help-icon {
-      color: var(--secondary-text-color);
-    }
     .description {
-      justify-content: space-between;
-      display: flex;
-      align-items: center;
-      padding-right: 2px;
-      padding-inline-end: 2px;
-      padding-inline-start: initial;
+      border-top: var(
+        --service-control-items-border-top,
+        1px solid var(--divider-color)
+      );
+      color: var(--secondary-text-color);
     }
     .description p {
       direction: ltr;
+    }
+    .description a {
+      color: var(--primary-color);
     }
     ha-expansion-panel {
       --ha-card-border-radius: var(--ha-border-radius-square);
