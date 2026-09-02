@@ -2037,7 +2037,7 @@ class DialogAddAutomationElement
     if (type !== "trigger" && type !== "condition") {
       return undefined;
     }
-    return this.hass.localize("ui.panel.config.automation.editor.time_sun");
+    return this.hass.localize("ui.panel.config.automation.editor.other");
   }
 
   private _getTimeLocationGroups = memoizeOne(
