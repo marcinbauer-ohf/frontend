@@ -9,6 +9,7 @@ import type {
   TargetType,
 } from "../../../src/data/target";
 import type { HomeAssistant } from "../../../src/types";
+import { fetchBrandsAccessToken } from "../../../src/util/brands-url";
 
 const extractResult = (
   referenced: Partial<ExtractFromTargetResult>
@@ -199,5 +200,99 @@ describe("ha-target-picker-item-row target extraction", () => {
     expect(result.referenced_areas).toEqual(["area_missing"]);
     expect(result.referenced_devices).toEqual(["dev_missing"]);
     expect(result.referenced_entities).toEqual(["light.missing"]);
+  });
+});
+
+describe("ha-target-picker-item-row selection", () => {
+  // Toggling a parent row (floor/area/device) has to cascade to every entity
+  // it contains; only entity rows toggle themselves.
+  const toggled = (
+    type: TargetType,
+    itemId: string,
+    referenced_entities: string[],
+    checked: boolean
+  ) => {
+    const el = document.createElement(
+      "ha-target-picker-item-row"
+    ) as HaTargetPickerItemRow;
+    el.type = type;
+    el.itemId = itemId;
+    el.parentEntries = extractResult({ referenced_entities });
+
+    let detail: { entityIds: string[]; selected: boolean } | undefined;
+    el.addEventListener("toggle-entity-selection", (ev) => {
+      detail = (ev as CustomEvent).detail;
+    });
+
+    (el as any)._toggleEntitySelection({
+      stopPropagation: () => undefined,
+      target: { checked },
+    });
+    return detail;
+  };
+
+  it("cascades a parent toggle to every entity it contains", () => {
+    expect(
+      toggled("area", "area_1", ["light.one", "light.two"], false)
+    ).toEqual({ entityIds: ["light.one", "light.two"], selected: false });
+  });
+
+  it("toggles only itself for an entity row", () => {
+    expect(toggled("entity", "light.one", ["light.two"], true)).toEqual({
+      entityIds: ["light.one"],
+      selected: true,
+    });
+  });
+});
+
+describe("ha-target-picker-item-row brand icon", () => {
+  // brandsUrl returns "" until the access token arrives, so the row has to
+  // recompute the src on the re-render that follows it rather than caching it.
+  it("renders the brand icon once the token arrives", async () => {
+    const hass = {
+      devices: {
+        dev_1: mkDevice("dev_1", { primary_config_entry: "entry_1" }),
+      },
+      entities: {},
+      areas: {},
+      floors: {},
+      states: {},
+      themes: { darkMode: false },
+      language: "en",
+      translationMetadata: { translations: {} },
+      auth: { data: { hassUrl: "http://localhost:8123" } },
+      localize: (key: string) => key,
+      callWS: async (msg: { type: string }) =>
+        msg.type === "config_entries/get_single"
+          ? { config_entry: { domain: "hue" } }
+          : { token: "tok" },
+    } as unknown as HomeAssistant;
+
+    const el = document.createElement(
+      "ha-target-picker-item-row"
+    ) as HaTargetPickerItemRow;
+    el.hass = hass;
+    el.type = "device";
+    el.itemId = "dev_1";
+    el.subEntry = true;
+    el.parentEntries = extractResult({ referenced_entities: ["light.one"] });
+    document.body.append(el);
+    await el.updateComplete;
+    await new Promise((resolve) => {
+      setTimeout(resolve, 10);
+    });
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector("img")).toBeNull();
+
+    await fetchBrandsAccessToken(hass);
+    el.hass = { ...hass } as HomeAssistant;
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector("img")?.getAttribute("src")).toContain(
+      "/api/brands/integration/hue/icon.png"
+    );
+
+    el.remove();
   });
 });

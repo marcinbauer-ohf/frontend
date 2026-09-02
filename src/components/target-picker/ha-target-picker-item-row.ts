@@ -19,18 +19,29 @@ import {
   type PropertyValues,
   type TemplateResult,
 } from "lit";
+import "@home-assistant/webawesome/dist/components/divider/divider";
 import { customElement, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../../common/dom/fire_event";
+import { stopPropagation } from "../../common/dom/stop_propagation";
+import {
+  getTargetExclusions,
+  setTargetExclusions,
+  subscribeTargetExclusions,
+} from "./target-exclusions";
 import { computeAreaName } from "../../common/entity/compute_area_name";
+import { getDeviceAreaId } from "../../common/entity/context/get_device_context";
 import {
   computeDeviceName,
   computeDeviceNameDisplay,
 } from "../../common/entity/compute_device_name";
 import { computeDomain } from "../../common/entity/compute_domain";
 import { computeEntityName } from "../../common/entity/compute_entity_name";
-import { getEntityContext } from "../../common/entity/context/get_entity_context";
+import {
+  getEntityAreaId,
+  getEntityContext,
+} from "../../common/entity/context/get_entity_context";
 import { computeRTL } from "../../common/util/compute_rtl";
 import type { AreaRegistryEntry } from "../../data/area/area_registry";
 import { getConfigEntry } from "../../data/config_entries";
@@ -129,7 +140,10 @@ export class HaTargetPickerItemRow extends LitElement {
   @property({ attribute: false })
   public compositeSplits?: DeviceCompositeSplits;
 
-  @state() private _iconImg?: string;
+  // The domain, not the URL: brandsUrl returns "" until the brands access
+  // token arrives, and the row has to recompute the src on the re-render that
+  // follows it.
+  @state() private _brandDomain?: string;
 
   @state() private _domainName?: string;
 
@@ -137,14 +151,39 @@ export class HaTargetPickerItemRow extends LitElement {
 
   @state() private _excludedEntityIds: string[] = [];
 
+  private _unsubExclusions?: () => void;
+
   @state()
   @consume({ context: labelsContext, subscribe: true })
   _labelRegistry!: LabelRegistryEntry[];
+
+  public connectedCallback(): void {
+    super.connectedCallback();
+    this._unsubExclusions = subscribeTargetExclusions(() => {
+      this._excludedEntityIds = getTargetExclusions(this.type, this.itemId);
+    });
+  }
+
+  public disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._unsubExclusions?.();
+    this._unsubExclusions = undefined;
+  }
 
   protected willUpdate(changedProps: PropertyValues<this>) {
     if (!this.subEntry && changedProps.has("itemId")) {
       this._updateItemData();
     }
+    if (changedProps.has("itemId") || changedProps.has("type")) {
+      this._excludedEntityIds = getTargetExclusions(this.type, this.itemId);
+    }
+  }
+
+  // The set the dialog is editing, or this target's own stored exclusions.
+  private _excludedSet = memoizeOne((ids: string[]) => new Set(ids));
+
+  private get _effectiveExcluded(): Set<string> {
+    return this.excludedEntities ?? this._excludedSet(this._excludedEntityIds);
   }
 
   protected render() {
@@ -175,24 +214,47 @@ export class HaTargetPickerItemRow extends LitElement {
 
     const replaceable = !this.subEntry && !this.expand;
 
-    const excludedCount =
-      this.selectable && entries
-        ? entries.referenced_entities.filter((id) =>
-            this.excludedEntities?.has(id)
-          ).length
-        : this._excludedEntityIds.length;
+    const iconImg = this._brandDomain
+      ? brandsUrl(
+          {
+            domain: this._brandDomain,
+            type: "icon",
+            darkOptimized: this.hass.themes?.darkMode,
+          },
+          this.hass.auth?.data.hassUrl
+        )
+      : undefined;
+
+    const excluded = this._effectiveExcluded;
+
+    const excludedCount = entries
+      ? entries.referenced_entities.filter((id) => excluded.has(id)).length
+      : 0;
+
+    // Entities this row stands for: itself, or everything it contains
+    const selectableEntities =
+      this.type === "entity" ? [this.itemId] : entries?.referenced_entities;
+    const showCheckbox = this.selectable && !!selectableEntities?.length;
+    // Collapsed rows put the whole count in one clickable button
+    const showAsButton = !this.expand && !!entries?.referenced_entities.length;
+    const excludedHere =
+      this.type === "entity"
+        ? excluded.has(this.itemId)
+          ? 1
+          : 0
+        : excludedCount;
 
     const content = html`
       <div class="icon" slot="start">
         ${
           iconPath
             ? html`<ha-icon .icon=${iconPath}></ha-icon>`
-            : this._iconImg
+            : iconImg
               ? html`<img
                   alt=${this._domainName || ""}
                   crossorigin="anonymous"
                   referrerpolicy="no-referrer"
-                  src=${this._iconImg}
+                  src=${iconImg}
                 />`
               : canMigrate
                 ? html`<ha-svg-icon .path=${mdiSwapHorizontal}></ha-svg-icon>`
@@ -259,28 +321,18 @@ export class HaTargetPickerItemRow extends LitElement {
           ? html`
               <div slot="end" class="summary">
                 ${
-                  this.expand || !entries.referenced_entities.length
-                    ? html`<span class="main">
-                        ${this._entitiesLabel(entries, excludedCount)}
-                      </span>`
-                    : html`<ha-button
+                  showAsButton
+                    ? html`<ha-button
                         appearance="filled"
                         variant="brand"
                         size="xs"
                         @click=${this._openDetails}
                       >
-                        ${this._entitiesLabel(entries, excludedCount)}
+                        ${this._countsLabel(entries, excludedCount)}
                       </ha-button>`
-                }
-                ${
-                  excludedCount
-                    ? html`<span class="secondary excluded">
-                        ${this.hass.localize(
-                          "ui.components.target-picker.excluded_count",
-                          { count: excludedCount }
-                        )}
+                    : html`<span class="main">
+                        ${this._countsLabel(entries, excludedCount)}
                       </span>`
-                    : nothing
                 }
               </div>
             `
@@ -305,46 +357,50 @@ export class HaTargetPickerItemRow extends LitElement {
           : nothing
       }
       ${
-        this.selectable && this.type === "entity"
+        !this.expand && !this.subEntry
+          ? html`
+              <ha-icon-button
+                .path=${mdiClose}
+                slot="end"
+                @click=${this._removeItem}
+              ></ha-icon-button>
+            `
+          : this.subEntry && this.type === "entity"
+            ? html`
+                <ha-svg-icon
+                  .path=${
+                    computeRTL(
+                      this.hass.language,
+                      this.hass.translationMetadata.translations
+                    )
+                      ? mdiChevronLeft
+                      : mdiChevronRight
+                  }
+                  slot="end"
+                ></ha-svg-icon>
+              `
+            : nothing
+      }
+      ${
+        showCheckbox
           ? html`
               <ha-checkbox
                 slot="end"
-                .checked=${!this.excludedEntities?.has(this.itemId)}
+                .checked=${excludedHere === 0}
+                .indeterminate=${
+                  excludedHere > 0 && excludedHere < selectableEntities!.length
+                }
                 @change=${this._toggleEntitySelection}
+                @click=${stopPropagation}
               ></ha-checkbox>
             `
-          : !this.expand && !this.subEntry
-            ? html`
-                <ha-icon-button
-                  .path=${mdiClose}
-                  slot="end"
-                  @click=${this._removeItem}
-                ></ha-icon-button>
-              `
-            : this.subEntry && this.type === "entity"
-              ? html`
-                  <ha-svg-icon
-                    .path=${
-                      computeRTL(
-                        this.hass.language,
-                        this.hass.translationMetadata.translations
-                      )
-                        ? mdiChevronLeft
-                        : mdiChevronRight
-                    }
-                    slot="end"
-                  ></ha-svg-icon>
-                `
-              : nothing
+          : nothing
       }
     `;
 
     let item: TemplateResult;
 
-    if (
-      replaceable ||
-      (this.subEntry && this.type === "entity" && !this.selectable)
-    ) {
+    if (replaceable || (this.subEntry && this.type === "entity")) {
       item = html`
         <ha-list-item-button
           class=${classMap({
@@ -394,13 +450,29 @@ export class HaTargetPickerItemRow extends LitElement {
     };
   }
 
+  // Reads the same either way; only the picker's collapsed row makes it a button.
+  private _countsLabel(
+    entries: ExtractFromTargetResultReferenced,
+    excludedCount: number
+  ): string {
+    if (!excludedCount) {
+      return this._entitiesLabel(entries);
+    }
+    return this.hass.localize(
+      "ui.components.target-picker.entities_count_excluded",
+      {
+        count: this._entityCounts(entries).count - excludedCount,
+        excluded: excludedCount,
+      }
+    );
+  }
+
   private _entitiesLabel(
     entries: ExtractFromTargetResultReferenced,
     excludedCount = 0
   ): string {
-    const { count: rawCount, total: rawTotal } = this._entityCounts(entries);
+    const { count: rawCount, total } = this._entityCounts(entries);
     const count = rawCount - excludedCount;
-    const total = rawTotal - excludedCount;
     return this.activeFilter
       ? this.hass.localize(
           "ui.components.target-picker.entities_count_filtered",
@@ -456,29 +528,32 @@ export class HaTargetPickerItemRow extends LitElement {
 
             if (nextType === "area") {
               nextEntries.referenced_devices =
-                entries?.referenced_devices.filter(
-                  (device_id) =>
-                    this.hass.devices?.[device_id]?.area_id === rowItem &&
+                entries?.referenced_devices.filter((device_id) => {
+                  const device = this.hass.devices?.[device_id];
+                  return (
+                    !!device &&
+                    getDeviceAreaId(device, this.hass.devices) === rowItem &&
                     entries?.referenced_entities.some(
                       (entity_id) =>
                         this.hass.entities?.[entity_id]?.device_id === device_id
                     )
-                ) || ([] as string[]);
+                  );
+                }) || ([] as string[]);
 
               devicesInAreas.push(...nextEntries.referenced_devices);
 
+              // An entity belongs to the area it is assigned to, falling back
+              // to its device's area. Anything looser puts entities under
+              // areas they are not in.
               nextEntries.referenced_entities =
-                entries?.referenced_entities.filter((entity_id) => {
-                  const entity = this.hass.entities[entity_id];
-                  if (!entity) {
-                    return false;
-                  }
-                  return (
-                    entity.area_id === rowItem ||
-                    !entity.device_id ||
-                    nextEntries.referenced_devices.includes(entity.device_id)
-                  );
-                }) || ([] as string[]);
+                entries?.referenced_entities.filter(
+                  (entity_id) =>
+                    getEntityAreaId(
+                      entity_id,
+                      this.hass.entities,
+                      this.hass.devices
+                    ) === rowItem
+                ) || ([] as string[]);
 
               return nextEntries;
             }
@@ -535,8 +610,12 @@ export class HaTargetPickerItemRow extends LitElement {
 
     const nextSubLevel = this.subLevel + 1;
 
-    return html`
-      ${rows1.map(
+    // Separate the blocks a target expands into: areas under a floor, devices
+    // under an area. Entity rows are leaves, so they stay together.
+    const separateRows = nextType !== "entity";
+
+    const childRows = [
+      ...rows1.map(
         (itemId, index) => html`
           <ha-target-picker-item-row
             sub-entry
@@ -548,12 +627,12 @@ export class HaTargetPickerItemRow extends LitElement {
             .parentEntries=${rows1Entries?.[index]}
             .hideContext=${this.hideContext || this.type !== "label"}
             .selectable=${this.selectable}
-            .excludedEntities=${this.excludedEntities}
+            .excludedEntities=${this._effectiveExcluded}
             expand
           ></ha-target-picker-item-row>
         `
-      )}
-      ${deviceRows.map(
+      ),
+      ...deviceRows.map(
         (itemId, index) => html`
           <ha-target-picker-item-row
             sub-entry
@@ -565,12 +644,12 @@ export class HaTargetPickerItemRow extends LitElement {
             .parentEntries=${deviceRowsEntries?.[index]}
             .hideContext=${this.hideContext || this.type !== "label"}
             .selectable=${this.selectable}
-            .excludedEntities=${this.excludedEntities}
+            .excludedEntities=${this._effectiveExcluded}
             expand
           ></ha-target-picker-item-row>
         `
-      )}
-      ${entityRows.map(
+      ),
+      ...entityRows.map(
         (itemId) => html`
           <ha-target-picker-item-row
             sub-entry
@@ -581,11 +660,23 @@ export class HaTargetPickerItemRow extends LitElement {
             .itemId=${itemId}
             .hideContext=${this.hideContext || this.type !== "label"}
             .selectable=${this.selectable}
-            .excludedEntities=${this.excludedEntities}
+            .excludedEntities=${this._effectiveExcluded}
           ></ha-target-picker-item-row>
         `
-      )}
-    `;
+      ),
+    ];
+
+    if (this.subEntry || !separateRows) {
+      return childRows;
+    }
+
+    // Entities sitting directly under the target are one trailing group, not
+    // one block each.
+    const blockCount = childRows.length - entityRows.length;
+
+    return childRows.map((row, index) =>
+      index && index <= blockCount ? html`<wa-divider></wa-divider>${row}` : row
+    );
   }
 
   private _renderEmptyEntries() {
@@ -817,8 +908,12 @@ export class HaTargetPickerItemRow extends LitElement {
   private _toggleEntitySelection(ev: Event) {
     ev.stopPropagation();
     const checked = (ev.target as HTMLInputElement).checked;
+    const entries = this.parentEntries || this._entries;
     fireEvent(this, "toggle-entity-selection", {
-      entityId: this.itemId,
+      entityIds:
+        this.type === "entity"
+          ? [this.itemId]
+          : entries?.referenced_entities || [],
       selected: checked,
     });
   }
@@ -835,15 +930,7 @@ export class HaTargetPickerItemRow extends LitElement {
     try {
       const data = await getConfigEntry(this.hass, configEntryId);
       const domain = data.config_entry.domain;
-      this._iconImg = brandsUrl(
-        {
-          domain: domain,
-          type: "icon",
-          darkOptimized: this.hass.themes?.darkMode,
-        },
-        this.hass.auth.data.hassUrl
-      );
-
+      this._brandDomain = domain;
       this._setDomainName(domain);
     } catch {
       // failed to load config entry -> ignore
@@ -917,7 +1004,7 @@ export class HaTargetPickerItemRow extends LitElement {
       primaryEntitiesOnly: this.primaryEntitiesOnly,
       initialExcludedEntities: this._excludedEntityIds,
       onEntitiesExcluded: (excludedEntityIds: string[]) => {
-        this._excludedEntityIds = excludedEntityIds;
+        setTargetExclusions(this.type, this.itemId, excludedEntityIds);
       },
     });
   }
@@ -989,11 +1076,6 @@ export class HaTargetPickerItemRow extends LitElement {
       .summary .main {
         font-weight: var(--ha-font-weight-medium);
       }
-      :host([expand]) .summary .main {
-        color: var(--ha-color-text-secondary);
-        font-size: var(--ha-font-size-s);
-        font-weight: var(--ha-font-weight-normal);
-      }
       .summary .secondary {
         font-size: var(--ha-font-size-s);
         color: var(--secondary-text-color);
@@ -1005,7 +1087,12 @@ export class HaTargetPickerItemRow extends LitElement {
         color: var(--ha-color-text-secondary);
       }
 
-      ha-list-item-button::part(end) {
+      wa-divider {
+        --color: var(--divider-color);
+        --spacing: 0;
+      }
+      ha-list-item-button::part(end),
+      ha-list-item-base::part(end) {
         gap: var(--ha-space-2);
       }
 
@@ -1022,6 +1109,6 @@ declare global {
     "ha-target-picker-item-row": HaTargetPickerItemRow;
   }
   interface HASSDomEvents {
-    "toggle-entity-selection": { entityId: string; selected: boolean };
+    "toggle-entity-selection": { entityIds: string[]; selected: boolean };
   }
 }

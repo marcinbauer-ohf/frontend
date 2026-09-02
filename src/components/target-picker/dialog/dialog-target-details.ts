@@ -249,13 +249,15 @@ class DialogTargetDetails extends LitElement implements HassDialog {
     ev: HASSDomEvent<HASSDomEvents["toggle-entity-selection"]>
   ) {
     ev.stopPropagation();
-    const { entityId, selected } = ev.detail;
+    const { entityIds, selected } = ev.detail;
     const newExcluded = new Set(this._excludedEntities);
-    if (selected) {
-      newExcluded.delete(entityId);
-    } else {
-      newExcluded.add(entityId);
-    }
+    entityIds.forEach((entityId) => {
+      if (selected) {
+        newExcluded.delete(entityId);
+      } else {
+        newExcluded.add(entityId);
+      }
+    });
     this._excludedEntities = newExcluded;
   }
 
@@ -273,8 +275,7 @@ class DialogTargetDetails extends LitElement implements HassDialog {
       display: flex;
       flex-direction: column;
       border-radius: var(--ha-border-radius-xl);
-      border: var(--ha-border-width-sm) solid
-        var(--ha-color-border-neutral-normal);
+      border: var(--ha-border-width-sm) solid var(--divider-color);
       overflow: hidden;
     }
     .type-label {

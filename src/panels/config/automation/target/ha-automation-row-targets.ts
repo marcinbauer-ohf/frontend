@@ -30,6 +30,11 @@ import type { HaDropdownSelectEvent } from "../../../../components/ha-dropdown";
 import "../../../../components/ha-dropdown-item";
 import "../../../../components/ha-svg-icon";
 import { showTargetDetailsDialog } from "../../../../components/target-picker/dialog/show-dialog-target-details";
+import {
+  getTargetExclusions,
+  setTargetExclusions,
+  subscribeTargetExclusions,
+} from "../../../../components/target-picker/target-exclusions";
 import type { ConfigEntry } from "../../../../data/config_entries";
 import {
   apiContext,
@@ -114,6 +119,24 @@ export class HaAutomationRowTargets extends LitElement {
   >();
 
   private _rerenderCount = true;
+
+  private _unsubExclusions?: () => void;
+
+  public connectedCallback(): void {
+    super.connectedCallback();
+    this._unsubExclusions = subscribeTargetExclusions(() => {
+      // Counts are cached per target, so they have to be recounted once the
+      // excluded entities change.
+      this._rerenderCount = true;
+      this.requestUpdate();
+    });
+  }
+
+  public disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._unsubExclusions?.();
+    this._unsubExclusions = undefined;
+  }
 
   protected willUpdate(changedProps: PropertyValues) {
     super.willUpdate(changedProps);
@@ -229,9 +252,16 @@ export class HaAutomationRowTargets extends LitElement {
           false,
           this.selector?.target?.primary_entities_only
         )
-          .then((result) =>
-            this._countMatchingEntities(result.referenced_entities)
-          )
+          .then((result) => {
+            const excluded = getTargetExclusions(targetType, targetId);
+            return this._countMatchingEntities(
+              excluded.length
+                ? result.referenced_entities.filter(
+                    (entityId) => !excluded.includes(entityId)
+                  )
+                : result.referenced_entities
+            );
+          })
           .catch((err) => {
             // eslint-disable-next-line no-console
             console.error("Error counting target entities", err);
@@ -616,6 +646,10 @@ export class HaAutomationRowTargets extends LitElement {
       type: targetType,
       itemId: targetId,
       selector: this.selector,
+      initialExcludedEntities: getTargetExclusions(targetType, targetId),
+      onEntitiesExcluded: (excludedEntityIds) => {
+        setTargetExclusions(targetType, targetId, excludedEntityIds);
+      },
     });
   }
 
