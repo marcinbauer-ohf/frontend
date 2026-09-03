@@ -101,13 +101,6 @@ const leadingRank = (key: string): number => {
   return operation === -1 ? LEADING_ELEMENTS.length : operation;
 };
 
-/**
- * Whether an element leads its category, i.e. whether "Recommended" pulls it
- * out of the alphabet.
- */
-export const isLeadingElement = (key: string) =>
-  leadingRank(key) < LEADING_ELEMENTS.length;
-
 export const compareElements =
   (sort: ElementSort, language: string) =>
   (a: { key: string; name: string }, b: { key: string; name: string }) =>

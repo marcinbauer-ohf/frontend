@@ -131,7 +131,6 @@ import type { ElementSort } from "./add-automation-element/element-group";
 import {
   compareElements,
   findElementGroupKey,
-  isLeadingElement,
 } from "./add-automation-element/element-group";
 import "./add-automation-element/ha-automation-add-search";
 import type { AddAutomationElementDialogParams } from "./show-add-automation-element-dialog";
@@ -212,6 +211,10 @@ const RECENT_TARGET_TYPES = new Set([
   "label",
 ]);
 
+// Targets that stand for a set of other targets: what they offer is the union
+// of their members' categories, so the item list opens collapsed.
+const AGGREGATE_TARGET_TYPES = new Set(["floor", "area", "label"]);
+
 // Group keys surfaced as their own section in the "by target" tab because
 // their elements have no target (time/calendar/schedule, sun). Picking one
 // drills into its items, like selecting the matching group in the "by type" tab.
@@ -264,10 +267,7 @@ class DialogAddAutomationElement
   @consume({ context: conditionDescriptionsContext, subscribe: true })
   private _conditionDescriptions: ConditionDescriptions = {};
 
-  @state() private _targetItems?: {
-    title: string;
-    items: AddAutomationElementListItem[];
-  }[];
+  @state() private _targetItems?: AddAutomationElementSection[];
 
   @state() private _loadItemsError = false;
 
@@ -919,9 +919,7 @@ class DialogAddAutomationElement
                   .emptyLabel=${this.hass.localize(
                     `ui.panel.config.automation.editor.${automationElementType}s.no_items_for_target`
                   )}
-                  .tooltipDescription=${
-                    this._tab === "targets" && !this._selectedGroup
-                  }
+                  .collapsible=${this._collapsibleTargetItems}
                   .target=${
                     (this._tab === "targets" &&
                       this._selectedTarget &&
@@ -1148,6 +1146,29 @@ class DialogAddAutomationElement
     return this._tab === "groups" && !!this._selectedGroup && !this._filter;
   }
 
+  /**
+   * An aggregate target answers with every category its members have between
+   * them, which on a floor is more headings than fit on a screen. Collapsed,
+   * the headings are the list. A device or a single entity has few enough
+   * items to leave open.
+   */
+  private get _collapsibleTargetItems() {
+    // Every condition _getItems() puts ahead of the target list: a group
+    // outlives the tab it was picked in, so on the way back to "by target"
+    // the column can still be showing its sections.
+    if (
+      this._tab !== "targets" ||
+      this._filter ||
+      this._selectedGroup ||
+      !this._selectedTarget ||
+      !this._targetItems
+    ) {
+      return false;
+    }
+    const [targetType] = this._extractTypeAndIdFromTarget(this._selectedTarget);
+    return AGGREGATE_TARGET_TYPES.has(targetType);
+  }
+
   private _getItems = () =>
     !this._filter && this._tab === "blocks"
       ? [
@@ -1184,32 +1205,9 @@ class DialogAddAutomationElement
       `ui.panel.config.automation.editor.${type}s.name`
     );
 
-    // "Common" only lifts the leading elements above the alphabet; a header
-    // between the two halves is what makes that visible. The rest is named
-    // "More triggers" rather than "Triggers", so it reads as the remainder of
-    // the category and not as a second, separate one. Nothing to separate
-    // when one half is empty.
-    if (this._sortable && this._sort !== "name") {
-      const leading = items.filter((item) => isLeadingElement(item.key));
-
-      if (leading.length && leading.length < items.length) {
-        return [
-          {
-            title: this.hass.localize(
-              "ui.panel.config.automation.editor.common"
-            ),
-            items: leading,
-          },
-          {
-            title: this.hass.localize(
-              `ui.panel.config.automation.editor.${type}s.more`
-            ),
-            items: items.filter((item) => !isLeadingElement(item.key)),
-          },
-        ];
-      }
-    }
-
+    // One heading either way: "Common first" is an order, not a second
+    // category, and cutting the list in two under a heading of its own said
+    // otherwise.
     return [{ title, items }];
   }
 
@@ -1807,11 +1805,8 @@ class DialogAddAutomationElement
 
   private _sortDomainsByCollection(
     type: AddAutomationElementDialogParams["type"],
-    entries: [
-      string,
-      { title: string; items: AddAutomationElementListItem[] },
-    ][]
-  ): { title: string; items: AddAutomationElementListItem[] }[] {
+    entries: [string, AddAutomationElementSection][]
+  ): AddAutomationElementSection[] {
     const order: string[] = [];
 
     TYPES[type].collections.forEach((collection) => {
@@ -1987,11 +1982,8 @@ class DialogAddAutomationElement
       domain: string,
       id: string
     ) => AddAutomationElementListItem
-  ): { title: string; items: AddAutomationElementListItem[] }[] {
-    const items: Record<
-      string,
-      { title: string; items: AddAutomationElementListItem[] }
-    > = {};
+  ): AddAutomationElementSection[] {
+    const items: Record<string, AddAutomationElementSection> = {};
 
     // When a specific entity is selected, system domain items are merged
     // under the entity's real domain rather than under their system domain name.
@@ -2100,11 +2092,8 @@ class DialogAddAutomationElement
   private _getDomainGroupedActionListItems(
     localize: LocalizeFunc,
     serviceIds: string[]
-  ): { title: string; items: AddAutomationElementListItem[] }[] {
-    const items: Record<
-      string,
-      { title: string; items: AddAutomationElementListItem[] }
-    > = {};
+  ): AddAutomationElementSection[] {
+    const items: Record<string, AddAutomationElementSection> = {};
 
     serviceIds.forEach((service) => {
       const [domain, serviceName] = service.split(".", 2);
@@ -2711,7 +2700,7 @@ class DialogAddAutomationElement
           /* Fixed-width left column so it does not resize as the right
              panel's content width changes between groups. */
           flex: 0 0 360px;
-          margin-inline-end: 0;
+          margin-inline-end: var(--ha-space-2);
         }
 
         ha-automation-add-from-target.hidden {
@@ -2787,13 +2776,24 @@ class DialogAddAutomationElement
         }
         .content.column ha-automation-add-items {
           min-height: 160px;
+          /* Stacked, it is the only column on screen: its ground has to reach
+             the bottom of the sheet rather than stopping under the last card,
+             it owns both side insets, and the space above it is the content's
+             own gap. */
+          flex: 1 0 auto;
+          margin-top: 0;
+          margin-inline-start: var(--ha-space-3);
         }
         .content.column ha-automation-add-from-target {
           overflow: clip;
         }
 
-        ha-dialog ha-automation-add-items {
-          margin-top: var(--ha-space-3);
+        /* Beside the other column: the gap between them is that column's own
+           end margin, the rest matches it so the two panes sit alike. */
+        ha-dialog ha-automation-add-items,
+        ha-bottom-sheet ha-automation-add-items {
+          margin: var(--ha-space-3);
+          margin-inline-start: 0;
         }
 
         ha-bottom-sheet .groups {

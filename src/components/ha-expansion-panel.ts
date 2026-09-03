@@ -37,7 +37,7 @@ export class HaExpansionPanel extends LitElement {
           ></ha-svg-icon>
         `;
     return html`
-      <div class="top ${classMap({ expanded: this.expanded })}">
+      <div class="top ${classMap({ expanded: this.expanded })}" part="top">
         <div
           id="summary"
           class=${classMap({ noCollapse: this.noCollapse })}

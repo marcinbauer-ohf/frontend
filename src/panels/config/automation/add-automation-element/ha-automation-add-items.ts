@@ -1,4 +1,5 @@
-import { mdiInformationOutline, mdiMenuDown, mdiPlus } from "@mdi/js";
+import { mdiMenuDown, mdiPlus } from "@mdi/js";
+import type { PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import {
   customElement,
@@ -11,12 +12,11 @@ import { classMap } from "lit/directives/class-map";
 import { repeat } from "lit/directives/repeat";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../../../../common/dom/fire_event";
-import { stopPropagation } from "../../../../common/dom/stop_propagation";
 import "../../../../components/ha-button";
 import "../../../../components/ha-dropdown";
 import "../../../../components/ha-dropdown-item";
+import "../../../../components/ha-expansion-panel";
 import "../../../../components/ha-svg-icon";
-import "../../../../components/ha-tooltip";
 import "../../../../components/item/ha-list-item-button";
 import "../../../../components/list/ha-list-base";
 import type { ConfigEntry } from "../../../../data/config_entries";
@@ -31,6 +31,10 @@ import type { ElementSort } from "./element-group";
 import { getTargetIcon } from "../target/get_target_icon";
 
 type Target = [string, string | undefined, string | undefined];
+
+// Enough categories that opening them one at a time is the wrong tool. Fewer
+// than this and the button costs more room than it saves.
+const TOGGLE_ALL_MIN_SECTIONS = 4;
 
 @customElement("ha-automation-add-items")
 export class HaAutomationAddItems extends LitElement {
@@ -61,71 +65,156 @@ export class HaAutomationAddItems extends LitElement {
     ConfigEntry
   > = {};
 
-  @property({ type: Boolean, attribute: "tooltip-description" })
-  public tooltipDescription = false;
-
   @property({ type: Boolean, reflect: true }) scrollable = false;
 
+  /**
+   * Turns every section heading into a collapsed toggle. The target column
+   * asks for it on an aggregate: a floor or an area answers with a couple of
+   * dozen headings, and the one the user came for is somewhere below the fold.
+   */
+  @property({ type: Boolean }) public collapsible = false;
+
   @state() private _itemsScrolled = false;
+
+  @state() private _openSections: ReadonlySet<string> = new Set();
 
   @query(".items")
   private _itemsDiv!: HTMLDivElement;
 
+  protected willUpdate(changedProps: PropertyValues<this>) {
+    super.willUpdate(changedProps);
+    // A new list is a new target; nothing the user opened for the old one
+    // says anything about this one.
+    if (changedProps.has("items") && this._openSections.size) {
+      this._openSections = new Set();
+    }
+  }
+
   protected render() {
-    return html`<div
-      class=${classMap({
-        items: true,
-        blank: this.error || !this.items || !this.items.length,
-        error: this.error,
-        scrolled: this._itemsScrolled,
-        sorted: !!this.sort,
-        "ha-scrollbar": this.scrollable,
-      })}
-      @scroll=${this._onItemsScroll}
-    >
-      ${
-        // The control orders the whole list, not the section it used to sit
-        // in: bolted to the first heading it scrolled out of reach the moment
-        // the next heading pinned over it, which on a phone is most of the
-        // time. Pinned to the top of the scrollport it stays put, and takes
-        // no height of its own so each heading rises into the same band and
-        // the two read as one row. It has to come first for sticky to hold it
-        // there, and be a span so the shadow rule below still finds a
-        // heading as its first div.
-        this.sort && this.items?.length && !this.error
-          ? html`<span class="sort-bar">${this._renderSort(this.sort)}</span>`
-          : nothing
-      }
-      ${
-        !this.items && !this.error
-          ? this.selectLabel
-          : this.error
-            ? html`${this.error}
-                <div>${this._renderTarget(this.target)}</div>`
-            : this.items && !this.items.length
-              ? html`${this.emptyLabel}
-                ${
-                  this.target
-                    ? html`<div>${this._renderTarget(this.target)}</div>`
-                    : nothing
-                }`
-              : repeat(
-                  this.items,
-                  (_, index) => `item-group-${index}`,
-                  (itemGroup) =>
-                    this._renderItemList(itemGroup.title, itemGroup.items)
-                )
-      }
+    return html`
+      <div
+        class=${classMap({
+          items: true,
+          blank: this.error || !this.items || !this.items.length,
+          error: this.error,
+          scrolled: this._itemsScrolled,
+          "with-toggle-all": this._showToggleAll,
+          "ha-scrollbar": this.scrollable,
+        })}
+        @scroll=${this._onItemsScroll}
+      >
+        ${
+          // The control orders the whole list, not the section it used to sit
+          // in: bolted to the first heading it scrolled out of reach the
+          // moment the next heading pinned over it, which on a phone is most
+          // of the time. Pinned to the top of the scrollport it stays put,
+          // and takes no height of its own so each heading rises into the
+          // same band and the two read as one row. It has to come first for
+          // sticky to hold it there, and be a span so the shadow rule below
+          // still finds a heading as its first div.
+          this.sort && this.items?.length && !this.error
+            ? html`<span class="sort-bar">${this._renderSort(this.sort)}</span>`
+            : nothing
+        }
+        ${
+          !this.items && !this.error
+            ? this.selectLabel
+            : this.error
+              ? html`${this.error}
+                  <div>${this._renderTarget(this.target)}</div>`
+              : this.items && !this.items.length
+                ? html`${this.emptyLabel}
+                  ${
+                    this.target
+                      ? html`<div>${this._renderTarget(this.target)}</div>`
+                      : nothing
+                  }`
+                : repeat(
+                    this.items,
+                    (_, index) => `item-group-${index}`,
+                    (itemGroup) => this._renderItemList(itemGroup)
+                  )
+        }
+      </div>
+      ${this._renderToggleAll()}
+    `;
+  }
+
+  /**
+   * The target column's own "show more": a floor answers with more categories
+   * than fit, and the way out of that is all of them at once, not twenty
+   * clicks.
+   */
+  private _renderToggleAll() {
+    if (!this._showToggleAll) {
+      return nothing;
+    }
+
+    return html`<div class="toggle-all">
+      <ha-button appearance="filled" @click=${this._toggleAll}>
+        ${this.hass.localize(
+          `ui.panel.config.automation.editor.${
+            this._allOpen ? "collapse_all" : "expand_all"
+          }`
+        )}
+      </ha-button>
     </div>`;
   }
 
-  private _renderItemList(title, items?: AddAutomationElementListItem[]) {
+  private get _showToggleAll() {
+    return (
+      this.collapsible &&
+      !this.error &&
+      !!this.items &&
+      this.items.length >= TOGGLE_ALL_MIN_SECTIONS
+    );
+  }
+
+  private get _allOpen() {
+    return this._openSections.size === this.items?.length;
+  }
+
+  private _toggleAll() {
+    this._openSections = this._allOpen
+      ? new Set()
+      : new Set(this.items!.map((section) => section.title));
+  }
+
+  private _renderItemList({ title, items }: AddAutomationElementSection) {
     if (!items || !items.length) {
       return nothing;
     }
 
+    if (!this.collapsible) {
+      return html`
+        <div class="items-title">${title}</div>
+        ${this._renderItems(items)}
+      `;
+    }
+
+    // The target picker's expandable group, wearing the heading the "by
+    // type" column already uses: same band, same inset, the count while
+    // closed, and the chevron at the end rather than a filled header — a gray
+    // band per category would be most of what is on screen here.
+    const open = this._openSections.has(title);
+
     return html`
-      <div class="items-title">${title}</div>
+      <ha-expansion-panel
+        .expanded=${open}
+        .section=${title}
+        @expanded-changed=${this._sectionExpandedChanged}
+      >
+        <div slot="header">
+          ${title}
+          ${open ? nothing : html`<span class="count">(${items.length})</span>`}
+        </div>
+        ${this._renderItems(items)}
+      </ha-expansion-panel>
+    `;
+  }
+
+  private _renderItems(items: AddAutomationElementListItem[]) {
+    return html`
       <ha-list-base>
         ${repeat(
           items,
@@ -137,11 +226,6 @@ export class HaAutomationAddItems extends LitElement {
               </div>
 
               ${
-                !this.tooltipDescription && item.description
-                  ? html`<div slot="supporting-text">${item.description}</div>`
-                  : nothing
-              }
-              ${
                 item.icon
                   ? html`<span slot="start">${item.icon}</span>`
                   : item.iconPath
@@ -150,26 +234,6 @@ export class HaAutomationAddItems extends LitElement {
                         .path=${item.iconPath}
                       ></ha-svg-icon>`
                     : nothing
-              }
-              ${
-                this.tooltipDescription && item.description
-                  ? html`<ha-svg-icon
-                        tabindex="0"
-                        id=${`description-tooltip-${item.key}`}
-                        slot="end"
-                        .path=${mdiInformationOutline}
-                        @click=${stopPropagation}
-                      ></ha-svg-icon>
-                      <ha-tooltip
-                        slot="end"
-                        .for=${`description-tooltip-${item.key}`}
-                        @wa-show=${stopPropagation}
-                        @wa-hide=${stopPropagation}
-                        @wa-after-hide=${stopPropagation}
-                        @wa-after-show=${stopPropagation}
-                        >${item.description}</ha-tooltip
-                      > `
-                  : nothing
               }
               <ha-svg-icon
                 slot="end"
@@ -181,6 +245,17 @@ export class HaAutomationAddItems extends LitElement {
         )}
       </ha-list-base>
     `;
+  }
+
+  private _sectionExpandedChanged(ev: CustomEvent<{ expanded: boolean }>) {
+    const { section } = ev.currentTarget as HTMLElement & { section: string };
+    const open = new Set(this._openSections);
+    if (ev.detail.expanded) {
+      open.add(section);
+    } else {
+      open.delete(section);
+    }
+    this._openSections = open;
   }
 
   private _renderTarget = memoizeOne((target?: Target) => {
@@ -270,6 +345,13 @@ export class HaAutomationAddItems extends LitElement {
       :host {
         display: flex;
         flex-grow: 1;
+        position: relative;
+        /* The column is the ground the cards sit on: white rows on a plain
+           white pane read as one block, and the whole point of this list is
+           telling one row from the next. Same corner as the column beside
+           it, so the two read as a pair. */
+        background-color: var(--ha-color-surface-low);
+        border-radius: var(--ha-border-radius-xl);
       }
       :host([scrollable]) .items {
         overflow: auto;
@@ -279,34 +361,57 @@ export class HaAutomationAddItems extends LitElement {
         flex-direction: column;
         flex: 1;
         min-width: 0;
+        /* The scrollport is what the cards run through, so it is what has to
+           hold them inside the rounded ground. */
+        border-radius: inherit;
       }
+      /* Over the end of the list, the way the target column floats its own
+         "show more" over the end of the tree. */
+      .toggle-all {
+        display: flex;
+        justify-content: center;
+        position: absolute;
+        bottom: 0;
+        width: 100%;
+        padding-bottom: var(--ha-space-2);
+        box-shadow: inset 0 -8px 12px 0 rgba(0, 0, 0, 0.06);
+        z-index: 2;
+      }
+      /* The last card scrolls clear of the button rather than under it. */
+      .items.with-toggle-all {
+        padding-bottom: var(--ha-space-12);
+      }
+
       .items.blank {
-        border-radius: var(--ha-border-radius-xl);
-        background-color: var(--ha-color-surface-default);
         align-items: center;
         color: var(--ha-color-text-secondary);
         padding: var(--ha-space-4);
-        margin: 0 var(--ha-space-4)
-          max(var(--safe-area-inset-bottom), var(--ha-space-3));
         line-height: var(--ha-line-height-expanded);
         justify-content: center;
       }
 
+      /* Nothing to say is not a card: the label belongs on the ground the
+         cards would have been on. A failure is, though — it is the one thing
+         here the user has to notice. */
       .items.error {
+        border-radius: var(--ha-border-radius-xl);
         background-color: var(--ha-color-fill-danger-quiet-resting);
         color: var(--ha-color-on-danger-normal);
+        margin: 0 var(--ha-space-2)
+          max(var(--safe-area-inset-bottom), var(--ha-space-3));
       }
       .items ha-list-base {
         --ha-row-item-padding-inline: var(--ha-space-3);
         --ha-row-item-padding-block: var(--ha-space-2);
         --ha-list-gap: var(--ha-space-3);
         gap: var(--ha-space-2);
-        padding: 0 var(--ha-space-4);
+        padding: 0 var(--ha-space-2);
         padding-bottom: max(var(--safe-area-inset-bottom), var(--ha-space-3));
       }
       .items ha-list-base ha-list-item-button {
         border-radius: var(--ha-border-radius-lg);
         border: 1px solid var(--ha-color-border-neutral-quiet);
+        background-color: var(--ha-color-surface-default);
         overflow: hidden;
       }
 
@@ -336,23 +441,16 @@ export class HaAutomationAddItems extends LitElement {
         overflow: visible;
         display: flex;
         justify-content: flex-end;
-        padding-inline-end: var(--ha-space-3);
-      }
-
-      /* The button is taller than the heading's text, so the row it floats
-         over needs the extra depth beneath it — otherwise the button crowds
-         the first card. */
-      .items.sorted .items-title {
-        padding-bottom: var(--ha-space-4);
+        padding-inline-end: var(--ha-space-2);
       }
 
       ha-dropdown.sort ha-button {
-        /* Sits on the heading's text line box. Nothing reserves space for it
-           at the row's end — the button's width follows its label, so a
-           heading long enough to reach it would be covered rather than
-           pushed. The two headings here are short. */
+        /* Nothing reserves space for it at the row's end — the button's width
+           follows its label, so a heading long enough to reach it would be
+           covered rather than pushed. The two headings here are short. */
         margin-block-start: var(--ha-space-2);
-        --ha-button-height: var(--ha-space-7);
+        /* The heading's line box exactly, so the two sit on one line. */
+        --ha-button-height: var(--ha-space-6);
         --wa-form-control-padding-inline: var(--ha-space-2);
         font-size: var(--ha-font-size-s);
       }
@@ -360,6 +458,34 @@ export class HaAutomationAddItems extends LitElement {
       /* The default 24px would dwarf the 12px label beside it. */
       ha-dropdown.sort ha-button ha-svg-icon {
         --mdc-icon-size: 16px;
+      }
+
+      .items ha-expansion-panel {
+        --expansion-panel-content-padding: 0;
+      }
+      /* The heading pins over its own cards, the way a plain one does. */
+      .items ha-expansion-panel::part(top) {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background-color: var(--ha-color-surface-low);
+      }
+      /* The same 40px band and weight the "by type" column's headings have,
+         with the chevron at the far end and nothing filled in behind it. */
+      .items ha-expansion-panel::part(summary) {
+        padding-block: var(--ha-space-2);
+        /* The inset a plain heading has, so both columns start alike. */
+        padding-inline-start: var(--ha-space-6);
+        /* Lands the chevron's box on the cards' right edge. */
+        padding-inline-end: var(--ha-space-2);
+        min-height: unset;
+        line-height: var(--ha-space-6);
+        font-weight: var(--ha-font-weight-medium);
+        color: var(--secondary-text-color);
+      }
+      .items ha-expansion-panel .count {
+        color: var(--secondary-text-color);
+        font-weight: var(--ha-font-weight-normal);
       }
 
       .items-title {
@@ -373,11 +499,11 @@ export class HaAutomationAddItems extends LitElement {
         line-height: var(--ha-space-6);
         padding-top: var(--ha-space-2);
         padding-bottom: var(--ha-space-2);
-        padding-inline-start: var(--ha-space-8);
-        padding-inline-end: var(--ha-space-3);
+        padding-inline-start: var(--ha-space-6);
+        padding-inline-end: var(--ha-space-2);
         top: 0;
         z-index: 1;
-        background-color: var(--card-background-color);
+        background-color: var(--ha-color-surface-low);
       }
       ha-bottom-sheet .items-title {
         padding-top: var(--ha-space-3);

@@ -5,7 +5,6 @@ import { TRIGGER_COLLECTIONS } from "../../../../src/data/trigger";
 import {
   compareElements,
   findElementGroupKey,
-  isLeadingElement,
 } from "../../../../src/panels/config/automation/add-automation-element/element-group";
 
 describe("findElementGroupKey", () => {
@@ -93,15 +92,5 @@ describe("compareElements", () => {
       "Apply effect",
       "Blink",
     ]);
-  });
-});
-
-describe("isLeadingElement", () => {
-  it("splits the common block from the alphabetical rest", () => {
-    // Same rank the common sort uses, so the header lands where the
-    // order changes.
-    expect(isLeadingElement(`${DYNAMIC_PREFIX}light.turn_on`)).toBe(true);
-    expect(isLeadingElement(`${DYNAMIC_PREFIX}sun.sunrise`)).toBe(true);
-    expect(isLeadingElement(`${DYNAMIC_PREFIX}light.blink`)).toBe(false);
   });
 });
