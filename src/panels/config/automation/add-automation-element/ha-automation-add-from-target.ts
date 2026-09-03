@@ -337,9 +337,7 @@ export default class HaAutomationAddFromTarget extends LitElement {
     const selected = this._getSelectedTargetId(value);
 
     return html`<ha-section-title>
-        ${this._i18n.localize(
-          "ui.panel.config.automation.editor.recently_selected"
-        )}
+        ${this._i18n.localize("ui.panel.config.automation.editor.recent")}
         <ha-button
           class="clear-recent"
           appearance="plain"
@@ -387,6 +385,10 @@ export default class HaAutomationAddFromTarget extends LitElement {
           </ha-list-item-button>`;
         })}
       </ha-list-base>`;
+  }
+
+  private _clearRecentTargets() {
+    fireEvent(this, "clear-recent-targets");
   }
 
   private _targetExists(type: TargetType, id: string): boolean {
@@ -1341,10 +1343,6 @@ export default class HaAutomationAddFromTarget extends LitElement {
     }
   }
 
-  private _clearRecentTargets() {
-    fireEvent(this, "clear-recent-targets");
-  }
-
   private _selectTimeLocationGroup(ev: CustomEvent) {
     const value = (ev.currentTarget as any).value;
     if (value) {
@@ -1595,6 +1593,11 @@ export default class HaAutomationAddFromTarget extends LitElement {
       top: 0;
       position: sticky;
       z-index: 1;
+      /* Sized off the px spacing scale, never off font metrics: with
+         --ha-font-size-scale applied, font-size-m * line-height-normal is
+         fractional, which gives the header a subpixel height and lands the
+         Clear button's edges on half pixels. 8 + 24 + 8 is always whole. */
+      line-height: var(--ha-space-6);
     }
 
     /* Icons vary (state, domain, floor, svg); a fixed box keeps labels aligned. */
@@ -1627,6 +1630,8 @@ export default class HaAutomationAddFromTarget extends LitElement {
       --wa-color-neutral-fill-quiet: var(--ha-color-fill-neutral-quiet-hover);
       margin-inline-start: auto;
       margin-inline-end: calc(-1 * var(--ha-space-2));
+      /* The same whole-pixel line box the title's text gets, so the button
+         neither grows the header nor sits off-grid inside it. */
       --ha-button-height: var(--ha-space-6);
       --wa-form-control-padding-inline: var(--ha-space-2);
       font-size: var(--ha-font-size-s);

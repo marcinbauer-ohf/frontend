@@ -1,4 +1,4 @@
-import { mdiInformationOutline, mdiPlus } from "@mdi/js";
+import { mdiInformationOutline, mdiMenuDown, mdiPlus } from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
 import {
   customElement,
@@ -13,6 +13,8 @@ import memoizeOne from "memoize-one";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import { stopPropagation } from "../../../../common/dom/stop_propagation";
 import "../../../../components/ha-button";
+import "../../../../components/ha-dropdown";
+import "../../../../components/ha-dropdown-item";
 import "../../../../components/ha-svg-icon";
 import "../../../../components/ha-tooltip";
 import "../../../../components/item/ha-list-item-button";
@@ -25,6 +27,7 @@ import type {
   AddAutomationElementListItem,
   AddAutomationElementSection,
 } from "../add-automation-element-dialog";
+import type { ElementSort } from "./element-group";
 import { getTargetIcon } from "../target/get_target_icon";
 
 type Target = [string, string | undefined, string | undefined];
@@ -34,6 +37,12 @@ export class HaAutomationAddItems extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @property({ attribute: false }) public items?: AddAutomationElementSection[];
+
+  /**
+   * The order the category is listed in. Unset leaves the list alone and
+   * renders no control — the target view has its own grouping to preserve.
+   */
+  @property({ attribute: false }) public sort?: ElementSort;
 
   @property() public error?: string;
 
@@ -69,10 +78,24 @@ export class HaAutomationAddItems extends LitElement {
         blank: this.error || !this.items || !this.items.length,
         error: this.error,
         scrolled: this._itemsScrolled,
+        sorted: !!this.sort,
         "ha-scrollbar": this.scrollable,
       })}
       @scroll=${this._onItemsScroll}
     >
+      ${
+        // The control orders the whole list, not the section it used to sit
+        // in: bolted to the first heading it scrolled out of reach the moment
+        // the next heading pinned over it, which on a phone is most of the
+        // time. Pinned to the top of the scrollport it stays put, and takes
+        // no height of its own so each heading rises into the same band and
+        // the two read as one row. It has to come first for sticky to hold it
+        // there, and be a span so the shadow rule below still finds a
+        // heading as its first div.
+        this.sort && this.items?.length && !this.error
+          ? html`<span class="sort-bar">${this._renderSort(this.sort)}</span>`
+          : nothing
+      }
       ${
         !this.items && !this.error
           ? this.selectLabel
@@ -90,42 +113,19 @@ export class HaAutomationAddItems extends LitElement {
                   this.items,
                   (_, index) => `item-group-${index}`,
                   (itemGroup) =>
-                    this._renderItemList(
-                      itemGroup.title,
-                      itemGroup.items,
-                      itemGroup.clearable
-                    )
+                    this._renderItemList(itemGroup.title, itemGroup.items)
                 )
       }
     </div>`;
   }
 
-  private _renderItemList(
-    title,
-    items?: AddAutomationElementListItem[],
-    clearable?: boolean
-  ) {
+  private _renderItemList(title, items?: AddAutomationElementListItem[]) {
     if (!items || !items.length) {
       return nothing;
     }
 
     return html`
-      <div class="items-title">
-        ${title}
-        ${
-          clearable
-            ? html`<ha-button
-                class="clear-recent"
-                appearance="plain"
-                variant="neutral"
-                size="s"
-                @click=${this._clearRecent}
-              >
-                ${this.hass.localize("ui.common.clear")}
-              </ha-button>`
-            : nothing
-        }
-      </div>
+      <div class="items-title">${title}</div>
       <ha-list-base>
         ${repeat(
           items,
@@ -206,8 +206,34 @@ export class HaAutomationAddItems extends LitElement {
     </div>`;
   });
 
-  private _clearRecent() {
-    fireEvent(this, "clear-recent-items");
+  private _renderSort(sort: ElementSort) {
+    const label = (value: ElementSort) =>
+      this.hass.localize(
+        `ui.panel.config.automation.editor.sort.${value}` as const
+      );
+
+    return html`
+      <ha-dropdown class="sort" @wa-select=${this._sortSelected}>
+        <ha-button slot="trigger" appearance="plain" variant="neutral" size="s">
+          ${this.hass.localize(
+            "ui.panel.config.automation.editor.sort.sort_by",
+            { sort: label(sort) }
+          )}
+          <ha-svg-icon slot="end" .path=${mdiMenuDown}></ha-svg-icon>
+        </ha-button>
+        ${(["common", "name"] as const).map(
+          (value) => html`
+            <ha-dropdown-item .value=${value} .selected=${value === sort}>
+              ${label(value)}
+            </ha-dropdown-item>
+          `
+        )}
+      </ha-dropdown>
+    `;
+  }
+
+  private _sortSelected(ev: CustomEvent<{ item: { value: ElementSort } }>) {
+    fireEvent(this, "element-sort-changed", { sort: ev.detail.item.value });
   }
 
   private _selected(ev) {
@@ -300,12 +326,40 @@ export class HaAutomationAddItems extends LitElement {
         flex-wrap: wrap;
       }
 
-      ha-button.clear-recent {
-        margin-inline-start: auto;
-        margin-inline-end: calc(-1 * var(--ha-space-2));
-        --ha-button-height: var(--ha-space-6);
+      .sort-bar {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        /* No height of its own: the heading pinned beneath supplies the row,
+           and the button overflows down into it. */
+        height: 0;
+        overflow: visible;
+        display: flex;
+        justify-content: flex-end;
+        padding-inline-end: var(--ha-space-3);
+      }
+
+      /* The button is taller than the heading's text, so the row it floats
+         over needs the extra depth beneath it — otherwise the button crowds
+         the first card. */
+      .items.sorted .items-title {
+        padding-bottom: var(--ha-space-4);
+      }
+
+      ha-dropdown.sort ha-button {
+        /* Sits on the heading's text line box. Nothing reserves space for it
+           at the row's end — the button's width follows its label, so a
+           heading long enough to reach it would be covered rather than
+           pushed. The two headings here are short. */
+        margin-block-start: var(--ha-space-2);
+        --ha-button-height: var(--ha-space-7);
         --wa-form-control-padding-inline: var(--ha-space-2);
         font-size: var(--ha-font-size-s);
+      }
+
+      /* The default 24px would dwarf the 12px label beside it. */
+      ha-dropdown.sort ha-button ha-svg-icon {
+        --mdc-icon-size: 16px;
       }
 
       .items-title {
@@ -313,6 +367,10 @@ export class HaAutomationAddItems extends LitElement {
         display: flex;
         align-items: center;
         font-weight: var(--ha-font-weight-medium);
+        /* Whole-pixel band, matching the left column's section titles: a line
+           box of font-size-m * line-height-normal is fractional once
+           --ha-font-size-scale is applied. */
+        line-height: var(--ha-space-6);
         padding-top: var(--ha-space-2);
         padding-bottom: var(--ha-space-2);
         padding-inline-start: var(--ha-space-8);
@@ -377,6 +435,6 @@ declare global {
     "ha-automation-add-items": HaAutomationAddItems;
   }
   interface HASSDomEvents {
-    "clear-recent-items": undefined;
+    "element-sort-changed": { sort: ElementSort };
   }
 }

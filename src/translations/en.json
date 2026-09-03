@@ -5263,10 +5263,13 @@
             "home": "Home",
             "unassigned": "Unassigned",
             "time_sun": "Time and sun",
-            "recently_selected": "Recently selected",
-            "recently_used_triggers": "Recently used triggers",
-            "recently_used_conditions": "Recently used conditions",
-            "recently_used_actions": "Recently used actions",
+            "recent": "Recent",
+            "common": "Common",
+            "sort": {
+              "sort_by": "Order: {sort}",
+              "common": "Common first",
+              "name": "Name (A-Z)"
+            },
             "blocks": "Blocks",
             "tabs": {
               "target": "By target",
@@ -5314,6 +5317,7 @@
             "generic": "Generic",
             "triggers": {
               "name": "Triggers",
+              "more": "More triggers",
               "header": "When",
               "description": "A trigger is a specific event happening in or around your home, for example: ''When the sun sets''. Any trigger added here will start your automation.",
               "learn_more": "Learn more about triggers",
@@ -5611,6 +5615,7 @@
             },
             "conditions": {
               "name": "Conditions",
+              "more": "More conditions",
               "header": "And if",
               "description": "All conditions added here need to be satisfied for the automation to run. A condition can be satisfied or not at any given time, for example: ''If {user} is home''. You can use building blocks to create more complex conditions.",
               "learn_more": "Learn more about conditions",
@@ -5802,6 +5807,7 @@
             },
             "actions": {
               "name": "Actions",
+              "more": "More actions",
               "header": "Then do",
               "description": "All actions added here will be performed in sequence when the automation runs. An action usually controls one of your areas, devices, or entities, for example: 'Turn on the lights'. You can use building blocks to create more complex sequences of actions.",
               "learn_more": "Learn more about actions",
