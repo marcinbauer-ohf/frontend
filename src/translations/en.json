@@ -1636,7 +1636,7 @@
             "insteon": "[%key:ui::panel::config::dashboard::insteon::main%]",
             "voice-assistants": "[%key:ui::panel::config::dashboard::voice_assistants::main%]",
             "connectivity": "[%key:ui::panel::config::dashboard::connectivity::main%]",
-            "ai-tasks": "[%key:ui::panel::config::ai_tasks::caption%]"
+            "ai": "[%key:ui::panel::config::ai::caption%]"
           }
         },
         "filter_placeholder": "Search entities",
@@ -1694,7 +1694,6 @@
         "entity_id": "ID",
         "copy_value": "Copy {label}: {value}",
         "labels": "Labels",
-        "no_labels": "None",
         "toggle_yaml_mode": "Toggle YAML mode",
         "back_to_info": "Back to info",
         "info": "Information",
@@ -8546,6 +8545,7 @@
             "add_device": "Add device",
             "status_online": "Online",
             "status_offline": "Offline",
+            "devices_offline": "{count} offline",
             "my_network_title": "My network",
             "show_map": "[%key:ui::panel::config::bluetooth::show_map%]",
             "devices": "{count, plural,\n  one {# device}\n  other {# devices}\n}",
@@ -8857,7 +8857,7 @@
           "intro": "Share anonymized information from your installation to help make Home Assistant better and help us convince manufacturers to add local control and privacy-focused features.",
           "download_device_info": "Preview device analytics"
         },
-        "ai_tasks": {
+        "ai": {
           "caption": "AI",
           "description": "Configure AI suggestions, task preferences, and the Model Context Protocol server"
         },
@@ -10983,6 +10983,11 @@
               },
               "select-options": {
                 "label": "Select options",
+                "style": "[%key:ui::panel::lovelace::editor::features::types::climate-preset-modes::style%]",
+                "style_list": {
+                  "dropdown": "[%key:ui::panel::lovelace::editor::features::types::climate-preset-modes::style_list::dropdown%]",
+                  "buttons": "Buttons"
+                },
                 "options": "Options",
                 "customize_options": "Customize options"
               },
