@@ -2776,13 +2776,13 @@ class DialogAddAutomationElement
         }
         .content.column ha-automation-add-items {
           min-height: 160px;
-          /* Stacked, it is the only column on screen: its ground has to reach
-             the bottom of the sheet rather than stopping under the last card,
-             it owns both side insets, and the space above it is the content's
-             own gap. */
+          /* Stacked, it is the only column on screen, so it takes all of it:
+             edge to edge, from under the header down into the sheet's own
+             bottom edge. Only the corners it does not run into are its own. */
           flex: 1 0 auto;
-          margin-top: 0;
-          margin-inline-start: var(--ha-space-3);
+          margin: 0;
+          border-end-start-radius: 0;
+          border-end-end-radius: 0;
         }
         .content.column ha-automation-add-from-target {
           overflow: clip;

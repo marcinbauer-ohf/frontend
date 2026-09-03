@@ -373,7 +373,9 @@ export class HaAutomationAddItems extends LitElement {
         position: absolute;
         bottom: 0;
         width: 100%;
-        padding-bottom: var(--ha-space-2);
+        /* Runs into the sheet's bottom edge on a phone, so it clears the
+           home indicator the way the list below it does. */
+        padding-bottom: max(var(--safe-area-inset-bottom), var(--ha-space-2));
         box-shadow: inset 0 -8px 12px 0 rgba(0, 0, 0, 0.06);
         z-index: 2;
       }
