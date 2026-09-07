@@ -267,6 +267,7 @@ class HaPanelHistory extends LitElement {
                             .endTime=${this._endDate}
                             .narrow=${this.narrow}
                             sync-charts
+                            inside-labels
                           >
                           </state-history-charts>
                         `
@@ -816,6 +817,12 @@ class HaPanelHistory extends LitElement {
           min-width: 0;
           overflow: hidden auto;
           padding: 16px;
+        }
+
+        /* Narrow screens: keep the vertical rhythm but give the charts the
+           horizontal space back. */
+        :host([narrow]) .results {
+          padding-inline: var(--ha-space-2);
         }
 
         .progress-wrapper {
