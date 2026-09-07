@@ -1536,11 +1536,84 @@
         "confirm_error": "Failed to confirm the new configuration: {error}",
         "revert_error": "Failed to revert the configuration: {error}"
       },
+      "beta_feedback": {
+        "title": "Help us improve",
+        "type": {
+          "label": "Type of feedback",
+          "bug": "Bug",
+          "reaction": "Feature reaction"
+        },
+        "message": {
+          "label": "What happened?",
+          "placeholder": {
+            "bug": "What did you do, what did you expect, and what happened instead?",
+            "reaction": "What do you think of this feature so far?"
+          }
+        },
+        "product_area": {
+          "label": "Which area fits best?"
+        },
+        "included": {
+          "title": "Included with your report"
+        },
+        "context": {
+          "title": "Include context",
+          "preview": "Preview",
+          "dialog_title": "Included context",
+          "description": "Only the items you leave ticked are sent with your report.",
+          "collecting": "Collecting context\u2026",
+          "privacy_notice": "None of this includes your entity states, your location, or your account details. Review what is included below, and untick anything you would rather not send.",
+          "items": {
+            "ha_version": "Home Assistant version",
+            "frontend_version": "Frontend version",
+            "installation_type": "Installation type",
+            "path": "Page",
+            "panel": "Panel",
+            "dialogs": "Open dialogs",
+            "integration": "Integration",
+            "browser": "Browser and display",
+            "console_errors": "Recent browser errors",
+            "core_log_excerpt": "Core log excerpt"
+          }
+        },
+        "screenshot": {
+          "title": "Screenshot (optional)",
+          "none": "None attached",
+          "add": "Attach",
+          "remove": "Remove",
+          "failed": "Could not read that image. Please try a different file."
+        },
+        "consent": {
+          "label": "I agree to send this data",
+          "hint": "Your message and the context selected above are sent to Home Assistant."
+        },
+        "analytics": {
+          "label": "Also send a one-time analytics snapshot",
+          "hint": "Sends the same data as the Analytics integration once, with this report only. Does not turn analytics on.",
+          "unavailable": "This version of Home Assistant cannot provide an analytics snapshot. Your report was sent without it."
+        },
+        "contact": {
+          "label": "Contact email (optional)",
+          "hint": "Only used if we need to follow up on this report."
+        },
+        "send": "Send",
+        "sending": "Sending\u2026",
+        "send_failed": "Could not send your report: {error}. It has been saved and will be retried the next time you open this dialog.",
+        "rate_limited": "You have sent the maximum number of reports for this hour. Please try again later.",
+        "outbox_waiting": "{count, plural, one {# report} other {# reports}} waiting to send.",
+        "success": {
+          "title": "Thanks for the feedback",
+          "description": "Your report ID is {report_id}. Quote it if you follow up.",
+          "copy_github": "Copy as GitHub issue",
+          "copied": "Report copied to clipboard"
+        }
+      },
       "quick-bar": {
         "ask_assist": "Ask Assist: {query}",
         "commands_title": "Commands",
         "navigate_title": "Navigate",
         "commands": {
+          "beta_feedback": "Send feedback",
           "reload": {
             "all": "[%key:ui::panel::config::tools::tabs::yaml::section::reloading::all%]",
             "reload": "[%key:ui::panel::config::tools::tabs::yaml::section::reloading::reload%]",
@@ -2539,7 +2612,8 @@
         "other": {
           "title": "Other",
           "my_link": "get My Home Assistant link",
-          "show_shortcuts": "show keyboard shortcuts"
+          "show_shortcuts": "show keyboard shortcuts",
+          "beta_feedback": "send feedback"
         }
       }
     },
@@ -2610,6 +2684,8 @@
       }
     },
     "sidebar": {
+      "beta_feedback": "Send feedback",
+      "beta_badge": "Beta",
       "external_app_configuration": "App settings",
       "sidebar_toggle": "Sidebar toggle",
       "edit_sidebar": "Edit sidebar",

@@ -6,6 +6,7 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import type { NavigationFilterOptions } from "../../common/config/filter_navigation_pages";
+import { isBetaFeedbackEnabled } from "../../common/config/is_beta_version";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import { fireEvent } from "../../common/dom/fire_event";
 import { navigate } from "../../common/navigate";
@@ -41,8 +42,10 @@ import {
   type HassioAddonInfo,
 } from "../../data/hassio/addon";
 import {
+  BETA_FEEDBACK_ACTION,
   commandComboBoxKeys,
   generateActionCommands,
+  generateBetaFeedbackCommand,
   generateNavigationCommands,
   navigateComboBoxKeys,
   type ActionCommandComboBoxItem,
@@ -59,6 +62,11 @@ import { buttonLinkStyle } from "../../resources/styles";
 import type { HomeAssistant } from "../../types";
 import { isIosApp } from "../../util/is_ios";
 import { isMac } from "../../util/is_mac";
+import type { FeedbackContextOrigin } from "../../data/beta_feedback_context";
+import {
+  captureFeedbackOrigin,
+  showBetaFeedbackDialog,
+} from "../beta-feedback/show-dialog-beta-feedback";
 import { showConfirmationDialog } from "../generic/show-dialog-box";
 import "../restart/automation-restart-status";
 import { showShortcutsDialog } from "../shortcuts/show-shortcuts-dialog";
@@ -117,6 +125,9 @@ export class QuickBar extends LitElement {
 
   private _itemSelected = false;
 
+  /** Where the user was before this overlay opened, for beta feedback. */
+  private _feedbackOrigin?: FeedbackContextOrigin;
+
   // #region lifecycle
   public async showDialog(params: QuickBarParams) {
     if (!this._translationsLoaded) {
@@ -124,6 +135,8 @@ export class QuickBar extends LitElement {
       this._translationsLoaded = true;
     }
     this._initialize();
+    // captured now, while the page underneath is still the active one
+    this._feedbackOrigin = captureFeedbackOrigin(["ha-quick-bar"]);
     this._selectedSection = effectiveQuickBarMode(this.hass.user, params.mode);
     this._showHint = params.showHint ?? false;
 
@@ -471,6 +484,9 @@ export class QuickBar extends LitElement {
     ) => {
       const items: (string | QuickBarComboBoxItem)[] = [];
       const prompt = filter?.trim();
+      const betaFeedbackItem = isBetaFeedbackEnabled(this.hass.config.version)
+        ? generateBetaFeedbackCommand(this.hass)
+        : undefined;
       const assistItem =
         prompt &&
         (!section || section === "command") &&
@@ -516,6 +532,11 @@ export class QuickBar extends LitElement {
               this._sortBySortingLabel
             )
           : [];
+
+        if (betaFeedbackItem) {
+          // unlike the other action commands, not admin-only
+          commandItems = [betaFeedbackItem, ...commandItems];
+        }
 
         if (filter) {
           commandItems = this._filterGroup(
@@ -636,6 +657,20 @@ export class QuickBar extends LitElement {
         }
 
         items.push(...areaItems);
+      }
+
+      // typing "feedback" reaches the command from any section, not just
+      // command mode
+      if (
+        betaFeedbackItem &&
+        section &&
+        section !== "command" &&
+        filter &&
+        betaFeedbackItem.primary
+          .toLowerCase()
+          .includes(filter.trim().toLowerCase())
+      ) {
+        items.unshift(betaFeedbackItem);
       }
 
       return items;
@@ -795,6 +830,12 @@ export class QuickBar extends LitElement {
       // command selected
       if (item && "action" in item) {
         const actionItem = item as ActionCommandComboBoxItem;
+        if (actionItem.action === BETA_FEEDBACK_ACTION) {
+          const origin = this._feedbackOrigin;
+          this.closeDialog();
+          showBetaFeedbackDialog(this, { origin });
+          return;
+        }
         if (actionItem.action === "restart" || actionItem.action === "stop") {
           const confirmed = await showConfirmationDialog(this, {
             title: this.hass.localize(

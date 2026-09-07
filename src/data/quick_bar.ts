@@ -1,5 +1,6 @@
 import {
   mdiKeyboard,
+  mdiMessageAlertOutline,
   mdiNavigationVariant,
   mdiReload,
   mdiServerNetwork,
@@ -284,6 +285,26 @@ const generateServerControlCommands = (
       action,
     };
   });
+};
+
+export const BETA_FEEDBACK_ACTION = "beta_feedback";
+
+/**
+ * Only offered on beta/dev builds — callers gate on isBetaFeedbackEnabled.
+ * Unlike the other action commands this is not admin-only.
+ */
+export const generateBetaFeedbackCommand = (
+  hass: HomeAssistant
+): ActionCommandComboBoxItem => {
+  const primary = hass.localize("ui.dialogs.quick-bar.commands.beta_feedback");
+  return {
+    id: "beta_feedback",
+    primary,
+    secondary: hass.localize("ui.dialogs.beta_feedback.title"),
+    icon_path: mdiMessageAlertOutline,
+    sorting_label: primary,
+    action: BETA_FEEDBACK_ACTION,
+  };
 };
 
 export const generateActionCommands = (

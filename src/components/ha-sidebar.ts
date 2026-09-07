@@ -4,6 +4,7 @@ import {
   mdiCog,
   mdiMenu,
   mdiMenuOpen,
+  mdiMessageAlertOutline,
 } from "@mdi/js";
 import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
@@ -11,6 +12,7 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import memoizeOne from "memoize-one";
+import { isBetaFeedbackEnabled } from "../common/config/is_beta_version";
 import { fireEvent } from "../common/dom/fire_event";
 import { stringCompare } from "../common/string/compare";
 import { computeRTL } from "../common/util/compute_rtl";
@@ -29,6 +31,7 @@ import { subscribeNotifications } from "../data/persistent_notification";
 import { subscribeRepairsIssueRegistry } from "../data/repairs";
 import type { UpdateEntity } from "../data/update";
 import { updateCanInstall } from "../data/update";
+import { showBetaFeedbackDialog } from "../dialogs/beta-feedback/show-dialog-beta-feedback";
 import { showEditSidebarDialog } from "../dialogs/sidebar/show-dialog-edit-sidebar";
 import { ScrollableFadeMixin } from "../mixins/scrollable-fade-mixin";
 import { SubscribeMixin } from "../mixins/subscribe-mixin";
@@ -427,6 +430,7 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
   private _renderFixedPanels(selectedPanel: string) {
     // prettier-ignore
     return html`
+      ${this._renderBetaFeedback()}
       ${this.hass.user?.is_admin
         ? this._renderConfiguration(selectedPanel)
         : this._renderExternalConfiguration()}
@@ -470,6 +474,40 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
 
   private _renderSpacer() {
     return html`<div class="spacer" disabled></div>`;
+  }
+
+  /**
+   * Not a panel: it never appears in the sidebar edit list, and it is only
+   * rendered on beta/dev builds.
+   */
+  private _renderBetaFeedback() {
+    if (!isBetaFeedbackEnabled(this.hass.config?.version)) {
+      return nothing;
+    }
+
+    const title = this.hass.localize("ui.sidebar.beta_feedback");
+
+    return html`
+      <ha-list-item-button
+        @click=${this._handleShowBetaFeedback}
+        id="sidebar-beta-feedback"
+      >
+        <ha-svg-icon slot="start" .path=${mdiMessageAlertOutline}></ha-svg-icon>
+        <span class="item-text" slot="headline">${title}</span>
+        <span class="beta-badge" slot="end"
+          >${this.hass.localize("ui.sidebar.beta_badge")}</span
+        >
+      </ha-list-item-button>
+      ${
+        !this.alwaysExpand
+          ? this._renderToolTip("sidebar-beta-feedback", title)
+          : nothing
+      }
+    `;
+  }
+
+  private _handleShowBetaFeedback(): void {
+    showBetaFeedbackDialog(this);
   }
 
   private _renderConfiguration(selectedPanel: string) {
@@ -861,6 +899,18 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           transition:
             opacity var(--ha-animation-duration-normal) ease,
             transform var(--ha-animation-duration-normal) ease;
+        }
+
+        .beta-badge {
+          border-radius: var(--ha-border-radius-sm);
+          background-color: var(--ha-color-fill-neutral-normal-resting);
+          color: var(--secondary-text-color);
+          font-size: var(--ha-font-size-2xs);
+          font-weight: var(--ha-font-weight-medium);
+          letter-spacing: 0.04em;
+          line-height: normal;
+          padding: 2px 6px;
+          text-transform: uppercase;
         }
 
         ha-svg-icon + .badge {

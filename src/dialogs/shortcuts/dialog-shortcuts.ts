@@ -1,11 +1,12 @@
 import { consume, type ContextType } from "@lit/context";
-import { css, html, LitElement } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, state } from "lit/decorators";
+import { isBetaFeedbackEnabled } from "../../common/config/is_beta_version";
 import type { LocalizeKeys } from "../../common/translations/localize";
 import "../../components/ha-alert";
 import "../../components/ha-dialog";
 import "../../components/ha-svg-icon";
-import { internationalizationContext } from "../../data/context";
+import { configContext, internationalizationContext } from "../../data/context";
 import { isMac } from "../../util/is_mac";
 import { DialogMixin } from "../dialog-mixin";
 
@@ -22,6 +23,8 @@ type ShortcutString = string | LocalizedShortcut;
 interface Shortcut {
   shortcut: ShortcutString[];
   descriptionTranslationKey: LocalizeKeys;
+  /** Only listed on beta/dev builds. */
+  betaOnly?: boolean;
 }
 
 interface Section {
@@ -171,6 +174,11 @@ const _SHORTCUTS: Section[] = [
         shortcut: ["Shift", "/"],
         descriptionTranslationKey: "ui.dialogs.shortcuts.other.show_shortcuts",
       },
+      {
+        shortcut: ["F"],
+        descriptionTranslationKey: "ui.dialogs.shortcuts.other.beta_feedback",
+        betaOnly: true,
+      },
     ],
   },
 ];
@@ -180,6 +188,10 @@ class DialogShortcuts extends DialogMixin(LitElement) {
   @state()
   @consume({ context: internationalizationContext, subscribe: true })
   private _i18n!: ContextType<typeof internationalizationContext>;
+
+  @state()
+  @consume({ context: configContext, subscribe: true })
+  private _config!: ContextType<typeof configContext>;
 
   private _renderShortcut(
     shortcutKeys: ShortcutString[],
@@ -219,6 +231,12 @@ class DialogShortcuts extends DialogMixin(LitElement) {
               <div class="items">
                 ${section.items.map((item) => {
                   if ("shortcut" in item) {
+                    if (
+                      (item as Shortcut).betaOnly &&
+                      !isBetaFeedbackEnabled(this._config?.config?.version)
+                    ) {
+                      return nothing;
+                    }
                     return this._renderShortcut(
                       (item as Shortcut).shortcut,
                       (item as Shortcut).descriptionTranslationKey

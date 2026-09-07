@@ -1,7 +1,9 @@
 import type { PropertyValues } from "lit";
 import type { HASSDomEvent } from "../common/dom/fire_event";
+import { isBetaFeedbackEnabled } from "../common/config/is_beta_version";
 import type { SystemLogLevel } from "../data/system_log";
 import type { Constructor } from "../types";
+import { installErrorBuffer } from "../util/error-buffer";
 import { recoverFromStaleBuild } from "../util/recover-stale-build";
 import type { HassBaseEl } from "./hass-base-mixin";
 
@@ -24,6 +26,19 @@ export const loggingMixin = <T extends Constructor<HassBaseEl>>(
   superClass: T
 ) =>
   class extends superClass {
+    private _errorBufferChecked = false;
+
+    protected hassChanged(hass, oldHass) {
+      super.hassChanged(hass, oldHass);
+      // config (and with it the version) arrives after the connection is up
+      if (!this._errorBufferChecked && hass?.config?.version) {
+        this._errorBufferChecked = true;
+        if (isBetaFeedbackEnabled(hass.config.version)) {
+          installErrorBuffer();
+        }
+      }
+    }
+
     protected hassConnected() {
       super.hassConnected();
       // Resource-load errors (<script>, modulepreload <link>) do not bubble,

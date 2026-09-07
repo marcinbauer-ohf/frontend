@@ -63,6 +63,11 @@ type LoadedDialogsDict = Record<string, LoadedDialogInfo>;
 
 const LOADED: LoadedDialogsDict = {};
 const OPEN_DIALOG_STACK: DialogState[] = [];
+
+/** Snapshot of the currently open dialogs, outermost first. */
+export const getOpenDialogStack = (): readonly DialogState[] => [
+  ...OPEN_DIALOG_STACK,
+];
 export const FOCUS_TARGET = Symbol.for("HA focus target");
 
 /**

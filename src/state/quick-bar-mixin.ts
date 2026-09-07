@@ -1,11 +1,14 @@
 import type { PropertyValues } from "lit";
 import memoizeOne from "memoize-one";
+import { isBetaFeedbackEnabled } from "../common/config/is_beta_version";
 import { isComponentLoaded } from "../common/config/is_component_loaded";
 import { canOverrideAlphanumericInput } from "../common/dom/can-override-input";
 import type { HASSDomEvent } from "../common/dom/fire_event";
 import { mainWindow } from "../common/dom/get_main_window";
+import type { ShortcutConfig } from "../common/keyboard/shortcuts";
 import { ShortcutManager } from "../common/keyboard/shortcuts";
 import { extractSearchParamsObject } from "../common/url/search-params";
+import { showBetaFeedbackDialog } from "../dialogs/beta-feedback/show-dialog-beta-feedback";
 import type { QuickBarSection } from "../dialogs/quick-bar/show-dialog-quick-bar";
 import {
   closeQuickBar,
@@ -28,6 +31,8 @@ declare global {
 export default <T extends Constructor<HassElement>>(superClass: T) =>
   class extends superClass {
     private _quickBarOpen = false;
+
+    private _shortcutManager = new ShortcutManager();
 
     protected firstUpdated(changedProps: PropertyValues<this>) {
       super.firstUpdated(changedProps);
@@ -82,6 +87,9 @@ export default <T extends Constructor<HassElement>>(superClass: T) =>
           case "a":
             this._showVoiceCommandDialog(ev.detail);
             break;
+          case "f":
+            this._showBetaFeedbackDialog(ev.detail);
+            break;
           case "?":
             this._showShortcutDialog(ev.detail);
         }
@@ -93,17 +101,22 @@ export default <T extends Constructor<HassElement>>(superClass: T) =>
     protected updated(changedProperties: PropertyValues<this>): void {
       super.updated(changedProperties);
 
+      const oldHass = changedProperties.get("hass");
       if (
         changedProperties.has("hass") &&
-        changedProperties.get("hass")?.user !== this.hass?.user
+        (oldHass?.user !== this.hass?.user ||
+          // the version arrives with the config, after the first render
+          oldHass?.config?.version !== this.hass?.config?.version)
       ) {
         this._registerShortcut();
       }
     }
 
     private _registerShortcut() {
-      const shortcutManager = new ShortcutManager();
-      shortcutManager.add({
+      // One registration for the whole map: ShortcutManager.add() disposes the
+      // previous binding, so registering in several calls would drop all but
+      // the last.
+      const shortcuts: Record<string, ShortcutConfig> = {
         // These are for latin keyboards that have e, c, m keys
         e: { handler: (ev) => this._showQuickBar(ev, "entity") },
         m: { handler: (ev) => this._createMyLink(ev) },
@@ -124,18 +137,42 @@ export default <T extends Constructor<HassElement>>(superClass: T) =>
           allowWhenTextSelected: true,
           allowInInput: true,
         },
-      });
+      };
 
       if (this.hass?.user?.is_admin) {
-        shortcutManager.add({
-          // Latin keyboards
-          c: { handler: (ev) => this._showQuickBar(ev, "command") },
-          d: { handler: (ev) => this._showQuickBar(ev, "device") },
-          // Non-latin keyboards
-          KeyC: { handler: (ev) => this._showQuickBar(ev, "command") },
-          KeyD: { handler: (ev) => this._showQuickBar(ev, "device") },
-        });
+        // Latin keyboards
+        shortcuts.c = { handler: (ev) => this._showQuickBar(ev, "command") };
+        shortcuts.d = { handler: (ev) => this._showQuickBar(ev, "device") };
+        // Non-latin keyboards
+        shortcuts.KeyC = { handler: (ev) => this._showQuickBar(ev, "command") };
+        shortcuts.KeyD = { handler: (ev) => this._showQuickBar(ev, "device") };
       }
+
+      if (isBetaFeedbackEnabled(this.hass?.config?.version)) {
+        shortcuts.f = { handler: (ev) => this._showBetaFeedbackDialog(ev) };
+        shortcuts.KeyF = {
+          handler: (ev) => this._showBetaFeedbackDialog(ev),
+        };
+      }
+
+      this._shortcutManager.add(shortcuts);
+    }
+
+    private _showBetaFeedbackDialog(e: KeyboardEvent) {
+      if (
+        !this.hass?.enableShortcuts ||
+        !canOverrideAlphanumericInput(e.composedPath()) ||
+        !isBetaFeedbackEnabled(this.hass.config?.version)
+      ) {
+        return;
+      }
+
+      if (e.defaultPrevented) {
+        return;
+      }
+      e.preventDefault();
+
+      showBetaFeedbackDialog(this);
     }
 
     private _conversation = memoizeOne((_components) =>
