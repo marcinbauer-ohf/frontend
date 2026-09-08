@@ -5259,13 +5259,11 @@
             "ctrl": "Ctrl",
             "del": "Del",
             "targets": "Targets",
-            "select_target": "Select a target",
             "home": "Home",
             "unassigned": "Unassigned",
             "time_sun": "Time and sun",
             "recent": "Recent",
             "sort": {
-              "sort_by": "Order: {sort}",
               "common": "Common first",
               "name": "Name (A-Z)"
             },
@@ -5345,6 +5343,8 @@
               "copied_to_clipboard": "Trigger copied to clipboard",
               "cut_to_clipboard": "Trigger cut to clipboard",
               "select": "Select a trigger",
+              "select_hint": "Pick a type from the list to see the triggers it includes.",
+              "select_target_hint": "Pick an area, device, or entity to see the triggers it offers.",
               "no_items_for_target": "No triggers available for",
               "groups": {
                 "device": {
@@ -5654,6 +5654,8 @@
               "copied_to_clipboard": "Condition copied to clipboard",
               "cut_to_clipboard": "Condition cut to clipboard",
               "select": "Select a condition",
+              "select_hint": "Pick a type from the list to see the conditions it includes.",
+              "select_target_hint": "Pick an area, device, or entity to see the conditions it offers.",
               "no_items_for_target": "No conditions available for",
               "groups": {
                 "device": {
@@ -5838,6 +5840,8 @@
               "copied_to_clipboard": "Action copied to clipboard",
               "cut_to_clipboard": "Action cut to clipboard",
               "select": "Select an action",
+              "select_hint": "Pick a type from the list to see the actions it includes.",
+              "select_target_hint": "Pick an area, device, or entity to see the actions it offers.",
               "no_items_for_target": "No actions available for",
               "groups": {
                 "device_id": {

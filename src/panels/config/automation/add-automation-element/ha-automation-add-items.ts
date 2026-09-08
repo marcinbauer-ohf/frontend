@@ -1,13 +1,7 @@
 import { mdiMenuDown, mdiPlus } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
-import {
-  customElement,
-  eventOptions,
-  property,
-  query,
-  state,
-} from "lit/decorators";
+import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { repeat } from "lit/directives/repeat";
 import memoizeOne from "memoize-one";
@@ -15,7 +9,9 @@ import { fireEvent } from "../../../../common/dom/fire_event";
 import "../../../../components/ha-button";
 import "../../../../components/ha-dropdown";
 import "../../../../components/ha-dropdown-item";
+import "../../../../components/ha-empty-state";
 import "../../../../components/ha-expansion-panel";
+import "../../../../components/ha-spinner";
 import "../../../../components/ha-svg-icon";
 import "../../../../components/item/ha-list-item-button";
 import "../../../../components/list/ha-list-base";
@@ -32,10 +28,6 @@ import { getTargetIcon } from "../target/get_target_icon";
 
 type Target = [string, string | undefined, string | undefined];
 
-// Enough categories that opening them one at a time is the wrong tool. Fewer
-// than this and the button costs more room than it saves.
-const TOGGLE_ALL_MIN_SECTIONS = 4;
-
 @customElement("ha-automation-add-items")
 export class HaAutomationAddItems extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
@@ -43,14 +35,27 @@ export class HaAutomationAddItems extends LitElement {
   @property({ attribute: false }) public items?: AddAutomationElementSection[];
 
   /**
-   * The order the category is listed in. Unset leaves the list alone and
-   * renders no control — the target view has its own grouping to preserve.
+   * The order the list is in. Unset leaves the list alone and renders no
+   * control.
    */
   @property({ attribute: false }) public sort?: ElementSort;
 
+  /** Names the whole list, in the row above the ground its sections sit on. */
+  @property() public heading?: string;
+
   @property() public error?: string;
 
+  /**
+   * Items are on their way. Without it the pane shows the "pick something"
+   * state for the instant between one target and the next's list, and every
+   * pick in the tree flashes.
+   */
+  @property({ type: Boolean }) public loading = false;
+
   @property({ attribute: "select-label" }) public selectLabel!: string;
+
+  /** What picking something in the other column will put here. */
+  @property({ attribute: "select-hint" }) public selectHint?: string;
 
   @property({ attribute: "empty-label" }) public emptyLabel!: string;
 
@@ -74,8 +79,6 @@ export class HaAutomationAddItems extends LitElement {
    */
   @property({ type: Boolean }) public collapsible = false;
 
-  @state() private _itemsScrolled = false;
-
   @state() private _openSections: ReadonlySet<string> = new Set();
 
   @query(".items")
@@ -84,41 +87,66 @@ export class HaAutomationAddItems extends LitElement {
   protected willUpdate(changedProps: PropertyValues<this>) {
     super.willUpdate(changedProps);
     // A new list is a new target; nothing the user opened for the old one
-    // says anything about this one.
+    // says anything about this one. The same sections in another order is
+    // the same list, only re-sorted, and what was open stays open.
     if (changedProps.has("items") && this._openSections.size) {
-      this._openSections = new Set();
+      const previous = changedProps.get("items") as
+        AddAutomationElementSection[] | undefined;
+      const sameSections =
+        !!previous &&
+        !!this.items &&
+        previous.length === this.items.length &&
+        previous.every((section) =>
+          this.items!.some((item) => item.title === section.title)
+        );
+      if (!sameSections) {
+        this._openSections = new Set();
+      }
     }
   }
 
   protected render() {
+    // Stays up through a load: it is the row that would flash otherwise.
+    const showHeader =
+      (this.heading || this.sort) &&
+      (this.items?.length || this.loading) &&
+      !this.error;
+
     return html`
+      ${
+        // Above the ground the cards sit on, not on it: the heading names the
+        // whole list and the control orders the whole list, so neither
+        // belongs to any section that scrolls past.
+        showHeader
+          ? html`<div class="header">
+              ${this.heading}
+              ${this.sort ? this._renderSort(this.sort) : nothing}
+            </div>`
+          : nothing
+      }
       <div
         class=${classMap({
           items: true,
           blank: this.error || !this.items || !this.items.length,
           error: this.error,
-          scrolled: this._itemsScrolled,
           "with-toggle-all": this._showToggleAll,
           "ha-scrollbar": this.scrollable,
         })}
-        @scroll=${this._onItemsScroll}
       >
         ${
-          // The control orders the whole list, not the section it used to sit
-          // in: bolted to the first heading it scrolled out of reach the
-          // moment the next heading pinned over it, which on a phone is most
-          // of the time. Pinned to the top of the scrollport it stays put,
-          // and takes no height of its own so each heading rises into the
-          // same band and the two read as one row. It has to come first for
-          // sticky to hold it there, and be a span so the shadow rule below
-          // still finds a heading as its first div.
-          this.sort && this.items?.length && !this.error
-            ? html`<span class="sort-bar">${this._renderSort(this.sort)}</span>`
-            : nothing
-        }
-        ${
           !this.items && !this.error
-            ? this.selectLabel
+            ? this.loading
+              ? html`<ha-spinner></ha-spinner>`
+              : html`<ha-empty-state .heading=${this.selectLabel}>
+                  ${
+                    // Slotted rather than passed as the description: the
+                    // component centers that, and this line reads from the
+                    // start, quieter than the heading above it.
+                    this.selectHint
+                      ? html`<p class="hint">${this.selectHint}</p>`
+                      : nothing
+                  }
+                </ha-empty-state>`
             : this.error
               ? html`${this.error}
                   <div>${this._renderTarget(this.target)}</div>`
@@ -162,12 +190,7 @@ export class HaAutomationAddItems extends LitElement {
   }
 
   private get _showToggleAll() {
-    return (
-      this.collapsible &&
-      !this.error &&
-      !!this.items &&
-      this.items.length >= TOGGLE_ALL_MIN_SECTIONS
-    );
+    return this.collapsible && !this.error && !!this.items?.length;
   }
 
   private get _allOpen() {
@@ -187,7 +210,7 @@ export class HaAutomationAddItems extends LitElement {
 
     if (!this.collapsible) {
       return html`
-        <div class="items-title">${title}</div>
+        ${title ? html`<div class="items-title">${title}</div>` : nothing}
         ${this._renderItems(items)}
       `;
     }
@@ -290,10 +313,7 @@ export class HaAutomationAddItems extends LitElement {
     return html`
       <ha-dropdown class="sort" @wa-select=${this._sortSelected}>
         <ha-button slot="trigger" appearance="plain" variant="neutral" size="s">
-          ${this.hass.localize(
-            "ui.panel.config.automation.editor.sort.sort_by",
-            { sort: label(sort) }
-          )}
+          ${label(sort)}
           <ha-svg-icon slot="end" .path=${mdiMenuDown}></ha-svg-icon>
         </ha-button>
         ${(["common", "name"] as const).map(
@@ -318,12 +338,6 @@ export class HaAutomationAddItems extends LitElement {
     });
   }
 
-  @eventOptions({ passive: true })
-  private _onItemsScroll(ev) {
-    const top = ev.target.scrollTop ?? 0;
-    this._itemsScrolled = top > 0;
-  }
-
   public override scrollTo(options?: ScrollToOptions): void;
 
   public override scrollTo(x: number, y: number): void;
@@ -344,14 +358,25 @@ export class HaAutomationAddItems extends LitElement {
     css`
       :host {
         display: flex;
+        flex-direction: column;
         flex-grow: 1;
         position: relative;
-        /* The column is the ground the cards sit on: white rows on a plain
-           white pane read as one block, and the whole point of this list is
-           telling one row from the next. Same corner as the column beside
-           it, so the two read as a pair. */
-        background-color: var(--ha-color-surface-low);
         border-radius: var(--ha-border-radius-xl);
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--ha-space-2);
+        /* The same band the column beside it gives its heading, so the two
+           titles sit on one line across the gap. */
+        padding: var(--ha-space-2) var(--ha-space-2) var(--ha-space-2)
+          var(--ha-space-3);
+        /* The same whole-pixel line box the sort button gets, so the row is
+           one band whether or not the button is there. */
+        line-height: var(--ha-space-6);
+        font-weight: var(--ha-font-weight-medium);
+        color: var(--secondary-text-color);
       }
       :host([scrollable]) .items {
         overflow: auto;
@@ -361,8 +386,12 @@ export class HaAutomationAddItems extends LitElement {
         flex-direction: column;
         flex: 1;
         min-width: 0;
-        /* The scrollport is what the cards run through, so it is what has to
-           hold them inside the rounded ground. */
+        min-height: 0;
+        /* The scrollport is the ground the cards sit on: white rows on a plain
+           white pane read as one block, and the whole point of this list is
+           telling one row from the next. Same corner as the column beside
+           it, so the two read as a pair. */
+        background-color: var(--ha-color-surface-low);
         border-radius: inherit;
       }
       /* Over the end of the list, the way the target column floats its own
@@ -391,6 +420,28 @@ export class HaAutomationAddItems extends LitElement {
         line-height: var(--ha-line-height-expanded);
         justify-content: center;
       }
+      /* Most loads are done within a blink; showing a spinner for one is the
+         flash it is meant to prevent. Mounted at once, shown late: a load that
+         finishes first unmounts it before it ever appears. */
+      ha-spinner {
+        opacity: 0;
+        animation: reveal 0s linear 300ms forwards;
+      }
+      @keyframes reveal {
+        to {
+          opacity: 1;
+        }
+      }
+      ha-empty-state {
+        color: var(--primary-text-color);
+      }
+      ha-empty-state .hint {
+        margin: 0;
+        align-self: stretch;
+        text-align: start;
+        color: var(--ha-color-text-disabled);
+        font-weight: var(--ha-font-weight-medium);
+      }
 
       /* Nothing to say is not a card: the label belongs on the ground the
          cards would have been on. A failure is, though — it is the one thing
@@ -409,6 +460,11 @@ export class HaAutomationAddItems extends LitElement {
         gap: var(--ha-space-2);
         padding: 0 var(--ha-space-2);
         padding-bottom: max(var(--safe-area-inset-bottom), var(--ha-space-3));
+      }
+      /* A list with no heading over it opens the ground itself, so it takes
+         the gap a heading would have left above the first card. */
+      .items > ha-list-base:first-child {
+        padding-top: var(--ha-space-2);
       }
       .items ha-list-base ha-list-item-button {
         border-radius: var(--ha-border-radius-lg);
@@ -433,24 +489,7 @@ export class HaAutomationAddItems extends LitElement {
         flex-wrap: wrap;
       }
 
-      .sort-bar {
-        position: sticky;
-        top: 0;
-        z-index: 3;
-        /* No height of its own: the heading pinned beneath supplies the row,
-           and the button overflows down into it. */
-        height: 0;
-        overflow: visible;
-        display: flex;
-        justify-content: flex-end;
-        padding-inline-end: var(--ha-space-2);
-      }
-
       ha-dropdown.sort ha-button {
-        /* Nothing reserves space for it at the row's end — the button's width
-           follows its label, so a heading long enough to reach it would be
-           covered rather than pushed. The two headings here are short. */
-        margin-block-start: var(--ha-space-2);
         /* The heading's line box exactly, so the two sit on one line. */
         --ha-button-height: var(--ha-space-6);
         --wa-form-control-padding-inline: var(--ha-space-2);
@@ -485,6 +524,17 @@ export class HaAutomationAddItems extends LitElement {
         font-weight: var(--ha-font-weight-medium);
         color: var(--secondary-text-color);
       }
+      /* Closed, the heading is all there is of the section: a rule under it
+         says so, where an open section's cards would begin. */
+      .items ha-expansion-panel:not([expanded])::part(top) {
+        margin: 0 var(--ha-space-2);
+        border-bottom: 1px solid var(--ha-color-border-neutral-quiet);
+      }
+      .items ha-expansion-panel:not([expanded])::part(summary) {
+        /* Keeps the text where it sits when open, minus the margin above. */
+        padding-inline-start: var(--ha-space-4);
+        padding-inline-end: 0;
+      }
       .items ha-expansion-panel .count {
         color: var(--secondary-text-color);
         font-weight: var(--ha-font-weight-normal);
@@ -509,10 +559,6 @@ export class HaAutomationAddItems extends LitElement {
       }
       ha-bottom-sheet .items-title {
         padding-top: var(--ha-space-3);
-      }
-      .scrolled .items-title:first-of-type {
-        box-shadow: var(--bar-box-shadow);
-        border-bottom: 1px solid var(--ha-color-border-neutral-quiet);
       }
 
       ha-svg-icon.plus {

@@ -904,6 +904,20 @@ class DialogAddAutomationElement
                   .hass=${this.hass}
                   .items=${this._getItems()}
                   .sort=${this._sortable ? this._sort : undefined}
+                  .loading=${
+                    this._tab === "targets" &&
+                    !this._selectedGroup &&
+                    !!this._selectedTarget &&
+                    !this._targetItems &&
+                    !this._loadItemsError
+                  }
+                  .heading=${
+                    this._sortable
+                      ? this.hass.localize(
+                          `ui.panel.config.automation.editor.${automationElementType}s.name`
+                        )
+                      : undefined
+                  }
                   @element-sort-changed=${this._sortChanged}
                   .scrollable=${!this._narrow}
                   .error=${
@@ -914,7 +928,10 @@ class DialogAddAutomationElement
                       : undefined
                   }
                   .selectLabel=${this.hass.localize(
-                    `ui.panel.config.automation.editor.${this._tab === "groups" || this._selectedGroup ? `${automationElementType}s.select` : "select_target"}` as LocalizeKeys
+                    `ui.panel.config.automation.editor.${automationElementType}s.select`
+                  )}
+                  .selectHint=${this.hass.localize(
+                    `ui.panel.config.automation.editor.${automationElementType}s.${this._tab === "groups" || this._selectedGroup ? "select_hint" : "select_target_hint"}` as LocalizeKeys
                   )}
                   .emptyLabel=${this.hass.localize(
                     `ui.panel.config.automation.editor.${automationElementType}s.no_items_for_target`
@@ -1139,11 +1156,30 @@ class DialogAddAutomationElement
   // #region data
 
   /**
-   * The order is the user's to pick only in the "by type" list; the target and
-   * search views have a grouping of their own to keep.
+   * The order is the user's to pick in the "by type" and target lists; search
+   * results and blocks have an order of their own.
    */
   private get _sortable() {
-    return this._tab === "groups" && !!this._selectedGroup && !this._filter;
+    return (
+      !this._filter &&
+      this._tab !== "blocks" &&
+      (!!this._selectedGroup || this._showingTargetItems)
+    );
+  }
+
+  /**
+   * Every condition _getItems() puts ahead of the target list, loaded or on
+   * its way: the heading and order control stay up through the load.
+   */
+  private get _showingTargetItems() {
+    // A group outlives the tab it was picked in, so on the way back to "by
+    // target" the column can still be showing its sections.
+    return (
+      this._tab === "targets" &&
+      !this._filter &&
+      !this._selectedGroup &&
+      !!this._selectedTarget
+    );
   }
 
   /**
@@ -1153,19 +1189,12 @@ class DialogAddAutomationElement
    * items to leave open.
    */
   private get _collapsibleTargetItems() {
-    // Every condition _getItems() puts ahead of the target list: a group
-    // outlives the tab it was picked in, so on the way back to "by target"
-    // the column can still be showing its sections.
-    if (
-      this._tab !== "targets" ||
-      this._filter ||
-      this._selectedGroup ||
-      !this._selectedTarget ||
-      !this._targetItems
-    ) {
+    if (!this._showingTargetItems) {
       return false;
     }
-    const [targetType] = this._extractTypeAndIdFromTarget(this._selectedTarget);
+    const [targetType] = this._extractTypeAndIdFromTarget(
+      this._selectedTarget!
+    );
     return AGGREGATE_TARGET_TYPES.has(targetType);
   }
 
@@ -1185,8 +1214,34 @@ class DialogAddAutomationElement
             this._tab === "targets" &&
             this._selectedTarget &&
             this._targetItems
-          ? this._targetItems
+          ? this._sortTargetItems(
+              this._targetItems,
+              this._sort,
+              this.hass.locale.language
+            )
           : undefined;
+
+  /**
+   * The target list arrives grouped by domain and alphabetical within each;
+   * the order control reaches into every group the way it orders the "by
+   * type" list, and by name it lines the groups up too.
+   */
+  private _sortTargetItems = memoizeOne(
+    (
+      sections: AddAutomationElementSection[],
+      sort: ElementSort,
+      language: string
+    ) => {
+      const compare = compareElements(sort, language);
+      const sorted = sections.map((section) => ({
+        ...section,
+        items: [...section.items].sort(compare),
+      }));
+      return sort === "name"
+        ? sorted.sort((a, b) => stringCompare(a.title, b.title, language))
+        : sorted;
+    }
+  );
 
   private _getGroupSections(group: string) {
     const type = this._params!.type;
@@ -1201,14 +1256,10 @@ class DialogAddAutomationElement
       this._sort
     );
 
-    const title = this.hass.localize(
-      `ui.panel.config.automation.editor.${type}s.name`
-    );
-
-    // One heading either way: "Common first" is an order, not a second
-    // category, and cutting the list in two under a heading of its own said
-    // otherwise.
-    return [{ title, items }];
+    // One list, no heading of its own: the column names it above the ground
+    // the cards sit on. "Common first" is an order, not a second category,
+    // and cutting the list in two under a heading of its own said otherwise.
+    return [{ title: "", items }];
   }
 
   /**
@@ -2776,13 +2827,7 @@ class DialogAddAutomationElement
         }
         .content.column ha-automation-add-items {
           min-height: 160px;
-          /* Stacked, it is the only column on screen, so it takes all of it:
-             edge to edge, from under the header down into the sheet's own
-             bottom edge. Only the corners it does not run into are its own. */
           flex: 1 0 auto;
-          margin: 0;
-          border-end-start-radius: 0;
-          border-end-end-radius: 0;
         }
         .content.column ha-automation-add-from-target {
           overflow: clip;
@@ -2790,10 +2835,24 @@ class DialogAddAutomationElement
 
         /* Beside the other column: the gap between them is that column's own
            end margin, the rest matches it so the two panes sit alike. */
-        ha-dialog ha-automation-add-items,
-        ha-bottom-sheet ha-automation-add-items {
+        ha-dialog ha-automation-add-items {
           margin: var(--ha-space-3);
           margin-inline-start: 0;
+        }
+        /* Alone in the row (the blocks tab, or a target with no tree beside
+           it): the start margin the other column would have supplied. */
+        ha-dialog
+          ha-automation-add-from-target.hidden
+          + .groups.hidden
+          + ha-automation-add-items {
+          margin-inline-start: var(--ha-space-3);
+        }
+        /* In the sheet it is the only pane on screen, whichever tab: edge to
+           edge, from under the header down into the sheet's own bottom edge,
+           with no corners of its own to round. */
+        ha-bottom-sheet ha-automation-add-items {
+          margin: 0;
+          border-radius: 0;
         }
 
         ha-bottom-sheet .groups {
