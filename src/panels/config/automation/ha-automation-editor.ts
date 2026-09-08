@@ -1253,6 +1253,9 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
       haStyle,
       automationScriptEditorStyles,
       css`
+        hass-subpage {
+          background-color: var(--ha-color-surface-low);
+        }
         manual-automation-editor,
         blueprint-automation-editor {
           margin: 0 auto;
