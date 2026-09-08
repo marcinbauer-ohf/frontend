@@ -157,7 +157,7 @@ export class HaAutomationRowParameter extends LitElement {
       border-radius: var(--ha-border-radius-md);
       background: transparent;
       padding: 0 var(--ha-space-2);
-      color: var(--ha-color-on-neutral-normal);
+      color: var(--ha-color-text-secondary);
       border: var(--ha-border-width-sm) solid
         var(--ha-color-border-neutral-quiet);
       overflow: hidden;

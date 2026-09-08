@@ -5144,7 +5144,7 @@
             "offset_duration": "{offsetType, select, \n after {{duration} after}\n other {{duration} before}\n}",
             "timeout_duration": "with a timeout of {duration}",
             "timeout_template": "with a templated timeout",
-            "automation_behavior": "{behavior, select, \n each {each of}\n first {first of}\n all {all of}\n any {any of}\n other {}\n}",
+            "automation_behavior": "{behavior, select, \n each {each target}\n first {first target}\n all {all targets}\n any {any target}\n other {}\n}",
             "threshold_value": "{type, select, \n above {above {value}}\n below {below {value}}\n between {in range {value}}\n outside {outside range {value}}\n other {{value}}\n}",
             "inline_parameters": {
               "enable": "Edit parameters in rows",
@@ -5262,7 +5262,7 @@
             "triggers": {
               "name": "Triggers",
               "header": "When",
-              "description": "A trigger is a specific event happening in or around your home, for example: ''When the sun sets''. Any trigger added here will start your automation.",
+              "description": "Triggers start this automation when something happens.",
               "learn_more": "Learn more about triggers",
               "triggered": "Triggered",
               "add": "Add trigger",
@@ -5559,7 +5559,7 @@
             "conditions": {
               "name": "Conditions",
               "header": "And if",
-              "description": "All conditions added here need to be satisfied for the automation to run. A condition can be satisfied or not at any given time, for example: ''If {user} is home''. You can use building blocks to create more complex conditions.",
+              "description": "Conditions filter when this automation runs (optional).",
               "learn_more": "Learn more about conditions",
               "add": "Add condition",
               "empty_search": {
@@ -5750,8 +5750,8 @@
             },
             "actions": {
               "name": "Actions",
-              "header": "Then do",
-              "description": "All actions added here will be performed in sequence when the automation runs. An action usually controls one of your areas, devices, or entities, for example: 'Turn on the lights'. You can use building blocks to create more complex sequences of actions.",
+              "header": "Then",
+              "description": "Actions run each time this automation triggers.",
               "learn_more": "Learn more about actions",
               "add": "Add action",
               "empty_search": {

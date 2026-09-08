@@ -616,7 +616,7 @@ export class HaAutomationRowTargets extends LitElement {
       align-items: center;
       border-radius: var(--ha-border-radius-md);
       padding: 0 var(--ha-space-2) 0 var(--ha-space-1);
-      color: var(--ha-color-on-neutral-normal);
+      color: var(--ha-color-text-secondary);
       /*
        * A chip can be a <button>, and the UA's default buttonface then sits
        * under the tint: lighter than the card in dark mode, darker in light.

@@ -40,6 +40,7 @@ import { truncateWithEllipsis } from "../../../../common/string/truncate-with-el
 import { handleStructError } from "../../../../common/structs/handle-errors";
 import { copyToClipboard } from "../../../../common/util/copy-clipboard";
 import "../../../../components/automation/ha-automation-row";
+import "../../../../components/automation/ha-automation-collapsible";
 import type { HaAutomationRow } from "../../../../components/automation/ha-automation-row";
 import "../../../../components/automation/ha-automation-condition-live-test";
 import "../../../../components/automation/ha-automation-row-event-chip";
@@ -749,17 +750,22 @@ export default class HaAutomationActionRow extends LitElement {
             CONDITION_BUILDING_BLOCKS.includes(
               (this.action as Condition).condition
             )))
-          ? html`<ha-automation-action-editor
-              class=${this._collapsed ? "hidden" : ""}
-              .hass=${this.hass}
-              .action=${this.action}
-              .narrow=${this.narrow}
-              .disabled=${this.disabled}
-              .uiSupported=${this._uiSupported(type!)}
-              indent
-              .selected=${this._selected}
-              @value-changed=${this._onValueChange}
-            ></ha-automation-action-editor>`
+          ? html`<ha-automation-collapsible
+              .collapsed=${this._collapsed}
+              .count=${this._collapsedItemCount(blockType)}
+              @toggle-collapsed=${this._toggleCollapse}
+            >
+              <ha-automation-action-editor
+                .hass=${this.hass}
+                .action=${this.action}
+                .narrow=${this.narrow}
+                .disabled=${this.disabled}
+                .uiSupported=${this._uiSupported(type!)}
+                indent
+                .selected=${this._selected}
+                @value-changed=${this._onValueChange}
+              ></ha-automation-action-editor>
+            </ha-automation-collapsible>`
           : nothing
       }
     `;
@@ -1223,8 +1229,40 @@ export default class HaAutomationActionRow extends LitElement {
       customElements.get(`ha-automation-action-${type}`) !== undefined
   );
 
-  private _toggleCollapse() {
+  private _toggleCollapse(ev?: Event) {
+    // Nested blocks fire the same event; only the nearest row may act on it
+    ev?.stopPropagation();
     this._collapsed = !this._collapsed;
+  }
+
+  /** How many items a collapsed building block hides; 0 for anything else. */
+  private _collapsedItemCount(type: string | undefined): number {
+    const action = this.action as Record<string, unknown>;
+    const len = (value: unknown) => (ensureArray(value) ?? []).length;
+    switch (type) {
+      case "choose":
+        return len(action.choose) + (action.default ? 1 : 0);
+      case "if":
+        return len(action.then) + len(action.else);
+      case "parallel":
+        return len(action.parallel);
+      case "sequence":
+        return len(action.sequence);
+      case "wait_for_trigger":
+        return len(action.wait_for_trigger);
+      case "condition":
+        return CONDITION_BUILDING_BLOCKS.includes(
+          (this.action as Condition).condition
+        )
+          ? len(action.conditions)
+          : 0;
+      default:
+        return type?.startsWith("repeat")
+          ? len(
+              (action.repeat as Record<string, unknown> | undefined)?.sequence
+            )
+          : 0;
+    }
   }
 
   public focus() {

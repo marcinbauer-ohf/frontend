@@ -56,6 +56,16 @@ export default class HaAutomationActionEditor extends LitElement {
         })}
       >
         ${
+          this.indent
+            ? html`<button
+                class="collapse-rail"
+                tabindex="-1"
+                aria-hidden="true"
+                @click=${this._toggleCollapsed}
+              ></button>`
+            : nothing
+        }
+        ${
           yamlMode
             ? html`
                 ${
@@ -92,6 +102,11 @@ export default class HaAutomationActionEditor extends LitElement {
         }
       </div>
     `;
+  }
+
+  private _toggleCollapsed(ev: Event) {
+    ev.stopPropagation();
+    fireEvent(this, "toggle-collapsed");
   }
 
   private _onYamlChange(ev: CustomEvent) {

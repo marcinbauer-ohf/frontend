@@ -36,6 +36,7 @@ import { truncateWithEllipsis } from "../../../../common/string/truncate-with-el
 import { handleStructError } from "../../../../common/structs/handle-errors";
 import { copyToClipboard } from "../../../../common/util/copy-clipboard";
 import "../../../../components/automation/ha-automation-row";
+import "../../../../components/automation/ha-automation-collapsible";
 import type { HaAutomationRow } from "../../../../components/automation/ha-automation-row";
 import "../../../../components/automation/ha-automation-condition-live-test";
 import "../../../../components/automation/ha-automation-row-event-chip";
@@ -266,7 +267,7 @@ export default class HaAutomationConditionRow extends LitElement {
       ? this.conditionDescriptions[this.condition.condition]?.fields
       : undefined;
 
-    // Behavior qualifies the targets ("any of these lights"), so it is rendered
+    // Behavior qualifies the targets ("any target"), so it is rendered
     // immediately before them and nothing separates the two. Everything else
     // trails the targets as an independent fact.
     const behaviorParameter = this._inlineParameters ? behavior : undefined;
@@ -673,19 +674,30 @@ export default class HaAutomationConditionRow extends LitElement {
       ${
         this.optionsInSidebar &&
         CONDITION_BUILDING_BLOCKS.includes(this.condition.condition)
-          ? html`<ha-automation-condition-editor
-              class=${this._collapsed ? "hidden" : ""}
-              .hass=${this.hass}
-              .condition=${this.condition}
-              .disabled=${this.disabled}
-              .uiSupported=${this._uiSupported(
-                this._getType(this.condition, this.conditionDescriptions)
-              )}
-              indent
-              .selected=${this._selected}
-              .narrow=${this.narrow}
-              @value-changed=${this._onValueChange}
-            ></ha-automation-condition-editor>`
+          ? html`<ha-automation-collapsible
+              .collapsed=${this._collapsed}
+              .count=${
+                (
+                  ensureArray(
+                    (this.condition as { conditions?: unknown }).conditions
+                  ) ?? []
+                ).length
+              }
+              @toggle-collapsed=${this._toggleCollapse}
+            >
+              <ha-automation-condition-editor
+                .hass=${this.hass}
+                .condition=${this.condition}
+                .disabled=${this.disabled}
+                .uiSupported=${this._uiSupported(
+                  this._getType(this.condition, this.conditionDescriptions)
+                )}
+                indent
+                .selected=${this._selected}
+                .narrow=${this.narrow}
+                @value-changed=${this._onValueChange}
+              ></ha-automation-condition-editor>
+            </ha-automation-collapsible>`
           : nothing
       }
     `;
@@ -1149,7 +1161,9 @@ export default class HaAutomationConditionRow extends LitElement {
       customElements.get(`ha-automation-condition-${type}`) !== undefined
   );
 
-  private _toggleCollapse() {
+  private _toggleCollapse(ev?: Event) {
+    // Nested blocks fire the same event; only the nearest row may act on it
+    ev?.stopPropagation();
     this._collapsed = !this._collapsed;
   }
 

@@ -27,6 +27,11 @@ export const rowStyles = css`
   ha-card {
     transition: outline 0.2s;
   }
+  /* Inline, the icon would sit on a text baseline and pick up line-height,
+     making the condition badge taller than the action badge */
+  ha-condition-icon {
+    display: flex;
+  }
   .disabled-bar {
     background: var(--divider-color, #e0e0e0);
     text-align: center;
@@ -105,24 +110,59 @@ export const editorStyles = css`
 `;
 
 export const indentStyle = css`
+  /*
+   * The frame colour sits between the quiet and normal border tokens: quiet
+   * disappears on the editor's low surface and normal is too heavy. A
+   * translucent layer of the text colour rather than a neutral step, so it
+   * inverts with the theme (see the chips for the same reasoning).
+   */
+  :host {
+    --ha-automation-frame-color: rgba(var(--rgb-primary-text-color), 0.2);
+  }
   .card-content.indent,
   .selector-row,
   :host([indent]) ha-form {
+    position: relative;
     margin-inline-start: 12px;
     padding-top: 12px;
     padding-bottom: 16px;
     padding-inline-start: 16px;
     padding-inline-end: 0px;
-    border-inline-start: 2px solid var(--ha-color-border-neutral-quiet);
-    border-bottom: 2px solid var(--ha-color-border-neutral-quiet);
+    /* Transparent: the frame is drawn by ::before so its bottom line can stop
+       short of the right edge, but the borders keep the box's geometry */
+    border-inline-start: 2px solid transparent;
+    border-bottom: 2px solid transparent;
+    background-clip: padding-box;
     border-radius: var(--ha-border-radius-square);
     border-end-start-radius: var(--ha-border-radius-lg);
+  }
+  /* The frame: an L that ends where the rows' corner rounding starts, like
+     the collapsed stand-in */
+  .card-content.indent::before,
+  .selector-row::before,
+  :host([indent]) ha-form::before {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    top: 0;
+    bottom: -2px;
+    inset-inline-start: -2px;
+    inset-inline-end: var(--ha-card-border-radius, var(--ha-border-radius-lg));
+    border-inline-start: 2px solid var(--ha-automation-frame-color);
+    border-bottom: 2px solid var(--ha-automation-frame-color);
+    border-end-start-radius: var(--ha-border-radius-lg);
+    transition: border-color var(--ha-animation-duration-instant);
+  }
+  .card-content.indent.selected::before,
+  :host([selected]) .card-content.indent::before,
+  .selector-row.parent-selected::before,
+  :host([selected]) ha-form::before {
+    border-color: var(--primary-color);
   }
   .card-content.indent.selected,
   :host([selected]) .card-content.indent,
   .selector-row.parent-selected,
   :host([selected]) ha-form {
-    border-color: var(--primary-color);
     background: var(--ha-color-fill-primary-quiet-resting);
     background: linear-gradient(
       to right,
@@ -130,6 +170,48 @@ export const indentStyle = css`
       var(--ha-color-fill-primary-quiet-resting) 80%,
       rgba(var(--rgb-primary-color), 0) 100%
     );
+  }
+  /*
+   * The indent frame doubles as the collapse control, the counterpart of the
+   * collapsed stack below a folded block. The button spans the content box
+   * but only its two pseudo-elements take pointer events: wide, transparent
+   * strips centred on the vertical line and on the bottom line, so the whole
+   * frame including the corner is clickable without covering the content.
+   * Hovering paints the frame itself in the primary colour.
+   */
+  .collapse-rail {
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: none;
+    pointer-events: none;
+  }
+  .collapse-rail::before,
+  .collapse-rail::after {
+    content: "";
+    position: absolute;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  /* the vertical line: 2px border sits just outside the padding box */
+  .collapse-rail::before {
+    top: 0;
+    bottom: calc(-1 * var(--ha-space-2) - 2px);
+    inset-inline-start: calc(-1 * var(--ha-space-2) - 2px);
+    width: calc(var(--ha-space-4) + 2px);
+  }
+  /* the bottom line, corner included; reaches down through the gap to the
+     next row, like the collapsed stand-in does */
+  .collapse-rail::after {
+    inset-inline-start: calc(-1 * var(--ha-space-2) - 2px);
+    inset-inline-end: 0;
+    bottom: calc(-1 * var(--ha-space-4) - 2px);
+    height: calc(var(--ha-space-6) + 2px);
+  }
+  .card-content.indent:has(> .collapse-rail:hover)::before {
+    border-color: var(--primary-color);
   }
 `;
 

@@ -95,11 +95,11 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
       </div>
       ${
         !ensureArray(this.config.triggers)?.length
-          ? html`<p>
+          ? html`<div class="empty-state">
               ${this.hass.localize(
                 "ui.panel.config.automation.editor.triggers.description"
               )}
-            </p>`
+            </div>`
           : nothing
       }
 
@@ -125,19 +125,15 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
           ${this.hass.localize(
             "ui.panel.config.automation.editor.conditions.header"
           )}
-          <span class="small"
-            >(${this.hass.localize("ui.common.optional")})</span
-          >
         </h2>
       </div>
       ${
         !ensureArray(this.config.conditions)?.length
-          ? html`<p>
+          ? html`<div class="empty-state">
               ${this.hass.localize(
-                "ui.panel.config.automation.editor.conditions.description",
-                { user: this.hass.user?.name || "Alice" }
+                "ui.panel.config.automation.editor.conditions.description"
               )}
-            </p>`
+            </div>`
           : nothing
       }
 
@@ -167,11 +163,11 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
       </div>
       ${
         !ensureArray(this.config.actions)?.length
-          ? html`<p>
+          ? html`<div class="empty-state">
               ${this.hass.localize(
                 "ui.panel.config.automation.editor.actions.description"
               )}
-            </p>`
+            </div>`
           : nothing
       }
 
@@ -455,8 +451,18 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
       saveFabStyles,
       manualEditorStyles,
       css`
-        p {
-          margin-top: 0;
+        .empty-state {
+          display: flex;
+          align-items: center;
+          min-height: 52px;
+          padding: 0 var(--ha-space-3);
+          border-radius: var(--ha-border-radius-xl);
+          /* one step below the editor's own surface so the well still shows */
+          background: var(--ha-color-surface-lower);
+          color: var(--ha-color-text-secondary);
+          font-size: var(--ha-font-size-m);
+          box-sizing: border-box;
+          margin-bottom: var(--ha-space-4);
         }
         .header {
           display: flex;
@@ -470,12 +476,6 @@ export class HaManualAutomationEditor extends ManualEditorMixin<ManualAutomation
           flex: 1;
           margin-bottom: 8px;
         }
-        .header .small {
-          font-size: small;
-          font-weight: var(--ha-font-weight-normal);
-          line-height: 0;
-        }
-
         .description {
           margin-top: 16px;
         }

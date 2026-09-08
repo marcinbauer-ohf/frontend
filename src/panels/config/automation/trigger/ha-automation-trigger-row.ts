@@ -297,7 +297,7 @@ export default class HaAutomationTriggerRow extends LitElement {
             ?.fields
         : undefined;
 
-    // Behavior qualifies the targets ("each of these lights"), so it is rendered
+    // Behavior qualifies the targets ("each target"), so it is rendered
     // immediately before them and nothing separates the two. Everything else
     // trails the targets as an independent fact.
     const behaviorParameter = this._inlineParameters ? behavior : undefined;

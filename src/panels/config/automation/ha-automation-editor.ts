@@ -1273,6 +1273,13 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
       haStyle,
       automationScriptEditorStyles,
       css`
+        /* The editor sits on a low surface so its cards lift off the page.
+           Not the lowest: that token is the same colour as the quiet border
+           the indent frames are drawn in, which made them vanish. */
+        hass-subpage {
+          --hass-subpage-background-color: var(--ha-color-surface-low);
+        }
+
         manual-automation-editor,
         blueprint-automation-editor {
           margin: 0 auto;
