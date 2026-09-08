@@ -5290,6 +5290,7 @@
               "device": "{count} more devices..."
             },
             "load_target_items_failed": "Failed to load target items for",
+            "target_empty": "Choose {domain} targets",
             "other_areas": "Other areas",
             "services": "Services",
             "helpers": "Helpers",

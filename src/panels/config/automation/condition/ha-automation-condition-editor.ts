@@ -5,6 +5,7 @@ import memoizeOne from "memoize-one";
 import { dynamicElement } from "../../../../common/dom/dynamic-element-directive";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import "../../../../components/ha-yaml-editor";
+import "../ha-automation-element-description";
 import type { HaYamlEditor } from "../../../../components/ha-yaml-editor";
 import type { Condition } from "../../../../data/automation";
 import {
@@ -110,6 +111,16 @@ export default class HaAutomationConditionEditor extends LitElement {
                         )
                   }
                 </div>
+                ${
+                  // Integration-provided conditions render their own footer.
+                  this.inSidebar && !this.description
+                    ? html`<ha-automation-element-description
+                        .hass=${this.hass}
+                        kind="condition"
+                        .type=${condition.condition}
+                      ></ha-automation-element-description>`
+                    : nothing
+                }
               `
         }
       </div>

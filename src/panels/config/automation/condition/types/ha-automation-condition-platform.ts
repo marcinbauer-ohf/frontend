@@ -1,4 +1,4 @@
-import { mdiAlertOutline, mdiHelpCircleOutline } from "@mdi/js";
+import { mdiAlertOutline } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -10,6 +10,10 @@ import { stopPropagation } from "../../../../../common/dom/stop_propagation";
 import { getSelectorFallbackValue } from "../../../../../components/ha-form/get-selector-fallback-value";
 import "../../../../../components/ha-checkbox";
 import "../../../../../components/ha-selector/ha-selector";
+import {
+  isTargetEmpty,
+  resolveTargetKind,
+} from "../../target/ha-automation-target-empty-state";
 import "../../../../../components/ha-settings-row";
 import "../../../../../components/ha-svg-icon";
 import "../../../../../components/ha-tooltip";
@@ -191,39 +195,9 @@ export class HaPlatformCondition extends LitElement {
       : this._manifest?.documentation;
 
     return html`
-      <div class="description">
-        ${description ? html`<p>${description}</p>` : nothing}
-        ${
-          documentationLink
-            ? html`<a
-                href=${documentationLink}
-                title=${this.hass.localize(
-                  "ui.components.service-control.integration_doc"
-                )}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <ha-icon-button
-                  .path=${mdiHelpCircleOutline}
-                  class="help-icon"
-                  .label=${this.hass.localize(
-                    "ui.components.service-control.integration_doc"
-                  )}
-                ></ha-icon-button>
-              </a>`
-            : nothing
-        }
-      </div>
       ${
         conditionDesc && "target" in conditionDesc
-          ? html`<ha-selector
-              class="target-selector"
-              .hass=${this.hass}
-              .selector=${this._targetSelector(conditionDesc.target)}
-              .disabled=${this.disabled}
-              @value-changed=${this._targetChanged}
-              .value=${this.condition?.target}
-            ></ha-selector>`
+          ? this._renderTarget(conditionDesc.target, domain)
           : nothing
       }
       ${
@@ -247,6 +221,55 @@ export class HaPlatformCondition extends LitElement {
               )
             )
       }
+      ${
+        description || documentationLink
+          ? html`<div class="description">
+              <p>
+                ${description}
+                ${
+                  documentationLink
+                    ? html`<a
+                        href=${documentationLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        >${this.hass.localize(
+                          "ui.panel.config.common.learn_more"
+                        )}</a
+                      >`
+                    : nothing
+                }
+              </p>
+            </div>`
+          : nothing
+      }
+    `;
+  }
+
+  private _renderTarget(
+    filter: TargetSelector["target"] | undefined,
+    domain: string
+  ) {
+    const kind = isTargetEmpty(this.condition?.target)
+      ? resolveTargetKind(this.hass, filter, domain)
+      : undefined;
+
+    return html`
+      ${
+        kind
+          ? html`<ha-automation-target-empty-state
+              .hass=${this.hass}
+              .kind=${kind}
+            ></ha-automation-target-empty-state>`
+          : nothing
+      }
+      <ha-selector
+        class="target-selector"
+        .hass=${this.hass}
+        .selector=${this._targetSelector(filter)}
+        .disabled=${this.disabled}
+        @value-changed=${this._targetChanged}
+        .value=${this.condition?.target}
+      ></ha-selector>
     `;
   }
 
@@ -650,7 +673,15 @@ export class HaPlatformCondition extends LitElement {
       display: block;
       margin: 0 var(--ha-space-4);
     }
-    ha-selector.target-selector {
+    /* Where the picked list sits, so the first pick moves nothing. */
+    ha-automation-target-empty-state {
+      margin: var(--ha-space-2) var(--ha-space-4) 0;
+    }
+    ha-automation-target-empty-state + .target-selector {
+      border-top: none;
+      padding-top: 0;
+    }
+    .target-selector {
       display: block;
       padding: var(--ha-space-2) var(--ha-space-4);
       border-top: var(
@@ -671,19 +702,23 @@ export class HaPlatformCondition extends LitElement {
     .checkbox-spacer {
       width: 32px;
     }
-    .help-icon {
-      color: var(--secondary-text-color);
-    }
     .description {
-      justify-content: space-between;
-      display: flex;
-      align-items: center;
-      padding-right: 2px;
-      padding-inline-end: 2px;
-      padding-inline-start: initial;
+      border-top: var(
+        --service-control-items-border-top,
+        1px solid var(--divider-color)
+      );
+      color: var(--secondary-text-color);
     }
     .description p {
       direction: ltr;
+    }
+    .description a {
+      color: var(--primary-color);
+      white-space: nowrap;
+    }
+    /* Leaves the app: the link says so before it is clicked. */
+    .description a::after {
+      content: " ↗";
     }
     .clickable {
       cursor: pointer;
