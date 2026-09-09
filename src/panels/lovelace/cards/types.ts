@@ -23,7 +23,10 @@ import type {
   LovelaceCardFeaturePosition,
 } from "../card-features/types";
 import type { LegacyStateFilter } from "../common/evaluate-filter";
-import type { Condition, LegacyCondition } from "../common/validate-condition";
+import type {
+  Condition,
+  VisibilityCondition,
+} from "../common/validate-condition";
 import type { HuiImage } from "../components/hui-image";
 import type { LogbookNameDetail } from "../../logbook/logbook-entry-model";
 import type { TimestampRenderingFormat } from "../components/types";
@@ -59,7 +62,7 @@ export interface CalendarCardConfig extends LovelaceCardConfig {
 
 export interface ConditionalCardConfig extends LovelaceCardConfig {
   card: LovelaceCardConfig;
-  conditions: (Condition | LegacyCondition)[];
+  conditions: VisibilityCondition[];
 }
 
 export interface EmptyStateButtonConfig {
@@ -256,10 +259,12 @@ export interface PowerSourcesGraphCardConfig extends EnergyCardConfig {
 
 export interface EnergySankeyCardConfig extends EnergyCardSankeyConfig {
   type: "energy-sankey";
+  show_values?: boolean;
 }
 
 export interface PowerSankeyCardConfig extends EnergyCardSankeyConfig {
   type: "power-sankey";
+  show_values?: boolean;
 }
 
 export interface WaterSankeyCardConfig extends EnergyCardSankeyConfig {
@@ -269,6 +274,12 @@ export interface WaterSankeyCardConfig extends EnergyCardSankeyConfig {
 export interface WaterFlowSankeyCardConfig extends EnergyCardSankeyConfig {
   type: "water-flow-sankey";
 }
+
+export type SankeyCardConfig =
+  | EnergySankeyCardConfig
+  | PowerSankeyCardConfig
+  | WaterSankeyCardConfig
+  | WaterFlowSankeyCardConfig;
 
 export interface EntityFilterCardConfig extends LovelaceCardConfig {
   type: "entity-filter";
