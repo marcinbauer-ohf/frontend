@@ -33,6 +33,7 @@ entity_id: binary_sensor.front_door
         {
           trigger: "state",
           entity_id: "binary_sensor.front_door",
+          id: "1",
         },
       ],
     },
@@ -58,6 +59,7 @@ actions:
         {
           trigger: "state",
           entity_id: "binary_sensor.front_door",
+          id: "1",
         },
       ],
       actions: [
@@ -89,6 +91,7 @@ actions:
         {
           trigger: "state",
           entity_id: "binary_sensor.front_door",
+          id: "1",
         },
       ],
       actions: [
@@ -116,6 +119,7 @@ actions:
         {
           trigger: "state",
           entity_id: "binary_sensor.front_door",
+          id: "1",
         },
       ],
     },
@@ -187,6 +191,7 @@ actions:
         {
           trigger: "state",
           entity_id: "binary_sensor.front_door",
+          id: "1",
         },
       ],
       conditions: [
@@ -246,6 +251,7 @@ actions:
         {
           trigger: "state",
           entity_id: "binary_sensor.front_door",
+          id: "1",
         },
       ],
       conditions: ["{{ true }}"],

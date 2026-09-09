@@ -77,6 +77,24 @@ export const rowStyles = css`
     display: inline-flex;
   }
 
+  .trigger-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    box-sizing: border-box;
+    height: var(--ha-space-6);
+    min-width: var(--ha-space-6);
+    padding: 0 var(--ha-space-1);
+    border-radius: var(--ha-border-radius-pill);
+    border: var(--ha-border-width-md) dotted
+      var(--ha-color-border-neutral-normal);
+    background-color: transparent;
+    color: var(--ha-color-on-neutral-normal);
+    font-size: var(--ha-font-size-s);
+    font-weight: var(--ha-font-weight-medium);
+  }
+
   .note-indicator {
     color: var(--ha-color-on-neutral-normal);
   }

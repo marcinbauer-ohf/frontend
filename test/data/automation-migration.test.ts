@@ -29,7 +29,7 @@ describe("normalizeAutomationConfig deprecated option reporting", () => {
     );
     // Aliases are normalized...
     expect(config.triggers).toEqual([
-      { trigger: "state", entity_id: "light.kitchen" },
+      { trigger: "state", entity_id: "light.kitchen", id: "1" },
     ]);
     expect(config.actions).toEqual([{ action: "light.turn_on" }]);
     // ...but they are not deprecated options that raise a repair.

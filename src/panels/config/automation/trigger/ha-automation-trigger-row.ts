@@ -51,12 +51,19 @@ import "../../../../components/ha-svg-icon";
 import { TRIGGER_ICONS } from "../../../../components/ha-trigger-icon";
 import type {
   AutomationClipboard,
+  AutomationConfig,
   PlatformTrigger,
   Trigger,
   TriggerList,
   TriggerSidebarConfig,
 } from "../../../../data/automation";
-import { isTrigger, subscribeTrigger } from "../../../../data/automation";
+import {
+  automationConfigContext,
+  editingTriggerConditionContext,
+  flattenTriggers,
+  isTrigger,
+  subscribeTrigger,
+} from "../../../../data/automation";
 import { describeTrigger } from "../../../../data/automation_i18n";
 import { validateConfig } from "../../../../data/config";
 import { fullEntitiesContext } from "../../../../data/context";
@@ -181,6 +188,34 @@ export default class HaAutomationTriggerRow extends LitElement {
   @consume({ context: fullEntitiesContext, subscribe: true })
   _entityReg: EntityRegistryEntry[] = [];
 
+  @state()
+  @consume({ context: automationConfigContext, subscribe: true })
+  _automationConfig?: AutomationConfig;
+
+  @state()
+  @consume({ context: editingTriggerConditionContext, subscribe: true })
+  _editingTriggerCondition = false;
+
+  // 1-based position of this trigger among all triggers, shown as an index
+  // label while a "Triggered by" condition is being edited.
+  private get _triggerPosition(): number | undefined {
+    if (isTriggerList(this.trigger)) {
+      return undefined;
+    }
+    const id = (this.trigger as Exclude<Trigger, TriggerList>).id;
+    if (!id) {
+      return undefined;
+    }
+    const flattened = flattenTriggers(this._automationConfig?.triggers);
+    // Prefer object identity so duplicate IDs still get distinct positions;
+    // fall back to id match when the reference isn't in the config.
+    let index = flattened.indexOf(this.trigger);
+    if (index === -1) {
+      index = flattened.findIndex((t) => t.id === id);
+    }
+    return index === -1 ? undefined : index + 1;
+  }
+
   get selected() {
     return this._selected;
   }
@@ -250,6 +285,18 @@ export default class HaAutomationTriggerRow extends LitElement {
               .hass=${this.hass}
               .trigger=${(this.trigger as Exclude<Trigger, TriggerList>).trigger}
             ></ha-trigger-icon>`
+      }
+      ${
+        this._editingTriggerCondition && this._triggerPosition !== undefined
+          ? html`<span class="trigger-index" slot="lead" id="trigger-index"
+                >${this._triggerPosition}</span
+              >
+              <ha-tooltip slot="lead" for="trigger-index">
+                ${this.hass.localize(
+                  "ui.panel.config.automation.editor.triggers.index_tooltip"
+                )}
+              </ha-tooltip>`
+          : nothing
       }
       <h3 slot="header">
         ${capitalizeFirstLetter(

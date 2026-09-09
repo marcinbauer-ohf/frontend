@@ -27,6 +27,7 @@ import type {
   LegacyTrigger,
   Trigger,
 } from "./automation";
+import { flattenTriggers } from "./automation";
 import { getConditionDomain, getConditionObjectId } from "./condition";
 import type {
   DeviceCondition,
@@ -150,6 +151,64 @@ export interface DescribeOptions {
   // Skip the user defined alias and describe the underlying config.
   ignoreAlias?: boolean;
 }
+
+export interface TriggerInfo {
+  id: string;
+  // 1-based position of the trigger among all triggers; shown as its label.
+  position: number;
+  label: string;
+  triggerType: string;
+}
+
+export type MergedTriggerEntry = { info: TriggerInfo } | { missing: string };
+
+// Interleaves stale (deleted-trigger) ids among existing triggers by numeric
+// id, so a missing entry keeps the slot its trigger held (ids are assigned
+// incrementally, so numeric order matches creation/position order). Non-numeric
+// or higher-than-all stale ids fall through to the end.
+export const mergeStaleTriggers = (
+  triggerInfos: TriggerInfo[],
+  staleIds: string[]
+): MergedTriggerEntry[] => {
+  const remaining = [...staleIds].sort((a, b) => Number(a) - Number(b));
+  const merged: MergedTriggerEntry[] = [];
+  triggerInfos.forEach((info) => {
+    const infoNum = Number(info.id);
+    while (
+      remaining.length &&
+      Number.isInteger(infoNum) &&
+      Number(remaining[0]) < infoNum
+    ) {
+      merged.push({ missing: remaining.shift()! });
+    }
+    merged.push({ info });
+  });
+  remaining.forEach((id) => merged.push({ missing: id }));
+  return merged;
+};
+
+export const getTriggerInfos = (
+  triggers: Trigger[] | undefined,
+  hass: HomeAssistant,
+  entityRegistry: EntityRegistryEntry[]
+): TriggerInfo[] => {
+  if (!triggers) {
+    return [];
+  }
+  const infos: TriggerInfo[] = [];
+  flattenTriggers(triggers).forEach((t, index) => {
+    if (!t.id) {
+      return;
+    }
+    infos.push({
+      id: t.id,
+      position: index + 1,
+      label: describeTrigger(t, hass, entityRegistry),
+      triggerType: t.trigger,
+    });
+  });
+  return infos;
+};
 
 export const describeTrigger = (
   trigger: Trigger,

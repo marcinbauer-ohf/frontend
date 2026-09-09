@@ -53,6 +53,9 @@ export class HaAutomationRow extends LitElement {
               `
             : nothing
         }
+        <div class="lead-wrapper">
+          <slot name="lead"></slot>
+        </div>
         <div class="leading-icon-wrapper">
           <slot name="leading-icon"></slot>
         </div>
@@ -165,6 +168,14 @@ export class HaAutomationRow extends LitElement {
       padding-top: var(--ha-space-3);
       position: relative;
       z-index: 1;
+    }
+    .lead-wrapper {
+      display: flex;
+      align-items: flex-start;
+      padding-top: var(--ha-space-3);
+    }
+    ::slotted([slot="lead"].trigger-index) {
+      margin-inline-end: var(--ha-space-2);
     }
     ::slotted([slot="leading-icon"]) {
       color: var(--ha-color-on-neutral-quiet);

@@ -23,9 +23,11 @@ import {
 import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
-import { customElement, property, query } from "lit/decorators";
+import { provide } from "@lit/context";
+import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { UndoRedoController } from "../../../common/controllers/undo-redo-controller";
+import type { HASSDomEvent } from "../../../common/dom/fire_event";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { goBack, navigate } from "../../../common/navigate";
 import { promiseTimeout } from "../../../common/util/promise-timeout";
@@ -45,11 +47,14 @@ import type {
   Trigger,
 } from "../../../data/automation";
 import {
+  automationConfigContext,
   deleteAutomation,
+  editingTriggerConditionContext,
   fetchAutomationFileConfig,
   getAutomationEditorInitData,
   getAutomationStateConfig,
   normalizeAutomationConfig,
+  resolveDuplicateTriggerIds,
   saveAutomationConfig,
   showAutomationEditor,
   triggerAutomationActions,
@@ -131,6 +136,47 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
   > = {};
 
   private _configSubscriptionsId = 1;
+
+  @provide({ context: automationConfigContext })
+  @state()
+  protected config?: AutomationConfig;
+
+  @provide({ context: editingTriggerConditionContext })
+  @state()
+  protected editingTriggerCondition = false;
+
+  // Number of open "Triggered by" condition editors. Trigger index labels are
+  // shown while at least one is open.
+  private _triggerConditionEditors = 0;
+
+  private _handleTriggerConditionEditing = (
+    ev: HASSDomEvent<{ editing: boolean }>
+  ) => {
+    ev.stopPropagation();
+    this._triggerConditionEditors = Math.max(
+      0,
+      this._triggerConditionEditors + (ev.detail.editing ? 1 : -1)
+    );
+    this.editingTriggerCondition = this._triggerConditionEditors > 0;
+  };
+
+  private _handleFixDuplicateTriggerIds = (ev: HASSDomEvent<undefined>) => {
+    ev.stopPropagation();
+    if (!this.config || this.readOnly) {
+      return;
+    }
+    const newConfig = resolveDuplicateTriggerIds(this.config);
+    if (newConfig === this.config) {
+      return;
+    }
+    this._undoRedoController.commit(this.config);
+    this.config = newConfig;
+    this._updateDirtyState({
+      config: this.config,
+      entityRegistryUpdate: this.entityRegistryUpdate,
+    });
+    this.errors = undefined;
+  };
 
   private _newAutomationId?: string;
 
@@ -220,6 +266,10 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
           this.config.alias ||
           this.hass.localize("ui.panel.config.automation.editor.default_name")
         }
+        @trigger-condition-editing-changed=${
+          this._handleTriggerConditionEditing
+        }
+        @fix-duplicate-trigger-ids=${this._handleFixDuplicateTriggerIds}
       >
         ${
           this.mode === "gui" && !this.narrow

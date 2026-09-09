@@ -8,6 +8,7 @@ import type {
   Trigger,
   TriggerList,
 } from "./automation";
+import { flattenTriggers } from "./automation";
 import type { Selector, TargetSelector } from "./selector";
 
 export const TRIGGER_COLLECTIONS: AutomationElementGroupCollection[] = [
@@ -56,6 +57,11 @@ export const TRIGGER_COLLECTIONS: AutomationElementGroupCollection[] = [
 
 export const isTriggerList = (trigger: Trigger): trigger is TriggerList =>
   "triggers" in trigger;
+
+export const getTriggerIds = (triggers: Trigger[]): string[] =>
+  flattenTriggers(triggers)
+    .map((trigger) => trigger.id)
+    .filter((id): id is string => !!id);
 
 export interface TriggerDescription {
   target?: TargetSelector["target"];

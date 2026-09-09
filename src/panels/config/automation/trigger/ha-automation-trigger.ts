@@ -6,12 +6,15 @@ import type { PropertyValues } from "lit";
 import { html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { repeat } from "lit/directives/repeat";
+import { ensureArray } from "../../../../common/array/ensure-array";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import { stopPropagation } from "../../../../common/dom/stop_propagation";
 import "../../../../components/ha-button";
 import "../../../../components/ha-sortable";
 import "../../../../components/ha-svg-icon";
 import {
+  ensureTriggerIds,
+  flattenTriggers,
   getValueFromDynamic,
   isDynamic,
   type Trigger,
@@ -59,6 +62,47 @@ export default class HaAutomationTrigger extends AutomationSortableListMixin<Tri
 
   protected setHighlightedItems(items: Trigger[]) {
     this.highlightedTriggers = items;
+  }
+
+  // Strips any IDs off a cloned trigger (and its nested triggers) and assigns
+  // fresh stable IDs, so a duplicated or pasted trigger never reuses the
+  // source's ID and gets its own handle for "Triggered by" conditions.
+  private _withFreshIds(trigger: Trigger): Trigger {
+    flattenTriggers(trigger).forEach((t) => {
+      delete t.id;
+    });
+    ensureTriggerIds([...this.triggers, trigger]);
+    return trigger;
+  }
+
+  protected override pasteItem(ev: CustomEvent) {
+    if (this.root && ev.detail.item) {
+      ev.detail.item = this._withFreshIds(deepClone(ev.detail.item) as Trigger);
+    }
+    super.pasteItem(ev);
+  }
+
+  protected override insertAfter(ev: CustomEvent) {
+    // Only dedupe when a single trigger is being inserted.
+    const incoming = ensureArray(ev.detail.value) as Trigger[];
+    if (this.root && incoming.length === 1) {
+      ev.detail.value = this._withFreshIds(deepClone(incoming[0]));
+    }
+    super.insertAfter(ev);
+  }
+
+  protected override duplicateItem(ev: CustomEvent) {
+    if (this.root) {
+      const index = (ev.target as any).index;
+      const duplicated = this._withFreshIds(deepClone(this.triggers[index]));
+      fireEvent(this, "value-changed", {
+        // @ts-expect-error Requires library bump to ES2023
+        value: this.triggers.toSpliced(index + 1, 0, duplicated),
+      });
+      ev.stopPropagation();
+      return;
+    }
+    super.duplicateItem(ev);
   }
 
   protected firstUpdated(changedProps: PropertyValues<this>) {
@@ -166,23 +210,28 @@ export default class HaAutomationTrigger extends AutomationSortableListMixin<Tri
   private _addTrigger = (value: string, target?: HassServiceTarget) => {
     let triggers: Trigger[];
     if (value === PASTE_VALUE) {
-      triggers = this.triggers.concat(deepClone(this._clipboard!.trigger!));
-    } else if (isDynamic(value)) {
-      triggers = this.triggers.concat({
-        trigger: getValueFromDynamic(value),
-        target,
-      });
+      const pasted = this._withFreshIds(deepClone(this._clipboard!.trigger!));
+      triggers = this.triggers.concat(pasted);
     } else {
-      const trigger = value as Exclude<Trigger, TriggerList>["trigger"];
-      const elClass = customElements.get(
-        `ha-automation-trigger-${trigger}`
-      ) as CustomElementConstructor & {
-        defaultConfig: Trigger;
-      };
-      triggers = this.triggers.concat({
-        ...elClass.defaultConfig,
-        ...(target?.entity_id ? { entity_id: target.entity_id } : {}),
-      });
+      let newTrigger: Trigger;
+      if (isDynamic(value)) {
+        newTrigger = {
+          trigger: getValueFromDynamic(value),
+          target,
+        };
+      } else {
+        const trigger = value as Exclude<Trigger, TriggerList>["trigger"];
+        const elClass = customElements.get(
+          `ha-automation-trigger-${trigger}`
+        ) as CustomElementConstructor & {
+          defaultConfig: Trigger;
+        };
+        newTrigger = {
+          ...elClass.defaultConfig,
+          ...(target?.entity_id ? { entity_id: target.entity_id } : {}),
+        };
+      }
+      triggers = this.triggers.concat(this._withFreshIds(newTrigger));
     }
     this.focusLastItemOnChange = true;
     fireEvent(this, "value-changed", { value: triggers });

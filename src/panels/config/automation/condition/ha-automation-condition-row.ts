@@ -16,13 +16,14 @@ import {
   mdiPlaylistEdit,
   mdiPlusCircleMultipleOutline,
   mdiRenameBox,
+  mdiLinkVariantOff,
   mdiStopCircleOutline,
 } from "@mdi/js";
 import deepClone from "deep-clone-simple";
 import type { HassServiceTarget } from "home-assistant-js-websocket";
 import { dump } from "js-yaml";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
-import { LitElement, html, nothing } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import memoizeOne from "memoize-one";
@@ -48,13 +49,25 @@ import "../../../../components/ha-dropdown-item";
 import "../../../../components/ha-expansion-panel";
 import "../../../../components/ha-icon-button";
 import "../../../../components/ha-tooltip";
+import "../../../../components/ha-trigger-icon";
 import type {
   AutomationClipboard,
+  AutomationConfig,
   Condition,
   ConditionSidebarConfig,
+  TriggerCondition,
 } from "../../../../data/automation";
-import { isCondition, testCondition } from "../../../../data/automation";
-import { describeCondition } from "../../../../data/automation_i18n";
+import {
+  automationConfigContext,
+  editingTriggerConditionContext,
+  isCondition,
+  testCondition,
+} from "../../../../data/automation";
+import {
+  describeCondition,
+  getTriggerInfos,
+  mergeStaleTriggers,
+} from "../../../../data/automation_i18n";
 import type { ConditionDescriptions } from "../../../../data/condition";
 import { CONDITION_BUILDING_BLOCKS } from "../../../../data/condition";
 import {
@@ -148,6 +161,20 @@ export default class HaAutomationConditionRow extends LitElement {
 
   @state() private _selected = false;
 
+  @state() private _expanded = false;
+
+  // Tracks the last value broadcast via "trigger-condition-editing-changed",
+  // so we only fire on real changes.
+  private _triggerEditingSignalled = false;
+
+  @state()
+  @consume({ context: automationConfigContext, subscribe: true })
+  private _automationConfig?: AutomationConfig;
+
+  @state()
+  @consume({ context: editingTriggerConditionContext, subscribe: true })
+  private _editingTriggerCondition = false;
+
   @state()
   @consume({ context: fullEntitiesContext, subscribe: true })
   _entityReg: EntityRegistryEntry[] = [];
@@ -227,9 +254,15 @@ export default class HaAutomationConditionRow extends LitElement {
             </div>`
       }
       <h3 slot="header">
-        ${capitalizeFirstLetter(
-          describeCondition(this.condition, this.hass, this._entityReg)
-        )}
+        ${
+          this.condition.condition === "trigger"
+            ? this._renderTriggerConditionDescription(
+                this.condition as TriggerCondition
+              )
+            : capitalizeFirstLetter(
+                describeCondition(this.condition, this.hass, this._entityReg)
+              )
+        }
         ${
           this._getType(this.condition, this.conditionDescriptions) ===
           "platform"
@@ -625,6 +658,8 @@ export default class HaAutomationConditionRow extends LitElement {
 
   private _getDeviceTarget = memoizeOne(getDeviceTarget);
 
+  private _getTriggerInfos = memoizeOne(getTriggerInfos);
+
   private _getTarget(
     descriptionHasTarget: boolean,
     hasEntityTarget: boolean
@@ -643,6 +678,83 @@ export default class HaAutomationConditionRow extends LitElement {
       return this._getDeviceTarget(this.condition.device_id);
     }
     return undefined;
+  }
+
+  private _renderTriggerConditionDescription(condition: TriggerCondition) {
+    const ids = ensureArray(condition.id ?? []).filter((id) => id !== "");
+    const prefix = capitalizeFirstLetter(
+      this.hass
+        .localize(
+          "ui.panel.config.automation.editor.conditions.type.trigger.description.full",
+          { id: "" }
+        )
+        .trim()
+    );
+    if (!ids.length) {
+      return html`${prefix}
+        <div class="trigger warning">
+          ${this.hass.localize(
+            "ui.panel.config.automation.editor.conditions.type.trigger.description.no_trigger"
+          )}
+        </div>`;
+    }
+
+    const triggers = ensureArray(this._automationConfig?.triggers || []);
+
+    const triggerInfos = this._getTriggerInfos(
+      triggers,
+      this.hass,
+      this._entityReg
+    );
+    const selectedIds = new Set(ids.map(String));
+    const availableIds = new Set(triggerInfos.map((info) => info.id));
+    // Selected ids that no longer match any existing trigger (deleted trigger).
+    const staleIds = [
+      ...new Set(ids.map(String).filter((id) => id && !availableIds.has(id))),
+    ];
+    // Match by id against every trigger, so legacy automations where several
+    // triggers share the same id render one chip per matching trigger. Missing
+    // entries are interleaved by id so each keeps its deleted trigger's slot.
+    const selectedInfos = triggerInfos.filter((info) =>
+      selectedIds.has(info.id)
+    );
+    return html`${prefix}
+    ${mergeStaleTriggers(selectedInfos, staleIds).map((entry) =>
+      "missing" in entry
+        ? html`
+            <div class="trigger warning">
+              <ha-svg-icon .path=${mdiLinkVariantOff}></ha-svg-icon>
+              <span>
+                ${this.hass.localize(
+                  "ui.panel.config.automation.editor.conditions.type.trigger.missing_trigger"
+                )}
+              </span>
+            </div>
+          `
+        : html`
+            <div class="trigger">
+              ${
+                this._editingTriggerCondition
+                  ? html`<span
+                        class="trigger-index"
+                        id=${`trigger-index-${entry.info.position}`}
+                        >${entry.info.position}</span
+                      >
+                      <ha-tooltip for=${`trigger-index-${entry.info.position}`}>
+                        ${this.hass.localize(
+                        "ui.panel.config.automation.editor.triggers.index_tooltip"
+                      )}
+                      </ha-tooltip>`
+                  : nothing
+              }
+              <ha-trigger-icon
+                .hass=${this.hass}
+                .trigger=${entry.info.triggerType}
+              ></ha-trigger-icon>
+              <span>${entry.info.label}</span>
+            </div>
+          `
+    )}`;
   }
 
   private _renderTargets = memoizeOne(
@@ -675,10 +787,37 @@ export default class HaAutomationConditionRow extends LitElement {
     }
   }
 
+  protected updated() {
+    this._updateTriggerEditingSignal();
+  }
+
+  // A "Triggered by" condition is being edited when its editor is open: in
+  // sidebar mode that means the row is selected, inline it means expanded.
+  private get _isEditingTriggerCondition(): boolean {
+    return (
+      this.condition.condition === "trigger" &&
+      (this.optionsInSidebar ? this._selected : this._expanded)
+    );
+  }
+
+  // Broadcasts whether a "Triggered by" condition is being edited, so trigger
+  // index labels only appear while one is.
+  private _updateTriggerEditingSignal() {
+    const editing = this._isEditingTriggerCondition;
+    if (editing !== this._triggerEditingSignalled) {
+      this._triggerEditingSignalled = editing;
+      fireEvent(this, "trigger-condition-editing-changed", { editing });
+    }
+  }
+
   public disconnectedCallback() {
     super.disconnectedCallback();
     if (this._testingTimeout !== undefined) {
       clearTimeout(this._testingTimeout);
+    }
+    if (this._triggerEditingSignalled) {
+      this._triggerEditingSignalled = false;
+      fireEvent(this, "trigger-condition-editing-changed", { editing: false });
     }
   }
 
@@ -999,6 +1138,7 @@ export default class HaAutomationConditionRow extends LitElement {
   }
 
   private _expansionPanelChanged(ev: CustomEvent) {
+    this._expanded = ev.detail.expanded;
     if (!ev.detail.expanded) {
       this._isNew = false;
     }
@@ -1127,12 +1267,38 @@ export default class HaAutomationConditionRow extends LitElement {
   }
 
   static get styles(): CSSResultGroup {
-    return [rowStyles, overflowStyles];
+    return [
+      rowStyles,
+      overflowStyles,
+      css`
+        .trigger {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+          background-color: var(--ha-color-fill-neutral-normal-resting);
+          border-radius: var(--ha-border-radius-md);
+          padding: var(--ha-space-1) var(--ha-space-2);
+          color: var(--ha-color-on-neutral-normal);
+        }
+        .trigger ha-trigger-icon,
+        .trigger .trigger-index {
+          flex: none;
+          align-self: flex-start;
+        }
+        .trigger.warning {
+          background-color: var(--ha-color-fill-warning-normal-resting);
+          color: var(--ha-color-on-warning-normal);
+        }
+      `,
+    ];
   }
 }
 
 declare global {
   interface HTMLElementTagNameMap {
     "ha-automation-condition-row": HaAutomationConditionRow;
+  }
+  interface HASSDomEvents {
+    "trigger-condition-editing-changed": { editing: boolean };
   }
 }

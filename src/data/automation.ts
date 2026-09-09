@@ -1,3 +1,5 @@
+import { createContext } from "@lit/context";
+import deepClone from "deep-clone-simple";
 import type {
   Connection,
   HassEntityAttributeBase,
@@ -301,7 +303,7 @@ export interface TemplateCondition extends BaseCondition {
 
 export interface TriggerCondition extends BaseCondition {
   condition: "trigger";
-  id: string;
+  id: string | string[];
 }
 
 type ShorthandBaseCondition = Omit<BaseCondition, "condition">;
@@ -471,6 +473,7 @@ export const migrateAutomationConfig = <
 
   if (config.triggers) {
     config.triggers = migrateAutomationTrigger(config.triggers, report);
+    ensureTriggerIds(config.triggers);
   }
 
   if (config.actions) {
@@ -559,14 +562,134 @@ export const migrateAutomationTrigger = (
   return trigger;
 };
 
+// Trigger IDs are auto-generated, hidden from the user, and stable for the
+// lifetime of a trigger. They are numeric strings that never get reused, so a
+// "Triggered by" condition keeps pointing at the same trigger across reorders
+// and deletions.
+//
+// `ensureTriggerIds` assigns a stable ID (max existing numeric ID + 1) to every
+// trigger that doesn't have one yet, mutating the triggers in place. Triggers
+// that already carry an ID keep it, so existing references stay valid.
+export const ensureTriggerIds = (triggers: Trigger | Trigger[]): void => {
+  const flat = flattenTriggers(triggers);
+  let max = 0;
+  for (const t of flat) {
+    const num = Number(t.id);
+    if (t.id && Number.isInteger(num) && num > max) {
+      max = num;
+    }
+  }
+  for (const t of flat) {
+    if (!t.id) {
+      max += 1;
+      t.id = String(max);
+    }
+  }
+};
+
+// Walks the whole config graph and, for every "Triggered by" condition, remaps
+// its referenced trigger id(s) through `remap` (oldId -> [ids that now
+// represent that group]), de-duplicating while preserving order.
+const remapTriggerConditionIds = (
+  node: unknown,
+  remap: Map<string, string[]>
+): void => {
+  if (Array.isArray(node)) {
+    node.forEach((child) => remapTriggerConditionIds(child, remap));
+    return;
+  }
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  const obj = node as Record<string, any>;
+  if (obj.condition === "trigger" && obj.id != null) {
+    const seen = new Set<string>();
+    const newIds: string[] = [];
+    for (const oldId of ensureArray(obj.id).map(String)) {
+      for (const id of remap.get(oldId) ?? [oldId]) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          newIds.push(id);
+        }
+      }
+    }
+    obj.id = newIds;
+  }
+  Object.keys(obj).forEach((key) => remapTriggerConditionIds(obj[key], remap));
+};
+
+// Resolves triggers that share the same ID by keeping the ID on the first one
+// and assigning fresh auto-generated IDs to the rest, then updating every
+// "Triggered by" condition that referenced the shared ID to reference all the
+// triggers that used to share it — so the automation keeps behaving the same.
+// Returns the config unchanged (same reference) when there are no duplicates.
+export const resolveDuplicateTriggerIds = (
+  config: AutomationConfig
+): AutomationConfig => {
+  if (!("triggers" in config)) {
+    return config;
+  }
+  const counts = new Map<string, number>();
+  for (const t of flattenTriggers(config.triggers)) {
+    if (t.id) {
+      counts.set(t.id, (counts.get(t.id) ?? 0) + 1);
+    }
+  }
+  if (![...counts.values()].some((count) => count > 1)) {
+    return config;
+  }
+
+  const newConfig = deepClone(config) as ManualAutomationConfig;
+  const flat = flattenTriggers(newConfig.triggers);
+
+  let max = 0;
+  for (const t of flat) {
+    const num = Number(t.id);
+    if (t.id && Number.isInteger(num) && num > max) {
+      max = num;
+    }
+  }
+
+  const byId = new Map<string, Exclude<Trigger, TriggerList>[]>();
+  for (const t of flat) {
+    if (t.id) {
+      const group = byId.get(t.id);
+      if (group) {
+        group.push(t);
+      } else {
+        byId.set(t.id, [t]);
+      }
+    }
+  }
+
+  const remap = new Map<string, string[]>();
+  byId.forEach((group, id) => {
+    if (group.length < 2) {
+      return;
+    }
+    // First trigger keeps the shared id; the rest get fresh unique ids.
+    const ids = [id];
+    for (let i = 1; i < group.length; i++) {
+      max += 1;
+      group[i].id = String(max);
+      ids.push(String(max));
+    }
+    remap.set(id, ids);
+  });
+
+  remapTriggerConditionIds(newConfig, remap);
+
+  return newConfig;
+};
+
 export const flattenTriggers = (
   triggers: undefined | Trigger | Trigger[]
-): Trigger[] => {
+): Exclude<Trigger, TriggerList>[] => {
   if (!triggers) {
     return [];
   }
 
-  const flatTriggers: Trigger[] = [];
+  const flatTriggers: Exclude<Trigger, TriggerList>[] = [];
 
   ensureArray(triggers).forEach((t) => {
     if ("triggers" in t) {
@@ -770,3 +893,13 @@ export interface ShowAutomationEditorParams {
   data?: Partial<AutomationConfig>;
   expanded?: boolean;
 }
+
+export const automationConfigContext = createContext<
+  AutomationConfig | undefined
+>("automationConfig");
+
+// True while a "Triggered by" condition is being edited. Trigger index labels
+// are only shown in that context, so users can map a trigger to its position.
+export const editingTriggerConditionContext = createContext<boolean>(
+  "editingTriggerCondition"
+);
