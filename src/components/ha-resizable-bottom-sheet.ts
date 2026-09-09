@@ -1,6 +1,6 @@
 import type { PropertyValues } from "lit";
 import { css, html, LitElement } from "lit";
-import { customElement, query, state } from "lit/decorators";
+import { customElement, property, query, state } from "lit/decorators";
 import { fireEvent } from "../common/dom/fire_event";
 import { BOTTOM_SHEET_ANIMATION_DURATION_MS } from "./ha-bottom-sheet";
 
@@ -16,6 +16,13 @@ import { BOTTOM_SHEET_ANIMATION_DURATION_MS } from "./ha-bottom-sheet";
  * @cssprop --ha-bottom-sheet-border-width - Border width for the sheet
  * @cssprop --ha-bottom-sheet-border-style - Border style for the sheet
  * @cssprop --ha-bottom-sheet-border-color - Border color for the sheet
+ * @cssprop --ha-bottom-sheet-handle-grab-extension - How far below the handle
+ *   bar the drag area reaches (default 76px). Lower it when the sheet content
+ *   has controls near the top.
+ *
+ * @attr {number} open-height - Height the sheet opens at, as a percentage of
+ *   the viewport. Omit to size to the content, clamped to 55%-70%. Either way
+ *   the sheet can then be dragged between 20% and 90%.
  */
 @customElement("ha-resizable-bottom-sheet")
 export class HaResizableBottomSheet extends LitElement {
@@ -26,6 +33,9 @@ export class HaResizableBottomSheet extends LitElement {
   private _dragStartY = 0;
 
   private _initialSize = 0;
+
+  @property({ type: Number, attribute: "open-height" })
+  public openHeight?: number;
 
   @state() private _dialogMaxViewpointHeight = 70;
 
@@ -63,6 +73,12 @@ export class HaResizableBottomSheet extends LitElement {
   }
 
   private _openSheet() {
+    if (this.openHeight !== undefined) {
+      // Pin both bounds so the sheet opens at exactly this height; they are
+      // relaxed for dragging once the opening animation is done.
+      this._dialogMaxViewpointHeight = this.openHeight;
+      this._dialogMinViewpointHeight = this.openHeight;
+    }
     requestAnimationFrame(() => {
       // trigger opening animation
       this._dialog.classList.add("show");
@@ -201,7 +217,10 @@ export class HaResizableBottomSheet extends LitElement {
       justify-content: center;
       align-items: center;
       z-index: 7;
-      padding-bottom: 76px;
+      /* The handle sits above the sheet content, so anything the content puts
+         near the top is only reachable outside this grab area. Sheets that
+         start with controls at the very top can shrink it. */
+      padding-bottom: var(--ha-bottom-sheet-handle-grab-extension, 76px);
     }
     .handle-wrapper .handle::after {
       content: "";

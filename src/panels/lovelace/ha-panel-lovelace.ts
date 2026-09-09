@@ -397,6 +397,7 @@ export class LovelacePanel extends LitElement {
       mode,
       urlPath: this.urlPath,
       editMode: this.lovelace ? this.lovelace.editMode : false,
+      staged: false,
       locale: this.hass!.locale,
       enableFullEditMode: () => {
         if (!editorLoaded) {
@@ -430,26 +431,39 @@ export class LovelacePanel extends LitElement {
 
         this._updateLovelace({ editMode });
       },
+      stageConfig: async (newConfig: LovelaceRawConfig): Promise<void> => {
+        newConfig = this._checkLovelaceConfig(newConfig);
+        this._updateLovelace({
+          config: await this._resolveLovelaceConfig(newConfig),
+          rawConfig: newConfig,
+          mode: "storage",
+          staged: true,
+        });
+      },
+      // Reads the panel's current lovelace rather than the captured one, so a
+      // just-staged change is included even before callers see it.
+      saveStagedConfig: async (): Promise<void> => {
+        if (!this.lovelace!.staged) {
+          return;
+        }
+        await this.lovelace!.saveConfig(this.lovelace!.rawConfig);
+      },
       saveConfig: async (newConfig: LovelaceRawConfig): Promise<void> => {
         const {
           config: previousConfig,
           rawConfig: previousRawConfig,
           mode: previousMode,
+          staged: previousStaged,
         } = this.lovelace!;
         newConfig = this._checkLovelaceConfig(newConfig);
-        let conf: LovelaceConfig;
-        // If strategy defined, apply it here.
-        if (isStrategyDashboard(newConfig)) {
-          conf = await generateLovelaceDashboardStrategy(newConfig, this.hass!);
-        } else {
-          conf = newConfig;
-        }
+        const conf = await this._resolveLovelaceConfig(newConfig);
         try {
           // Optimistic update
           this._updateLovelace({
             config: conf,
             rawConfig: newConfig,
             mode: "storage",
+            staged: false,
           });
           this._ignoreNextUpdateEvent = true;
           await saveConfig(this.hass!, urlPath, newConfig);
@@ -461,6 +475,7 @@ export class LovelacePanel extends LitElement {
             config: previousConfig,
             rawConfig: previousRawConfig,
             mode: previousMode,
+            staged: previousStaged,
           });
           throw err;
         }
@@ -497,6 +512,16 @@ export class LovelacePanel extends LitElement {
       },
       showToast: (params: ShowToastParams) => showToast(this, params),
     };
+  }
+
+  private async _resolveLovelaceConfig(
+    rawConfig: LovelaceRawConfig
+  ): Promise<LovelaceConfig> {
+    // If strategy defined, apply it here.
+    if (isStrategyDashboard(rawConfig)) {
+      return generateLovelaceDashboardStrategy(rawConfig, this.hass!);
+    }
+    return rawConfig;
   }
 
   private _generateDefaultConfig = memoizeOne(

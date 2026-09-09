@@ -1,76 +1,37 @@
-/* eslint-disable -- FOR TESTING ONLY: tile card editor concept comparison; not for merge */
-import { LitElement, html, css, nothing, render } from "lit";
+/* eslint-disable -- FOR TESTING ONLY: redesigned tile card editor; not for merge */
+import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import type {
-  ConceptId,
   ConfigChangedEvent,
   HomeAssistant,
   TileCardLabConfig,
 } from "./tile-card-lab-types";
-import { CONCEPTS } from "./tile-card-lab-types";
 import "./tile-lab-concept-a";
-import "./tile-lab-concept-b";
-import "./tile-lab-concept-c";
-// Reused HA controls / sub-editors (registered so the concepts can render them).
-import "../../../../components/ha-form/ha-form";
-import "../../../../components/ha-switch";
-import "./hui-card-features-editor";
-import "./hui-tile-card-editor";
-import "../card-editor/hui-card-visibility-editor";
-import "../card-editor/hui-card-layout-editor";
 
+// Thin adapter between HA's card-editor contract (setConfig + config-changed)
+// and the concept, which takes a plain `config` property. It also owns the two
+// changes that have to happen outside our own shadow root: hiding HA's stock
+// tab group, and sizing the dialog.
 @customElement("tile-card-lab-editor")
 export class TileCardLabEditor extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
 
   @state() private _config?: TileCardLabConfig;
 
-  // True once the A/B/C switcher has been injected into the dialog header;
-  // until then we show an in-body fallback switcher.
-  @state() private _headerReady = false;
+  // Keep a reference to each style element we inject elsewhere. By the time
+  // disconnectedCallback runs this element is already detached, so walking back
+  // up to the dialog no longer works — anything we tried to re-find at that
+  // point would silently leak (HA's tabs staying hidden, the dialog stuck at
+  // our height, and so on).
+  private _editorRootStyle?: HTMLStyleElement;
 
-  // The concept is a GLOBAL testing preference, never written to the tile config.
-  private static _CONCEPT_KEY = "tcl_concept";
-
-  private _headerContainer?: HTMLElement;
-
-  // Everything below is something we mutate OUTSIDE our own shadow root. Keep a
-  // reference to each one, because by the time disconnectedCallback runs this
-  // element is already detached — walking back up to the dialog no longer works,
-  // so anything we tried to re-find at that point would silently leak (HA's
-  // tabs staying hidden, the dialog stuck at our height, and so on).
-  private _hideTabsStyle?: HTMLStyleElement;
-
-  private _stickyPreviewStyle?: HTMLStyleElement;
-
-  private _sizedDialog?: HTMLElement;
-
-  // Reused stock tile editor instance for the "Control" option.
-  private _controlEl?: HTMLElement & {
-    hass?: HomeAssistant;
-    setConfig?: (config: TileCardLabConfig) => void;
-  };
-
-  private _lastControlConfig?: TileCardLabConfig;
+  private _dialogSizeStyle?: HTMLStyleElement;
 
   public setConfig(config: TileCardLabConfig): void {
     this._config = config;
   }
 
-  private get _concept(): ConceptId {
-    const stored = localStorage.getItem(TileCardLabEditor._CONCEPT_KEY);
-    return CONCEPTS.some((c) => c.id === stored) ? (stored as ConceptId) : "a";
-  }
-
-  private _selectConcept(concept: ConceptId): void {
-    if (concept === this._concept) {
-      return;
-    }
-    localStorage.setItem(TileCardLabEditor._CONCEPT_KEY, concept);
-    this.requestUpdate();
-  }
-
-  private _conceptChanged(ev: ConfigChangedEvent): void {
+  private _configChanged(ev: ConfigChangedEvent): void {
     ev.stopPropagation();
     this._config = ev.detail.config;
     this.dispatchEvent(
@@ -91,102 +52,75 @@ export class TileCardLabEditor extends LitElement {
       : undefined;
   }
 
-  // ---- dialog surgery: hide HA's tabs + inject the switcher into the header --
+  // ---- dialog surgery -------------------------------------------------------
 
   protected firstUpdated(): void {
-    this._applyStockTabs();
+    this._applyEditorRootStyle();
   }
 
   protected updated(): void {
-    this._applyStockTabs();
-    this._injectHeaderSwitcher();
-    this._matchDialogSize();
-    this._applyStickyPreview();
-  }
-
-  // Concept C: keep the card preview pinned to the side while the editor
-  // content scrolls. Only C wants this, so add/remove per active concept.
-  private _applyStickyPreview(): void {
-    const root = this._findDialog()?.shadowRoot;
-    if (!root) {
-      return;
-    }
-    const existing =
-      this._stickyPreviewStyle ?? root.getElementById("tcl-sticky-preview");
-    if (this._concept === "c") {
-      if (!existing) {
-        const style = document.createElement("style");
-        style.id = "tcl-sticky-preview";
-        style.textContent =
-          ".element-preview{position:sticky;top:0;align-self:flex-start;}";
-        root.appendChild(style);
-        this._stickyPreviewStyle = style;
-      }
-    } else {
-      existing?.remove();
-      this._stickyPreviewStyle = undefined;
-    }
+    this._applyEditorRootStyle();
+    this._applyDialogSize();
   }
 
   public disconnectedCallback(): void {
     super.disconnectedCallback();
-    // Undo every outside-our-shadow change through its stored reference. We
-    // cannot look any of it up again here: this element is already detached, so
-    // _findDialog() can no longer walk up to the dialog. If the editor is
-    // unloaded while the dialog stays open (switching card type, or Control's
-    // own tabs remounting it), re-finding would fail and leave HA's tabs hidden
-    // and the dialog pinned to our height.
-    this._headerContainer?.remove();
-    this._headerContainer = undefined;
-    this._headerReady = false;
+    // Undo every outside-our-shadow change through its stored reference; see
+    // the note on the fields above for why we cannot look them up again here.
+    this._editorRootStyle?.remove();
+    this._editorRootStyle = undefined;
 
-    this._hideTabsStyle?.remove();
-    this._hideTabsStyle = undefined;
-
-    this._stickyPreviewStyle?.remove();
-    this._stickyPreviewStyle = undefined;
-
-    this._sizedDialog?.style.removeProperty("--ha-dialog-min-height");
-    this._sizedDialog?.style.removeProperty("--ha-dialog-max-height");
-    this._sizedDialog = undefined;
+    this._dialogSizeStyle?.remove();
+    this._dialogSizeStyle = undefined;
   }
 
-  // Match the "Add card" dialog's fixed size + position: it pins ha-dialog to
-  // min(900px, 80vh). The edit dialog otherwise sizes to its content, so it ends
-  // up short and high. Set the vars INLINE on the ha-dialog element so they win
-  // over the dialog's own stylesheet and inherit into its shadow.
-  private _matchDialogSize(): void {
-    const haDialog = this._findDialog()?.shadowRoot?.querySelector(
-      "ha-dialog"
-    ) as HTMLElement | null;
-    if (!haDialog) {
+  // Match the "Add card" dialog's fixed size: it pins ha-dialog to
+  // min(900px, 80vh). The edit dialog otherwise sizes to its content, so it
+  // ends up short and high.
+  //
+  // This has to be a stylesheet rather than inline styles on ha-dialog. Below
+  // 451px wide or 501px tall, HA's own dialog styles switch to fullscreen
+  // (min-height 100svh, margin-top 0); inline vars beat that stylesheet, so a
+  // fixed height fought the fullscreen min-height and left the dialog clipped
+  // with its header and footer out of reach on phones. Carrying the same media
+  // query hui-dialog-create-card uses keeps mobile untouched, and CSS
+  // re-evaluates it on rotate and resize for free.
+  private _applyDialogSize(): void {
+    const root = this._findDialog()?.shadowRoot;
+    if (!root || this._dialogSizeStyle?.isConnected) {
       return;
     }
-    haDialog.style.setProperty("--ha-dialog-min-height", "min(900px, 80vh)");
-    haDialog.style.setProperty("--ha-dialog-max-height", "min(900px, 80vh)");
-    this._sizedDialog = haDialog;
+    const style = document.createElement("style");
+    style.id = "tcl-dialog-size";
+    style.textContent = `
+      @media all and (min-width: 451px) and (min-height: 501px) {
+        ha-dialog {
+          --ha-dialog-min-height: min(900px, 80vh);
+          --ha-dialog-max-height: var(--ha-dialog-min-height);
+        }
+      }
+    `;
+    root.appendChild(style);
+    this._dialogSizeStyle = style;
   }
 
   // We render inside hui-card-element-editor's shadow root, alongside HA's
-  // Config/Visibility/Layout tab group. Hide it for the concepts (they bring
-  // their own tabs); for "Control" show HA's tabs — that IS the current editor.
-  private _applyStockTabs(): void {
+  // Config/Visibility/Layout tab group. Hide it — the editor brings its own —
+  // and drop the wrapper's top padding so our tab row sits at the top of the
+  // pane instead of 8px down it.
+  private _applyEditorRootStyle(): void {
     const root = this.getRootNode();
-    if (!(root instanceof ShadowRoot)) {
+    if (!(root instanceof ShadowRoot) || this._editorRootStyle?.isConnected) {
       return;
     }
-    const existing =
-      this._hideTabsStyle ?? root.querySelector("#tcl-hide-tabs");
-    if (this._concept === "control") {
-      existing?.remove();
-      this._hideTabsStyle = undefined;
-    } else if (!existing) {
-      const style = document.createElement("style");
-      style.id = "tcl-hide-tabs";
-      style.textContent = "ha-tab-group{display:none!important;}";
-      root.appendChild(style);
-      this._hideTabsStyle = style;
-    }
+    const style = document.createElement("style");
+    style.id = "tcl-editor-root";
+    style.textContent = `
+      ha-tab-group { display: none !important; }
+      .gui-editor { padding-top: 0 !important; }
+    `;
+    root.appendChild(style);
+    this._editorRootStyle = style;
   }
 
   private _findDialog(): HTMLElement | undefined {
@@ -205,198 +139,22 @@ export class TileCardLabEditor extends LitElement {
     return undefined;
   }
 
-  private _injectHeaderSwitcher(): void {
-    const dialog = this._findDialog();
-    const haDialog = dialog?.shadowRoot?.querySelector("ha-dialog");
-    if (!haDialog) {
-      return;
-    }
-    if (!this._headerContainer || !this._headerContainer.isConnected) {
-      const container = document.createElement("div");
-      container.slot = "headerActionItems";
-      container.id = "tcl-header-switcher";
-      haDialog.appendChild(container);
-      this._headerContainer = container;
-    }
-    render(this._switcherTemplate(true), this._headerContainer);
-    if (!this._headerReady) {
-      this._headerReady = true;
-    }
-  }
-
-  private _switcherTemplate(inHeader: boolean) {
-    const active = this._concept;
-    return html`
-      <div class="switcher ${inHeader ? "in-header" : ""}" role="radiogroup">
-        ${CONCEPTS.map(
-          (c) => html`
-            <button
-              class="segment ${c.id === active ? "active" : ""}"
-              role="radio"
-              aria-checked=${c.id === active}
-              @click=${() => this._selectConcept(c.id)}
-            >
-              ${c.label}
-            </button>
-          `
-        )}
-      </div>
-      ${
-        inHeader
-          ? html`<style>
-              ${TileCardLabEditor._headerCss}
-            </style>`
-          : nothing
-      }
-    `;
-  }
-
-  // Inline styles travel with the header switcher because it lives outside this
-  // component's shadow root.
-  private static _headerCss = `
-    #tcl-header-switcher .switcher {
-      display: flex;
-      gap: 4px;
-      background: var(--divider-color, #e0e0e0);
-      border-radius: var(--ha-border-radius-md, 10px);
-      padding: 3px;
-      margin-inline-end: 8px;
-    }
-    #tcl-header-switcher .segment {
-      appearance: none;
-      border: 0;
-      cursor: pointer;
-      font-family: inherit;
-      font-size: var(--ha-font-size-s, 13px);
-      font-weight: var(--ha-font-weight-medium, 500);
-      padding: 6px 12px;
-      border-radius: var(--ha-border-radius-sm, 8px);
-      background: transparent;
-      color: var(--primary-text-color);
-      white-space: nowrap;
-    }
-    #tcl-header-switcher .segment.active {
-      background: var(--card-background-color, #fff);
-      color: var(--primary-color);
-    }
-  `;
-
-  // "Control" = the current stock HA tile editor, reused as a comparison
-  // baseline. HA's own Config/Visibility/Layout tabs stay visible around it.
-  private _renderControl() {
-    if (!this._controlEl) {
-      const el = document.createElement(
-        "hui-tile-card-editor"
-      ) as HTMLElement & {
-        hass?: HomeAssistant;
-        setConfig?: (config: TileCardLabConfig) => void;
-      };
-      el.addEventListener("config-changed", (ev) => {
-        ev.stopPropagation();
-        const config = (ev as ConfigChangedEvent).detail.config;
-        this._config = config;
-        this._lastControlConfig = config;
-        this.dispatchEvent(
-          new CustomEvent("config-changed", {
-            detail: { config },
-            bubbles: true,
-            composed: true,
-          })
-        );
-      });
-      this._controlEl = el;
-    }
-    this._controlEl.hass = this.hass;
-    // Only push config when it changed externally, so typing in the stock
-    // editor isn't interrupted by a setConfig echo of its own change.
-    if (this._config && this._config !== this._lastControlConfig) {
-      this._lastControlConfig = this._config;
-      try {
-        this._controlEl.setConfig?.(this._config);
-      } catch (_e) {
-        // stock editor may reject a transient config; ignore
-      }
-    }
-    return html`${this._controlEl}`;
-  }
-
-  private _renderConcept() {
-    const config = this._config!;
-    switch (this._concept) {
-      case "control":
-        return this._renderControl();
-      case "b":
-        return html`<tile-lab-concept-b
-          .hass=${this.hass}
-          .config=${config}
-          .sectionConfig=${this._sectionConfig}
-          @config-changed=${this._conceptChanged}
-        ></tile-lab-concept-b>`;
-      case "c":
-        return html`<tile-lab-concept-c
-          .hass=${this.hass}
-          .config=${config}
-          .sectionConfig=${this._sectionConfig}
-          @config-changed=${this._conceptChanged}
-        ></tile-lab-concept-c>`;
-      default:
-        return html`<tile-lab-concept-a
-          .hass=${this.hass}
-          .config=${config}
-          .sectionConfig=${this._sectionConfig}
-          @config-changed=${this._conceptChanged}
-        ></tile-lab-concept-a>`;
-    }
-  }
-
   protected render() {
     if (!this._config) {
       return nothing;
     }
     return html`
-      ${
-        !this._headerReady
-          ? html`<div class="fallback-switcher">
-              ${this._switcherTemplate(false)}
-            </div>`
-          : nothing
-      }
-      <div class="concept-host">${this._renderConcept()}</div>
+      <tile-lab-concept-a
+        .hass=${this.hass}
+        .config=${this._config}
+        .sectionConfig=${this._sectionConfig}
+        @config-changed=${this._configChanged}
+      ></tile-lab-concept-a>
     `;
   }
 
   static styles = css`
     :host {
-      display: block;
-    }
-    .fallback-switcher {
-      margin-bottom: var(--ha-space-4, 16px);
-    }
-    .switcher {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 4px;
-      background: var(--divider-color, #e0e0e0);
-      border-radius: var(--ha-border-radius-md, 12px);
-      padding: 4px;
-    }
-    .segment {
-      appearance: none;
-      border: 0;
-      cursor: pointer;
-      font-family: inherit;
-      font-size: var(--ha-font-size-m, 14px);
-      font-weight: var(--ha-font-weight-medium, 500);
-      padding: 8px 12px;
-      border-radius: var(--ha-border-radius-sm, 8px);
-      background: transparent;
-      color: var(--primary-text-color);
-    }
-    .segment.active {
-      background: var(--card-background-color, #fff);
-      color: var(--primary-color);
-    }
-    .concept-host {
       display: block;
     }
   `;

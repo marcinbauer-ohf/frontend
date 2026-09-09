@@ -123,16 +123,19 @@ export class HuiCardElementEditor extends HuiTypedElementEditor<LovelaceCardConf
   static override styles = [
     css`
       ha-tab-group {
-        margin-bottom: 16px;
+        /* Pinned to the top of the scrolling editor, spanning its full width so
+           nothing shows beside, above or below it as content scrolls under. */
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: var(--card-background-color);
+        margin-inline: calc(-1 * var(--ha-card-editor-inline-padding, 0px));
+        padding: 0 0 16px;
       }
 
-      ha-tab-group-tab {
-        flex: 1;
-      }
-
-      ha-tab-group-tab::part(base) {
-        width: 100%;
-        justify-content: center;
+      /* The first tab's label lines up with the content below it. */
+      ha-tab-group-tab:first-of-type::part(base) {
+        padding-inline-start: var(--ha-card-editor-inline-padding, 0px);
       }
     `,
   ];

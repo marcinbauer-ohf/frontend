@@ -37,6 +37,15 @@ export interface Lovelace {
   enableFullEditMode: () => void;
   setEditMode: (editMode: boolean) => void;
   saveConfig: (newConfig: LovelaceRawConfig) => Promise<void>;
+  /**
+   * Apply a config change locally without writing it, so the dashboard shows
+   * it while it is still pending. `saveConfig` commits whatever is staged.
+   */
+  stageConfig: (newConfig: LovelaceRawConfig) => Promise<void>;
+  /** Write the staged config, if there is one. No-op otherwise. */
+  saveStagedConfig: () => Promise<void>;
+  /** There are staged changes that have not been written yet. */
+  staged: boolean;
   deleteConfig: () => Promise<void>;
   showToast: (params: ShowToastParams) => void;
 }

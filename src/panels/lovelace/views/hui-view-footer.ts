@@ -3,6 +3,7 @@ import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
+import memoizeOne from "memoize-one";
 import { styleMap } from "lit/directives/style-map";
 import "../../../components/ha-ripple";
 import "../../../components/ha-svg-icon";
@@ -17,6 +18,10 @@ import type { HuiCard } from "../cards/hui-card";
 import { computeCardGridSize } from "../common/compute-card-grid-size";
 import { showCreateCardDialog } from "../editor/card-editor/show-create-card-dialog";
 import { showEditCardDialog } from "../editor/card-editor/show-edit-card-dialog";
+import {
+  VIEW_FOOTER_CARD_INDEX,
+  type LovelaceCardPath,
+} from "../editor/lovelace-path";
 import { replaceView } from "../editor/config-util";
 import { showEditViewFooterDialog } from "../editor/view-footer/show-edit-view-footer-dialog";
 import type { Lovelace } from "../types";
@@ -101,6 +106,12 @@ export class HuiViewFooter extends LitElement {
     });
   }
 
+  // Memoized so the path keeps its identity across renders.
+  private _cardPath = memoizeOne((viewIndex: number): LovelaceCardPath => [
+    viewIndex,
+    VIEW_FOOTER_CARD_INDEX,
+  ]);
+
   private _deleteCard(ev) {
     ev.stopPropagation();
     const newConfig = { ...this.config };
@@ -125,13 +136,20 @@ export class HuiViewFooter extends LitElement {
     showEditCardDialog(this, {
       cardConfig,
       lovelaceConfig: this.lovelace.config,
-      saveCardConfig: (newCardConfig: LovelaceCardConfig) => {
-        this._saveFooterConfig({ ...this.config, card: newCardConfig });
+      saveCardConfig: (newCardConfig: LovelaceCardConfig, options) => {
+        this._saveFooterConfig(
+          { ...this.config, card: newCardConfig },
+          options?.stage
+        );
       },
+      cardPath: this._cardPath(this.viewIndex),
     });
   }
 
-  private _saveFooterConfig(footerConfig: LovelaceViewFooterConfig) {
+  private _saveFooterConfig(
+    footerConfig: LovelaceViewFooterConfig,
+    stage = false
+  ) {
     const viewConfig = this.lovelace.config.views[
       this.viewIndex
     ] as LovelaceViewConfig;
@@ -144,6 +162,10 @@ export class HuiViewFooter extends LitElement {
       this.viewIndex,
       config
     );
+    if (stage) {
+      this.lovelace.stageConfig(updatedConfig);
+      return;
+    }
     this.lovelace.saveConfig(updatedConfig);
   }
 
@@ -167,7 +189,7 @@ export class HuiViewFooter extends LitElement {
                   @ll-edit-card=${this._editCard}
                   @ll-delete-card=${this._deleteCard}
                   .lovelace=${this.lovelace!}
-                  .path=${[0]}
+                  .path=${this._cardPath(this.viewIndex)}
                   no-duplicate
                   no-move
                 >

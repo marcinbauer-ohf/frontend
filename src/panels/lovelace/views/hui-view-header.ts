@@ -3,6 +3,7 @@ import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
+import memoizeOne from "memoize-one";
 import { DragScrollController } from "../../../common/controllers/drag-scroll-controller";
 import "../../../components/ha-ripple";
 import "../../../components/ha-sortable";
@@ -18,6 +19,10 @@ import "../badges/hui-view-badges";
 import type { HuiCard } from "../cards/hui-card";
 import "../components/hui-badge-edit-mode";
 import { showEditCardDialog } from "../editor/card-editor/show-edit-card-dialog";
+import {
+  VIEW_HEADER_CARD_INDEX,
+  type LovelaceCardPath,
+} from "../editor/lovelace-path";
 import { replaceView } from "../editor/config-util";
 import { showEditViewHeaderDialog } from "../editor/view-header/show-edit-view-header-dialog";
 import type { Lovelace } from "../types";
@@ -138,6 +143,12 @@ export class HuiViewHeader extends LitElement {
     });
   }
 
+  // Memoized so the path keeps its identity across renders.
+  private _cardPath = memoizeOne((viewIndex: number): LovelaceCardPath => [
+    viewIndex,
+    VIEW_HEADER_CARD_INDEX,
+  ]);
+
   private _deleteCard(ev) {
     ev.stopPropagation();
     const newConfig = { ...this.config };
@@ -156,15 +167,19 @@ export class HuiViewHeader extends LitElement {
     showEditCardDialog(this, {
       cardConfig,
       lovelaceConfig: this.lovelace.config,
-      saveCardConfig: (newCardConfig: LovelaceCardConfig) => {
+      saveCardConfig: (newCardConfig: LovelaceCardConfig, options) => {
         const newConfig = { ...this.config };
         newConfig.card = newCardConfig;
-        this._saveHeaderConfig(newConfig);
+        this._saveHeaderConfig(newConfig, options?.stage);
       },
+      cardPath: this._cardPath(this.viewIndex),
     });
   }
 
-  private _saveHeaderConfig(headerConfig: LovelaceViewHeaderConfig) {
+  private _saveHeaderConfig(
+    headerConfig: LovelaceViewHeaderConfig,
+    stage = false
+  ) {
     const viewConfig = this.lovelace.config.views[
       this.viewIndex
     ] as LovelaceViewConfig;
@@ -178,6 +193,10 @@ export class HuiViewHeader extends LitElement {
       this.viewIndex,
       config
     );
+    if (stage) {
+      this.lovelace.stageConfig(updatedConfig);
+      return;
+    }
     this.lovelace.saveConfig(updatedConfig);
   }
 
@@ -247,7 +266,7 @@ export class HuiViewHeader extends LitElement {
                                 @ll-edit-card=${this._editCard}
                                 @ll-delete-card=${this._deleteCard}
                                 .lovelace=${this.lovelace!}
-                                .path=${[0]}
+                                .path=${this._cardPath(this.viewIndex)}
                                 no-duplicate
                                 no-move
                               >

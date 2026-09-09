@@ -44,10 +44,11 @@ import {
 } from "../editor/lovelace-path";
 import { showSelectViewDialog } from "../editor/select-view/show-select-view-dialog";
 import type { Lovelace, LovelaceCard } from "../types";
+import { CardEditorSelectionMixin } from "./card-editor-selection-mixin";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
 
 @customElement("hui-card-options")
-export class HuiCardOptions extends LitElement {
+export class HuiCardOptions extends CardEditorSelectionMixin(LitElement) {
   @property({ attribute: false }) public hass?: HomeAssistant;
 
   @property({ attribute: false }) public lovelace?: Lovelace;
@@ -196,7 +197,15 @@ export class HuiCardOptions extends LitElement {
     return [
       haStyle,
       css`
-        :host(:hover) {
+        :host {
+          scroll-margin-top: calc(
+            var(--header-height, 56px) + var(--tab-bar-height, 56px) +
+              var(--ha-space-4)
+          );
+        }
+
+        :host(:hover),
+        :host([selected]) {
           outline: 2px solid var(--primary-color);
         }
 

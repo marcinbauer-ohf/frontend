@@ -382,15 +382,18 @@ export class HUIView extends ReactiveElement {
       const cardConfig = viewConfig.cards![cardIndex];
       showEditCardDialog(this, {
         lovelaceConfig: this.lovelace.config,
-        saveCardConfig: async (newCardConfig) => {
+        saveCardConfig: async (newCardConfig, options) => {
           const newConfig = replaceCard(
             this.lovelace!.config,
             [this.index, cardIndex],
             newCardConfig
           );
-          await this.lovelace.saveConfig(newConfig);
+          await (options?.stage
+            ? this.lovelace.stageConfig(newConfig)
+            : this.lovelace.saveConfig(newConfig));
         },
         cardConfig,
+        cardPath: ev.detail.path,
       });
     });
     this._layoutElement.addEventListener("ll-delete-card", (ev) => {

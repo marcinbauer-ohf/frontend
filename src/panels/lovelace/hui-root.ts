@@ -26,8 +26,16 @@ import { ifDefined } from "lit/directives/if-defined";
 import memoizeOne from "memoize-one";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import { UndoRedoController } from "../../common/controllers/undo-redo-controller";
+import type { HASSDomEvent } from "../../common/dom/fire_event";
 import { fireEvent } from "../../common/dom/fire_event";
-import { goBack, navigate, replaceCurrentUrl } from "../../common/navigate";
+import type { UnsavedChangesGuard } from "../../common/navigate";
+import {
+  goBack,
+  navigate,
+  registerUnsavedChangesGuard,
+  replaceCurrentUrl,
+  unregisterUnsavedChangesGuard,
+} from "../../common/navigate";
 import type { LocalizeKeys } from "../../common/translations/localize";
 import { constructUrlCurrentPath } from "../../common/url/construct-url";
 import { sanitizeNavigationPath } from "../../common/url/sanitize-navigation-path";
@@ -92,6 +100,11 @@ import { showEditViewDialog } from "./editor/view-editor/show-edit-view-dialog";
 import { getLovelaceStrategy } from "./strategies/get-strategy";
 import { isLegacyStrategyConfig } from "./strategies/legacy-strategy";
 import type { Lovelace } from "./types";
+import type { HuiDialogEditCard } from "./editor/card-editor/hui-dialog-edit-card";
+import {
+  importEditCardDialog,
+  type EditCardDialogParams,
+} from "./editor/card-editor/show-edit-card-dialog";
 import "./views/hui-view";
 import type { HUIView } from "./views/hui-view";
 import "./views/hui-view-background";
@@ -155,6 +168,12 @@ class HUIRoot extends LitElement {
 
   @state() private _resourceMode: "yaml" | "storage" = "storage";
 
+  @state() private _cardEditorOpen = false;
+
+  @state() private _saving = false;
+
+  private _cardEditor?: HuiDialogEditCard;
+
   private _configChangedByUndo = false;
 
   private _viewCache: Record<string, HUIView> = {};
@@ -205,12 +224,13 @@ class HUIRoot extends LitElement {
             ${this.hass.localize("ui.common.redo")}
           </ha-tooltip>
           <ha-button
-            appearance="filled"
+            appearance=${this._hasUnsavedChanges ? "accent" : "filled"}
             size="s"
             class="exit-edit-mode"
-            @click=${this._editModeDisable}
+            .loading=${this._saving}
+            @click=${this._saveAndExit}
           >
-            ${this.hass!.localize("ui.panel.lovelace.menu.exit_edit_mode")}
+            ${this.hass!.localize("ui.common.save")}
           </ha-button>
           <ha-icon-button
             .label=${this.hass!.localize("ui.panel.lovelace.menu.help")}
@@ -555,7 +575,10 @@ class HUIRoot extends LitElement {
         class=${classMap({
           "edit-mode": this._editMode,
           narrow: this.narrow,
+          "has-card-editor": this._cardEditorOpen && !this.narrow,
+          "has-card-sheet": this._cardEditorOpen && this.narrow,
         })}
+        @ll-show-card-editor=${this._handleShowCardEditor}
       >
         <div class="header">
           <slot name="toolbar">
@@ -648,9 +671,56 @@ class HUIRoot extends LitElement {
           <hui-view-background .hass=${this.hass} .background=${background}>
           </hui-view-background>
         </hui-view-container>
+        <div class="card-editor-positioner"></div>
       </div>
     `;
   }
+
+  /**
+   * Edit a card that is already on the dashboard next to it, in a side panel
+   * (wide) or a resizable bottom sheet (narrow), instead of in a dialog that
+   * would cover it.
+   */
+  private _handleShowCardEditor = async (
+    ev: HASSDomEvent<EditCardDialogParams>
+  ): Promise<void> => {
+    ev.stopPropagation();
+    // Tells showEditCardDialog we took over, so it does not open the dialog.
+    ev.preventDefault();
+
+    if (this._cardEditor && !this._cardEditor.closeDialog()) {
+      // Unsaved changes on the card that is currently open; the user is being
+      // asked what to do with them first.
+      return;
+    }
+
+    await importEditCardDialog();
+
+    const editor = document.createElement("hui-dialog-edit-card");
+    editor.hass = this.hass;
+    editor.sidebar = true;
+    editor.narrow = this.narrow;
+    editor.addEventListener(
+      "dialog-closed",
+      () => {
+        editor.remove();
+        if (this._cardEditor === editor) {
+          this._cardEditor = undefined;
+          this._cardEditorOpen = false;
+        }
+      },
+      { once: true }
+    );
+
+    this._cardEditor = editor;
+    this._cardEditorOpen = true;
+    // Configure before connecting, so the first render is the finished editor.
+    editor.showDialog(ev.detail);
+    await this.updateComplete;
+    this.shadowRoot!.querySelector(".card-editor-positioner")!.appendChild(
+      editor
+    );
+  };
 
   private _handleWindowScroll = () => {
     this.toggleAttribute("scrolled", window.scrollY !== 0);
@@ -696,6 +766,7 @@ class HUIRoot extends LitElement {
     });
     window.addEventListener("popstate", this._handlePopState);
     window.addEventListener("location-changed", this._locationChanged);
+    registerUnsavedChangesGuard(this._unsavedChangesGuard);
     // Disable history scroll restoration because it is managed manually here
     window.history.scrollRestoration = "manual";
   }
@@ -705,6 +776,7 @@ class HUIRoot extends LitElement {
     window.removeEventListener("scroll", this._handleWindowScroll);
     window.removeEventListener("popstate", this._handlePopState);
     window.removeEventListener("location-changed", this._locationChanged);
+    unregisterUnsavedChangesGuard(this._unsavedChangesGuard);
     this.toggleAttribute("scrolled", window.scrollY !== 0);
     // Re-enable history scroll restoration when leaving the page
     window.history.scrollRestoration = "auto";
@@ -757,6 +829,20 @@ class HUIRoot extends LitElement {
 
     if (changedProperties.has("narrow") && huiView) {
       huiView.narrow = this.narrow;
+    }
+
+    if (this._cardEditor) {
+      if (changedProperties.has("hass")) {
+        this._cardEditor.hass = this.hass;
+      }
+      if (changedProperties.has("narrow")) {
+        this._cardEditor.narrow = this.narrow;
+      }
+      if (!this._editMode) {
+        // Leaving edit mode takes the card editor with it. Closing (rather
+        // than removing) keeps the pending edit as a staged change.
+        this._cardEditor.closeDialog();
+      }
     }
 
     let newSelectView: HUIRoot["_curView"];
@@ -1057,6 +1143,49 @@ class HUIRoot extends LitElement {
   private _editModeDisable(): void {
     this.lovelace!.setEditMode(false);
     this._undoRedoController.reset();
+  }
+
+  /** Staged card edits, or an open editor holding changes. */
+  private get _hasUnsavedChanges(): boolean {
+    return !!this.lovelace?.staged || !!this._cardEditor?.isDirtyState;
+  }
+
+  private async _saveAndExit(): Promise<void> {
+    this._saving = true;
+    try {
+      // Take whatever the open editor is holding before writing.
+      await this._cardEditor?.flushPendingChanges();
+      await this.lovelace!.saveStagedConfig();
+    } catch (err: any) {
+      this._saving = false;
+      showToast(this, {
+        message: this.hass.localize(
+          "ui.panel.lovelace.editor.raw_editor.error_save_yaml",
+          { error: err.message }
+        ),
+      });
+      return;
+    }
+    this._saving = false;
+    this._editModeDisable();
+  }
+
+  private _unsavedChangesGuard: UnsavedChangesGuard = {
+    isDirty: () => this._hasUnsavedChanges,
+    prompt: () => this._promptDiscardChanges(),
+  };
+
+  private async _promptDiscardChanges(): Promise<boolean> {
+    return showConfirmationDialog(this, {
+      title: this.hass.localize(
+        "ui.panel.lovelace.editor.raw_editor.unsaved_changes"
+      ),
+      text: this.hass.localize(
+        "ui.panel.lovelace.editor.raw_editor.confirm_unsaved_changes"
+      ),
+      dismissText: this.hass.localize("ui.common.stay"),
+      confirmText: this.hass.localize("ui.common.leave"),
+    });
   }
 
   private async _editDashboard() {
@@ -1538,12 +1667,17 @@ class HUIRoot extends LitElement {
             var(--header-height) + var(--safe-area-inset-top) +
               var(--view-container-padding-top, 0px)
           );
-          padding-right: var(--safe-area-inset-right);
-          padding-inline-end: var(--safe-area-inset-right);
+          padding-right: calc(
+            var(--safe-area-inset-right) + var(--card-editor-sidebar-width, 0px)
+          );
+          padding-inline-end: calc(
+            var(--safe-area-inset-right) + var(--card-editor-sidebar-width, 0px)
+          );
           padding-bottom: calc(
             var(--safe-area-inset-bottom) +
               var(--view-container-padding-bottom, 0px)
           );
+          transition: padding-bottom 180ms ease-in-out;
         }
         .narrow hui-view-container {
           padding-left: var(--safe-area-inset-left);
@@ -1575,6 +1709,52 @@ class HUIRoot extends LitElement {
         }
         .child-view-icon {
           opacity: 0.5;
+        }
+
+        /* While the bottom sheet is up it covers the lower part of the screen,
+           so the dashboard gets trailing space to scroll the selected card
+           clear of it — even one that sits at the very bottom of the view. */
+        .has-card-sheet hui-view-container {
+          --view-container-padding-bottom: calc(
+            90dvh - max(var(--safe-area-inset-bottom, 0px), 32px)
+          );
+        }
+
+        /* Card editor side panel (wide screens); on narrow screens the editor
+           renders itself as a bottom sheet and nothing is pushed aside. */
+        .has-card-editor {
+          --card-editor-sidebar-width: min(
+            500px,
+            calc(100vw - 350px - var(--ha-sidebar-width, 0px))
+          );
+        }
+        .card-editor-positioner {
+          --card-editor-top: calc(
+            var(--header-height, 56px) + var(--tab-bar-height, 56px) - 2px +
+              var(--safe-area-inset-top, 0px) + var(--ha-space-2)
+          );
+        }
+        .card-editor-positioner hui-dialog-edit-card[sidebar] {
+          position: fixed;
+          z-index: 5;
+          top: var(--card-editor-top);
+          inset-inline-end: calc(
+            var(--safe-area-inset-right, 0px) + var(--ha-space-2)
+          );
+          width: calc(
+            var(--card-editor-sidebar-width, 0px) - var(--ha-space-4)
+          );
+          height: calc(100dvh - var(--card-editor-top) - var(--ha-space-4));
+        }
+        .card-editor-positioner hui-dialog-edit-card[sidebar][narrow] {
+          /* The bottom sheet places itself; it only needs to sit above the
+             view's own floating edit controls. */
+          position: relative;
+          z-index: 5;
+          inset-inline-end: auto;
+          top: auto;
+          width: auto;
+          height: auto;
         }
       `,
     ];

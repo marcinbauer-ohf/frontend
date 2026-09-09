@@ -54,9 +54,8 @@ export const getEntityDefaultTileIconAction = (entityId: string) => {
 @customElement("hui-tile-card")
 export class HuiTileCard extends LitElement implements LovelaceCard {
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
-    // FOR TESTING ONLY — open the tile editor concept switcher (Control +
-    // Concept A/B/C) instead of the stock editor, so the designs can be
-    // compared. Not for merge.
+    // FOR TESTING ONLY — open the redesigned tile editor instead of the stock
+    // one, so the design can be tried on real dashboards. Not for merge.
     await import("../editor/config-elements/tile-card-lab-editor");
     return document.createElement(
       "tile-card-lab-editor"

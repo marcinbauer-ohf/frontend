@@ -23,9 +23,10 @@ import "../../../components/ha-svg-icon";
 import { haStyle } from "../../../resources/styles";
 import type { LovelaceCardPath } from "../editor/lovelace-path";
 import type { Lovelace } from "../types";
+import { CardEditorSelectionMixin } from "./card-editor-selection-mixin";
 
 @customElement("hui-card-edit-mode")
-export class HuiCardEditMode extends LitElement {
+export class HuiCardEditMode extends CardEditorSelectionMixin(LitElement) {
   @property({ attribute: false }) public lovelace!: Lovelace;
 
   @property({ type: Array }) public path!: LovelaceCardPath;
@@ -270,10 +271,30 @@ export class HuiCardEditMode extends LitElement {
           pointer-events: auto;
         }
 
+        :host {
+          scroll-margin-top: calc(
+            var(--header-height, 56px) + var(--tab-bar-height, 56px) +
+              var(--ha-space-4)
+          );
+        }
+
         .card-wrapper {
           position: relative;
           height: 100%;
           z-index: 0;
+        }
+
+        :host([selected]) .card-wrapper::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          border-radius: var(
+            --ha-card-border-radius,
+            var(--ha-border-radius-lg)
+          );
+          outline: 2px solid var(--primary-color);
+          outline-offset: 2px;
         }
 
         .control {

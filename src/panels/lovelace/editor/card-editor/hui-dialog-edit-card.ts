@@ -1,4 +1,4 @@
-import { mdiClose, mdiHelpCircleOutline } from "@mdi/js";
+import { mdiClose, mdiCodeBraces, mdiHelpCircleOutline } from "@mdi/js";
 import deepFreeze from "deep-freeze";
 import type { CSSResultGroup, PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
@@ -14,10 +14,15 @@ import { computeRTLDirection } from "../../../../common/util/compute_rtl";
 import { stripDefaults } from "../../../../common/util/strip-defaults";
 import { withViewTransition } from "../../../../common/util/view-transition";
 import "../../../../components/ha-button";
+import "../../../../components/ha-card";
 import "../../../../components/ha-dialog";
 import "../../../../components/ha-dialog-footer";
+import "../../../../components/ha-dialog-header";
 import "../../../../components/ha-icon-button";
+import "../../../../components/ha-resizable-bottom-sheet";
+import type { HaResizableBottomSheet } from "../../../../components/ha-resizable-bottom-sheet";
 import "../../../../components/ha-spinner";
+import "../../../../components/ha-svg-icon";
 import type { LovelaceCardConfig } from "../../../../data/lovelace/config/card";
 import type { LovelaceSectionConfig } from "../../../../data/lovelace/config/section";
 import {
@@ -43,6 +48,7 @@ import { getCardDefaultConfig } from "../get-card-default-config";
 import { getCardDocumentationURL } from "../get-dashboard-documentation-url";
 import type { ConfigChangedEvent } from "../hui-element-editor";
 import type { GUIModeChangedEvent } from "../types";
+import { fireCardEditorSelection } from "./card-editor-selection";
 import "./hui-card-element-editor";
 import type { HuiCardElementEditor } from "./hui-card-element-editor";
 import type { EditCardDialogParams } from "./show-edit-card-dialog";
@@ -67,6 +73,15 @@ export class HuiDialogEditCard
 
   @property({ type: Boolean, reflect: true }) public large = false;
 
+  /**
+   * Render next to the dashboard as a side panel (wide) or a resizable bottom
+   * sheet (narrow) instead of as a dialog. Set by hui-root for cards that are
+   * already placed on the dashboard.
+   */
+  @property({ type: Boolean, reflect: true }) public sidebar = false;
+
+  @property({ type: Boolean, reflect: true }) public narrow = false;
+
   @state() private _params?: EditCardDialogParams;
 
   @state() private _open = false;
@@ -81,8 +96,16 @@ export class HuiDialogEditCard
 
   @state() private _guiModeAvailable? = true;
 
+  @state() private _sheetOpen = true;
+
+  /** The previewed config now lives in the dashboard config (saved or staged). */
+  private _applied = false;
+
   @query("hui-card-element-editor")
   private _cardEditorEl?: HuiCardElementEditor;
+
+  @query("ha-resizable-bottom-sheet")
+  private _bottomSheetEl?: HaResizableBottomSheet;
 
   @state() private _GUImode = true;
 
@@ -93,6 +116,7 @@ export class HuiDialogEditCard
     this._GUImode = true;
     this._guiModeAvailable = true;
     this._open = true;
+    this._sheetOpen = true;
 
     this._sectionConfig = this._params.sectionConfig;
 
@@ -116,12 +140,42 @@ export class HuiDialogEditCard
   }
 
   public closeDialog(): boolean {
+    if (this.sidebar) {
+      // The side panel has no save button: closing keeps the change as a
+      // staged edit, which the dashboard's own save button writes.
+      this.flushPendingChanges();
+      this._open = false;
+      // There is no <ha-dialog> to report back, so drive the close ourselves.
+      // A sheet that has already been dragged away cannot animate out again.
+      if (this._sheetOpen && this._bottomSheetEl) {
+        this._bottomSheetEl.closeSheet();
+      } else {
+        this._dialogClosed();
+      }
+      return true;
+    }
     if (this.isEffectiveDirtyState) {
       this._confirmCancel();
       return false;
     }
     this._open = false;
     return true;
+  }
+
+  /**
+   * Hand the pending config to the dashboard as a staged change. Called when
+   * the side panel closes and by the dashboard's save button.
+   */
+  public async flushPendingChanges(): Promise<void> {
+    if (!this.sidebar || !this._params || !this._cardConfig) {
+      return;
+    }
+    if (!this.isDirtyState) {
+      return;
+    }
+    this._applied = true;
+    this._markDirtyStateClean();
+    await this._params.saveCardConfig(this._cardConfig, { stage: true });
   }
 
   private _dialogClosed(): void {
@@ -131,11 +185,37 @@ export class HuiDialogEditCard
     this._error = undefined;
     this._documentationURL = undefined;
     this._updateRelatedContext(undefined);
+    // Clear eagerly: the host removes us on dialog-closed, so a pending render
+    // would never get to broadcast the deselection.
+    if (this.sidebar) {
+      fireCardEditorSelection({ saved: this._applied });
+    }
+    this._applied = false;
     fireEvent(this, "dialog-closed", { dialog: this.localName });
+  }
+
+  private _sheetClosed(): void {
+    // Dragging the sheet away keeps the edit, same as closing it deliberately.
+    this._sheetOpen = false;
+    this.flushPendingChanges();
+    this._dialogClosed();
   }
 
   protected updated(changedProps: PropertyValues): void {
     super.updated(changedProps);
+
+    if (
+      this.sidebar &&
+      this._params &&
+      (changedProps.has("_cardConfig") || changedProps.has("_params"))
+    ) {
+      // Keep the card on the dashboard highlighted and previewing our edits.
+      fireCardEditorSelection({
+        path: this._params.cardPath,
+        config: this._cardConfig,
+      });
+    }
+
     if (!this._cardConfig || !changedProps.has("_cardConfig")) {
       return;
     }
@@ -165,38 +245,202 @@ export class HuiDialogEditCard
     fireRelatedContext(this, context);
   }
 
+  private _computeHeading(): string {
+    const cardConfig = this._cardConfig!;
+
+    if (!cardConfig.type) {
+      return this.hass!.localize("ui.panel.lovelace.editor.edit_card.header");
+    }
+
+    let cardName: string | undefined;
+    if (isCustomType(cardConfig.type)) {
+      // prettier-ignore
+      cardName = getCustomCardEntry(
+        stripCustomPrefix(cardConfig.type)
+      )?.name;
+      // Trim names that end in " Card" so as not to redundantly duplicate it
+      if (cardName?.toLowerCase().endsWith(" card")) {
+        cardName = cardName.substring(0, cardName.length - 5);
+      }
+    } else {
+      cardName = this.hass!.localize(
+        `ui.panel.lovelace.editor.card.${cardConfig.type}.name`
+      );
+    }
+    return this.hass!.localize(
+      "ui.panel.lovelace.editor.edit_card.typed_header",
+      { type: cardName }
+    );
+  }
+
+  private _renderDocumentationButton(slot: string) {
+    if (this._documentationURL === undefined) {
+      return nothing;
+    }
+    return html`
+      <ha-icon-button
+        .path=${mdiHelpCircleOutline}
+        slot=${slot}
+        href=${this._documentationURL}
+        title=${this.hass!.localize("ui.panel.lovelace.menu.help")}
+        target="_blank"
+        rel="noreferrer"
+        dir=${computeRTLDirection(this.hass)}
+      ></ha-icon-button>
+    `;
+  }
+
+  private _renderElementEditor() {
+    return html`
+      <hui-card-element-editor
+        autofocus
+        .showVisibilityTab=${this._cardConfig!.type !== "conditional"}
+        .sectionConfig=${this._sectionConfig}
+        .hass=${this.hass}
+        .lovelace=${this._params!.lovelaceConfig}
+        .value=${this._cardConfig}
+        in-dialog
+        @config-changed=${this._handleConfigChanged}
+        @GUImode-changed=${this._handleGUIModeChanged}
+        @editor-save=${this._save}
+      ></hui-card-element-editor>
+    `;
+  }
+
+  private _renderModeButton() {
+    return html`
+      <ha-button
+        slot="secondaryAction"
+        @click=${this._toggleMode}
+        .disabled=${!this._guiModeAvailable}
+        class="gui-mode-button"
+        appearance="plain"
+      >
+        ${this.hass!.localize(
+          !this._cardEditorEl || this._GUImode
+            ? "ui.panel.lovelace.editor.edit_card.show_code_editor"
+            : "ui.panel.lovelace.editor.edit_card.show_visual_editor"
+        )}
+      </ha-button>
+    `;
+  }
+
+  private _renderCancelButton() {
+    return html`
+      <ha-button
+        appearance="plain"
+        slot="secondaryAction"
+        @click=${this._cancel}
+      >
+        ${this.hass!.localize("ui.common.cancel")}
+      </ha-button>
+    `;
+  }
+
+  private _renderSaveButton() {
+    return html`
+      <ha-button
+        slot="primaryAction"
+        ?disabled=${!this._canSave || this._saving || !this.isDirtyState}
+        @click=${this._save}
+        .loading=${this._saving}
+      >
+        ${this.hass!.localize("ui.common.save")}
+      </ha-button>
+    `;
+  }
+
   protected render() {
     if (!this._params || !this._cardConfig) {
       return nothing;
     }
 
-    let heading: string;
-    if (this._cardConfig.type) {
-      let cardName: string | undefined;
-      if (isCustomType(this._cardConfig.type)) {
-        // prettier-ignore
-        cardName = getCustomCardEntry(
-          stripCustomPrefix(this._cardConfig.type)
-        )?.name;
-        // Trim names that end in " Card" so as not to redundantly duplicate it
-        if (cardName?.toLowerCase().endsWith(" card")) {
-          cardName = cardName.substring(0, cardName.length - 5);
-        }
-      } else {
-        cardName = this.hass!.localize(
-          `ui.panel.lovelace.editor.card.${this._cardConfig.type}.name`
-        );
-      }
-      heading = this.hass!.localize(
-        "ui.panel.lovelace.editor.edit_card.typed_header",
-        { type: cardName }
-      );
-    } else {
-      heading = this.hass!.localize(
-        "ui.panel.lovelace.editor.edit_card.header"
-      );
+    return this.sidebar ? this._renderSidebar() : this._renderDialog();
+  }
+
+  private _renderSidebar() {
+    if (this.narrow) {
+      return this._sheetOpen
+        ? html`
+            <ha-resizable-bottom-sheet
+              open-height="50"
+              @bottom-sheet-closed=${this._sheetClosed}
+              @keydown=${this._handleSidebarKeydown}
+            >
+              ${this._renderSidebarContent()}
+            </ha-resizable-bottom-sheet>
+          `
+        : nothing;
     }
 
+    return html`
+      <div class="sidebar-panel" @keydown=${this._handleSidebarKeydown}>
+        ${this._renderSidebarContent()}
+      </div>
+    `;
+  }
+
+  private _renderSidebarContent() {
+    return html`
+      <ha-card outlined class="sidebar-card">
+        ${
+          // On a phone the sheet is short, so the drag handle carries the
+          // whole top and the editor gets the height back.
+          this.narrow
+            ? nothing
+            : html`
+                <ha-dialog-header>
+                  <ha-icon-button
+                    slot="navigationIcon"
+                    @click=${this._closeFromSidebar}
+                    .label=${this.hass!.localize("ui.common.close")}
+                    .path=${mdiClose}
+                  ></ha-icon-button>
+                  <span slot="title">${this._computeHeading()}</span>
+                  ${this._renderDocumentationButton("actionItems")}
+                </ha-dialog-header>
+              `
+        }
+        <div class="sidebar-content ha-scrollbar">
+          ${this._renderElementEditor()} ${this._renderYamlToggle()}
+        </div>
+      </ha-card>
+    `;
+  }
+
+  private _renderYamlToggle() {
+    return html`
+      <ha-button
+        class="yaml-toggle"
+        appearance="plain"
+        size="small"
+        .disabled=${!this._guiModeAvailable}
+        @click=${this._toggleMode}
+      >
+        <ha-svg-icon slot="start" .path=${mdiCodeBraces}></ha-svg-icon>
+        ${this.hass!.localize(
+          !this._cardEditorEl || this._GUImode
+            ? "ui.panel.lovelace.editor.edit_card.show_code_editor"
+            : "ui.panel.lovelace.editor.edit_card.show_visual_editor"
+        )}
+      </ha-button>
+    `;
+  }
+
+  private _closeFromSidebar() {
+    this.closeDialog();
+  }
+
+  private _handleSidebarKeydown(ev: KeyboardEvent) {
+    // The dashboard has single-key shortcuts, so keystrokes must not escape
+    // the editor, the same way the dialog swallows them.
+    ev.stopPropagation();
+    if (ev.key === "Escape" && !ev.defaultPrevented) {
+      this.closeDialog();
+    }
+  }
+
+  private _renderDialog() {
     return html`
       <ha-dialog
         .open=${this._open}
@@ -216,37 +460,12 @@ export class HuiDialogEditCard
           slot="headerTitle"
           class="title-enlargeable"
           @click=${this._enlarge}
-          >${heading}</span
+          >${this._computeHeading()}</span
         >
-        ${
-          this._documentationURL !== undefined
-            ? html`
-                <ha-icon-button
-                  .path=${mdiHelpCircleOutline}
-                  slot="headerActionItems"
-                  href=${this._documentationURL}
-                  title=${this.hass!.localize("ui.panel.lovelace.menu.help")}
-                  target="_blank"
-                  rel="noreferrer"
-                  dir=${computeRTLDirection(this.hass)}
-                ></ha-icon-button>
-              `
-            : nothing
-        }
+        ${this._renderDocumentationButton("headerActionItems")}
         <div class="content">
           <div class="element-editor ha-scrollbar">
-            <hui-card-element-editor
-              autofocus
-              .showVisibilityTab=${this._cardConfig.type !== "conditional"}
-              .sectionConfig=${this._sectionConfig}
-              .hass=${this.hass}
-              .lovelace=${this._params.lovelaceConfig}
-              .value=${this._cardConfig}
-              in-dialog
-              @config-changed=${this._handleConfigChanged}
-              @GUImode-changed=${this._handleGUIModeChanged}
-              @editor-save=${this._save}
-            ></hui-card-element-editor>
+            ${this._renderElementEditor()}
           </div>
           <div class="element-preview ha-scrollbar">
             ${
@@ -254,7 +473,7 @@ export class HuiDialogEditCard
                 ? html`
                     <hui-section
                       .hass=${this.hass}
-                      .config=${this._cardConfigInSection(this._cardConfig)}
+                      .config=${this._cardConfigInSection(this._cardConfig!)}
                       preview
                       class=${this._error ? "blur" : ""}
                     ></hui-section>
@@ -278,40 +497,8 @@ export class HuiDialogEditCard
           </div>
         </div>
         <ha-dialog-footer slot="footer">
-          ${
-            this._cardConfig !== undefined
-              ? html`
-                  <ha-button
-                    slot="secondaryAction"
-                    @click=${this._toggleMode}
-                    .disabled=${!this._guiModeAvailable}
-                    class="gui-mode-button"
-                    appearance="plain"
-                  >
-                    ${this.hass!.localize(
-                      !this._cardEditorEl || this._GUImode
-                        ? "ui.panel.lovelace.editor.edit_card.show_code_editor"
-                        : "ui.panel.lovelace.editor.edit_card.show_visual_editor"
-                    )}
-                  </ha-button>
-                `
-              : ""
-          }
-          <ha-button
-            appearance="plain"
-            slot="secondaryAction"
-            @click=${this._cancel}
-          >
-            ${this.hass!.localize("ui.common.cancel")}
-          </ha-button>
-          <ha-button
-            slot="primaryAction"
-            ?disabled=${!this._canSave || this._saving || !this.isDirtyState}
-            @click=${this._save}
-            .loading=${this._saving}
-          >
-            ${this.hass!.localize("ui.common.save")}
-          </ha-button>
+          ${this._renderModeButton()} ${this._renderCancelButton()}
+          ${this._renderSaveButton()}
         </ha-dialog-footer>
       </ha-dialog>
     `;
@@ -418,6 +605,7 @@ export class HuiDialogEditCard
     try {
       await this._params!.saveCardConfig(this._cardConfig!);
       this._saving = false;
+      this._applied = true;
       this._markDirtyStateClean();
       showSaveSuccessToast(this, this.hass);
       this.closeDialog();
@@ -563,6 +751,77 @@ export class HuiDialogEditCard
         }
         .title-enlargeable {
           display: block;
+        }
+
+        /* Side panel / bottom sheet presentation */
+
+        :host([sidebar]) {
+          display: block;
+          height: 100%;
+          --code-mirror-max-height: none;
+          --ha-card-border-radius: var(
+            --ha-dialog-border-radius,
+            var(--ha-border-radius-2xl)
+          );
+        }
+
+        :host([sidebar][narrow]) {
+          --ha-bottom-sheet-surface-background: var(--card-background-color);
+          /* Without a header the tab row is the first thing under the handle,
+             so the drag area stops at the handle bar itself. */
+          --ha-bottom-sheet-handle-grab-extension: 0px;
+        }
+
+        :host([sidebar][narrow]) .sidebar-card {
+          /* Exactly the handle's height, cleared out here rather than inside
+             the scroller, so the sticky tab row sits flush against the top of
+             the scroll area with nothing above it but the handle itself. */
+          padding-top: var(--ha-space-5);
+        }
+
+        .sidebar-panel {
+          height: 100%;
+        }
+
+        .sidebar-card {
+          height: 100%;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          border-color: var(--primary-color);
+          border-width: 2px;
+        }
+
+        :host([narrow]) .sidebar-card {
+          border: none;
+          box-shadow: none;
+          border-bottom-left-radius: var(--ha-border-radius-square);
+          border-bottom-right-radius: var(--ha-border-radius-square);
+        }
+
+        .sidebar-card ha-dialog-header {
+          border-radius: var(--ha-card-border-radius);
+          border-bottom-left-radius: 0;
+          border-bottom-right-radius: 0;
+          background-color: var(
+            --ha-dialog-surface-background,
+            var(--card-background-color)
+          );
+        }
+
+        .yaml-toggle {
+          display: flex;
+          margin-top: var(--ha-space-4);
+        }
+
+        .sidebar-content {
+          /* Published so the tab row can bleed back out to the edges. */
+          --ha-card-editor-inline-padding: var(--ha-space-4);
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow: auto;
+          padding: 0 var(--ha-card-editor-inline-padding)
+            max(var(--safe-area-inset-bottom, 0px), var(--ha-space-4));
         }
       `,
     ];

@@ -7,6 +7,14 @@ import type { LovelaceViewRawConfig } from "../../../data/lovelace/config/view";
 import { isStrategyView } from "../../../data/lovelace/config/view";
 
 export type LovelaceCardPath = [number, number] | [number, number, number];
+
+/**
+ * A view header and footer each hold a single card that is not part of the
+ * view's `cards` list. These sentinel card indexes give them a card path, so
+ * they can be identified like any other card on the dashboard.
+ */
+export const VIEW_HEADER_CARD_INDEX = -1;
+export const VIEW_FOOTER_CARD_INDEX = -2;
 export type LovelaceContainerPath = [number] | [number, number];
 
 export const parseLovelaceCardPath = (

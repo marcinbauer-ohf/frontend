@@ -343,16 +343,19 @@ export class HuiSection extends ConditionalListenerMixin<LovelaceSectionConfig>(
       const cardConfig = sectionConfig.cards![cardIndex];
       showEditCardDialog(this, {
         lovelaceConfig: this.lovelace.config,
-        saveCardConfig: async (newCardConfig) => {
+        saveCardConfig: async (newCardConfig, options) => {
           const newConfig = replaceCard(
             this.lovelace!.config,
             [this.viewIndex, this.index, cardIndex],
             newCardConfig
           );
-          await this.lovelace!.saveConfig(newConfig);
+          await (options?.stage
+            ? this.lovelace!.stageConfig(newConfig)
+            : this.lovelace!.saveConfig(newConfig));
         },
         sectionConfig,
         cardConfig,
+        cardPath: ev.detail.path,
       });
     });
     this._layoutElement.addEventListener("ll-delete-card", (ev) => {

@@ -303,6 +303,25 @@ export const supportsFeaturesType = (
   return !supportsFeature || supportsFeature(hass, context);
 };
 
+export const isFeatureTypeEditable = (type: string) => {
+  if (isCustomType(type)) {
+    const customType = stripCustomPrefix(type);
+    return CUSTOM_FEATURE_ENTRIES[customType]?.configurable;
+  }
+  return EDITABLES_FEATURE_TYPES.has(type as FeatureType);
+};
+
+export const getFeatureTypeLabel = (hass: HomeAssistant, type: string) => {
+  if (isCustomType(type)) {
+    const customType = stripCustomPrefix(type);
+    return CUSTOM_FEATURE_ENTRIES[customType]?.name || type;
+  }
+  return (
+    hass.localize(`ui.panel.lovelace.editor.features.types.${type}.label`) ||
+    type
+  );
+};
+
 declare global {
   interface HASSDomEvents {
     "features-changed": {
@@ -343,26 +362,11 @@ export class HuiCardFeaturesEditor extends LitElement {
   }
 
   private _isFeatureTypeEditable(type: string) {
-    if (isCustomType(type)) {
-      const customType = stripCustomPrefix(type);
-      const customFeatureEntry = CUSTOM_FEATURE_ENTRIES[customType];
-      return customFeatureEntry?.configurable;
-    }
-
-    return EDITABLES_FEATURE_TYPES.has(type as FeatureType);
+    return isFeatureTypeEditable(type);
   }
 
   private _getFeatureTypeLabel(type: string) {
-    if (isCustomType(type)) {
-      const customType = stripCustomPrefix(type);
-      const customFeatureEntry = CUSTOM_FEATURE_ENTRIES[customType];
-      return customFeatureEntry?.name || type;
-    }
-    return (
-      this.hass!.localize(
-        `ui.panel.lovelace.editor.features.types.${type}.label`
-      ) || type
-    );
+    return getFeatureTypeLabel(this.hass!, type);
   }
 
   private _getKey(feature: LovelaceCardFeatureConfig) {
