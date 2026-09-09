@@ -154,3 +154,32 @@ describe("rate limit", () => {
     expect(isRateLimited(Date.now() + 3600_001)).toBe(false);
   });
 });
+
+describe("prototype mode (no endpoint)", () => {
+  const noEndpoint = { config: {} } as unknown as HomeAssistant;
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+  afterEach(() => {
+    setBetaFeedbackTransport({ send: async () => undefined });
+    localStorage.clear();
+  });
+
+  it("resolves without hitting the transport and queues nothing", async () => {
+    const send = vi.fn();
+    setBetaFeedbackTransport({ send });
+
+    await expect(
+      submitBetaFeedback(noEndpoint, makeReport("bf_AAAAAAAA"))
+    ).resolves.toBeUndefined();
+    expect(send).not.toHaveBeenCalled();
+    expect(getOutbox()).toEqual([]);
+  });
+
+  it("drops reports queued before the endpoint was removed", async () => {
+    addToOutbox(makeReport("bf_AAAAAAAA"));
+    await expect(flushOutbox(noEndpoint)).resolves.toBe(0);
+    expect(getOutbox()).toEqual([]);
+  });
+});

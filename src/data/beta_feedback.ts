@@ -142,12 +142,15 @@ export const submitBetaFeedback = async (
   report: BetaFeedbackReport
 ): Promise<void> => {
   const endpoint = getBetaFeedbackEndpoint(hass);
-  if (!endpoint) {
-    throw new Error("No beta feedback endpoint configured");
-  }
   // counted on attempt, not on success, so a failing endpoint cannot be used
   // to bypass the limit
   recordSend();
+  // ponytail: no endpoint = prototype mode, the report is dropped instead of
+  // sent so the flow can be walked end to end. Remove once
+  // BETA_FEEDBACK_ENDPOINT (or config.beta_feedback_url) has a real value.
+  if (!endpoint) {
+    return;
+  }
   try {
     await transport.send(report, endpoint);
   } catch (err) {
@@ -164,7 +167,9 @@ export const submitBetaFeedback = async (
 export const flushOutbox = async (hass: HomeAssistant): Promise<number> => {
   const endpoint = getBetaFeedbackEndpoint(hass);
   if (!endpoint) {
-    return getOutbox().length;
+    // prototype mode: nothing can ever be delivered, so don't nag about a queue
+    writeStore(OUTBOX_KEY, []);
+    return 0;
   }
   for (const report of getOutbox()) {
     try {

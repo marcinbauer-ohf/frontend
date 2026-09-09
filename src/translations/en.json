@@ -1557,7 +1557,7 @@
           "title": "Included with your report"
         },
         "context": {
-          "title": "Include context",
+          "title": "System and page information",
           "preview": "Preview",
           "dialog_title": "Included context",
           "description": "Only the items you leave ticked are sent with your report.",
@@ -1588,8 +1588,8 @@
           "hint": "Your message and the context selected above are sent to Home Assistant."
         },
         "analytics": {
-          "label": "Also send a one-time analytics snapshot",
-          "hint": "Sends the same data as the Analytics integration once, with this report only. Does not turn analytics on.",
+          "label": "One-time analytics snapshot",
+          "hint": "Sent with this report only. Does not turn analytics on.",
           "unavailable": "This version of Home Assistant cannot provide an analytics snapshot. Your report was sent without it."
         },
         "contact": {
