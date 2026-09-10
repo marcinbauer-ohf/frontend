@@ -106,9 +106,14 @@ export class HuiHistoryGraphCard extends LitElement implements LovelaceCard {
     this._names = {};
     this._entities.forEach((entity) => {
       const stateObj = this.hass!.states[entity.entity];
-      this._names[entity.entity] = stateObj
-        ? this.hass!.formatEntityName(stateObj, entity.name)
-        : entity.entity;
+      // Only override the history default ("Device ▸ Entity") when the card
+      // config names the entity explicitly.
+      if (entity.name && stateObj) {
+        this._names[entity.entity] = this.hass!.formatEntityName(
+          stateObj,
+          entity.name
+        );
+      }
     });
   }
 
@@ -373,6 +378,7 @@ export class HuiHistoryGraphCard extends LitElement implements LovelaceCard {
                     .height=${hasFixedHeight ? "100%" : undefined}
                     .narrow=${narrow}
                     .expandLegend=${this._config.expand_legend}
+                    inside-labels
                   ></state-history-charts>
                 `
           }

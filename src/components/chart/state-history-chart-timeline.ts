@@ -23,8 +23,23 @@ import { measureTextWidth } from "../../util/text";
 import { fireEvent, type HASSDomEvent } from "../../common/dom/fire_event";
 
 const ROW_HEIGHT = 30;
-// Taller rows when the name is drawn under the bar instead of in a column.
-const ROW_HEIGHT_INSIDE_LABELS = 64;
+const BAR_HEIGHT = 20;
+// Inside-labels mode: bar and the name under it form one block. ECharts centres
+// a row's content on the row's tick, which would pile all the slack above the
+// bar, so the block is lifted off the tick instead. The slack that is left goes
+// below the name, keeping the last row clear of the x axis.
+const INSIDE_LABEL_GAP = 4;
+const INSIDE_LABEL_HEIGHT = 14;
+const INSIDE_ROW_TOP = 2;
+const INSIDE_ROW_BOTTOM = 8;
+const ROW_HEIGHT_INSIDE_LABELS =
+  INSIDE_ROW_TOP +
+  BAR_HEIGHT +
+  INSIDE_LABEL_GAP +
+  INSIDE_LABEL_HEIGHT +
+  INSIDE_ROW_BOTTOM;
+const INSIDE_LABEL_LIFT =
+  ROW_HEIGHT_INSIDE_LABELS / 2 - INSIDE_ROW_TOP - BAR_HEIGHT / 2;
 const GRID_BOTTOM = 30;
 
 @customElement("state-history-chart-timeline")
@@ -78,7 +93,7 @@ export class StateHistoryChartTimeline extends LitElement {
         .hass=${this.hass}
         .options=${this._chartOptions}
         .height=${`${
-          this.data.length *
+          this._chartData.length *
             (this.insideLabels ? ROW_HEIGHT_INSIDE_LABELS : ROW_HEIGHT) +
           GRID_BOTTOM
         }px`}
@@ -95,12 +110,12 @@ export class StateHistoryChartTimeline extends LitElement {
     const categoryIndex = api.value(0);
     const start = api.coord([api.value(1), categoryIndex]);
     const end = api.coord([api.value(2), categoryIndex]);
-    const height = 20;
+    const height = BAR_HEIGHT;
     const coordSys = params.coordSys as any;
     const rectShape = echarts.graphic.clipRectByRect(
       {
         x: start[0],
-        y: start[1] - height / 2,
+        y: start[1] - height / 2 - (this.insideLabels ? INSIDE_LABEL_LIFT : 0),
         width: end[0] - start[0],
         height: height,
       },
@@ -248,13 +263,24 @@ export class StateHistoryChartTimeline extends LitElement {
               show: showNames,
               inside: true,
               margin: 0,
-              padding: [18, 0, 0, rtl ? 0 : 2],
+              padding: [
+                BAR_HEIGHT / 2 - INSIDE_LABEL_LIFT + INSIDE_LABEL_GAP,
+                0,
+                0,
+                rtl ? 0 : 2,
+              ],
+              lineHeight: INSIDE_LABEL_HEIGHT,
               align: rtl ? "right" : "left",
               verticalAlign: "top",
               formatter: (id: string) =>
                 (this._chartData.find((d) => d.id === id)?.name as string) ??
                 "",
-              hideOverlap: true,
+              // Rows are fixed height so names cannot collide. Without this
+              // ECharts adaptively drops the first/last row's name, which
+              // leaves an empty band under that row's bar.
+              showMinLabel: true,
+              showMaxLabel: true,
+              hideOverlap: false,
             }
           : {
               show: showNames,
@@ -283,7 +309,7 @@ export class StateHistoryChartTimeline extends LitElement {
             },
       },
       grid: {
-        top: 10,
+        top: insideLabels ? 0 : 10,
         bottom: GRID_BOTTOM,
         left: rtl ? 1 : labelWidth,
         right: rtl ? labelWidth : 1,
@@ -396,6 +422,11 @@ export class StateHistoryChartTimeline extends LitElement {
             color,
           },
         });
+      }
+      if (!dataRow.length) {
+        // No category is created for an entity without data, so reserving a
+        // row for it would just stretch the others around an empty band.
+        return;
       }
       datasets.push({
         id: stateInfo.entity_id,
