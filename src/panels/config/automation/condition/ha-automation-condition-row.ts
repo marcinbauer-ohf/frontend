@@ -245,14 +245,6 @@ export default class HaAutomationConditionRow extends LitElement {
         )
       : undefined;
 
-    // As text the behavior is kept in one run with the description, so the
-    // header's chip-sized flex gap does not open up around the separator. As a
-    // chip it needs that gap, so it moves out into the parameter list.
-    const heading =
-      behavior && !this._inlineParameters
-        ? `${description} · ${behavior.text}`
-        : description;
-
     const setOptions = isPlatform
       ? describeOptions(
           this.hass,
@@ -266,11 +258,6 @@ export default class HaAutomationConditionRow extends LitElement {
     const platformFields = isPlatform
       ? this.conditionDescriptions[this.condition.condition]?.fields
       : undefined;
-
-    // Behavior qualifies the targets ("any target"), so it is rendered
-    // immediately before them and nothing separates the two. Everything else
-    // trails the targets as an independent fact.
-    const behaviorParameter = this._inlineParameters ? behavior : undefined;
 
     const parameters = [
       ...setOptions,
@@ -309,10 +296,16 @@ export default class HaAutomationConditionRow extends LitElement {
             </div>`
       }
       <h3 slot="header">
-        ${heading}
+        ${description}
+        ${parameters.map((parameter) =>
+          this._renderParameter(parameter, platformFields)
+        )}
         ${
-          behaviorParameter
-            ? this._renderParameter(behaviorParameter, platformFields, true)
+          // Behavior qualifies the targets ("any target"), so it closes the
+          // header immediately before them, after the values that describe the
+          // condition on its own.
+          behavior
+            ? this._renderParameter(behavior, platformFields, true)
             : nothing
         }
         ${
@@ -325,9 +318,6 @@ export default class HaAutomationConditionRow extends LitElement {
               )
             : nothing
         }
-        ${parameters.map((parameter) =>
-          this._renderParameter(parameter, platformFields)
-        )}
         ${
           this.condition.note?.trim()
             ? html`

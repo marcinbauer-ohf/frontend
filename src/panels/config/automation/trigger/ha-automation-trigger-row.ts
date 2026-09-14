@@ -271,14 +271,6 @@ export default class HaAutomationTriggerRow extends LitElement {
           )
         : undefined;
 
-    // As text the behavior is kept in one run with the description, so the
-    // header's chip-sized flex gap does not open up around the separator. As a
-    // chip it needs that gap, so it moves out into the parameter list.
-    const heading =
-      behavior && !this._inlineParameters
-        ? `${description} · ${behavior.text}`
-        : description;
-
     const setOptions =
       type === "platform"
         ? describeOptions(
@@ -296,11 +288,6 @@ export default class HaAutomationTriggerRow extends LitElement {
         ? this.triggerDescriptions[(this.trigger as PlatformTrigger).trigger]
             ?.fields
         : undefined;
-
-    // Behavior qualifies the targets ("each target"), so it is rendered
-    // immediately before them and nothing separates the two. Everything else
-    // trails the targets as an independent fact.
-    const behaviorParameter = this._inlineParameters ? behavior : undefined;
 
     const parameters = [
       ...setOptions,
@@ -330,15 +317,16 @@ export default class HaAutomationTriggerRow extends LitElement {
             ></ha-trigger-icon>`
       }
       <h3 slot="header">
-        ${heading}
+        ${description}
+        ${parameters.map((parameter) =>
+          this._renderParameter(parameter, platformFields, options)
+        )}
         ${
-          behaviorParameter
-            ? this._renderParameter(
-                behaviorParameter,
-                platformFields,
-                options,
-                true
-              )
+          // Behavior qualifies the targets ("each target"), so it closes the
+          // header immediately before them, after the values that describe the
+          // trigger on its own.
+          behavior
+            ? this._renderParameter(behavior, platformFields, options, true)
             : nothing
         }
         ${
@@ -351,9 +339,6 @@ export default class HaAutomationTriggerRow extends LitElement {
               )
             : nothing
         }
-        ${parameters.map((parameter) =>
-          this._renderParameter(parameter, platformFields, options)
-        )}
         ${
           type !== "list" &&
           (this.trigger as Exclude<Trigger, TriggerList>).note?.trim()
