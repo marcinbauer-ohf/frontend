@@ -510,7 +510,10 @@ export class HaAutomationRowTargets extends LitElement {
           targetId,
           this._configEntryLookup || {},
           this._getLabel,
-          dropdownOption ? "icon" : ""
+          dropdownOption ? "icon" : "",
+          // An entity target names one thing, so its icon can carry what that
+          // thing is doing right now; the other types stand for a set.
+          true
         );
 
     if (dropdownOption) {
@@ -614,7 +617,10 @@ export class HaAutomationRowTargets extends LitElement {
       gap: var(--ha-space-1);
       justify-content: center;
       align-items: center;
-      border-radius: var(--ha-border-radius-md);
+      border-radius: var(--ha-border-radius-pill);
+      /* The start padding matches the gap the disc leaves above and below it,
+         so the icon sits in an even ring of chip. The label keeps the wider
+         end padding, and takes the same at the start when there is no icon. */
       padding: 0 var(--ha-space-2) 0 var(--ha-space-1);
       color: var(--ha-color-text-secondary);
       /*
@@ -630,7 +636,7 @@ export class HaAutomationRowTargets extends LitElement {
        */
       border: var(--ha-border-width-sm) solid transparent;
       overflow: hidden;
-      height: 32px;
+      height: var(--ha-space-9);
       position: relative;
     }
     /*
@@ -667,23 +673,34 @@ export class HaAutomationRowTargets extends LitElement {
       background: var(--ha-color-fill-danger-normal-resting);
       color: var(--ha-color-on-danger-normal);
     }
+    .target .label:first-child {
+      padding-inline-start: var(--ha-space-1);
+    }
     .target .label {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .target ha-icon,
-    .target ha-svg-icon,
-    .target ha-domain-icon {
+    /*
+     * The icon rides in a white disc so it reads as its own object against the
+     * chip's tint. The disc is white in both themes, so the glyph cannot use a
+     * theme colour -- the light-mode-dark ones invert and disappear on it --
+     * and takes a fixed mid-dark grey instead. An entity icon overrides this
+     * inline with its state colour, which is what carries the state.
+     */
+    .target > :not(.label) {
+      box-sizing: border-box;
+      flex: none;
       display: flex;
-      padding: var(--ha-space-1) 0;
-    }
-
-    .target ha-floor-icon {
-      display: flex;
-      height: 32px;
       align-items: center;
+      justify-content: center;
+      width: var(--ha-space-7);
+      height: var(--ha-space-7);
+      border-radius: var(--ha-border-radius-circle);
+      background: var(--white-color);
+      color: var(--dark-grey-color);
+      --mdc-icon-size: 18px;
     }
 
     button.target {

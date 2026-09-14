@@ -176,7 +176,11 @@ export class HaAutomationAddItems extends LitElement {
         target[0],
         target[1],
         this.configEntryLookup,
-        this.getLabel
+        this.getLabel,
+        "",
+        // An entity target names one thing, so its icon can carry what that
+        // thing is doing right now; the other types stand for a set.
+        true
       )}
       <div class="label">${target[2]}</div>
     </div>`;
@@ -297,18 +301,26 @@ export class HaAutomationAddItems extends LitElement {
         color: var(--primary-color);
       }
 
+      /* Same chip as an automation row's target: pill, disc, geometry */
       .selected-target {
         display: inline-flex;
         gap: var(--ha-space-1);
         justify-content: center;
         align-items: center;
-        border-radius: var(--ha-border-radius-md);
+        border-radius: var(--ha-border-radius-pill);
         background: var(--ha-color-fill-neutral-normal-resting);
+        /* The start padding matches the gap the disc leaves above and below
+           it, so the icon sits in an even ring of chip. */
         padding: 0 var(--ha-space-2) 0 var(--ha-space-1);
         border: var(--ha-border-width-sm) solid
           var(--ha-color-border-neutral-quiet);
         color: var(--ha-color-on-neutral-normal);
         overflow: hidden;
+        box-sizing: border-box;
+        height: var(--ha-space-9);
+      }
+      .selected-target .label:first-child {
+        padding-inline-start: var(--ha-space-1);
       }
       .selected-target .label {
         overflow: hidden;
@@ -316,18 +328,24 @@ export class HaAutomationAddItems extends LitElement {
         white-space: nowrap;
       }
 
-      .selected-target ha-icon,
-      .selected-target ha-svg-icon,
-      .selected-target ha-domain-icon {
+      /*
+       * The icon rides in a white disc, white in both themes, so the glyph
+       * takes a fixed mid-dark grey rather than a theme colour that would
+       * disappear on it. An entity icon overrides this inline with its state
+       * colour, which is what carries the state.
+       */
+      .selected-target > :not(.label) {
+        box-sizing: border-box;
+        flex: none;
         display: flex;
-        padding: var(--ha-space-1) 0;
-      }
-
-      .selected-target ha-floor-icon {
-        display: flex;
-        height: 32px;
-        width: 32px;
         align-items: center;
+        justify-content: center;
+        width: var(--ha-space-7);
+        height: var(--ha-space-7);
+        border-radius: var(--ha-border-radius-circle);
+        background: var(--white-color);
+        color: var(--dark-grey-color);
+        --mdc-icon-size: 18px;
       }
       .selected-target ha-domain-icon {
         filter: grayscale(100%);

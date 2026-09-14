@@ -1,5 +1,7 @@
 import { mdiLabel, mdiTextureBox } from "@mdi/js";
 import { html, nothing, type TemplateResult } from "lit";
+import { styleMap } from "lit/directives/style-map";
+import { stateColorCss } from "../../../../common/entity/state_color";
 import "../../../../components/ha-domain-icon";
 import "../../../../components/ha-floor-icon";
 import "../../../../components/ha-icon";
@@ -16,7 +18,9 @@ export const getTargetIcon = (
   targetId: string | undefined,
   configEntryLookup: Record<string, ConfigEntry>,
   getLabel?: (id: string) => LabelRegistryEntry | undefined,
-  slot?: string
+  slot?: string,
+  /** Tints an entity icon with its state color, so the icon carries the state */
+  colorizeEntityState = false
 ): TemplateResult | typeof nothing => {
   if (!targetId) {
     return nothing;
@@ -60,6 +64,11 @@ export const getTargetIcon = (
     return html`<ha-state-icon
       .stateObj=${states[targetId]}
       .slot=${slot}
+      style=${styleMap({
+        color: colorizeEntityState
+          ? stateColorCss(states[targetId])
+          : undefined,
+      })}
     ></ha-state-icon>`;
   }
 

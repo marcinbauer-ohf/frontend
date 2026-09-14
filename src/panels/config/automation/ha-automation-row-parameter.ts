@@ -137,6 +137,11 @@ export class HaAutomationRowParameter extends LitElement {
       line-height: 1;
       color: var(--ha-color-text-secondary);
     }
+    /* A value that cannot be edited here is a fact about the row, not a
+       control, so it recedes to the secondary colour like the separator. */
+    .text {
+      color: var(--ha-color-text-secondary);
+    }
     ha-dropdown {
       max-width: 100%;
     }
@@ -161,7 +166,7 @@ export class HaAutomationRowParameter extends LitElement {
       border: var(--ha-border-width-sm) solid
         var(--ha-color-border-neutral-quiet);
       overflow: hidden;
-      height: 32px;
+      height: var(--ha-space-9);
       max-width: 100%;
       cursor: pointer;
       font: inherit;
