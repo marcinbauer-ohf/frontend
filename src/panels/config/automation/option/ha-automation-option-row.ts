@@ -32,6 +32,7 @@ import "../../../../components/ha-svg-icon";
 import type {
   Condition,
   OptionSidebarConfig,
+  TriggerCondition,
 } from "../../../../data/automation";
 import { describeCondition } from "../../../../data/automation_i18n";
 import { fullEntitiesContext } from "../../../../data/context";
@@ -44,6 +45,7 @@ import "../action/ha-automation-action";
 import type HaAutomationAction from "../action/ha-automation-action";
 import "../condition/ha-automation-condition";
 import type HaAutomationCondition from "../condition/ha-automation-condition";
+import "../trigger/ha-automation-row-triggers";
 import { showEditorToast } from "../editor-toast";
 import {
   editorStyles,
@@ -106,6 +108,38 @@ export default class HaAutomationOptionRow extends LitElement {
     this._expanded = ev.detail.expanded;
   }
 
+  // A "Triggered by" condition gets the same trigger chips as the condition
+  // row, so the option reads as trigger names rather than raw ids. Everything
+  // else stays the plain text description.
+  private _renderDescription() {
+    const conditions = ensureArray<Condition | string>(this.option!.conditions);
+    const first = conditions?.[0];
+    if (!first || typeof first === "string" || first.condition !== "trigger") {
+      return this._getDescription();
+    }
+    const prefix = capitalizeFirstLetter(
+      this.hass
+        .localize(
+          "ui.panel.config.automation.editor.conditions.type.trigger.description.full",
+          { id: "" }
+        )
+        .trim()
+    );
+    return html`${prefix}
+      <ha-automation-row-triggers
+        .hass=${this.hass}
+        .ids=${ensureArray((first as TriggerCondition).id ?? [])}
+      ></ha-automation-row-triggers>
+      ${
+        conditions.length > 1
+          ? this.hass.localize(
+              "ui.panel.config.automation.editor.actions.type.choose.option_description_additional",
+              { numberOfAdditionalConditions: conditions.length - 1 }
+            )
+          : nothing
+      }`;
+  }
+
   private _getDescription() {
     const conditions = ensureArray<Condition | string>(this.option!.conditions);
     if (!conditions || conditions.length === 0) {
@@ -153,10 +187,14 @@ export default class HaAutomationOptionRow extends LitElement {
       <h3 slot="header">
         ${
           this.option
-            ? `${this.hass.localize(
+            ? html`${this.hass.localize(
                 "ui.panel.config.automation.editor.actions.type.choose.option",
                 { number: this.index + 1 }
-              )}: ${this.option.alias || (this._expanded ? "" : this._getDescription())}`
+              )}:
+              ${
+                this.option.alias ||
+                (this._expanded ? nothing : this._renderDescription())
+              }`
             : this.hass.localize(
                 "ui.panel.config.automation.editor.actions.type.choose.default"
               )

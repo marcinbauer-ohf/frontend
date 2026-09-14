@@ -16,7 +16,6 @@ import {
   mdiPlaylistEdit,
   mdiPlusCircleMultipleOutline,
   mdiRenameBox,
-  mdiLinkVariantOff,
   mdiStopCircleOutline,
 } from "@mdi/js";
 import deepClone from "deep-clone-simple";
@@ -49,25 +48,14 @@ import "../../../../components/ha-dropdown-item";
 import "../../../../components/ha-expansion-panel";
 import "../../../../components/ha-icon-button";
 import "../../../../components/ha-tooltip";
-import "../../../../components/ha-trigger-icon";
 import type {
   AutomationClipboard,
-  AutomationConfig,
   Condition,
   ConditionSidebarConfig,
   TriggerCondition,
 } from "../../../../data/automation";
-import {
-  automationConfigContext,
-  editingTriggerConditionContext,
-  isCondition,
-  testCondition,
-} from "../../../../data/automation";
-import {
-  describeCondition,
-  getTriggerInfos,
-  mergeStaleTriggers,
-} from "../../../../data/automation_i18n";
+import { isCondition, testCondition } from "../../../../data/automation";
+import { describeCondition } from "../../../../data/automation_i18n";
 import type { ConditionDescriptions } from "../../../../data/condition";
 import { CONDITION_BUILDING_BLOCKS } from "../../../../data/condition";
 import {
@@ -92,6 +80,7 @@ import { overflowStyles, rowStyles } from "../styles";
 import { getDeviceTarget } from "../target/get_device_target";
 import { getEntityTarget } from "../target/get_entity_target";
 import "../target/ha-automation-row-targets";
+import "../trigger/ha-automation-row-triggers";
 import "./ha-automation-condition-editor";
 import type HaAutomationConditionEditor from "./ha-automation-condition-editor";
 import "./types/ha-automation-condition-and";
@@ -166,14 +155,6 @@ export default class HaAutomationConditionRow extends LitElement {
   // Tracks the last value broadcast via "trigger-condition-editing-changed",
   // so we only fire on real changes.
   private _triggerEditingSignalled = false;
-
-  @state()
-  @consume({ context: automationConfigContext, subscribe: true })
-  private _automationConfig?: AutomationConfig;
-
-  @state()
-  @consume({ context: editingTriggerConditionContext, subscribe: true })
-  private _editingTriggerCondition = false;
 
   @state()
   @consume({ context: fullEntitiesContext, subscribe: true })
@@ -658,8 +639,6 @@ export default class HaAutomationConditionRow extends LitElement {
 
   private _getDeviceTarget = memoizeOne(getDeviceTarget);
 
-  private _getTriggerInfos = memoizeOne(getTriggerInfos);
-
   private _getTarget(
     descriptionHasTarget: boolean,
     hasEntityTarget: boolean
@@ -690,71 +669,11 @@ export default class HaAutomationConditionRow extends LitElement {
         )
         .trim()
     );
-    if (!ids.length) {
-      return html`${prefix}
-        <div class="trigger warning">
-          ${this.hass.localize(
-            "ui.panel.config.automation.editor.conditions.type.trigger.description.no_trigger"
-          )}
-        </div>`;
-    }
-
-    const triggers = ensureArray(this._automationConfig?.triggers || []);
-
-    const triggerInfos = this._getTriggerInfos(
-      triggers,
-      this.hass,
-      this._entityReg
-    );
-    const selectedIds = new Set(ids.map(String));
-    const availableIds = new Set(triggerInfos.map((info) => info.id));
-    // Selected ids that no longer match any existing trigger (deleted trigger).
-    const staleIds = [
-      ...new Set(ids.map(String).filter((id) => id && !availableIds.has(id))),
-    ];
-    // Match by id against every trigger, so legacy automations where several
-    // triggers share the same id render one chip per matching trigger. Missing
-    // entries are interleaved by id so each keeps its deleted trigger's slot.
-    const selectedInfos = triggerInfos.filter((info) =>
-      selectedIds.has(info.id)
-    );
     return html`${prefix}
-    ${mergeStaleTriggers(selectedInfos, staleIds).map((entry) =>
-      "missing" in entry
-        ? html`
-            <div class="trigger warning">
-              <ha-svg-icon .path=${mdiLinkVariantOff}></ha-svg-icon>
-              <span>
-                ${this.hass.localize(
-                  "ui.panel.config.automation.editor.conditions.type.trigger.missing_trigger"
-                )}
-              </span>
-            </div>
-          `
-        : html`
-            <div class="trigger">
-              ${
-                this._editingTriggerCondition
-                  ? html`<span
-                        class="trigger-index"
-                        id=${`trigger-index-${entry.info.position}`}
-                        >${entry.info.position}</span
-                      >
-                      <ha-tooltip for=${`trigger-index-${entry.info.position}`}>
-                        ${this.hass.localize(
-                        "ui.panel.config.automation.editor.triggers.index_tooltip"
-                      )}
-                      </ha-tooltip>`
-                  : nothing
-              }
-              <ha-trigger-icon
-                .hass=${this.hass}
-                .trigger=${entry.info.triggerType}
-              ></ha-trigger-icon>
-              <span>${entry.info.label}</span>
-            </div>
-          `
-    )}`;
+      <ha-automation-row-triggers
+        .hass=${this.hass}
+        .ids=${ids}
+      ></ha-automation-row-triggers>`;
   }
 
   private _renderTargets = memoizeOne(
@@ -1267,30 +1186,7 @@ export default class HaAutomationConditionRow extends LitElement {
   }
 
   static get styles(): CSSResultGroup {
-    return [
-      rowStyles,
-      overflowStyles,
-      css`
-        .trigger {
-          display: flex;
-          align-items: center;
-          gap: var(--ha-space-2);
-          background-color: var(--ha-color-fill-neutral-normal-resting);
-          border-radius: var(--ha-border-radius-md);
-          padding: var(--ha-space-1) var(--ha-space-2);
-          color: var(--ha-color-on-neutral-normal);
-        }
-        .trigger ha-trigger-icon,
-        .trigger .trigger-index {
-          flex: none;
-          align-self: flex-start;
-        }
-        .trigger.warning {
-          background-color: var(--ha-color-fill-warning-normal-resting);
-          color: var(--ha-color-on-warning-normal);
-        }
-      `,
-    ];
+    return [rowStyles, overflowStyles, css``];
   }
 }
 
