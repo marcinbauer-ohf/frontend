@@ -86,7 +86,9 @@ export class HaAutomationCollapsedStack extends LitElement {
       width: var(--ha-space-8);
       height: 2px;
       border-radius: 1px;
-      background: var(--ha-color-border-neutral-quiet);
+      /* the -normal step, not -quiet: the peek's own 0.6 opacity fades this
+         line too, and at -quiet it was hard to pick out against the card */
+      background: var(--ha-color-border-neutral-normal);
     }
     .peek[tier="2"]::after {
       width: calc(2 * var(--ha-space-8));
