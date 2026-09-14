@@ -20,7 +20,7 @@ import {
   mdiTransitConnection,
   mdiUndo,
 } from "@mdi/js";
-import type { UnsubscribeFunc } from "home-assistant-js-websocket";
+import type { HassEntity, UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query } from "lit/decorators";
@@ -56,6 +56,12 @@ import {
 } from "../../../data/automation";
 import { substituteBlueprint } from "../../../data/blueprint";
 import { validateConfig } from "../../../data/config";
+import { computeStateName } from "../../../common/entity/compute_state_name";
+import {
+  automationDisabledUntil,
+  formatDisabledUntil,
+  setAutomationDisabledUntil,
+} from "../../../data/automation-disable-until";
 import { UNAVAILABLE } from "../../../data/entity/entity";
 import {
   type EntityRegistryEntry,
@@ -74,6 +80,7 @@ import type { Entries, ValueChangedEvent } from "../../../types";
 import { isMac } from "../../../util/is_mac";
 import { showEditorToast } from "./editor-toast";
 import { showAssignCategoryDialog } from "../category/show-dialog-assign-category";
+import { showAutomationDisableDialog } from "./automation-disable-dialog/show-dialog-automation-disable";
 import { showAutomationModeDialog } from "./automation-mode-dialog/show-dialog-automation-mode";
 import { showAutomationSaveDialog } from "./automation-save-dialog/show-dialog-automation-save";
 import { showAutomationSaveTimeoutDialog } from "./automation-save-timeout-dialog/show-dialog-automation-save-timeout";
@@ -581,9 +588,7 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
                                   stateObj?.state === "off"
                                     ? html`
                                         <ha-alert alert-type="info">
-                                          ${this.hass.localize(
-                                            "ui.panel.config.automation.editor.disabled"
-                                          )}
+                                          ${this._disabledAlertText(stateObj)}
                                           <ha-button
                                             size="s"
                                             slot="action"
@@ -609,9 +614,7 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
                       stateObj?.state === "off"
                         ? html`
                             <ha-alert alert-type="info">
-                              ${this.hass.localize(
-                                "ui.panel.config.automation.editor.disabled"
-                              )}
+                              ${this._disabledAlertText(stateObj)}
                               <ha-button
                                 appearance="filled"
                                 size="s"
@@ -847,10 +850,31 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
       return;
     }
     const stateObj = this.hass.states[this.currentEntityId];
-    const service = stateObj.state === "off" ? "turn_on" : "turn_off";
-    await this.hass.callService("automation", service, {
-      entity_id: stateObj.entity_id,
+    if (stateObj.state === "off") {
+      setAutomationDisabledUntil(stateObj.entity_id);
+      await this.hass.callService("automation", "turn_on", {
+        entity_id: stateObj.entity_id,
+      });
+      return;
+    }
+    showAutomationDisableDialog(this, {
+      name: computeStateName(stateObj),
+      confirm: async (until) => {
+        setAutomationDisabledUntil(stateObj.entity_id, until);
+        await this.hass.callService("automation", "turn_off", {
+          entity_id: stateObj.entity_id,
+        });
+      },
     });
+  }
+
+  private _disabledAlertText(stateObj: HassEntity): string {
+    const until = automationDisabledUntil(stateObj.entity_id);
+    return until
+      ? this.hass.localize("ui.panel.config.automation.editor.disabled_until", {
+          time: formatDisabledUntil(until, this.hass.locale, this.hass.config),
+        })
+      : this.hass.localize("ui.panel.config.automation.editor.disabled");
   }
 
   private _preprocessYaml() {

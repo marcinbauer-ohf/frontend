@@ -78,6 +78,11 @@ import {
   showAutomationEditor,
   triggerAutomationActions,
 } from "../../../data/automation";
+import {
+  automationDisabledUntil,
+  formatDisabledUntil,
+  setAutomationDisabledUntil,
+} from "../../../data/automation-disable-until";
 import type { CategoryRegistryEntry } from "../../../data/category_registry";
 import {
   createCategoryRegistryEntry,
@@ -122,6 +127,7 @@ import {
   getLabelsTableColumn,
   getTriggeredAtTableColumn,
 } from "../common/data-table-columns";
+import { showAutomationDisableDialog } from "./automation-disable-dialog/show-dialog-automation-disable";
 import { configSections } from "../config-sections";
 import { showLabelDetailDialog } from "../labels/show-dialog-label-detail";
 import {
@@ -376,13 +382,41 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
           filterable: true,
           direction: "asc",
           flex: 2,
-          extraTemplate: (automation) =>
-            automation.label_entries.length
-              ? html`<ha-data-table-labels
-                  @label-clicked=${narrow ? undefined : this._labelClicked}
-                  .labels=${automation.label_entries}
-                ></ha-data-table-labels>`
-              : nothing,
+          extraTemplate: (automation) => {
+            const until =
+              automation.state === "off"
+                ? automationDisabledUntil(automation.entity_id)
+                : undefined;
+            if (!until && !automation.label_entries.length) {
+              return nothing;
+            }
+            return html`
+              ${
+                until
+                  ? html`<div class="disabled-until">
+                      ${localize(
+                        "ui.panel.config.automation.picker.disabled_until",
+                        {
+                          time: formatDisabledUntil(
+                            until,
+                            this.hass.locale,
+                            this.hass.config
+                          ),
+                        }
+                      )}
+                    </div>`
+                  : nothing
+              }
+              ${
+                automation.label_entries.length
+                  ? html`<ha-data-table-labels
+                      @label-clicked=${narrow ? undefined : this._labelClicked}
+                      .labels=${automation.label_entries}
+                    ></ha-data-table-labels>`
+                  : nothing
+              }
+            `;
+          },
         },
         area: getAreaTableColumn(localize),
         category: getCategoryTableColumn(localize),
@@ -1123,16 +1157,31 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
   };
 
   private _handleSwitchToggle = (ev: Event) => {
-    const automation = (
-      ev.currentTarget as HaSwitch & { automation: AutomationItem }
-    ).automation;
+    const target = ev.currentTarget as HaSwitch & {
+      automation: AutomationItem;
+    };
+    const automation = target.automation;
+    // Undo the optimistic flip, the switch follows the entity state instead.
+    target.checked = automation.state === "on";
     this._toggle(automation);
   };
 
   private _toggle = async (automation: AutomationItem): Promise<void> => {
-    const service = automation.state === "off" ? "turn_on" : "turn_off";
-    await this.hass.callService("automation", service, {
-      entity_id: automation.entity_id,
+    if (automation.state === "off") {
+      setAutomationDisabledUntil(automation.entity_id);
+      await this.hass.callService("automation", "turn_on", {
+        entity_id: automation.entity_id,
+      });
+      return;
+    }
+    showAutomationDisableDialog(this, {
+      name: automation.name,
+      confirm: async (until) => {
+        setAutomationDisabledUntil(automation.entity_id, until);
+        await this.hass.callService("automation", "turn_off", {
+          entity_id: automation.entity_id,
+        });
+      },
     });
   };
 
@@ -1382,6 +1431,7 @@ ${rejected
   private _handleBulkEnable = async () => {
     const promises: Promise<ServiceCallResponse>[] = [];
     this._selected.forEach((entityId) => {
+      setAutomationDisabledUntil(entityId);
       promises.push(turnOnOffEntity(this.hass, entityId, true));
     });
     const result = await Promise.allSettled(promises);
@@ -1399,9 +1449,16 @@ ${rejected
     }
   };
 
-  private _handleBulkDisable = async () => {
+  private _handleBulkDisable = () => {
+    showAutomationDisableDialog(this, {
+      confirm: (until) => this._bulkDisable(until),
+    });
+  };
+
+  private _bulkDisable = async (until?: Date) => {
     const promises: Promise<ServiceCallResponse>[] = [];
     this._selected.forEach((entityId) => {
+      setAutomationDisabledUntil(entityId, until);
       promises.push(turnOnOffEntity(this.hass, entityId, false));
     });
     const result = await Promise.allSettled(promises);
@@ -1616,6 +1673,10 @@ ${rejected
         }
         hass-tabs-subpage-data-table.narrow {
           --data-table-row-height: 72px;
+        }
+        .disabled-until {
+          color: var(--secondary-text-color);
+          font-size: var(--ha-font-size-s);
         }
         .empty {
           --mdc-icon-size: 80px;

@@ -126,7 +126,8 @@
       },
       "automation": {
         "last_triggered": "Last triggered",
-        "trigger": "Run actions"
+        "trigger": "Run actions",
+        "disabled_until": "Disabled until {time}"
       },
       "button": {
         "press": "Press"
@@ -5170,6 +5171,21 @@
         },
         "automation": {
           "caption": "Automations",
+          "disable_dialog": {
+            "title": "Disable automation?",
+            "text": "''{name}'' will not run until you enable it again.",
+            "text_selected": "The selected automations will not run until you enable them again.",
+            "disable_for": "Disable for…",
+            "preset_3600": "1 hour",
+            "preset_14400": "4 hours",
+            "preset_28800": "8 hours",
+            "preset_86400": "24 hours",
+            "custom": "Custom duration",
+            "until": "Until {time}",
+            "disabled_toast": "''{name}'' disabled",
+            "disabled_toast_selected": "Selected automations disabled",
+            "disabled_until_toast": "''{name}'' disabled until {time}"
+          },
           "description": "Create custom behavior rules for your home",
           "picker": {
             "header": "Automation editor",
@@ -5217,7 +5233,8 @@
             "empty_text_1": "Automations make Home Assistant automatically respond to things happening in and around your home.",
             "empty_text_2": "Automations connect triggers to actions in a ''when trigger then action'' fashion with optional conditions. For example: ''When the sun sets and if {user} is home, then turn on the lights''.",
             "migrate_automation": "Migrate automation?",
-            "migrate_automation_description": "You can migrate this automation, so it can be edited from the UI. After it is migrated and you have saved it, you will have to manually delete your old automation from your configuration. Do you want to migrate this automation?"
+            "migrate_automation_description": "You can migrate this automation, so it can be edited from the UI. After it is migrated and you have saved it, you will have to manually delete your old automation from your configuration. Do you want to migrate this automation?",
+            "disabled_until": "Disabled until {time}"
           },
           "dialog_new": {
             "header": "Create automation",
@@ -6158,7 +6175,8 @@
             },
             "paste_toast_message": "Pasted automation from clipboard",
             "paste_invalid_yaml": "Pasted value is not valid YAML",
-            "paste_invalid_config": "Pasted automation is not editable in the visual editor"
+            "paste_invalid_config": "Pasted automation is not editable in the visual editor",
+            "disabled_until": "Automation is disabled until {time}"
           },
           "trace": {
             "refresh": "[%key:ui::common::refresh%]",
