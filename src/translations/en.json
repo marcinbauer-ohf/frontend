@@ -180,7 +180,8 @@
         "speed": {
           "low": "Low",
           "medium": "Medium",
-          "high": "High"
+          "high": "High",
+          "numbered": "Speed {speed}"
         }
       },
       "humidifier": {
@@ -518,7 +519,9 @@
       "append": "Append",
       "supports_markdown": "Supports {markdown_help_link}",
       "markdown": "Markdown",
-      "none": "None"
+      "none": "None",
+      "first": "First",
+      "last": "Last"
     },
     "components": {
       "input": {
@@ -1994,6 +1997,7 @@
               "cold": "Cold",
               "connectivity": "Connectivity",
               "gas": "Gas",
+              "glass_break": "Glass break",
               "heat": "Heat",
               "light": "Light",
               "lock": "Lock",
@@ -5412,6 +5416,8 @@
               "trigger": "Trigger",
               "copied_to_clipboard": "Trigger copied to clipboard",
               "cut_to_clipboard": "Trigger cut to clipboard",
+              "trigger_index_tooltip": "Position of this trigger, used to reference it in the Triggered by condition",
+              "trigger_index_aria_label": "Trigger {number}",
               "select": "Select a trigger",
               "no_items_for_target": "No triggers available for",
               "groups": {
@@ -5483,7 +5489,7 @@
                   "label": "State changed",
                   "attribute": "Attribute (optional)",
                   "from": "From (optional)",
-                  "for": "For",
+                  "for": "For at least",
                   "to": "To (optional)",
                   "any_state_ignore_attributes": "Any state (ignoring attribute changes)",
                   "description": {
@@ -5596,7 +5602,7 @@
                 "template": {
                   "label": "Template",
                   "value_template": "Value template",
-                  "for": "For",
+                  "for": "For at least",
                   "description": {
                     "picker": "Triggers when a template evaluates to true.",
                     "full": "When a template changes from false to true{hasDuration, select, \n true { for {duration}} \n other {}\n }"
@@ -5798,6 +5804,7 @@
                 "state": {
                   "label": "State",
                   "state": "[%key:ui::panel::config::automation::editor::conditions::type::state::label%]",
+                  "for_unavailable_with_attribute": "Not available when matching on an attribute.",
                   "description": {
                     "picker": "Tests if an entity (or attribute) is in a specific state.",
                     "is": "{hasAttribute, select, \n true {{attribute}} \n other {State}\n} is {states}{hasDuration, select, \n true { for {duration}} \n other {}\n}"
@@ -5852,11 +5859,19 @@
                 },
                 "trigger": {
                   "label": "Triggered by",
-                  "no_triggers": "There are no triggers with IDs set in this automation. Edit a trigger and give it a Trigger ID name.",
+                  "no_triggers": "There are no triggers in this automation. Add a trigger first.",
+                  "no_triggers_selected": "No triggers selected.",
                   "id": "Trigger",
+                  "missing_trigger": "Missing trigger",
+                  "missing_triggers": "This condition references a trigger that no longer exists. Uncheck it to clear it.",
+                  "duplicate_ids": "Some triggers share the same trigger ID. Avoid reusing a trigger ID to group triggers and select multiple triggers here instead.",
+                  "duplicate_ids_fix": "Fix",
+                  "assign_unique_ids_title": "Assign unique trigger IDs?",
+                  "assign_unique_ids_description": "Each trigger sharing an ID gets a unique one, and conditions using it are updated to match. Templates or actions that use trigger.id directly may need to be updated.",
                   "description": {
                     "picker": "Tests if the automation has been triggered by a specific trigger.",
-                    "full": "If triggered by {id}"
+                    "full": "If triggered by {id}",
+                    "summary": "If triggered by"
                   }
                 },
                 "zone": {
@@ -9392,7 +9407,7 @@
               "consumed_solar": "Solar",
               "consumed_battery": "Battery",
               "named_battery_charged": "[%key:ui::panel::lovelace::cards::energy::energy_sources_table::named_battery_charged%]",
-              "named_grid_consumed": "Consumed {name}",
+              "named_grid_consumed": "{name} consumed",
               "named_grid_exported": "[%key:ui::panel::lovelace::cards::energy::energy_sources_table::named_grid_exported%]"
             },
             "energy_sources_table": {
