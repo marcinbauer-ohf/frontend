@@ -3,7 +3,6 @@ import type { PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import type { HASSDomEvent } from "../common/dom/fire_event";
-import { fireEvent } from "../common/dom/fire_event";
 import { listenMediaQuery } from "../common/dom/media_query";
 import { toggleAttribute } from "../common/dom/toggle_attribute";
 import { computeRTLDirection } from "../common/util/compute_rtl";
@@ -89,12 +88,8 @@ export class HomeAssistantMain extends LitElement {
             >
               <ha-sidebar
                 .hass=${this.hass}
-                .narrow=${sidebarNarrow}
                 .route=${this.route}
                 .editMode=${this._sidebarEditMode}
-                .alwaysExpand=${
-                  sidebarNarrow || this.hass.dockedSidebar === "docked"
-                }
               ></ha-sidebar>
               ${panelContent}
             </ha-drawer>`
@@ -131,16 +126,11 @@ export class HomeAssistantMain extends LitElement {
 
         this._sidebarEditMode = ev.detail.editMode;
 
-        if (this._sidebarEditMode) {
-          const sidebarNarrow =
-            this._sidebarNarrow || this._externalSidebar || this.hass.kioskMode;
-          if (sidebarNarrow) {
-            this._drawerOpen = true;
-          } else {
-            fireEvent(this, "hass-dock-sidebar", {
-              dock: "docked",
-            });
-          }
+        if (
+          this._sidebarEditMode &&
+          (this._sidebarNarrow || this._externalSidebar || this.hass.kioskMode)
+        ) {
+          this._drawerOpen = true;
         }
       }
     );
@@ -161,16 +151,6 @@ export class HomeAssistantMain extends LitElement {
       }
       if (this._sidebarNarrow || this.hass.kioskMode) {
         this._drawerOpen = ev.detail?.open ?? !this._drawerOpen;
-      } else {
-        fireEvent(this, "hass-dock-sidebar", {
-          dock: ev.detail?.open
-            ? "docked"
-            : ev.detail?.open === false
-              ? "auto"
-              : this.hass.dockedSidebar === "auto"
-                ? "docked"
-                : "auto",
-        });
       }
     });
 
@@ -193,8 +173,6 @@ export class HomeAssistantMain extends LitElement {
 
   protected updated(changedProps: PropertyValues<this>) {
     super.updated(changedProps);
-
-    toggleAttribute(this, "expanded", this.hass.dockedSidebar === "docked");
 
     toggleAttribute(
       this,
@@ -228,11 +206,7 @@ export class HomeAssistantMain extends LitElement {
       --safe-area-content-inset-left: 0px;
       --safe-area-content-inset-right: var(--safe-area-inset-right);
     }
-    :host([expanded]) {
-      --ha-sidebar-width: calc(256px + var(--safe-area-inset-left, 0px));
-    }
     :host([modal]) {
-      --ha-sidebar-width: unset;
       --ha-top-app-bar-width: 100%;
       --safe-area-content-inset-left: var(--safe-area-inset-left);
     }

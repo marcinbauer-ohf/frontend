@@ -1,7 +1,5 @@
 import {
   mdiCellphoneCog,
-  mdiChevronDoubleLeft,
-  mdiChevronDoubleRight,
   mdiClose,
   mdiLinkVariant,
   mdiPencil,
@@ -15,7 +13,6 @@ import { classMap } from "lit/directives/class-map";
 import memoizeOne from "memoize-one";
 import { canShowPage } from "../common/config/can_show_page";
 import { fireEvent } from "../common/dom/fire_event";
-import { toggleAttribute } from "../common/dom/toggle_attribute";
 import { stringCompare } from "../common/string/compare";
 import type { LocalizeKeys } from "../common/translations/localize";
 import {
@@ -50,7 +47,6 @@ import { actionHandler } from "../panels/lovelace/common/directives/action-handl
 import { configSections } from "../panels/config/config-sections";
 import { haStyleScrollbar } from "../resources/styles";
 import type { HomeAssistant, PanelInfo, Route } from "../types";
-import { isMobileClient } from "../util/is_mobile";
 import "./animation/ha-fade-in";
 import "./ha-button";
 import "./ha-icon";
@@ -59,7 +55,6 @@ import "./ha-logo-svg";
 import "./ha-sortable";
 import "./ha-spinner";
 import "./ha-svg-icon";
-import "./ha-tooltip";
 import "./item/ha-list-item-button";
 import "./list/ha-list-nav";
 import "./user/ha-user-badge";
@@ -234,12 +229,7 @@ export const computePanels = memoizeOne(
 class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
-  @property({ type: Boolean, reflect: true }) public narrow = false;
-
   @property({ attribute: false }) public route!: Route;
-
-  @property({ attribute: "always-expand", type: Boolean })
-  public alwaysExpand = false;
 
   @property({ attribute: "edit-mode", type: Boolean, reflect: true })
   public editMode = false;
@@ -321,9 +311,6 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
 
   protected shouldUpdate(changedProps: PropertyValues): boolean {
     if (
-      changedProps.has("expanded") ||
-      changedProps.has("narrow") ||
-      changedProps.has("alwaysExpand") ||
       changedProps.has("editMode") ||
       changedProps.has("_updatesCount") ||
       changedProps.has("_issuesCount") ||
@@ -382,11 +369,8 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
     );
   }
 
-  protected updated(changedProps: PropertyValues<this>) {
+  protected updated(changedProps: PropertyValues) {
     super.updated(changedProps);
-    if (changedProps.has("alwaysExpand")) {
-      toggleAttribute(this, "expanded", this.alwaysExpand);
-    }
     if (!changedProps.has("hass")) {
       return;
     }
@@ -429,52 +413,13 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
         disabled: this.editMode,
       })}
     >
-      ${
-        !this.narrow && !this.alwaysExpand
-          ? html`
-              <button
-                id="sidebar-expand-button"
-                class="logo-toggle"
-                aria-label=${this.hass.localize("ui.sidebar.expand")}
-                @action=${this._toggleSidebar}
-              >
-                <ha-logo-svg></ha-logo-svg>
-                <ha-svg-icon .path=${mdiChevronDoubleRight}></ha-svg-icon>
-              </button>
-              ${this._renderToolTip(
-                "sidebar-expand-button",
-                this.hass.localize("ui.sidebar.expand")
-              )}
-            `
-          : html`
-              <a
-                class="logo-home"
-                href="/${getDefaultPanelUrlPath(this.hass)}"
-                aria-label=${this.sidebarTitle}
-              >
-                <ha-logo-svg></ha-logo-svg>
-              </a>
-            `
-      }
-      <div class="title">${this.sidebarTitle}</div>
-      ${
-        !this.narrow && this.alwaysExpand
-          ? html`
-              <ha-icon-button
-                id="sidebar-collapse-button"
-                class="collapse-button"
-                .label=${this.hass.localize("ui.sidebar.collapse")}
-                .path=${mdiChevronDoubleLeft}
-                @action=${this._toggleSidebar}
-              ></ha-icon-button>
-              ${this._renderToolTip(
-                "sidebar-collapse-button",
-                this.hass.localize("ui.sidebar.collapse"),
-                "bottom"
-              )}
-            `
-          : nothing
-      }
+      <a
+        class="logo-home"
+        href="/${getDefaultPanelUrlPath(this.hass)}"
+        aria-label=${this.sidebarTitle}
+      >
+        <ha-logo-svg></ha-logo-svg>
+      </a>
     </div>`;
   }
 
@@ -630,11 +575,6 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
         <ha-svg-icon slot="start" .path=${mdiPencil}></ha-svg-icon>
         <span class="item-text" slot="headline">${label}</span>
       </ha-list-item-button>
-      ${
-        !this.alwaysExpand
-          ? this._renderToolTip("sidebar-edit-mode", label)
-          : nothing
-      }
     `;
   }
 
@@ -682,11 +622,6 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
               : nothing
           }
         </ha-list-item-button>
-        ${
-          !this.alwaysExpand
-            ? this._renderToolTip(`sidebar-custom-${index}`, title)
-            : nothing
-        }
       `;
     });
   }
@@ -743,11 +678,6 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
             : nothing
         }
       </ha-list-item-button>
-      ${
-        !this.alwaysExpand && title
-          ? this._renderToolTip(`sidebar-panel-${urlPath}`, title)
-          : nothing
-      }
     `;
   }
 
@@ -895,15 +825,7 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
             ${this.hass.localize("ui.sidebar.add_link")}
           </span>
         </ha-list-item-button>
-        ${
-          !this.alwaysExpand
-            ? this._renderToolTip(
-                "sidebar-add-link",
-                this.hass.localize("ui.sidebar.add_link")
-              )
-            : nothing
-        }
-        <ha-button class="done-button" @click=${this._closeEditMode}>
+        <ha-button size="s" class="done-button" @click=${this._closeEditMode}>
           ${this.hass.localize("ui.sidebar.done")}
         </ha-button>
       </div>
@@ -954,11 +876,6 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
             : nothing
         }
       </ha-list-item-button>
-      ${
-        !this.alwaysExpand
-          ? this._renderToolTip("sidebar-settings", label)
-          : nothing
-      }
     `;
   }
 
@@ -976,34 +893,7 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           ${this.hass.localize("ui.sidebar.external_app_configuration")}
         </span>
       </ha-list-item-button>
-      ${
-        !this.alwaysExpand
-          ? this._renderToolTip(
-              "sidebar-external-config",
-              this.hass.localize("ui.sidebar.external_app_configuration")
-            )
-          : nothing
-      }
     `;
-  }
-
-  private _renderToolTip(
-    id: string,
-    text: string,
-    placement: "right" | "bottom" = "right"
-  ) {
-    if (isMobileClient) {
-      return nothing;
-    }
-
-    return html`<ha-tooltip
-      for=${id}
-      show-delay="0"
-      hide-delay="0"
-      .placement=${placement}
-    >
-      ${text}
-    </ha-tooltip>`;
   }
 
   private _handleExternalAppConfiguration(ev: Event) {
@@ -1011,13 +901,6 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
     this.hass.auth.external!.fireMessage({
       type: "config_screen/show",
     });
-  }
-
-  private _toggleSidebar(ev: CustomEvent) {
-    if (ev.detail.action !== "tap") {
-      return;
-    }
-    fireEvent(this, "hass-toggle-menu");
   }
 
   private _panelMoved(ev: CustomEvent) {
@@ -1089,8 +972,10 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
       haStyleScrollbar,
       sortableJiggleStyles,
       css`
+        /* One fixed-width vertical rail. Every item is an icon over a small
+           label, centered; the labels only fade in while the rail is
+           hovered or holds focus. There is no expanded state. */
         :host {
-          overflow: visible;
           height: 100%;
           display: flex;
           flex-direction: column;
@@ -1100,6 +985,7 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           -moz-user-select: none;
           background-color: var(--sidebar-background-color);
           width: 100%;
+          max-width: calc(80px + var(--safe-area-inset-left, 0px));
           box-sizing: border-box;
           padding-bottom: var(--safe-area-inset-bottom, 0px);
         }
@@ -1108,77 +994,28 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           box-sizing: border-box;
           display: flex;
           align-items: center;
-          justify-content: flex-start;
-          padding: 0 var(--ha-space-2);
+          justify-content: center;
           white-space: nowrap;
-          font-weight: var(--ha-font-weight-normal);
           color: var(
             --sidebar-menu-button-text-color,
             var(--primary-text-color)
           );
-          border-bottom: 1px solid var(--divider-color);
           background-color: var(
             --sidebar-menu-button-background-color,
             inherit
           );
-          font-size: var(--ha-font-size-xl);
           overflow: hidden;
-          width: calc(80px + var(--safe-area-inset-left, 0px));
-          padding-left: calc(
-            var(--ha-space-2) + var(--safe-area-inset-left, 0px)
-          );
-          padding-inline-start: calc(
-            var(--ha-space-2) + var(--safe-area-inset-left, 0px)
-          );
-          padding-inline-end: var(--ha-space-2);
-          padding-top: var(--safe-area-inset-top, 0px);
-          transition: width var(--ha-animation-duration-normal) ease;
-        }
-        :host([expanded]) .menu {
-          width: calc(
-            var(--ha-sidebar-expanded-width, 256px) +
-              var(--safe-area-inset-left, 0px)
-          );
-        }
-        :host([narrow][expanded]) .menu {
           width: 100%;
-        }
-        .logo-toggle {
-          position: relative;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: var(--ha-space-12);
-          height: var(--ha-space-12);
-          flex-shrink: 0;
-          /* button center sits at 40px from the sidebar edge, matching the
-             item icons, so it does not move when toggling */
-          margin-left: var(--ha-space-2);
-          margin-inline-start: var(--ha-space-2);
-          margin-inline-end: initial;
-          padding: 0;
-          border: none;
-          background: none;
-          cursor: pointer;
-          border-radius: var(--ha-border-radius-pill);
-          color: var(--sidebar-icon-color);
-          outline: none;
-        }
-        .logo-toggle:focus-visible {
-          outline: 2px solid var(--ha-color-focus);
-          outline-offset: -2px;
+          padding-inline-start: var(--safe-area-inset-left, 0px);
+          padding-top: var(--safe-area-inset-top, 0px);
         }
         .logo-home {
-          position: relative;
           display: flex;
           align-items: center;
           justify-content: center;
           width: var(--ha-space-12);
           height: var(--ha-space-12);
           flex-shrink: 0;
-          margin-left: var(--ha-space-2);
-          margin-inline-start: var(--ha-space-2);
-          margin-inline-end: initial;
           border-radius: var(--ha-border-radius-pill);
           outline: none;
         }
@@ -1186,55 +1023,9 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           outline: 2px solid var(--ha-color-focus);
           outline-offset: -2px;
         }
-        .logo-toggle ha-logo-svg,
         .logo-home ha-logo-svg {
           --mdc-icon-size: 32px;
           flex-shrink: 0;
-          transition: opacity var(--ha-animation-duration-fast) ease;
-        }
-        .logo-toggle ha-svg-icon {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%) scaleX(var(--scale-direction, 1));
-          --mdc-icon-size: 24px;
-          opacity: 0;
-          transition: opacity var(--ha-animation-duration-fast) ease;
-        }
-        .logo-toggle:hover ha-logo-svg,
-        .logo-toggle:focus-visible ha-logo-svg {
-          opacity: 0;
-        }
-        .logo-toggle:hover ha-svg-icon,
-        .logo-toggle:focus-visible ha-svg-icon {
-          opacity: 1;
-        }
-        .collapse-button {
-          flex-shrink: 0;
-          color: var(--sidebar-icon-color, var(--secondary-text-color));
-          transform: scaleX(var(--scale-direction, 1));
-          --mdc-icon-size: 24px;
-        }
-        .title {
-          margin-left: var(--ha-space-2);
-          margin-inline-start: var(--ha-space-2);
-          margin-inline-end: initial;
-          font-size: var(--ha-font-size-l);
-          font-weight: var(--ha-font-weight-bold);
-          flex: 1;
-          min-width: 0;
-          max-width: 0;
-          opacity: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          transition:
-            max-width var(--ha-animation-duration-normal) ease,
-            opacity var(--ha-animation-duration-normal) ease;
-        }
-        :host([expanded]) .title {
-          max-width: 100%;
-          opacity: 1;
-          transition-delay: 0ms, 80ms;
         }
 
         .panels-list {
@@ -1279,54 +1070,56 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           min-height: fit-content;
         }
 
-        /* Icon center stays at 40px from the sidebar edge in both states
-           (margin + inline padding always sum to 28px), so toggling only
-           animates widths — no layout shift. */
         ha-list-item-button {
           flex-shrink: 0;
-          margin: 0 var(--ha-space-4) var(--ha-space-1);
+          width: 100%;
+          margin: 0 0 var(--ha-space-2);
+          position: relative;
           border-radius: var(--ha-border-radius-xl);
           --ha-list-item-focus-radius: var(--ha-border-radius-xl);
           --ha-row-item-min-height: var(--ha-space-12);
           --ha-row-item-padding-block: 0;
-          --ha-row-item-padding-inline: var(--ha-space-3);
-          --ha-row-item-gap: var(--ha-space-4);
-          width: 48px;
-          position: relative;
-          transition:
-            width var(--ha-animation-duration-normal) ease,
-            margin var(--ha-animation-duration-normal) ease,
-            border-radius var(--ha-animation-duration-normal) ease;
+          --ha-row-item-padding-inline: 0;
+          --ha-row-item-gap: var(--ha-space-1);
+          /* the indicator pill carries the hover state, not the whole item */
+          --ha-ripple-hover-opacity: 0;
         }
         ha-list-item-button::part(base) {
-          transition:
-            padding var(--ha-animation-duration-normal) ease,
-            border-radius var(--ha-animation-duration-normal) ease;
+          flex-direction: column;
+          justify-content: center;
         }
-        ha-list-item-button::part(headline) {
-          color: var(--sidebar-text-color);
+        /* 56x32 active indicator around the icon */
+        ha-list-item-button::part(start) {
+          width: 56px;
+          height: var(--ha-space-8);
+          justify-content: center;
+          border-radius: var(--ha-border-radius-pill);
+          transition: background-color var(--ha-animation-duration-fast)
+            ease-out;
         }
-        :host([edit-mode]) ha-list-nav.before-spacer ha-list-item-button {
-          border: 1px solid var(--divider-color);
+        ha-list-item-button:hover:not(.selected)::part(start) {
+          background-color: var(--ha-color-fill-neutral-quiet-hover);
         }
-        :host([expanded]) ha-list-item-button {
-          width: var(--ha-sidebar-expanded-item-width, 240px);
-          margin: 0 var(--ha-space-2) var(--ha-space-1);
-          --ha-row-item-padding-inline: var(--ha-space-5);
-        }
-        :host([narrow][expanded]) ha-list-item-button {
-          width: calc(240px - var(--safe-area-inset-left, 0px));
-        }
-
-        ha-list-item-button.selected::part(headline) {
-          color: var(--sidebar-selected-icon-color);
-        }
-        ha-list-item-button.selected {
+        ha-list-item-button.selected::part(start) {
           background-color: color-mix(
             in srgb,
             var(--sidebar-selected-icon-color) 15%,
             transparent
           );
+        }
+        ha-list-item-button::part(content) {
+          flex: 0 0 auto;
+          width: 100%;
+          text-align: center;
+        }
+        ha-list-item-button::part(headline) {
+          color: var(--sidebar-text-color);
+        }
+        ha-list-item-button.selected::part(headline) {
+          color: var(--sidebar-selected-icon-color);
+        }
+        :host([edit-mode]) ha-list-nav.before-spacer ha-list-item-button {
+          border: 1px solid var(--divider-color);
         }
 
         ha-icon[slot="start"],
@@ -1341,23 +1134,25 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           color: var(--sidebar-selected-icon-color);
         }
 
+        /* Labels are always laid out, so revealing them shifts nothing */
         ha-list-item-button .item-text {
           display: block;
-          max-width: 0;
+          max-width: 120px;
+          margin-inline: auto;
           opacity: 0;
           overflow: hidden;
           white-space: nowrap;
           text-overflow: ellipsis;
-          font-size: var(--ha-font-size-m);
-          font-weight: var(--ha-font-weight-medium);
-          transition:
-            max-width var(--ha-animation-duration-normal) ease,
-            opacity var(--ha-animation-duration-normal) ease;
+          font-size: var(--ha-font-size-s);
+          font-weight: var(--ha-font-weight-normal);
+          line-height: var(--ha-line-height-condensed);
+          transition: opacity var(--ha-animation-duration-normal) ease;
         }
-        :host([expanded]) ha-list-item-button .item-text {
-          max-width: 100%;
+        :host(:hover) ha-list-item-button .item-text,
+        :host(:focus-within) ha-list-item-button .item-text,
+        /* editing without labels would be guesswork */
+        :host([edit-mode]) ha-list-item-button .item-text {
           opacity: 1;
-          transition-delay: 0ms, 80ms;
         }
 
         .badge {
@@ -1371,39 +1166,26 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           background-color: var(--accent-color);
           padding: 2px 6px;
           color: var(--text-accent-color, var(--text-primary-color));
-          transition:
-            opacity var(--ha-animation-duration-normal) ease,
-            transform var(--ha-animation-duration-normal) ease;
         }
-
         ha-svg-icon + .badge,
         ha-user-badge + .badge {
           position: absolute;
-          top: var(--ha-space-1);
-          left: 34px;
+          top: var(--ha-space-2);
+          /* trailing edge of the centered icon */
+          left: calc(50% + var(--ha-space-1));
           border-radius: var(--ha-border-radius-md);
           font-size: 0.65em;
           line-height: var(--ha-line-height-expanded);
           padding: 0 var(--ha-space-1);
         }
-        :host([expanded]) .badge[slot="start"],
-        :host(:not([expanded])) .badge[slot="end"] {
-          opacity: 0;
-          transform: scale(0.8);
-          pointer-events: none;
+        .badge[slot="end"] {
+          display: none;
         }
 
         ha-user-badge {
           width: 32px;
           height: 32px;
           flex-shrink: 0;
-        }
-
-        ha-list-item-button.user {
-          --ha-row-item-padding-inline: var(--ha-space-2);
-        }
-        :host([expanded]) ha-list-item-button.user {
-          --ha-row-item-padding-inline: var(--ha-space-4);
         }
 
         .spacer {
@@ -1413,12 +1195,7 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
 
         .show-panel,
         .hide-panel {
-          display: none;
           --mdc-icon-button-size: 24px;
-        }
-        :host([expanded]) .show-panel,
-        :host([expanded]) .hide-panel {
-          display: block;
         }
 
         ha-list-item-button.hidden-panel {
@@ -1433,7 +1210,7 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           display: flex;
           flex-direction: column;
           gap: var(--ha-space-2);
-          padding: var(--ha-space-2) var(--ha-space-4);
+          padding: var(--ha-space-2);
           border-top: 1px solid var(--divider-color);
         }
         .edit-footer .done-button {
@@ -1441,12 +1218,8 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .menu,
-          ha-list-item-button,
           ha-list-item-button .item-text,
-          .logo-toggle ha-logo-svg,
-          .logo-toggle ha-svg-icon,
-          .title {
+          ha-list-item-button::part(start) {
             transition: 1ms;
           }
         }
