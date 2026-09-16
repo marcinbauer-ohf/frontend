@@ -19,9 +19,10 @@ import {
   mdiWeb,
 } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
-import { css, html, LitElement, nothing } from "lit";
+import { css, html, LitElement, nothing, svg } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
+import { keyed } from "lit/directives/keyed";
 import { consumeLocalize } from "../common/decorators/consume-context-entry";
 import { storage } from "../common/decorators/storage";
 import { fireEvent } from "../common/dom/fire_event";
@@ -62,7 +63,6 @@ import {
 import { showAlertDialog } from "../dialogs/generic/show-dialog-box";
 import { assistCasitaIcon } from "../resources/assist-casita-icon";
 import { haStyleScrollbar } from "../resources/styles";
-import { brandsUrl } from "../util/brands-url";
 import type {
   HomeAssistant,
   HomeAssistantConfig,
@@ -243,6 +243,23 @@ export const greetingTranslationLanguage = (
   return language && language !== interfaceLanguage ? language : undefined;
 };
 
+const THINKING_VARIANTS = ["spin", "wave", "orbit", "bloom", "pulse"] as const;
+
+const randomThinkingVariant = (exclude?: ThinkingVariant): ThinkingVariant => {
+  const options = THINKING_VARIANTS.filter((v) => v !== exclude);
+  return options[Math.floor(Math.random() * options.length)];
+};
+
+const TARGET_INTENTS = [
+  "HassTurnOn",
+  "HassTurnOff",
+  "HassGetState",
+  "HassLightSet",
+  "HassSetPosition",
+  "HassClimateSetTemperature",
+];
+type ThinkingVariant = (typeof THINKING_VARIANTS)[number];
+
 @customElement("ha-assist-chat")
 export class HaAssistChat extends LitElement {
   /**
@@ -285,6 +302,8 @@ export class HaAssistChat extends LitElement {
   @state() private _showSendButton = false;
 
   @state() private _processing = false;
+
+  @state() private _thinkingVariant = randomThinkingVariant();
 
   // Integration domain -> iot_class for every agent's conversation engine, used
   // to show the cloud/local data-locality icon. Resolved from the integration
@@ -544,29 +563,80 @@ export class HaAssistChat extends LitElement {
   }
 
   /**
-   * The current agent's avatar (blinking thinking indicator): the uploaded
-   * avatar if one is set, else the conversation agent's integration logo.
+   * Four-petal thinking animation. Starts on a random variant, then chains
+   * into a random different one each time the current one finishes.
    */
-  private _renderModelLogo() {
-    const avatarSrc = this._uploadedAvatarSrc();
-    if (avatarSrc) {
-      return html`<img class="thinking-logo avatar" alt="" src=${avatarSrc} />`;
+  private _renderThinkingIcon() {
+    const petal = svg`<path
+      d="M0 32C17.6731 32 32 17.6731 32 0C14.3269 0 0 14.3269 0 32Z"
+      fill="currentColor"
+    />`;
+    return svg`<svg
+      class="thinking-logo ${this._thinkingVariant}"
+      viewBox="0 0 64 64"
+      aria-hidden="true"
+      @animationend=${this._nextThinkingVariant}
+    >
+      <g class="petals">
+        <g transform="matrix(0 1 -1 0 32 0)">${petal}</g>
+        <g transform="matrix(0 1 1 0 32 0)">${petal}</g>
+        <g transform="matrix(0 -1 1 0 32 64)">${petal}</g>
+        <g transform="matrix(0 -1 -1 0 32 64)">${petal}</g>
+      </g>
+    </svg>`;
+  }
+
+  private _nextThinkingVariant(ev: AnimationEvent) {
+    const target = ev.target as Element;
+    // Per-petal variants fire once per petal; only advance on the last one.
+    if (
+      !target.classList.contains("petals") &&
+      target !==
+        (ev.currentTarget as Element).querySelector(
+          ".petals > g:last-child > path"
+        )
+    ) {
+      return;
     }
-    const domain = this.pipeline
-      ? this._entities?.[this.pipeline.conversation_engine]?.platform
-      : undefined;
-    const src = domain
-      ? brandsUrl({ domain, type: "icon" }, this._config?.auth.data.hassUrl)
-      : "";
-    return src
-      ? html`<img
-          class="thinking-logo"
-          alt=""
-          src=${src}
-          crossorigin="anonymous"
-          referrerpolicy="no-referrer"
-        />`
-      : html`<span class="thinking-logo">${assistCasitaIcon}</span>`;
+    const options = THINKING_VARIANTS.filter(
+      (v) => v !== this._thinkingVariant
+    );
+    this._thinkingVariant = options[Math.floor(Math.random() * options.length)];
+  }
+
+  /** What the agent is doing right now, from the streamed chat log deltas. */
+  private _thinkingStatus(message: AssistMessage): string {
+    const calls = Object.values(message.tool_calls);
+    const last = calls[calls.length - 1];
+    if (last) {
+      return "result" in last
+        ? this._localize("ui.dialogs.voice_command.status.replying")
+        : this._toolStatus(last.tool_name, last.tool_args);
+    }
+    return this._localize(
+      message.thinking
+        ? "ui.dialogs.voice_command.status.reasoning"
+        : "ui.dialogs.voice_command.status.thinking"
+    );
+  }
+
+  private _toolStatus(tool: string, args: Record<string, unknown>): string {
+    const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+    const target = str(args.name) ?? str(args.area) ?? str(args.floor);
+    const item = str(args.item);
+    // Built-in intents have friendly phrases; ones that address a target only
+    // read well when we know the target.
+    const phrase =
+      (TARGET_INTENTS.includes(tool) && !target) ||
+      (tool === "HassListAddItem" && !item)
+        ? ""
+        : this._localize(
+            `ui.dialogs.voice_command.status.intent.${tool}` as LocalizeKeys,
+            { target: target ?? "", item: item ?? "" }
+          );
+    return (
+      phrase || this._localize("ui.dialogs.voice_command.status.tool", { tool })
+    );
   }
 
   /** Whether the agent can read/write (control) Home Assistant. */
@@ -669,18 +739,20 @@ export class HaAssistChat extends LitElement {
              itself, so a second growing child would halve its space. -->
         ${this._conversation.length ? html`<div class="spacer"></div>` : nothing}
         ${this._conversation!.map((message, index) => {
-          const isThinking =
-            message.who === "hass" &&
-            message.text === "…" &&
-            !message.thinking &&
-            !(message.tool_calls && Object.keys(message.tool_calls).length > 0);
+          const isThinking = message.who === "hass" && message.text === "…";
           return html`
             <div class="message-container ${classMap({ [message.who]: true })}">
               ${
                 isThinking
-                  ? html`<span class="thinking-indicator"
-                      >${this._renderModelLogo()}</span
-                    >`
+                  ? html`<span class="thinking-indicator">
+                      ${this._renderThinkingIcon()}
+                      ${keyed(
+                        this._thinkingStatus(message),
+                        html`<span class="thinking-status"
+                          >${this._thinkingStatus(message)}</span
+                        >`
+                      )}
+                    </span>`
                   : message.text ||
                       message.error ||
                       message.thinking ||
@@ -783,17 +855,13 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
                             message.text
                               ? typeof message.text !== "string"
                                 ? message.text
-                                : message.who === "hass" && message.text === "…"
-                                  ? html`<span class="thinking-indicator"
-                                      >${this._renderModelLogo()}</span
-                                    >`
-                                  : html`
-                                      <ha-markdown
-                                        breaks
-                                        cache
-                                        .content=${message.text}
-                                      ></ha-markdown>
-                                    `
+                                : html`
+                                    <ha-markdown
+                                      breaks
+                                      cache
+                                      .content=${message.text}
+                                    ></ha-markdown>
+                                  `
                               : nothing
                           }
                         </div>
@@ -1871,6 +1939,7 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
       this._processing = false;
       return;
     }
+    this._thinkingVariant = randomThinkingVariant();
     const hassMessageProcesser = this._createAddHassMessageProcessor();
     hassMessageProcesser.addMessage();
     try {
@@ -2139,36 +2208,134 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
         }
         .thinking-indicator {
           display: inline-flex;
+          align-items: center;
+          gap: var(--ha-space-2);
           padding: var(--ha-space-1) var(--ha-space-2);
         }
+        .thinking-status {
+          font-size: var(--ha-font-size-s);
+          color: var(--secondary-text-color);
+          animation: message-fade-in 300ms ease-out;
+        }
         .thinking-logo {
-          display: flex;
+          display: block;
           width: 20px;
           height: 20px;
           color: var(--ha-color-primary-60, var(--primary-color));
-          animation: thinking-blink 1.4s ease-in-out infinite;
         }
-        .thinking-logo img,
-        .thinking-logo svg {
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
+        .thinking-logo .petals {
+          transform-origin: 50% 50%;
         }
-        .thinking-logo.avatar {
-          border-radius: var(--ha-border-radius-circle);
-          object-fit: cover;
+        .thinking-logo path {
+          transform-box: fill-box;
+          transform-origin: center;
+          animation-duration: 2s;
+          animation-timing-function: linear;
+          animation-fill-mode: backwards;
         }
-        @keyframes thinking-blink {
-          0%,
-          100% {
+        /* 1 · Pinwheel spin */
+        .thinking-logo.spin .petals {
+          animation: thinking-spin 2s ease-in-out;
+        }
+        /* 3 · Orbit */
+        .thinking-logo.orbit .petals {
+          animation: thinking-orbit 2s linear;
+        }
+        @keyframes thinking-spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        /* Same motion, separate name so spin ↔ orbit restarts the animation. */
+        @keyframes thinking-orbit {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        /* 5 · Gentle pulse */
+        .thinking-logo.pulse .petals {
+          animation: thinking-pulse 2s cubic-bezier(0.4, 0, 0.6, 1);
+        }
+        @keyframes thinking-pulse {
+          50% {
+            transform: scale(0.82);
+            opacity: 0.5;
+          }
+        }
+        /* 4 · Sequential bloom */
+        .thinking-logo.bloom path {
+          animation-name: thinking-bloom;
+        }
+        .thinking-logo.bloom g:nth-child(2) path {
+          animation-delay: 0.2s;
+        }
+        .thinking-logo.bloom g:nth-child(3) path {
+          animation-delay: 0.4s;
+        }
+        .thinking-logo.bloom g:nth-child(4) path {
+          animation-delay: 0.6s;
+        }
+        @keyframes thinking-bloom {
+          0% {
+            transform: scale(0.5);
+            opacity: 0.15;
+            animation-timing-function: ease-out;
+          }
+          15% {
+            transform: scale(1);
             opacity: 1;
           }
-          50% {
-            opacity: 0.25;
+          70% {
+            transform: scale(1);
+            opacity: 1;
+            animation-timing-function: ease-in;
+          }
+          100% {
+            transform: scale(0.5);
+            opacity: 0.15;
+          }
+        }
+        /* 2 · Opacity wave (petals dip toward the centre one by one) */
+        .thinking-logo.wave path {
+          transform-origin: 32px 0;
+          animation-name: thinking-wave;
+        }
+        .thinking-logo.wave g:nth-child(2) path {
+          animation-delay: 0.32s;
+        }
+        .thinking-logo.wave g:nth-child(3) path {
+          animation-delay: 0.64s;
+        }
+        .thinking-logo.wave g:nth-child(4) path {
+          animation-delay: 0.96s;
+        }
+        @keyframes thinking-wave {
+          0% {
+            transform: scale(1);
+            opacity: 1;
+            animation-timing-function: ease-in-out;
+          }
+          7.5% {
+            transform: scale(0.8);
+            opacity: 0.1;
+            animation-timing-function: ease-out;
+          }
+          20%,
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+        @keyframes message-fade-in {
+          from {
+            opacity: 0;
           }
         }
         @media (prefers-reduced-motion: reduce) {
-          .thinking-logo {
+          .thinking-logo .petals,
+          .thinking-logo path,
+          .thinking-status,
+          .message.hass {
             animation: none;
           }
         }
@@ -2312,6 +2479,7 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
 
           color: var(--primary-text-color);
           direction: var(--direction);
+          animation: message-fade-in 300ms ease-out;
         }
         .message.error {
           background-color: var(--error-color);
