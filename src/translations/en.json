@@ -4984,10 +4984,9 @@
               "trigger": "Trigger",
               "actions": "Actions",
               "state": "State",
-              "errors": "Errors",
+              "last_error": "Last error",
               "icon": "Icon"
             },
-            "result_errors": "{count} errors in the last {time}",
             "bulk_action": "Action",
             "bulk_actions": {
               "move_category": "Move to category",

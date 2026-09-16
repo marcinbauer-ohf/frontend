@@ -2,7 +2,6 @@ import "@home-assistant/webawesome/dist/components/divider/divider";
 import { ResizeController } from "@lit-labs/observers/resize-controller";
 import { consume } from "@lit/context";
 import {
-  mdiAlertCircleOutline,
   mdiCog,
   mdiContentDuplicate,
   mdiDelete,
@@ -67,7 +66,6 @@ import "../../../components/ha-svg-icon";
 import "../../../components/ha-switch";
 import type { HaSwitch } from "../../../components/ha-switch";
 import "../../../components/ha-tooltip";
-import "../../../components/data-table/ha-data-table-icon";
 import { createAreaRegistryEntry } from "../../../data/area/area_registry";
 import type { AutomationEntity } from "../../../data/automation";
 import {
@@ -121,6 +119,7 @@ import {
   getEntityIdHiddenTableColumn,
   getLabelsTableColumn,
   getTriggeredAtTableColumn,
+  renderRelativeTimeColumn,
 } from "../common/data-table-columns";
 import { configSections } from "../ha-panel-config";
 import { showLabelDetailDialog } from "../labels/show-dialog-label-detail";
@@ -131,13 +130,6 @@ import {
 import { getAvailableAssistants } from "../voice-assistants/expose/available-assistants";
 import { showNewAutomationDialog } from "./show-dialog-new-automation";
 import { loadTraces } from "../../../data/trace";
-import { relativeTime } from "../../../common/datetime/relative_time";
-
-interface ErrorDescription {
-  count: number;
-  total: number;
-  oldest?: Date;
-}
 
 type AutomationItem = AutomationEntity & {
   name: string;
@@ -149,8 +141,8 @@ type AutomationItem = AutomationEntity & {
   labels: string[]; // search only
   assistants: string[];
   assistants_sortable_key: string | undefined;
-  errors: undefined | ErrorDescription;
-  errors_sort: number;
+  last_error: string | undefined;
+  error_count: number;
 };
 
 @customElement("ha-automation-picker")
@@ -171,7 +163,9 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
 
   @state() private _filteredEntityIds?: string[] | null;
 
-  @state() private _errors: Record<string, ErrorDescription> = {};
+  // automation id -> most recent errored trace and how many errored in total
+  @state() private _lastErrors: Record<string, { ts: string; count: number }> =
+    {};
 
   @state()
   @storage({
@@ -256,7 +250,7 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
   private _automations = memoizeOne(
     (
       automations: AutomationEntity[],
-      errors: Record<string, ErrorDescription>,
+      lastErrors: Record<string, { ts: string; count: number }>,
       entityReg: EntityRegistryEntry[],
       areas: HomeAssistant["areas"],
       categoryReg?: CategoryRegistryEntry[],
@@ -292,11 +286,6 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
           automation.entity_id
         );
 
-        const errorObject = automation.attributes.id
-          ? errors[automation.attributes.id]
-          : undefined;
-        const errors_sort = errorObject?.count || 0;
-
         return {
           ...automation,
           name: computeStateName(automation),
@@ -313,8 +302,12 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
           assistants,
           assistants_sortable_key: getAssistantsSortableKey(assistants),
           selectable: entityRegEntry !== undefined,
-          errors: errorObject,
-          errors_sort,
+          last_error: automation.attributes.id
+            ? lastErrors[automation.attributes.id]?.ts
+            : undefined,
+          error_count: automation.attributes.id
+            ? (lastErrors[automation.attributes.id]?.count ?? 0)
+            : 0,
         };
       });
     }
@@ -364,32 +357,24 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
         category: getCategoryTableColumn(localize),
         labels: getLabelsTableColumn(),
         last_triggered: getTriggeredAtTableColumn(localize, this.hass),
-        errors: {
-          title: localize("ui.panel.config.automation.picker.headers.errors"),
-          minWidth: "70px",
-          maxWidth: "70px",
+        last_error: {
+          title: localize(
+            "ui.panel.config.automation.picker.headers.last_error"
+          ),
           sortable: true,
-          showNarrow: false,
-          type: "icon",
-          valueColumn: "errors_sort",
           template: (automation) =>
-            automation.errors?.count
-              ? html`<ha-data-table-icon
-                  .path=${mdiAlertCircleOutline}
-                  .tooltip=${localize(
-                    "ui.panel.config.automation.picker.result_errors",
-                    {
-                      count: automation.errors.count,
-                      time: relativeTime(
-                        automation.errors.oldest!,
-                        this.hass.locale,
-                        undefined,
-                        false
-                      ),
-                    }
-                  )}
-                  style="--ha-data-table-icon-color: var(--error-color);"
-                ></ha-data-table-icon>`
+            automation.last_error
+              ? html`<span style="color: var(--error-color)"
+                  >${renderRelativeTimeColumn(
+                    automation.last_error,
+                    "last-error",
+                    automation.entity_id,
+                    localize,
+                    this.hass
+                  )}${automation.error_count > 1
+                    ? ` (+${automation.error_count - 1})`
+                    : nothing}</span
+                >`
               : nothing,
         },
         formatted_state: {
@@ -482,7 +467,7 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
 
     const automations = this._automations(
       this.automations,
-      this._errors,
+      this._lastErrors,
       this._entityReg,
       this.hass.areas,
       this._categories,
@@ -852,24 +837,19 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
 
   firstUpdated() {
     loadTraces(this.hass, "automation").then((traces) => {
-      this._errors = traces.reduce((acc, trace) => {
-        const id = trace.item_id;
+      const lastErrors: Record<string, { ts: string; count: number }> = {};
+      for (const trace of traces) {
+        if (trace.script_execution !== "error") {
+          continue;
+        }
         const ts = trace.timestamp.finish || trace.timestamp.start;
-        if (!acc[id]) {
-          acc[id] = { count: 0, total: 0 };
-        }
-
-        acc[id].total += 1;
-        if (trace.script_execution === "error") {
-          acc[id].count += 1;
-          const date = new Date(ts);
-          if (!acc[id].oldest || date < acc[id].oldest) {
-            acc[id].oldest = date;
-          }
-        }
-
-        return acc;
-      }, {});
+        const current = lastErrors[trace.item_id];
+        lastErrors[trace.item_id] = {
+          ts: current && current.ts > ts ? current.ts : ts,
+          count: (current?.count ?? 0) + 1,
+        };
+      }
+      this._lastErrors = lastErrors;
     });
   }
 
