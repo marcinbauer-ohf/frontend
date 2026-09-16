@@ -1,4 +1,5 @@
 import "@home-assistant/webawesome/dist/components/divider/divider";
+import { consume } from "@lit/context";
 import { ResizeController } from "@lit-labs/observers/resize-controller";
 import {
   mdiArrowDown,
@@ -18,6 +19,7 @@ import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { canShowPage } from "../common/config/can_show_page";
 import { fireEvent } from "../common/dom/fire_event";
+import { toggleAttribute } from "../common/dom/toggle_attribute";
 import type { LocalizeFunc } from "../common/translations/localize";
 import "../components/chips/ha-assist-chip";
 import "../components/data-table/ha-data-table";
@@ -38,6 +40,7 @@ import "../components/ha-icon-button";
 import "../components/ha-svg-icon";
 import "../components/input/ha-input-search";
 import type { HaInputSearch } from "../components/input/ha-input-search";
+import { settingsDetailContext } from "../data/context";
 import { KeyboardShortcutMixin } from "../mixins/keyboard-shortcut-mixin";
 import type { HomeAssistant, Route } from "../types";
 import "./hass-tabs-subpage";
@@ -54,6 +57,11 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
   @property({ type: Boolean, reflect: true }) public narrow = false;
 
   @property({ type: Boolean, attribute: "main-page" }) public mainPage = false;
+
+  /** True when rendered in the settings split layout's detail column. */
+  @state()
+  @consume({ context: settingsDetailContext, subscribe: true })
+  private _settingsDetail = false;
 
   @property({ attribute: false }) public initialCollapsedGroups: string[] = [];
 
@@ -211,6 +219,8 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
   }
 
   protected willUpdate(changedProperties: PropertyValues<this>) {
+    toggleAttribute(this, "in-detail", this._settingsDetail);
+
     if (
       changedProperties.has("tabs") ||
       (changedProperties.has("hass") &&
@@ -771,6 +781,27 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
           ) - var(--safe-area-inset-bottom, 0px)
       );
       display: block;
+    }
+    /* The settings detail column is not the full viewport, so the table fills
+       the column instead of measuring itself against the screen */
+    :host([in-detail]:not([narrow])) ha-data-table,
+    :host([in-detail]) .pane {
+      height: 100%;
+    }
+    :host([in-detail]) .pane-content {
+      height: calc(100% - var(--header-height, 0px));
+    }
+    /* A page that is just a table has no cards of its own, so the table itself
+       gets the card surface rather than floating on the background. Pages that
+       already render cards keep them at the top level. */
+    :host([in-detail]) ha-data-table {
+      --data-table-background-color: transparent;
+      box-sizing: border-box;
+      background-color: var(--card-background-color);
+      border: var(--ha-card-border-width, 1px) solid
+        var(--ha-card-border-color, var(--divider-color));
+      border-radius: var(--ha-card-border-radius, var(--ha-border-radius-lg));
+      overflow: hidden;
     }
     /* Last content row should keep the same padding above the fab as the fab
        has to the bottom (16px standard fab bottom padding) + the safe-area inset. */

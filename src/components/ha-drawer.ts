@@ -291,7 +291,8 @@ export class HaDrawer extends LitElement {
       position: fixed;
       width: var(--ha-sidebar-width);
       height: 100%;
-      border-inline-end: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+      /* No divider: panels inset their content, so the gutter separates the
+         sidebar from what it sits next to */
       box-sizing: border-box;
       transition: width var(--ha-animation-duration-normal) ease;
       z-index: 6;

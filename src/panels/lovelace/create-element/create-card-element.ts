@@ -78,6 +78,7 @@ const LAZY_LOAD_TYPES = {
   error: () => import("../cards/hui-error-card"),
   "home-summary": () => import("../cards/hui-home-summary-card"),
   shortcut: () => import("../cards/hui-shortcut-card"),
+  placeholder: () => import("../cards/hui-placeholder-card"),
   "discovered-devices": () => import("../cards/hui-discovered-devices-card"),
   repairs: () => import("../cards/hui-repairs-card"),
   updates: () => import("../cards/hui-updates-card"),

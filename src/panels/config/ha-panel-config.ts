@@ -150,10 +150,6 @@ class HaPanelConfig extends LitElement {
       "--app-header-text-color",
       "var(--sidebar-text-color)"
     );
-    this.style.setProperty(
-      "--app-header-border-bottom",
-      "1px solid var(--divider-color)"
-    );
   }
 
   private async _updateCloudStatus() {
@@ -175,8 +171,10 @@ class HaPanelConfig extends LitElement {
     :host {
       display: block;
     }
-    /* HassRouterPage renders the page as a plain child of its host */
-    ha-config-router > * {
+    /* HassRouterPage renders the page as a plain child of its host, and a page
+       that is a router itself nests another level, so the whole chain needs a
+       height for the pages that size themselves against their container */
+    ha-config-router * {
       display: block;
       height: 100%;
     }

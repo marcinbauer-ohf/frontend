@@ -1,5 +1,5 @@
 import { ResizeController } from "@lit-labs/observers/resize-controller";
-import { mdiPencil } from "@mdi/js";
+import { mdiPencil, mdiRedo, mdiUndo } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
@@ -7,10 +7,14 @@ import { styleMap } from "lit/directives/style-map";
 import { atLeastVersion } from "../../common/config/version";
 import { navigate } from "../../common/navigate";
 import { debounce } from "../../common/util/debounce";
+import "../../components/entity/ha-entity-picker";
 import "../../components/ha-button";
+import "../../components/ha-dialog";
+import "../../components/ha-icon-button";
 import "../../components/ha-svg-icon";
 import { updateAreaRegistryEntry } from "../../data/area/area_registry";
 import { updateDeviceRegistryEntry } from "../../data/device/device_registry";
+import { resolveShortcutItems } from "../../data/home_shortcuts";
 import {
   fetchFrontendSystemData,
   saveFrontendSystemData,
@@ -30,7 +34,6 @@ import {
   generateLovelaceDashboardStrategy,
 } from "../lovelace/strategies/get-strategy";
 import type { Lovelace } from "../lovelace/types";
-import { showEditHomeDialog } from "./dialogs/show-dialog-edit-home";
 import { showNewOverviewDialog } from "./dialogs/show-dialog-new-overview";
 import { hasLegacyOverviewPanel } from "../../data/panel";
 
@@ -49,6 +52,10 @@ class PanelHome extends LitElement {
   @state() private _config: FrontendSystemData["home"] = {};
 
   @state() private _extraActionItems?: ExtraActionItem[];
+
+  @state() private _editing = false;
+
+  @state() private _addingFavorite = false;
 
   @query(".banner") private _banner?: HTMLElement;
 
@@ -171,12 +178,19 @@ class PanelHome extends LitElement {
   private _updateExtraActionItems() {
     const path = this.route?.path?.split("/")[1];
 
+    // Editing is already on; the bottom toolbar carries the way out of it
+    if (this._editing) {
+      this._extraActionItems = undefined;
+      return;
+    }
+
     if (path?.startsWith("areas-")) {
       this._extraActionItems = [
         {
           icon: mdiPencil,
           labelKey: "ui.panel.lovelace.menu.edit_area",
           action: this._editArea,
+          nearTitle: true,
         },
       ];
     } else if (!path || path === "overview") {
@@ -184,7 +198,8 @@ class PanelHome extends LitElement {
         {
           icon: mdiPencil,
           labelKey: "ui.panel.lovelace.menu.edit_overview",
-          action: this._editHome,
+          action: this._startEditing,
+          nearTitle: true,
         },
       ];
     } else {
@@ -192,14 +207,62 @@ class PanelHome extends LitElement {
     }
   }
 
-  private _editHome = () => {
-    showEditHomeDialog(this, {
-      config: this._config,
-      saveConfig: async (config) => {
-        await this._saveConfig(config);
-      },
-    });
+  private _startEditing = () => {
+    this._editing = true;
+    this._updateExtraActionItems();
+    this._setLovelace();
   };
+
+  private _stopEditing = () => {
+    this._editing = false;
+    this._updateExtraActionItems();
+    this._setLovelace();
+  };
+
+  private _toggleSummary(key: string) {
+    const shortcuts = resolveShortcutItems(this._config.shortcuts).map(
+      (item) =>
+        item.type === "summary" && item.key === key
+          ? { ...item, hidden: !item.hidden }
+          : item
+    );
+    this._saveConfig({ ...this._config, shortcuts }, { silent: true });
+  }
+
+  private _removeFavorite(entityId: string) {
+    const favorites = (this._config.favorite_entities ?? []).filter(
+      (id) => id !== entityId
+    );
+    this._saveConfig(
+      {
+        ...this._config,
+        favorite_entities: favorites.length ? favorites : undefined,
+      },
+      { silent: true }
+    );
+  }
+
+  private _closeAddFavorite = () => {
+    this._addingFavorite = false;
+  };
+
+  private _addFavorite(ev: CustomEvent) {
+    const entityId = ev.detail.value;
+    this._addingFavorite = false;
+    if (!entityId || this._config.favorite_entities?.includes(entityId)) {
+      return;
+    }
+    this._saveConfig(
+      {
+        ...this._config,
+        favorite_entities: [
+          ...(this._config.favorite_entities ?? []),
+          entityId,
+        ],
+      },
+      { silent: true }
+    );
+  }
 
   private _editArea = async () => {
     const path = this.route?.path?.split("/")[1];
@@ -233,6 +296,18 @@ class PanelHome extends LitElement {
           this._showAddIntegrationDialog();
           break;
         }
+        case "toggle_summary": {
+          this._toggleSummary(detail.home_panel.key);
+          break;
+        }
+        case "remove_favorite": {
+          this._removeFavorite(detail.home_panel.entity_id);
+          break;
+        }
+        case "add_favorite": {
+          this._addingFavorite = true;
+          break;
+        }
       }
     }
   };
@@ -264,6 +339,8 @@ class PanelHome extends LitElement {
       "--view-container-padding-top": this._bannerHeight.value
         ? `${this._bannerHeight.value}px`
         : undefined,
+      // Room for the docked edit toolbar so it never covers the last row
+      "--view-container-padding-bottom": this._editing ? "88px" : undefined,
     });
 
     return html`
@@ -275,10 +352,59 @@ class PanelHome extends LitElement {
         .route=${this.route}
         .panel=${this.panel}
         no-edit
+        .editing=${this._editing}
         .extraActionItems=${this._extraActionItems}
         @ll-custom=${this._handleLLCustomEvent}
         style=${huiRootStyle}
       ></hui-root>
+      ${this._editing ? this._renderEditToolbar() : nothing}
+      ${this._addingFavorite ? this._renderAddFavoriteDialog() : nothing}
+    `;
+  }
+
+  // Same docked bottom toolbar as dashboard edit mode, so editing the home page
+  // feels like editing any other dashboard. Everything else is edited in place.
+  // ponytail: undo/redo are placeholders - home edits save straight away and
+  // keep no history; wire them to a config stack to make them work
+  private _renderEditToolbar() {
+    return html`
+      <div class="edit-toolbar">
+        <ha-icon-button
+          .path=${mdiUndo}
+          .label=${this.hass.localize("ui.common.undo")}
+          class="circle-button"
+          disabled
+        ></ha-icon-button>
+        <ha-icon-button
+          .path=${mdiRedo}
+          .label=${this.hass.localize("ui.common.redo")}
+          class="circle-button"
+          disabled
+        ></ha-icon-button>
+        <ha-button appearance="filled" @click=${this._stopEditing}>
+          ${this.hass.localize("ui.panel.lovelace.menu.exit_edit_mode")}
+        </ha-button>
+      </div>
+    `;
+  }
+
+  // The favorites section's plus placeholder opens this, so picking an entity
+  // stays next to the row it lands in.
+  private _renderAddFavoriteDialog() {
+    return html`
+      <ha-dialog
+        open
+        .headerTitle=${this.hass.localize("ui.panel.home.editor.add_favorite")}
+        @closed=${this._closeAddFavorite}
+      >
+        <ha-entity-picker
+          autofocus
+          .hass=${this.hass}
+          .label=${this.hass.localize("ui.panel.home.editor.add_favorite")}
+          .excludeEntities=${this._config.favorite_entities}
+          @value-changed=${this._addFavorite}
+        ></ha-entity-picker>
+      </ha-dialog>
     `;
   }
 
@@ -335,6 +461,7 @@ class PanelHome extends LitElement {
         hide_welcome_message: this._config.hide_welcome_message,
         hide_suggested_entities: this._config.hide_suggested_entities,
         shortcuts: this._config.shortcuts,
+        editing: this._editing,
       },
     };
   }
@@ -363,7 +490,10 @@ class PanelHome extends LitElement {
     };
   }
 
-  private async _saveConfig(config: HomeFrontendSystemData): Promise<void> {
+  private async _saveConfig(
+    config: HomeFrontendSystemData,
+    { silent = false }: { silent?: boolean } = {}
+  ): Promise<void> {
     try {
       await saveFrontendSystemData(this.hass.connection, "home", config);
       this._config = config || {};
@@ -377,9 +507,11 @@ class PanelHome extends LitElement {
       });
       return;
     }
-    showToast(this, {
-      message: this.hass.localize("ui.common.successfully_saved"),
-    });
+    if (!silent) {
+      showToast(this, {
+        message: this.hass.localize("ui.common.successfully_saved"),
+      });
+    }
     this._setLovelace();
   }
 
@@ -425,6 +557,96 @@ class PanelHome extends LitElement {
     }
     .banner-actions ha-button::part(base) {
       text-wrap: nowrap;
+    }
+    .edit-toolbar {
+      position: fixed;
+      z-index: 5;
+      bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom, 0px));
+      left: 50%;
+      transform: translateX(-50%);
+      /* The duration token collapses to 1ms under reduced motion */
+      animation: edit-toolbar-in var(--ha-animation-duration-normal) ease-out;
+      display: flex;
+      align-items: center;
+      gap: var(--ha-space-3);
+      box-sizing: border-box;
+      max-width: calc(100vw - 2 * var(--ha-space-4));
+      padding: var(--ha-space-2);
+      /* A tab growing out of the frame's bottom line: same fill as the border,
+         rounded on the side it grows towards, no shadow - it is part of the
+         frame, not floating over it. */
+      border-radius: var(--ha-border-radius-4xl) var(--ha-border-radius-4xl) 0 0;
+      background-color: var(--primary-color);
+      color: var(--text-primary-color);
+    }
+    /* The concave joins: a square beside the tab, filled everywhere outside a
+       quarter circle, so the fill meets both the tab's side and the border line
+       tangentially. */
+    .edit-toolbar::before,
+    .edit-toolbar::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      width: var(--ha-space-4);
+      height: var(--ha-space-4);
+    }
+    .edit-toolbar::before {
+      right: 100%;
+      background: radial-gradient(
+        circle at 0 0,
+        transparent var(--ha-space-4),
+        var(--primary-color) calc(var(--ha-space-4) + 0.5px)
+      );
+    }
+    .edit-toolbar::after {
+      left: 100%;
+      background: radial-gradient(
+        circle at 100% 0,
+        transparent var(--ha-space-4),
+        var(--primary-color) calc(var(--ha-space-4) + 0.5px)
+      );
+    }
+    /* Everything in the tab reads against the border color, and lines up with
+       the Done button's height so the row reads as one control set */
+    .edit-toolbar ha-icon-button {
+      color: var(--text-primary-color);
+      --ha-icon-button-size: 40px;
+      --mdc-icon-size: 20px;
+    }
+    .edit-toolbar .circle-button {
+      border: 1px solid
+        color-mix(in srgb, var(--text-primary-color) 40%, transparent);
+      border-radius: var(--ha-border-radius-circle);
+    }
+    /* Wider than its label needs, so the way out of edit mode is the easiest
+       thing in the bar to spot and to hit */
+    .edit-toolbar ha-button {
+      --wa-form-control-padding-inline: var(--ha-space-6);
+      --wa-color-fill-normal: var(--card-background-color);
+      --wa-color-on-normal: var(--primary-color);
+    }
+    /* Sits above the mobile bottom navigation instead of under it, which means
+       it no longer touches the frame - so it goes back to a pill */
+    :host([narrow]) .edit-toolbar {
+      bottom: calc(
+        var(--ha-bottom-navigation-height, 64px) + var(--ha-space-6) +
+          var(--safe-area-inset-bottom, 0px)
+      );
+      border-radius: var(--ha-border-radius-2xl);
+    }
+    :host([narrow]) .edit-toolbar::before,
+    :host([narrow]) .edit-toolbar::after {
+      display: none;
+    }
+    @keyframes edit-toolbar-in {
+      from {
+        transform: translate(-50%, calc(100% + var(--ha-space-4)));
+        opacity: 0;
+      }
+      to {
+        transform: translate(-50%, 0);
+        opacity: 1;
+      }
     }
   `;
 }

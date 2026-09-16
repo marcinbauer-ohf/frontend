@@ -55,6 +55,12 @@ export const coreStyles = css`
        column gaps + 32px padding each side (hui-sections-view.ts .wrapper),
        the widest of the non-full-bleed layouts (masonry caps at 4x500=2000px). */
     --ha-view-max-width: 2160px;
+
+    /* The lane a page without card columns of its own lives in: history,
+       activity, settings. Matches a 3-column sections dashboard --
+       3 x 500px + 2 x 32px column gaps + 32px padding each side -- so those
+       pages line up with the home dashboard instead of running full width. */
+    --ha-page-max-width: 1628px;
   }
 
   @media (prefers-reduced-motion: reduce) {

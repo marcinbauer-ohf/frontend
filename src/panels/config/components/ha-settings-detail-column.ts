@@ -32,6 +32,13 @@ export class HaSettingsDetailColumn extends LitElement {
       /* The column is already capped and centred by the split layout, so pages
          inside it fill it instead of centring their content a second time */
       --ha-page-content-max-width: none;
+      /* A page that brings its own top app bar (settings > tools) sizes it to
+         the viewport, which overflows the column; fill the column instead */
+      --ha-top-app-bar-fixed-height: 100%;
+      /* The column is already the sheet, so a page inside it does not inset and
+         round itself a second time */
+      --ha-page-sheet-gutter: 0px;
+      --ha-page-sheet-radius: 0;
     }
     ::slotted(*) {
       display: block;

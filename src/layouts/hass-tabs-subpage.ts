@@ -65,7 +65,8 @@ export class HassTabsSubpage extends LitElement {
 
   @property({ attribute: false }) public route!: Route;
 
-  @property({ attribute: false }) public tabs!: PageNavigation[];
+  /** Pages a tab bar links to; a page without a tab bar leaves this empty. */
+  @property({ attribute: false }) public tabs: PageNavigation[] = [];
 
   @state()
   @consume({ context: narrowViewportContext, subscribe: true })
@@ -313,11 +314,18 @@ export class HassTabsSubpage extends LitElement {
         :host([in-detail]) {
           display: flex;
           flex-direction: column;
+          /* the page's own cards sit straight on the split layout background */
+          background-color: transparent;
+          /* anchor for the fab, which follows the column and not the window */
+          position: relative;
         }
         :host([in-detail]) .container {
           height: auto;
           flex: 1 1 auto;
           min-height: 0;
+        }
+        :host([in-detail]) #fab {
+          position: absolute;
         }
 
         .container {

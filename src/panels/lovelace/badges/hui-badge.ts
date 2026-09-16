@@ -107,6 +107,7 @@ export class HuiBadge extends ConditionalListenerMixin<LovelaceBadgeConfig>(
         ...this._conditionContext,
         entity_id: this.config ? getConfigEntityId(this.config) : undefined,
       };
+      this._updateDimmed();
     }
 
     if (!this._element) {
@@ -174,6 +175,12 @@ export class HuiBadge extends ConditionalListenerMixin<LovelaceBadgeConfig>(
           this._conditionContext
         ));
     this._setElementVisibility(visible);
+  }
+
+  // A dimmed badge is switched off but still shown, so it can be switched back
+  // on (home panel edit mode).
+  private _updateDimmed() {
+    this.toggleAttribute("dimmed", Boolean(this.config?.dimmed));
   }
 
   private _setElementVisibility(visible: boolean) {

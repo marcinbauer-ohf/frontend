@@ -72,13 +72,7 @@ export class SectionsView extends LitElement implements LovelaceViewElement {
 
   @state() _dragging = false;
 
-  @state() private _sidebarTabActive = false;
-
   @state() private _sidebarVisible = true;
-
-  private _contentScrollTop = 0;
-
-  private _sidebarScrollTop = 0;
 
   private _columnsController = new ResizeController(this, {
     callback: (entries) => {
@@ -136,7 +130,6 @@ export class SectionsView extends LitElement implements LovelaceViewElement {
       "section-visibility-changed",
       this._sectionVisibilityChanged
     );
-    this._sidebarTabActive = Boolean(window.history.state?.sidebar);
   }
 
   disconnectedCallback(): void {
@@ -145,6 +138,23 @@ export class SectionsView extends LitElement implements LovelaceViewElement {
       "section-visibility-changed",
       this._sectionVisibilityChanged
     );
+  }
+
+  private _computeColumnCounts() {
+    const editMode = Boolean(this.lovelace?.editMode);
+    const hasSidebar = Boolean(
+      this._config?.sidebar && (this._sidebarVisible || editMode)
+    );
+    const totalSectionCount =
+      this._sectionColumnCount + (editMode ? 1 : 0) + (hasSidebar ? 1 : 0);
+    const columnCount = Math.max(
+      Math.min(this._maxColumns, totalSectionCount),
+      1
+    );
+    // On mobile with sidebar, use full width for whichever view is active
+    const contentColumnCount =
+      hasSidebar && !this.narrow ? Math.max(1, columnCount - 1) : columnCount;
+    return { editMode, hasSidebar, columnCount, contentColumnCount };
   }
 
   willUpdate(changedProperties: PropertyValues<this>): void {
@@ -167,20 +177,8 @@ export class SectionsView extends LitElement implements LovelaceViewElement {
     if (!this.lovelace) return nothing;
 
     const sections = this.sections;
-    const editMode = this.lovelace.editMode;
-    const hasSidebar =
-      this._config?.sidebar && (this._sidebarVisible || editMode);
-
-    const totalSectionCount =
-      this._sectionColumnCount + (editMode ? 1 : 0) + (hasSidebar ? 1 : 0);
-
-    const columnCount = Math.max(
-      Math.min(this._maxColumns, totalSectionCount),
-      1
-    );
-    // On mobile with sidebar, use full width for whichever view is active
-    const contentColumnCount =
-      hasSidebar && !this.narrow ? Math.max(1, columnCount - 1) : columnCount;
+    const { editMode, hasSidebar, columnCount, contentColumnCount } =
+      this._computeColumnCounts();
 
     const sectionNeedsMargin = computeSectionsBackgroundAlignment(
       sections,
@@ -206,29 +204,6 @@ export class SectionsView extends LitElement implements LovelaceViewElement {
           .viewIndex=${this.index}
           .config=${this._config?.header}
         ></hui-view-header>
-        ${
-          this.narrow && hasSidebar
-            ? html`
-                <div class="mobile-tabs">
-                  <ha-control-select
-                    .value=${this._sidebarTabActive ? "sidebar" : "content"}
-                    @value-changed=${this._viewChanged}
-                    .options=${[
-                      {
-                        value: "content",
-                        label: this._config!.sidebar!.content_label,
-                      },
-                      {
-                        value: "sidebar",
-                        label: this._config!.sidebar!.sidebar_label,
-                      },
-                    ]}
-                  >
-                  </ha-control-select>
-                </div>
-              `
-            : nothing
-        }
         <div class="container">
           <ha-sortable
             .disabled=${!editMode}
@@ -240,7 +215,6 @@ export class SectionsView extends LitElement implements LovelaceViewElement {
             <div
               class="content ${classMap({
                 dense: Boolean(this._config?.dense_section_placement),
-                "mobile-hidden": this.narrow && this._sidebarTabActive,
               })}"
             >
               ${repeat(
@@ -326,10 +300,7 @@ export class SectionsView extends LitElement implements LovelaceViewElement {
             this._config?.sidebar
               ? html`
                   <hui-view-sidebar
-                    class=${classMap({
-                      "mobile-hidden":
-                        !hasSidebar || (this.narrow && !this._sidebarTabActive),
-                    })}
+                    class=${classMap({ "mobile-hidden": !hasSidebar })}
                     .hass=${this.hass}
                     .badges=${this.badges}
                     .lovelace=${this.lovelace}
@@ -468,48 +439,10 @@ export class SectionsView extends LitElement implements LovelaceViewElement {
     this.lovelace!.saveConfig(newConfig);
   }
 
-  private _viewChanged(ev: CustomEvent) {
-    const newValue = ev.detail.value;
-    const shouldShowSidebar = newValue === "sidebar";
-
-    if (shouldShowSidebar !== this._sidebarTabActive) {
-      this._toggleView();
-    }
-  }
-
-  private _toggleView() {
-    // Save current scroll position
-    if (this._sidebarTabActive) {
-      this._sidebarScrollTop = window.scrollY;
-    } else {
-      this._contentScrollTop = window.scrollY;
-    }
-
-    this._sidebarTabActive = !this._sidebarTabActive;
-
-    // Add sidebar state to history
-    window.history.replaceState(
-      { ...window.history.state, sidebar: this._sidebarTabActive },
-      ""
-    );
-
-    // Restore scroll position after view updates
-    this.updateComplete.then(() => {
-      const scrollY = this._sidebarTabActive
-        ? this._sidebarScrollTop
-        : this._contentScrollTop;
-      window.scrollTo(0, scrollY);
-    });
-  }
-
   private _handleSidebarVisibilityChanged = (
     e: CustomEvent<{ visible: boolean }>
   ) => {
     this._sidebarVisible = e.detail.visible;
-    // Reset sidebar tab when sidebar becomes hidden
-    if (!e.detail.visible) {
-      this._sidebarTabActive = false;
-    }
   };
 
   static styles = css`
@@ -614,28 +547,6 @@ export class SectionsView extends LitElement implements LovelaceViewElement {
 
     .mobile-hidden {
       display: none !important;
-    }
-
-    .mobile-tabs {
-      position: fixed;
-      bottom: calc(var(--ha-space-3) + var(--safe-area-inset-bottom));
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 0;
-      z-index: 1;
-    }
-
-    .mobile-tabs ha-control-select {
-      width: max-content;
-      min-width: 280px;
-      max-width: 90%;
-      --control-select-thickness: var(--ha-space-14);
-      --control-select-border-radius: var(--ha-border-radius-pill);
-      --control-select-background: var(--card-background-color);
-      --control-select-background-opacity: 1;
-      --control-select-color: var(--primary-color);
-      --control-select-padding: 6px;
-      box-shadow: rgba(0, 0, 0, 0.3) 0px 4px 10px 0px;
     }
 
     ha-sortable {

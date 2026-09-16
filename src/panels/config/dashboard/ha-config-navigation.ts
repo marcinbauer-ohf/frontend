@@ -72,29 +72,22 @@ class HaConfigNavigation extends LitElement {
     }).map((page) => ({
       ...page,
       name: resolvePageName(this.hass, page),
+      // Static descriptions are dropped, only the cloud entry says something
+      // about its own state
       description:
         page.component === "cloud" && (page.info as CloudStatus)
-          ? page.info.logged_in
-            ? `
-                  ${this.hass.localize(
-                    "ui.panel.config.cloud.description_login"
-                  )}
-                `
-            : `
-                  ${this.hass.localize(
-                    "ui.panel.config.cloud.description_features"
-                  )}
-                `
-          : `
-                ${resolvePageDescription(this.hass, page)}
-              `,
+          ? this.hass.localize(
+              page.info.logged_in
+                ? "ui.panel.config.cloud.description_login"
+                : "ui.panel.config.cloud.description_not_login"
+            )
+          : undefined,
     }));
     return html`
       <div class="visually-hidden" role="heading" aria-level="2">
         ${this.hass.localize("panel.config")}
       </div>
       <ha-config-navigation-list
-        has-secondary
         .hass=${this.hass}
         .narrow=${this.narrow}
         .pages=${pages}

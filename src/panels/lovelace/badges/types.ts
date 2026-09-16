@@ -4,6 +4,7 @@ import type { LovelaceBadgeConfig } from "../../../data/lovelace/config/badge";
 import type { LegacyStateFilter } from "../common/evaluate-filter";
 import type { Condition } from "../common/validate-condition";
 import type { EntityFilterEntityConfig } from "../entity-rows/types";
+import type { HomeSummary } from "../strategies/home/helpers/home-summaries";
 import type { DisplayType } from "./hui-entity-badge";
 import type { TimestampRenderingFormat } from "../components/types";
 
@@ -35,6 +36,14 @@ export interface ShortcutBadgeConfig extends LovelaceBadgeConfig {
   text?: string;
   icon?: string;
   color?: string;
+  tap_action?: ActionConfig;
+  hold_action?: ActionConfig;
+  double_tap_action?: ActionConfig;
+}
+
+export interface HomeSummaryBadgeConfig extends LovelaceBadgeConfig {
+  type: "home-summary";
+  summary: HomeSummary;
   tap_action?: ActionConfig;
   hold_action?: ActionConfig;
   double_tap_action?: ActionConfig;

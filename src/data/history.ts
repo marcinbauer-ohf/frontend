@@ -6,8 +6,12 @@ import type {
   MessageBase,
 } from "home-assistant-js-websocket";
 import { computeDomain } from "../common/entity/compute_domain";
+import { computeEntityName } from "../common/entity/compute_entity_name";
 import { computeStateDisplayFromEntityAttributes } from "../common/entity/compute_state_display";
-import { computeStateNameFromEntityAttributes } from "../common/entity/compute_state_name";
+import {
+  computeStateName,
+  computeStateNameFromEntityAttributes,
+} from "../common/entity/compute_state_name";
 import type { LocalizeFunc } from "../common/translations/localize";
 import type { HomeAssistant } from "../types";
 import { isNumericSensorDeviceClass } from "./sensor";
@@ -337,6 +341,7 @@ const processTimelineEntity = (
   locale: FrontendLocaleData,
   config: HassConfig,
   entities: HomeAssistant["entities"],
+  devices: HomeAssistant["devices"],
   entityId: string,
   states: EntityHistoryState[],
   current_state: HassEntity | undefined
@@ -374,10 +379,10 @@ const processTimelineEntity = (
   }
 
   return {
-    name: computeStateNameFromEntityAttributes(
-      entityId,
-      current_state?.attributes || first.a
-    ),
+    name: current_state
+      ? (computeEntityName(current_state, entities, devices) ??
+        computeStateName(current_state))
+      : computeStateNameFromEntityAttributes(entityId, first.a),
     entity_id: entityId,
     data,
   };
@@ -387,7 +392,9 @@ const processLineChartEntities = (
   unit: string,
   device_class: string | undefined,
   entities: HistoryStates,
-  hassEntities: HassEntities
+  hassEntities: HassEntities,
+  entityRegistry: HomeAssistant["entities"],
+  devices: HomeAssistant["devices"]
 ): LineChartUnit => {
   const data: LineChartEntity[] = [];
 
@@ -436,16 +443,18 @@ const processLineChartEntities = (
       processedStates.push(processedState);
     }
 
-    const attributes =
+    const name =
       entityId in hassEntities
-        ? hassEntities[entityId].attributes
-        : "friendly_name" in first.a
-          ? first.a
-          : undefined;
+        ? (computeEntityName(hassEntities[entityId], entityRegistry, devices) ??
+          computeStateName(hassEntities[entityId]))
+        : computeStateNameFromEntityAttributes(
+            entityId,
+            "friendly_name" in first.a ? first.a : {}
+          );
 
     data.push({
       domain,
-      name: computeStateNameFromEntityAttributes(entityId, attributes || {}),
+      name,
       entity_id: entityId,
       states: processedStates,
     });
@@ -611,6 +620,7 @@ export const computeHistory = (
           hass.locale,
           hass.config,
           hass.entities,
+          hass.devices,
           entityId,
           stateInfo,
           currentState
@@ -638,7 +648,9 @@ export const computeHistory = (
       unit,
       deviceClass,
       lineChartDevices[key],
-      hass.states
+      hass.states,
+      hass.entities,
+      hass.devices
     );
   });
 

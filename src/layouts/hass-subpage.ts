@@ -137,6 +137,8 @@ class HassSubpage extends LitElement {
         :host([in-detail]) {
           display: flex;
           flex-direction: column;
+          /* the page's own cards sit straight on the split layout background */
+          background-color: transparent;
         }
         :host([in-detail]) .content {
           height: auto;

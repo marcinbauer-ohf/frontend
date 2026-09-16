@@ -1,11 +1,13 @@
 import {
   mdiAccount,
+  mdiCellphone,
   mdiCodeBraces,
   mdiDevices,
   mdiDotsVertical,
   mdiFileMultiple,
   mdiFormatListBulletedTriangle,
   mdiHelpCircleOutline,
+  mdiMonitor,
   mdiPencil,
   mdiPlus,
   mdiRedo,
@@ -13,6 +15,7 @@ import {
   mdiRobot,
   mdiShape,
   mdiSofa,
+  mdiTablet,
   mdiUndo,
   mdiViewDashboard,
 } from "@mdi/js";
@@ -21,11 +24,16 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { ifDefined } from "lit/directives/if-defined";
+import { styleMap } from "lit/directives/style-map";
+import memoizeOne from "memoize-one";
 import { UndoRedoController } from "../../common/controllers/undo-redo-controller";
 import { fireEvent } from "../../common/dom/fire_event";
 import { isNavigationClick } from "../../common/dom/is-navigation-click";
 import { goBack, navigate } from "../../common/navigate";
-import type { LocalizeKeys } from "../../common/translations/localize";
+import type {
+  LocalizeFunc,
+  LocalizeKeys,
+} from "../../common/translations/localize";
 import { constructUrlCurrentPath } from "../../common/url/construct-url";
 import {
   addSearchParam,
@@ -34,6 +42,8 @@ import {
 } from "../../common/url/search-params";
 import { afterNextRender } from "../../common/util/render-status";
 import "../../components/ha-button";
+import "../../components/ha-control-select";
+import type { ControlSelectOption } from "../../components/ha-control-select";
 import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
 import "../../components/ha-dropdown";
 import "../../components/ha-dropdown-item";
@@ -90,6 +100,24 @@ import type { HUIView } from "./views/hui-view";
 import "./views/hui-view-background";
 import "./views/hui-view-container";
 
+const EDIT_PREVIEW_SIZES = ["desktop", "tablet", "mobile"] as const;
+
+type EditPreviewSize = (typeof EDIT_PREVIEW_SIZES)[number];
+
+const EDIT_PREVIEW_ICONS: Record<EditPreviewSize, string> = {
+  desktop: mdiMonitor,
+  tablet: mdiTablet,
+  mobile: mdiCellphone,
+};
+
+// Widths the edit canvas is capped to so the section columns reflow the way
+// they would on that class of device.
+const EDIT_PREVIEW_WIDTHS: Record<EditPreviewSize, string | undefined> = {
+  desktop: undefined,
+  tablet: "1024px",
+  mobile: "420px",
+};
+
 interface ActionItem {
   icon: string;
   key: LocalizeKeys;
@@ -98,6 +126,8 @@ interface ActionItem {
   visible: boolean | undefined;
   overflow: boolean;
   overflow_can_promote?: boolean;
+  /** Render as a tinted button instead of a plain toolbar icon. */
+  emphasize?: boolean;
   suffix?: string;
   subItems?: SubActionItem[];
 }
@@ -106,6 +136,8 @@ export interface ExtraActionItem {
   icon: string;
   labelKey: LocalizeKeys;
   action: () => void;
+  /** Render next to the dashboard title instead of in the toolbar actions. */
+  nearTitle?: boolean;
 }
 
 interface SubActionItem {
@@ -140,6 +172,12 @@ class HUIRoot extends LitElement {
 
   @property({ type: Boolean, attribute: "no-edit" }) public noEdit = false;
 
+  /**
+   * Panel-driven edit mode (the home page edits itself, not the lovelace
+   * config). Frames the canvas the same way lovelace edit mode does.
+   */
+  @property({ type: Boolean }) public editing = false;
+
   @property({ attribute: false }) public backButton = false;
 
   @property({ attribute: false }) public backPath?: string;
@@ -147,6 +185,8 @@ class HUIRoot extends LitElement {
   @state() private _curView?: number | "hass-unused-entities";
 
   @state() private _resourceMode: "yaml" | "storage" = "storage";
+
+  @state() private _previewSize: EditPreviewSize = "desktop";
 
   private _configChangedByUndo = false;
 
@@ -164,48 +204,121 @@ class HUIRoot extends LitElement {
     }),
   });
 
+  // Previewing the mobile size in edit mode should lay the view out the way a
+  // phone would, not just narrow the canvas.
+  private get _effectiveNarrow(): boolean {
+    return this.narrow || (this._editMode && this._previewSize === "mobile");
+  }
+
+  // The edit pencil always sits next to the dashboard title, never in the
+  // toolbar action items or the overflow menu.
+  private get _canConfigureUi(): boolean {
+    return Boolean(
+      !this._editMode &&
+      this.hass?.user?.is_admin &&
+      !this.hass.config.recovery_mode &&
+      !this.hass.kioskMode &&
+      !this.noEdit
+    );
+  }
+
+  // Panel-supplied edit affordances (edit home, edit area) belong next to the
+  // title they act on, like the dashboard pencil does.
+  private _renderTitleActions() {
+    const items = this.extraActionItems?.filter((item) => item.nearTitle);
+    if (!items?.length) {
+      return nothing;
+    }
+    return items.map((item, index) => {
+      const label = this.hass!.localize(item.labelKey);
+      return html`
+        <ha-icon-button
+          id="title-action-${index}"
+          class="edit-icon"
+          .path=${item.icon}
+          .label=${label}
+          @click=${item.action}
+        ></ha-icon-button>
+        <ha-tooltip placement="bottom" for="title-action-${index}">
+          ${label}
+        </ha-tooltip>
+      `;
+    });
+  }
+
+  // Edit mode gathers undo/redo/done and the responsive preview switcher into a
+  // single docked toolbar at the bottom, so no controls float over the canvas.
+  private _renderEditToolbar(): TemplateResult {
+    return html`
+      <div class="edit-toolbar">
+        ${
+          this.narrow
+            ? nothing
+            : html`
+                <ha-control-select
+                  class="preview-size"
+                  hide-option-label
+                  .value=${this._previewSize}
+                  .options=${this._previewSizeOptions(this.hass.localize)}
+                  @value-changed=${this._previewSizeChanged}
+                ></ha-control-select>
+              `
+        }
+        <ha-icon-button
+          id="button-undo"
+          .path=${mdiUndo}
+          .label=${this.hass.localize("ui.common.undo")}
+          class="circle-button"
+          .disabled=${!this._undoRedoController.canUndo}
+          @click=${this._undo}
+        ></ha-icon-button>
+        <ha-tooltip placement="top" for="button-undo">
+          ${this.hass.localize("ui.common.undo")}
+        </ha-tooltip>
+        <ha-icon-button
+          id="button-redo"
+          .path=${mdiRedo}
+          .label=${this.hass.localize("ui.common.redo")}
+          class="circle-button"
+          .disabled=${!this._undoRedoController.canRedo}
+          @click=${this._redo}
+        ></ha-icon-button>
+        <ha-tooltip placement="top" for="button-redo">
+          ${this.hass.localize("ui.common.redo")}
+        </ha-tooltip>
+        <ha-button appearance="filled" @click=${this._editModeDisable}>
+          ${this.hass.localize("ui.panel.lovelace.menu.exit_edit_mode")}
+        </ha-button>
+      </div>
+    `;
+  }
+
+  private _previewSizeOptions = memoizeOne(
+    (localize: LocalizeFunc): ControlSelectOption[] =>
+      EDIT_PREVIEW_SIZES.map((size) => ({
+        value: size,
+        path: EDIT_PREVIEW_ICONS[size],
+        ariaLabel: localize(`ui.panel.lovelace.editor.preview_size.${size}`),
+      }))
+  );
+
+  private _previewSizeChanged(ev: CustomEvent) {
+    ev.stopPropagation();
+    this._previewSize = ev.detail.value as EditPreviewSize;
+  }
+
   private _renderActionItems(): TemplateResult {
     const result: TemplateResult[] = [];
 
     if (this._editMode) {
       result.push(
         html`<ha-icon-button
-            slot="toolbar-icon"
-            .path=${mdiUndo}
-            @click=${this._undo}
-            .disabled=${!this._undoRedoController.canUndo}
-            id="button-undo"
-          >
-          </ha-icon-button>
-          <ha-tooltip placement="bottom" for="button-undo">
-            ${this.hass.localize("ui.common.undo")}
-          </ha-tooltip>
-          <ha-icon-button
-            slot="toolbar-icon"
-            .path=${mdiRedo}
-            @click=${this._redo}
-            .disabled=${!this._undoRedoController.canRedo}
-            id="button-redo"
-          >
-          </ha-icon-button>
-          <ha-tooltip placement="bottom" for="button-redo">
-            ${this.hass.localize("ui.common.redo")}
-          </ha-tooltip>
-          <ha-button
-            appearance="filled"
-            size="s"
-            class="exit-edit-mode"
-            @click=${this._editModeDisable}
-          >
-            ${this.hass!.localize("ui.panel.lovelace.menu.exit_edit_mode")}
-          </ha-button>
-          <ha-icon-button
-            .label=${this.hass!.localize("ui.panel.lovelace.menu.help")}
-            .path=${mdiHelpCircleOutline}
-            href=${documentationUrl(this.hass, "/dashboards/")}
-            rel="noreferrer"
-            target="_blank"
-          ></ha-icon-button>`
+          .label=${this.hass!.localize("ui.panel.lovelace.menu.help")}
+          .path=${mdiHelpCircleOutline}
+          href=${documentationUrl(this.hass, "/dashboards/")}
+          rel="noreferrer"
+          target="_blank"
+        ></ha-icon-button>`
       );
     }
 
@@ -247,6 +360,7 @@ class HUIRoot extends LitElement {
           !this._editMode && this.hass.user?.is_admin && !this.hass.kioskMode,
         overflow: this.narrow,
         overflow_can_promote: true,
+        emphasize: true,
         subItems: [
           {
             icon: mdiDevices,
@@ -301,25 +415,14 @@ class HUIRoot extends LitElement {
           isLovelaceDashboard,
         overflow: true,
       },
-      {
-        icon: mdiPencil,
-        key: "ui.panel.lovelace.menu.configure_ui",
-        overflowAction: this._enableEditMode,
-        buttonAction: this._enableEditMode,
-        visible:
-          !this._editMode &&
-          this.hass!.user?.is_admin &&
-          !this.hass!.config.recovery_mode &&
-          !this.hass.kioskMode &&
-          !this.noEdit,
-        overflow: true,
-        overflow_can_promote: true,
-      },
     ];
 
     // Add extra action items from parent components
     if (this.extraActionItems) {
       this.extraActionItems.forEach((extraItem) => {
+        if (extraItem.nearTitle) {
+          return;
+        }
         items.push({
           icon: extraItem.icon,
           key: extraItem.labelKey,
@@ -354,6 +457,7 @@ class HUIRoot extends LitElement {
                 .id="button-${index}"
                 .path=${item.icon}
                 slot="trigger"
+                class=${item.emphasize ? "emphasized" : ""}
                 .label=${label}
                 hide-title
               ></ha-icon-button>
@@ -378,6 +482,7 @@ class HUIRoot extends LitElement {
               slot="actionItems"
               .id="button-${index}"
               .path=${item.icon}
+              class=${item.emphasize ? "emphasized" : ""}
               .label=${label}
               hide-title
               @click=${item.buttonAction}
@@ -523,7 +628,15 @@ class HUIRoot extends LitElement {
       <div
         class=${classMap({
           "edit-mode": this._editMode,
+          // Both kinds of editing frame the canvas; only lovelace edit mode
+          // brings the rest of the editor chrome with it
+          framed: this._editMode || this.editing,
           narrow: this.narrow,
+        })}
+        style=${styleMap({
+          "--ha-edit-preview-width": this._editMode
+            ? EDIT_PREVIEW_WIDTHS[this._previewSize]
+            : undefined,
         })}
       >
         <div class="header">
@@ -533,12 +646,15 @@ class HUIRoot extends LitElement {
                 this._editMode
                   ? html`
                       <div class="main-title">
-                        ${
-                          dashboardTitle ||
-                          this.hass!.localize("ui.panel.lovelace.editor.header")
-                        }
+                        <span class="title-text">
+                          ${
+                            dashboardTitle ||
+                            this.hass!.localize(
+                              "ui.panel.lovelace.editor.header"
+                            )
+                          }
+                        </span>
                         <ha-icon-button
-                          slot="actionItems"
                           .label=${this.hass!.localize(
                             "ui.panel.lovelace.editor.edit_lovelace.edit_title"
                           )}
@@ -546,6 +662,7 @@ class HUIRoot extends LitElement {
                           class="edit-icon"
                           @click=${this._editDashboard}
                         ></ha-icon-button>
+                        ${this._renderTitleActions()}
                       </div>
                       <div class="action-items">
                         ${this._renderActionItems()}
@@ -568,11 +685,37 @@ class HUIRoot extends LitElement {
                             `
                       }
                       <div class="main-title">
+                        <span class="title-text">
+                          ${
+                            isSubview
+                              ? curViewConfig.title
+                              : (views[0]?.title ?? dashboardTitle)
+                          }
+                        </span>
                         ${
-                          isSubview
-                            ? curViewConfig.title
-                            : (views[0]?.title ?? dashboardTitle)
+                          this._canConfigureUi
+                            ? html`
+                                <ha-icon-button
+                                  id="configure-ui"
+                                  .label=${this.hass!.localize(
+                                    "ui.panel.lovelace.menu.configure_ui"
+                                  )}
+                                  .path=${mdiPencil}
+                                  class="edit-icon"
+                                  @click=${this._enableEditMode}
+                                ></ha-icon-button>
+                                <ha-tooltip
+                                  placement="bottom"
+                                  for="configure-ui"
+                                >
+                                  ${this.hass!.localize(
+                                    "ui.panel.lovelace.menu.configure_ui"
+                                  )}
+                                </ha-tooltip>
+                              `
+                            : nothing
                         }
+                        ${this._renderTitleActions()}
                       </div>
                       <div class="action-items">
                         ${this._renderActionItems()}
@@ -615,6 +758,7 @@ class HUIRoot extends LitElement {
           <hui-view-background .hass=${this.hass} .background=${background}>
           </hui-view-background>
         </hui-view-container>
+        ${this._editMode ? this._renderEditToolbar() : nothing}
       </div>
     `;
   }
@@ -741,8 +885,9 @@ class HUIRoot extends LitElement {
       huiView.hass = this.hass;
     }
 
-    if (changedProperties.has("narrow") && huiView) {
-      huiView.narrow = this.narrow;
+    // Covers narrow, the edit-mode preview size and leaving edit mode in one go
+    if (huiView && huiView.narrow !== this._effectiveNarrow) {
+      huiView.narrow = this._effectiveNarrow;
     }
 
     let newSelectView;
@@ -1237,7 +1382,7 @@ class HUIRoot extends LitElement {
 
     view.lovelace = this.lovelace;
     view.hass = this.hass;
-    view.narrow = this.narrow;
+    view.narrow = this._effectiveNarrow;
 
     root.appendChild(view);
   }
@@ -1308,6 +1453,14 @@ class HUIRoot extends LitElement {
       haStyle,
       css`
         :host {
+          /* Block, or the host has no box to paint the sheet's surround on.
+             The stacking context matters just as much: hui-view-background
+             sits at z-index -1, and without one here the host's background
+             would paint straight over it and swallow the sheet. */
+          display: block;
+          position: relative;
+          z-index: 0;
+          background-color: var(--app-header-background-color);
           -ms-user-select: none;
           -webkit-user-select: none;
           -moz-user-select: none;
@@ -1346,27 +1499,23 @@ class HUIRoot extends LitElement {
             0px 1px 10px 0px rgba(0, 0, 0, 0.12)
           );
         }
-        .edit-mode .header {
-          background-color: var(--app-header-edit-background-color, #455a64);
-          color: var(--app-header-edit-text-color, white);
-        }
+        /* The framed canvas and its toolbar say we are editing; the bar keeps
+           its normal color instead of turning into a slab of blue-grey */
+        /* The bar keeps one lane on every page: it must not resize (or
+           animate) when a view with a narrower content column takes over. */
         .toolbar {
           position: relative;
-          border-bottom: var(--app-header-border-bottom, none);
+          /* No divider under the bar: the sheet's gutter separates them now */
           height: var(--header-height);
           display: flex;
           align-items: center;
           font-size: var(--ha-font-size-xl);
-          padding: 0px 12px;
+          padding: 0 12px;
           font-weight: var(--ha-font-weight-normal);
           box-sizing: border-box;
           width: 100%;
           max-width: var(--ha-view-max-width, 1400px);
           margin: 0 auto;
-          transition: max-width var(--ha-animation-duration-normal) ease;
-        }
-        .edit-mode .toolbar {
-          border-bottom: none;
         }
         .narrow .toolbar {
           padding: 0 4px;
@@ -1376,6 +1525,12 @@ class HUIRoot extends LitElement {
           margin-inline-start: var(--ha-space-6);
           line-height: var(--ha-line-height-normal);
           flex-grow: 1;
+          display: flex;
+          align-items: center;
+          min-width: 0;
+        }
+        /* Only the text ellipsizes, so the edit pencil next to it stays put */
+        .main-title .title-text {
           text-overflow: ellipsis;
           overflow: hidden;
           white-space: nowrap;
@@ -1388,13 +1543,6 @@ class HUIRoot extends LitElement {
           white-space: nowrap;
           display: flex;
           align-items: center;
-        }
-        .edit-mode .action-items ha-icon-button[disabled] {
-          --ha-color-on-disabled-quiet: color-mix(
-            in srgb,
-            var(--app-header-edit-text-color, #fff) 50%,
-            transparent
-          );
         }
         ha-tab-group {
           --ha-tab-indicator-color: var(
@@ -1428,21 +1576,6 @@ class HUIRoot extends LitElement {
             transparent
           );
         }
-        .edit-mode ha-tab-group::part(scroll-button) {
-          background-color: var(--app-header-edit-background-color, #455a64);
-          background: linear-gradient(
-            90deg,
-            var(--app-header-edit-background-color, #455a64),
-            transparent
-          );
-        }
-        .edit-mode ha-tab-group::part(scroll-button-end) {
-          background: linear-gradient(
-            270deg,
-            var(--app-header-edit-background-color, #455a64),
-            transparent
-          );
-        }
         .edit-mode div[main-title] {
           pointer-events: auto;
         }
@@ -1452,7 +1585,6 @@ class HUIRoot extends LitElement {
           max-width: var(--ha-view-max-width, 1400px);
           margin: 0 auto;
           box-sizing: border-box;
-          transition: max-width var(--ha-animation-duration-normal) ease;
         }
         .narrow .tab-bar {
           max-width: none;
@@ -1464,9 +1596,6 @@ class HUIRoot extends LitElement {
         .edit-mode ha-tab-group {
           flex-grow: 0;
           margin: 0;
-          color: var(--app-header-edit-text-color, #fff);
-          --ha-tab-active-text-color: var(--app-header-edit-text-color, #fff);
-          --ha-tab-indicator-color: var(--app-header-edit-text-color, #fff);
         }
         ha-tab-group-tab {
           --ha-tab-group-tab-height: var(--header-height, 56px);
@@ -1498,15 +1627,33 @@ class HUIRoot extends LitElement {
           padding: 0;
           margin-top: calc((var(--tab-bar-height, 56px) - 48px) / 2);
         }
+        /* Same restraint as the sidebar's edit pencil: a plain icon that fades
+           back until you go looking for it */
         .edit-icon {
-          color: var(--accent-color);
-          padding: 0 8px;
+          flex: none;
           vertical-align: middle;
           --mdc-theme-text-disabled-on-light: var(--disabled-text-color);
+          --mdc-icon-size: 20px;
+          --ha-icon-button-size: 32px;
+          opacity: 0.5;
+          margin-inline-start: var(--ha-space-1);
           direction: var(--direction);
         }
-        .edit-icon:last-child {
-          padding-left: 0;
+        .edit-icon:hover,
+        .edit-icon:focus-visible {
+          opacity: 1;
+        }
+        /* The add button is the one action worth spotting from across the room */
+        .action-items ha-icon-button.emphasized {
+          color: var(--primary-color);
+          border-radius: var(--ha-border-radius-circle);
+          background-color: color-mix(
+            in srgb,
+            var(--primary-color) 15%,
+            transparent
+          );
+          --mdc-icon-size: 20px;
+          --ha-icon-button-size: 36px;
         }
         .edit-icon.view {
           display: none;
@@ -1515,10 +1662,15 @@ class HUIRoot extends LitElement {
           white-space: nowrap;
           display: flex;
           align-items: center;
-        }
-        #add-view ha-svg-icon {
-          background-color: var(--accent-color);
-          border-radius: var(--ha-border-radius-sm);
+          --mdc-icon-size: 20px;
+          --ha-icon-button-size: 32px;
+          border-radius: var(--ha-border-radius-circle);
+          color: var(--primary-color);
+          background-color: color-mix(
+            in srgb,
+            var(--primary-color) 15%,
+            transparent
+          );
         }
         a {
           color: var(--text-primary-color, white);
@@ -1562,10 +1714,161 @@ class HUIRoot extends LitElement {
         .hide-tab {
           display: none;
         }
-        .exit-edit-mode {
-          --mdc-theme-primary: var(--app-header-edit-text-color, #fff);
-          --mdc-button-outline-color: var(--app-header-edit-text-color, #fff);
-          --mdc-typography-button-font-size: var(--ha-font-size-m);
+        /* The dashboard is a rounded sheet inset into the app chrome, so the
+           gutter does the separating that a divider line used to. The host
+           paints the surround in the bar's own color, and hui-view-background
+           (which already paints the canvas) is the sheet. */
+        hui-view-background {
+          top: calc(
+            var(--header-height, 56px) + var(--safe-area-inset-top, 0px)
+          );
+          bottom: var(--ha-space-4);
+          /* Hugs the sidebar, breathes on the open side */
+          inset-inline-start: 0;
+          inset-inline-end: var(--ha-space-4);
+          width: auto;
+          height: auto;
+          border: 0 solid var(--primary-color);
+          border-radius: var(--ha-border-radius-xl);
+        }
+        /* No sidebar to hug, so the sheet spans the width */
+        .narrow hui-view-background {
+          inset-inline: 0;
+        }
+        /* Starts under the tab row. The container pads 2px less than the bar is
+           tall (a tab-underline tweak); the sheet must not, or the bar covers
+           the top of its rounded corners. */
+        .has-tab-bar hui-view-background {
+          top: calc(
+            var(--header-height, 56px) + var(--tab-bar-height, 56px) +
+              var(--safe-area-inset-top, 0px)
+          );
+        }
+        /* Editing is the only state that draws an edge, so it is clear which
+           surface the toolbar acts on. The insets keep the outer edges put, so
+           it costs no layout shift. Pinned to the viewport while editing, so
+           the edge stays put and the toolbar can hang off its bottom line. */
+        .framed hui-view-background {
+          position: fixed;
+          /* Fixed anchors to the viewport, not the sidebar-offset container, so
+             the start edge has to step over the sidebar itself or its border
+             and rounded corners hide behind it */
+          inset-inline-start: var(--ha-sidebar-width, 0px);
+          border-width: 2px;
+        }
+        /* Responsive preview: cap the canvas so the columns reflow like they
+           would on that device. */
+        .edit-mode hui-view-container > * {
+          max-width: var(--ha-edit-preview-width, 100%);
+          margin: 0 auto;
+        }
+        /* Room for the docked edit toolbar so it never covers the last row, and
+           an offset the views' floating add-card buttons lift themselves by. */
+        .edit-mode hui-view-container {
+          --view-container-padding-bottom: 88px;
+          --ha-edit-toolbar-space: 72px;
+        }
+        .edit-toolbar {
+          position: fixed;
+          z-index: 5;
+          bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom, 0px));
+          left: 50%;
+          transform: translateX(-50%);
+          /* The duration token collapses to 1ms under reduced motion */
+          animation: edit-toolbar-in var(--ha-animation-duration-normal)
+            ease-out;
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-3);
+          box-sizing: border-box;
+          max-width: calc(100vw - 2 * var(--ha-space-4));
+          padding: var(--ha-space-2);
+          /* A tab growing out of the frame's bottom line: same fill as the
+             border, rounded on the side it grows towards, no shadow - it is
+             part of the frame, not floating over it. */
+          border-radius: var(--ha-border-radius-4xl) var(--ha-border-radius-4xl)
+            0 0;
+          background-color: var(--primary-color);
+          color: var(--text-primary-color);
+        }
+        /* The concave joins: a square beside the tab, filled everywhere outside
+           a quarter circle, so the fill meets both the tab's side and the
+           border line tangentially. */
+        .edit-toolbar::before,
+        .edit-toolbar::after {
+          content: "";
+          position: absolute;
+          bottom: 0;
+          width: var(--ha-space-4);
+          height: var(--ha-space-4);
+        }
+        .edit-toolbar::before {
+          right: 100%;
+          background: radial-gradient(
+            circle at 0 0,
+            transparent var(--ha-space-4),
+            var(--primary-color) calc(var(--ha-space-4) + 0.5px)
+          );
+        }
+        .edit-toolbar::after {
+          left: 100%;
+          background: radial-gradient(
+            circle at 100% 0,
+            transparent var(--ha-space-4),
+            var(--primary-color) calc(var(--ha-space-4) + 0.5px)
+          );
+        }
+        /* Sits above the mobile bottom navigation instead of under it, which
+           means it no longer touches the frame - so it goes back to a pill */
+        .narrow .edit-toolbar {
+          bottom: calc(
+            var(--ha-bottom-navigation-height, 64px) + var(--ha-space-6) +
+              var(--safe-area-inset-bottom, 0px)
+          );
+          border-radius: var(--ha-border-radius-2xl);
+        }
+        .narrow .edit-toolbar::before,
+        .narrow .edit-toolbar::after {
+          display: none;
+        }
+        /* Everything in the tab reads against the border color, and lines up
+           with the Done button's height so the row reads as one control set */
+        .edit-toolbar ha-icon-button {
+          color: var(--text-primary-color);
+          --ha-icon-button-size: 40px;
+          --mdc-icon-size: 20px;
+        }
+        .edit-toolbar ha-button {
+          --wa-color-fill-normal: var(--card-background-color);
+          --wa-color-on-normal: var(--primary-color);
+        }
+        .edit-toolbar .preview-size {
+          width: 132px;
+          --control-select-thickness: 40px;
+          --control-select-border-radius: var(--ha-border-radius-pill);
+          --control-select-background: var(--text-primary-color);
+          --control-select-background-opacity: 1;
+          --control-select-color: var(--primary-color);
+        }
+        .edit-toolbar .circle-button {
+          border: 1px solid
+            color-mix(in srgb, var(--text-primary-color) 40%, transparent);
+          border-radius: var(--ha-border-radius-circle);
+        }
+        /* Wider than its label needs, so the way out of edit mode is the
+           easiest thing in the bar to spot and to hit */
+        .edit-toolbar ha-button {
+          --wa-form-control-padding-inline: var(--ha-space-6);
+        }
+        @keyframes edit-toolbar-in {
+          from {
+            transform: translate(-50%, calc(100% + var(--ha-space-4)));
+            opacity: 0;
+          }
+          to {
+            transform: translate(-50%, 0);
+            opacity: 1;
+          }
         }
         .child-view-icon {
           opacity: 0.5;

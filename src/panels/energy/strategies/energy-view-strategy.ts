@@ -30,6 +30,9 @@ export class EnergyViewStrategy extends ReactiveElement {
 
     const view: LovelaceViewConfig = {
       type: "sections",
+      // Same cap as the other energy views and the home dashboard, so this page
+      // does not end up wider than every other dashboard.
+      max_columns: 3,
       sections: [],
       sidebar: {
         sections: [{ cards: [] }],

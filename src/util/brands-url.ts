@@ -16,6 +16,11 @@ export interface HardwareBrandsOptions {
 
 let _brandsAccessToken: string | undefined;
 let _brandsRefreshInterval: ReturnType<typeof setInterval> | undefined;
+// The brands API is served by core, which is not always the origin the
+// frontend itself is served from (dev server, or a differently proxied
+// frontend). Remembered here so every call site gets the right base without
+// having to thread hassUrl through.
+let _brandsHassUrl: string | undefined;
 
 // Token refreshes every 30 minutes and is valid for 1 hour.
 // Re-fetch every 30 minutes to always have a valid token.
@@ -58,6 +63,7 @@ export const fetchBrandsAccessToken = async (
     type: "brands/access_token",
   });
   _brandsAccessToken = result.token;
+  _brandsHassUrl = hass.auth.data.hassUrl;
 };
 
 export const scheduleBrandsTokenRefresh = (hass: HomeAssistant): void => {
@@ -91,7 +97,7 @@ export const brandsUrl = (options: BrandsOptions, hassUrl?: string): string => {
   if (!_brandsAccessToken) {
     return "";
   }
-  hassUrl = hassUrl ?? location.origin;
+  hassUrl = hassUrl ?? _brandsHassUrl ?? location.origin;
   const base = `/api/brands/integration/${options.domain}/${
     options.darkOptimized ? "dark_" : ""
   }${options.type}.png`;
@@ -116,7 +122,7 @@ export const hardwareBrandsUrl = (
   if (!_brandsAccessToken) {
     return "";
   }
-  hassUrl = hassUrl ?? location.origin;
+  hassUrl = hassUrl ?? _brandsHassUrl ?? location.origin;
   const base = `/api/brands/hardware/${options.category}/${
     options.darkOptimized ? "dark_" : ""
   }${options.manufacturer}${options.model ? `_${options.model}` : ""}.png`;
@@ -127,7 +133,7 @@ export const hardwareBrandsUrl = (
 };
 
 export const addBrandsAuth = (url: string, hassUrl?: string): string => {
-  hassUrl = hassUrl ?? location.origin;
+  hassUrl = hassUrl ?? _brandsHassUrl ?? location.origin;
 
   let parsedUrl: URL;
   try {

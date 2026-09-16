@@ -44,7 +44,9 @@ export const colorStyles = css`
 
     /* backgrounds */
     --card-background-color: #ffffff;
-    --primary-background-color: #fafafa;
+    /* Reads as a surface next to white cards and white chrome, which #fafafa
+       did not (same value as --ha-color-neutral-95) */
+    --primary-background-color: #f3f3f3;
     --secondary-background-color: #e5e5e5;
     --clear-background-color: #ffffff;
 
@@ -295,7 +297,9 @@ export const colorStyles = css`
     --mdc-theme-error: var(--error-color);
     --app-header-text-color: var(--sidebar-text-color);
     --app-header-background-color: var(--sidebar-background-color);
-    --app-header-border-bottom: 1px solid var(--divider-color);
+    /* Bars carry no divider: panels inset their content, so the gutter between
+       the chrome and the page does the separating */
+    --app-header-border-bottom: none;
     --app-theme-color: var(--app-header-background-color);
     --mdc-checkbox-unchecked-color: rgba(var(--rgb-primary-text-color), 0.54);
     --mdc-checkbox-disabled-color: var(--disabled-text-color);

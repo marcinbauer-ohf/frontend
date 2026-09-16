@@ -273,7 +273,7 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
                     <span slot="headline">${this.hass.user.name}</span>
                     <span slot="supporting-text"
                       >${this.hass.localize(
-                        "ui.panel.profile.tabs.general"
+                        `ui.panel.profile.role.${this._userRole}`
                       )}</span
                     >
                     <ha-icon-next slot="end"></ha-icon-next>
@@ -421,6 +421,16 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
     `;
   }
 
+  // What the account is allowed to do, the one thing about it that isn't
+  // already on screen. hass.user carries no group, so read-only users read as
+  // plain users here.
+  private get _userRole(): "owner" | "administrator" | "user" {
+    if (this.hass.user?.is_owner) {
+      return "owner";
+    }
+    return this.hass.user?.is_admin ? "administrator" : "user";
+  }
+
   private _filterPages(
     categories: PageNavigation[][],
     filter: string
@@ -508,6 +518,8 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
           grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
           gap: var(--ha-space-4);
           height: 100%;
+          box-sizing: border-box;
+          padding-bottom: var(--ha-space-4);
           /* same cap as the automation editor, so wide screens stay readable */
           max-width: var(--ha-settings-max-width, 1540px);
           margin: 0 auto;
@@ -516,10 +528,20 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
           min-width: 0;
           height: 100%;
         }
+        /* Pages render their own cards straight onto the background; only a
+           page that is just a table wraps that table in a card of its own
+           (hass-tabs-subpage-data-table). */
+        .split .detail {
+          margin-top: var(--ha-space-4);
+          height: calc(100% - var(--ha-space-4));
+        }
         .split .list {
           overflow: auto;
         }
         .split ha-config-section {
+          /* the legacy pull-up under the header would put the list above the
+             top bar; the list starts where the detail column starts */
+          margin-top: 0;
           --config-section-content-together-margin-top: var(--ha-space-4);
           --config-section-narrow-content-together-margin-top: var(
             --ha-space-4
@@ -532,9 +554,23 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
           gap: var(--ha-space-4);
         }
 
+        /* Title lines up with the split layout below it instead of running the
+           full width of the window */
+        ha-top-app-bar-fixed {
+          --ha-top-app-bar-content-max-width: var(
+            --ha-settings-max-width,
+            1540px
+          );
+        }
         ha-input-search {
           display: block;
           width: 100%;
+          /* stays put while the list scrolls under it */
+          position: sticky;
+          top: 0;
+          z-index: 2;
+          background-color: var(--primary-background-color);
+          padding-bottom: var(--ha-space-2);
         }
         .no-results {
           padding: var(--ha-space-4);

@@ -145,7 +145,9 @@ export class PanelView extends LitElement implements LovelaceViewElement {
     ha-button {
       position: fixed;
       right: calc(16px + var(--safe-area-inset-right));
-      bottom: calc(16px + var(--safe-area-inset-bottom));
+      bottom: calc(
+        16px + var(--safe-area-inset-bottom) + var(--ha-edit-toolbar-space, 0px)
+      );
       z-index: 1;
       float: var(--float-end);
       inset-inline-end: calc(16px + var(--safe-area-inset-right));

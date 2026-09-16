@@ -56,7 +56,8 @@ class HaConfigSystemNavigation extends LitElement {
     const pages = configSections.general
       .filter((page) => canShowPage(this.hass, page))
       .map((page) => {
-        let description: string;
+        // Only a status about the page itself earns a second line
+        let description: string | undefined;
 
         switch (page.translationKey) {
           case "backup":
@@ -67,9 +68,7 @@ class HaConfigSystemNavigation extends LitElement {
                     this.hass.locale
                   ),
                 })
-              : this.hass.localize(
-                  "ui.panel.config.backup.description_no_backup"
-                );
+              : undefined;
             break;
           case "network":
             description = this.hass.localize(
@@ -91,24 +90,18 @@ class HaConfigSystemNavigation extends LitElement {
                   )}${blankBeforePercent(this.hass.locale)}%`,
                   free_space: `${this._storageInfo.free} GB`,
                 })
-              : "";
+              : undefined;
             break;
           case "hardware":
-            description =
-              this._boardName ||
-              this.hass.localize("ui.panel.config.hardware.description");
+            description = this._boardName;
             break;
           case "labs":
-            description =
-              this._labFeatures && this._labFeatures.some((f) => f.enabled)
-                ? this.hass.localize("ui.panel.config.labs.description_enabled")
-                : this.hass.localize("ui.panel.config.labs.description");
+            description = this._labFeatures?.some((f) => f.enabled)
+              ? this.hass.localize("ui.panel.config.labs.description_enabled")
+              : undefined;
             break;
 
           default:
-            description = this.hass.localize(
-              `ui.panel.config.${page.translationKey}.description`
-            );
             break;
         }
 
@@ -148,7 +141,6 @@ class HaConfigSystemNavigation extends LitElement {
               .hass=${this.hass}
               .narrow=${this.narrow}
               .pages=${pages}
-              has-secondary
               .label=${this.hass.localize(
                 "ui.panel.config.dashboard.system.main"
               )}

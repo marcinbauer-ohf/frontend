@@ -69,17 +69,13 @@ class HaPanelProfile extends LitElement {
       "--app-header-text-color",
       "var(--sidebar-text-color)"
     );
-    this.style.setProperty(
-      "--app-header-border-bottom",
-      "1px solid var(--divider-color)"
-    );
   }
 
   static styles = css`
     :host {
       display: block;
     }
-    ha-profile-router > * {
+    ha-profile-router * {
       display: block;
       height: 100%;
     }

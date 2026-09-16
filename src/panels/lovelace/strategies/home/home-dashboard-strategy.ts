@@ -24,6 +24,8 @@ export interface HomeDashboardStrategyConfig {
   hide_welcome_message?: boolean;
   hide_suggested_entities?: boolean;
   shortcuts?: ShortcutItem[];
+  /** Home panel edit mode: summaries and favorites become editable in place. */
+  editing?: boolean;
 }
 
 @customElement("home-dashboard-strategy")
@@ -108,6 +110,7 @@ export class HomeDashboardStrategy extends ReactiveElement {
             hide_welcome_message: config.hide_welcome_message,
             hide_suggested_entities: config.hide_suggested_entities,
             shortcuts: config.shortcuts,
+            editing: config.editing,
           } satisfies HomeOverviewViewStrategyConfig,
         },
         ...areaViews,

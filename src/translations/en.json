@@ -675,7 +675,7 @@
         }
       },
       "logbook": {
-        "entries_not_found": "No activity found.",
+        "entries_not_found": "No activity found",
         "automation_triggered": "Triggered",
         "script_ran": "Ran",
         "view_trace": "View trace",
@@ -780,7 +780,7 @@
         "expand_area_id": "Split this area into separate devices and entities",
         "expand_device_id": "Split this device into separate entities",
         "expand_label_id": "Split this label into separate areas, devices and entities",
-        "add_target": "Add target",
+        "add_target": "Add targets",
         "remove": "Remove",
         "remove_floor_id": "Remove floor",
         "remove_area_id": "Remove area",
@@ -2558,6 +2558,7 @@
           "welcome_message_helper": "Show the personalized greeting at the top of your overview page.",
           "summaries": "Summaries",
           "summaries_description": "Customize the summaries of your Overview page.",
+          "add_favorite": "Add favorite",
           "add_custom_shortcut": "Add shortcut",
           "edit_shortcut": "Edit shortcut",
           "shortcut": {
@@ -9231,6 +9232,11 @@
             "edit_title": "Edit title",
             "title": "Title"
           },
+          "preview_size": {
+            "desktop": "Preview desktop size",
+            "tablet": "Preview tablet size",
+            "mobile": "Preview mobile size"
+          },
           "edit_view": {
             "header": "View configuration",
             "header_name": "{name} view configuration",
@@ -10910,6 +10916,11 @@
           "security": "Security"
         },
         "current_user": "You are currently logged in as {fullName}.",
+        "role": {
+          "owner": "Owner",
+          "administrator": "Administrator",
+          "user": "User"
+        },
         "is_owner": "You are an owner.",
         "user_preferences_header": "User preferences",
         "user_preferences_detail": "The following settings are tied to your account and will persist across all sessions and devices.",
@@ -11574,9 +11585,15 @@
         }
       },
       "history": {
-        "start_search": "Select areas, devices, entities or labels above",
+        "start_search_title": "Nothing to show yet",
+        "start_search": "Select areas, devices, entities or labels to see their history",
+        "select_sources": "Add targets",
+        "no_results_title": "No results found",
+        "no_results": "No history for the current selection. Try changing the targets, filters, or time range.",
+        "no_targets": "No targets selected",
+        "sources": "Sources",
+        "device_class": "Device class",
         "add_all": "Add all entities",
-        "remove_all": "Remove all selections",
         "download_data": "Download data",
         "download_data_error": "Unable to download data",
         "add_card": "Add current view as card",
@@ -11584,6 +11601,14 @@
         "error_no_data": "You need to select some data sources first."
       },
       "logbook": {
+        "sources": "[%key:ui::panel::history::sources%]",
+        "device_class": "[%key:ui::panel::history::device_class%]",
+        "start_search": "Select areas, devices, entities or labels to see their activity",
+        "select_sources": "Add targets",
+        "no_targets": "Showing all activity. Add targets to narrow it down.",
+        "no_results_title": "[%key:ui::panel::history::no_results_title%]",
+        "no_results": "No activity for the current selection. Try changing the targets, filters, or time range.",
+        "show_all": "Show all",
         "download_data": "[%key:ui::panel::history::download_data%]",
         "download_data_error": "[%key:ui::panel::history::download_data_error%]",
         "error_no_data": "No activity for the selected target in the selected time range."

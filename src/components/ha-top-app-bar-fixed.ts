@@ -13,8 +13,12 @@ export const haTopAppBarFixedStyles = css`
   :host {
     display: block;
     position: relative;
-    height: 100vh;
+    /* Full screen as a panel root; a container that hosts a page inside itself
+       (the settings detail column) overrides this to fill that container. */
+    height: var(--ha-top-app-bar-fixed-height, 100vh);
     overflow: hidden;
+    /* Surround for the sheet below, in the bar's own color */
+    background-color: var(--app-header-background-color);
     --total-top-app-bar-height: calc(
       var(--header-height, 0px) + var(--sub-row-height, 0px)
     );
@@ -48,10 +52,15 @@ export const haTopAppBarFixedStyles = css`
     box-shadow: var(--ha-box-shadow-s);
   }
 
+  /* The bar's background stays full width; only its contents are capped, so a
+     page's title lines up with the lane its content sits in. Opt in by setting
+     --ha-top-app-bar-content-max-width. */
   .row {
     box-sizing: border-box;
     display: flex;
     width: 100%;
+    max-width: var(--ha-top-app-bar-content-max-width, none);
+    margin: 0 auto;
     align-items: center;
     height: var(--header-height);
     border-bottom: var(--app-header-border-bottom);
@@ -74,6 +83,8 @@ export const haTopAppBarFixedStyles = css`
     box-sizing: border-box;
     display: block;
     width: 100%;
+    max-width: var(--ha-top-app-bar-content-max-width, none);
+    margin: 0 auto;
   }
 
   .sub-row[hidden] {
@@ -120,22 +131,30 @@ export const haTopAppBarFixedStyles = css`
     padding-inline-start: var(--ha-space-2);
   }
 
+  /* Same rounded sheet a dashboard sits in: the page is a surface inset into
+     the chrome, and the gutter separates the two instead of a divider line. */
   .top-app-bar-fixed-adjust {
     box-sizing: border-box;
     position: absolute;
     top: calc(
       var(--total-top-app-bar-height, 0px) + var(--safe-area-inset-top, 0px)
     );
-    bottom: 0;
+    bottom: var(--ha-page-sheet-gutter, var(--ha-space-4));
     inset-inline-start: 0;
-    inset-inline-end: 0;
+    inset-inline-end: var(--ha-page-sheet-gutter, var(--ha-space-4));
     padding-bottom: var(--safe-area-inset-bottom);
     padding-right: var(--safe-area-inset-right);
     overflow: auto;
+    background-color: var(--primary-background-color);
+    border-radius: var(--ha-page-sheet-radius, var(--ha-border-radius-xl));
   }
 
+  /* No sidebar to hug and no room to spare, so the sheet spans the width */
   :host([narrow]) .top-app-bar-fixed-adjust {
     padding-left: var(--safe-area-inset-left);
+    inset-inline: 0;
+    bottom: 0;
+    border-radius: 0;
   }
 `;
 

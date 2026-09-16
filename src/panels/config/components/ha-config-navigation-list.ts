@@ -17,9 +17,6 @@ class HaConfigNavigationList extends LitElement {
 
   @property({ attribute: false }) public pages!: PageNavigation[];
 
-  @property({ attribute: "has-secondary", type: Boolean })
-  public hasSecondary = false;
-
   @property() public label?: string;
 
   /** Path of the page shown in the detail column, highlighted in the list. */
@@ -49,7 +46,9 @@ class HaConfigNavigationList extends LitElement {
               </div>
               <span slot="headline">${page.name}</span>
               ${
-                this.hasSecondary
+                // Only pages that report a status get a second line, a static
+                // repeat of the page name reads as noise
+                page.description
                   ? html`<span slot="supporting-text"
                       >${page.description}</span
                     >`

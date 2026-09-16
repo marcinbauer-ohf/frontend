@@ -1,4 +1,4 @@
-import { mdiPlus } from "@mdi/js";
+import { mdiEye, mdiEyeOff, mdiPlus } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -152,23 +152,34 @@ export class HuiViewBadges extends LitElement {
                         this.viewIndex,
                         idx,
                       ] as LovelaceCardPath;
-                      return html`
-                        ${
-                          editMode
-                            ? html`
-                                <hui-badge-edit-mode
-                                  data-sortable
-                                  .lovelace=${this.lovelace}
-                                  .path=${badgePath}
-                                  .hiddenOverlay=${this._dragging}
-                                  .sortableData=${badgePath}
-                                >
-                                  ${badge}
-                                </hui-badge-edit-mode>
-                              `
-                            : badge
-                        }
-                      `;
+                      if (editMode) {
+                        return html`
+                          <hui-badge-edit-mode
+                            data-sortable
+                            .lovelace=${this.lovelace}
+                            .path=${badgePath}
+                            .hiddenOverlay=${this._dragging}
+                            .sortableData=${badgePath}
+                          >
+                            ${badge}
+                          </hui-badge-edit-mode>
+                        `;
+                      }
+                      // A toggleable badge is switched on and off by tapping it
+                      // (home page edit mode); hovering says which way it goes.
+                      if (badge.config?.toggleable) {
+                        return html`
+                          <div class="toggleable">
+                            ${badge}
+                            <div class="toggle-overlay">
+                              <ha-svg-icon
+                                .path=${badge.config.dimmed ? mdiEye : mdiEyeOff}
+                              ></ha-svg-icon>
+                            </div>
+                          </div>
+                        `;
+                      }
+                      return badge;
                     }
                   )}
                   ${
@@ -242,6 +253,43 @@ export class HuiViewBadges extends LitElement {
 
     .badges > * {
       min-width: fit-content;
+    }
+
+    /* Switched off, but still tappable to switch back on */
+    hui-badge[dimmed] {
+      opacity: 0.4;
+    }
+
+    .toggleable {
+      position: relative;
+    }
+    /* Same treatment as a card's edit overlay in a dashboard: the badge fades
+       behind the icon that says what tapping it does */
+    .toggle-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--ha-animation-duration-fast) ease-in-out;
+      border-radius: var(--ha-border-radius-pill);
+      background-color: color-mix(
+        in srgb,
+        var(--primary-background-color) 80%,
+        transparent
+      );
+    }
+    .toggleable:hover .toggle-overlay {
+      opacity: 1;
+    }
+    .toggle-overlay ha-svg-icon {
+      color: var(--primary-text-color);
+      border-radius: var(--ha-border-radius-circle);
+      padding: 4px;
+      background: var(--secondary-background-color);
+      --mdc-icon-size: 16px;
     }
 
     hui-badge-edit-mode {

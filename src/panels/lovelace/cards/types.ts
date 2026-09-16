@@ -713,6 +713,12 @@ export interface ShortcutCardConfig extends LovelaceCardConfig {
   double_tap_action?: ActionConfig;
 }
 
+export interface PlaceholderCardConfig extends LovelaceCardConfig {
+  label?: string;
+  icon_path?: string;
+  tap_action?: ActionConfig;
+}
+
 export interface ToggleGroupCardConfig extends LovelaceCardConfig {
   title: string;
   entities: string[];
