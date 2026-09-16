@@ -1,6 +1,5 @@
 import { css, html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators";
-import { classMap } from "lit/directives/class-map";
 import { stopPropagation } from "../../../common/dom/stop_propagation";
 import { fireEvent } from "../../../common/dom/fire_event";
 import "../../../components/ha-dropdown";
@@ -18,10 +17,8 @@ export interface ParameterChangedEvent {
  * One parameter fragment of an automation row header.
  *
  * Renders as plain text by default, matching the rest of the header. When
- * `editable` is set it becomes a chip that opens the option's own selector, so
- * a value can be changed without opening the sidebar. The chip borrows the
- * target chip's shape and size but is outlined rather than filled, so the two
- * read as the same kind of control without competing for the row's attention.
+ * `editable` is set it gets a dotted underline and opens the option's own
+ * selector on click, so a value can be changed without opening the sidebar.
  */
 @customElement("ha-automation-row-parameter")
 export class HaAutomationRowParameter extends LitElement {
@@ -44,13 +41,6 @@ export class HaAutomationRowParameter extends LitElement {
   @property({ type: Boolean }) public editable = false;
 
   @property({ type: Boolean }) public disabled = false;
-
-  /**
-   * Renders the chip filled rather than outlined. Used for the behavior, which
-   * qualifies the targets and so belongs with their solid chips; the trailing
-   * values stay outlined because they are separate facts about the row.
-   */
-  @property({ type: Boolean }) public filled = false;
 
   protected render() {
     // Fields whose selector the backend did not describe cannot be edited here
@@ -75,10 +65,7 @@ export class HaAutomationRowParameter extends LitElement {
                 @click=${stopPropagation}
                 @keydown=${stopPropagation}
               >
-                <button
-                  slot="trigger"
-                  class=${classMap({ parameter: true, filled: this.filled })}
-                >
+                <button slot="trigger" class="parameter">
                   <div class="label">${this.parameter.text}</div>
                 </button>
                 <div class="editor" @click=${stopPropagation}>
@@ -146,93 +133,70 @@ export class HaAutomationRowParameter extends LitElement {
       max-width: 100%;
     }
     /*
-     * Geometry is the target chip's, so the two read as the same kind of
-     * control. Outlined rather than filled keeps the targets dominant while the
-     * border still marks a value as a distinct, pressable thing.
-     *
-     * The border is the -quiet step: it only has to say "this is a chip", and
-     * at the -normal step it outweighed the filled chips it sits next to.
+     * Secondary, so the row's heading stays the primary thing read and the
+     * values it carries sit a step behind it.
+     */
+    .text {
+      color: var(--ha-color-text-secondary);
+    }
+    /*
+     * Parameters are part of the header sentence, so they stay plain text; an
+     * underline marks them as editable without the weight of a chip competing
+     * with the filled target chips next to them.
      */
     .parameter {
       display: inline-flex;
-      position: relative;
-      gap: var(--ha-space-1);
-      justify-content: center;
       align-items: center;
-      border-radius: var(--ha-border-radius-md);
-      background: transparent;
-      padding: 0 var(--ha-space-2);
-      color: var(--ha-color-text-secondary);
-      border: var(--ha-border-width-sm) solid
-        var(--ha-color-border-neutral-quiet);
-      overflow: hidden;
-      height: var(--ha-space-9);
       max-width: 100%;
+      margin: 0;
+      padding: 0;
+      border: none;
+      border-radius: var(--ha-border-radius-sm);
+      background: none;
+      color: var(--ha-color-text-secondary);
       cursor: pointer;
       font: inherit;
-    }
-    /*
-     * Every fill in this component is a translucent layer of the text colour
-     * rather than a fill-neutral token, because those do not survive dark mode:
-     * fill-neutral-normal is neutral-10 (#202020) against a #1c1c1c card, a
-     * four-step difference that reads as no fill at all. That is what made a
-     * filled chip and an outlined one indistinguishable there.
-     * --primary-text-color inverts with the theme, so one layer darkens a light
-     * card and lightens a dark one by the same amount.
-     * (color-mix would say this directly but is not safe for our browser
-     * support -- see ha-logbook-entry.)
-     */
-    .parameter::before {
-      content: "";
-      position: absolute;
-      /* Negative so the tint covers the transparent border ring too */
-      inset: calc(-1 * var(--ha-border-width-sm));
-      background-color: var(--primary-text-color);
-      opacity: 0;
-      pointer-events: none;
-      border-radius: inherit;
-      z-index: 0;
-      transition: opacity var(--ha-animation-duration-fast, 100ms) ease-in-out;
-    }
-    /* An outlined chip stays open at rest and only fills on interaction */
-    .parameter:hover::before {
-      opacity: 0.07;
-    }
-    .parameter:active::before {
-      opacity: 0.11;
-    }
-    /*
-     * The behavior qualifies the targets, so it is filled to match them, and
-     * drops its border so the pair reads as one group.
-     *
-     * Transparent rather than removed: there is no global border-box reset, so
-     * dropping the border would make a filled chip 2px shorter than an outlined
-     * one and break the row's alignment.
-     */
-    .parameter.filled {
-      border-color: transparent;
-    }
-    .parameter.filled::before {
-      opacity: 0.11;
-    }
-    .parameter.filled:hover::before {
-      opacity: 0.18;
-    }
-    .parameter.filled:active::before {
-      opacity: 0.22;
-    }
-    /* Positioned so the label paints above the tint layer */
-    .parameter .label {
-      position: relative;
-      z-index: 1;
-    }
-    .parameter:focus-visible {
-      outline: var(--wa-focus-ring);
     }
     .parameter .label {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      position: relative;
+      /*
+       * Room below the text for the bar, cancelled again by the negative
+       * margin: flex centres the margin box, so the label keeps its place in
+       * the row while the bar hangs lower. Padding rather than a negative
+       * offset on the bar itself, which overflow: hidden would clip.
+       */
+      padding-bottom: 2px;
+      margin-bottom: -2px;
+    }
+    /*
+     * A bar rather than text-decoration: an underline cannot have rounded
+     * ends. It hangs off the bottom of the line box, which sits just below the
+     * text's descenders -- the bottom offset is the knob if the row's
+     * line-height ever changes.
+     *
+     * A border token rather than a text colour, so it stays quieter than the
+     * row's words while still marking the value editable.
+     */
+    .parameter .label::after {
+      content: "";
+      position: absolute;
+      inset-inline: 0;
+      bottom: 1px;
+      height: 2px;
+      border-radius: var(--ha-border-radius-pill);
+      background-color: var(--ha-color-border-neutral-normal);
+      transition: background-color var(--ha-animation-duration-fast, 100ms)
+        ease-in-out;
+    }
+    .parameter:hover .label::after {
+      background-color: var(--ha-color-text-link);
+    }
+    .parameter:focus-visible {
+      outline: var(--wa-focus-ring);
+      outline-offset: var(--ha-space-1);
     }
     .editor {
       display: flex;

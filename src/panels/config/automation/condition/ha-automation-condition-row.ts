@@ -85,7 +85,10 @@ import { showEditorToast } from "../editor-toast";
 import "../ha-automation-editor-warning";
 import "../ha-automation-row-parameter";
 import type { ParameterChangedEvent } from "../ha-automation-row-parameter";
-import { INLINE_PARAMETERS_STORAGE_KEY } from "../inline-parameters";
+import {
+  INLINE_PARAMETERS_STORAGE_KEY,
+  VALUES_FIRST_STORAGE_KEY,
+} from "../inline-parameters";
 import { overflowStyles, rowStyles } from "../styles";
 import "../target/ha-automation-row-targets";
 import "./ha-automation-condition-editor";
@@ -157,6 +160,13 @@ export default class HaAutomationConditionRow extends LitElement {
     subscribe: true,
   })
   private _inlineParameters = false;
+
+  @storage({
+    key: VALUES_FIRST_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _valuesFirst = true;
 
   @state() private _yamlMode = false;
 
@@ -265,6 +275,11 @@ export default class HaAutomationConditionRow extends LitElement {
       ...(forDuration ? [forDuration] : []),
     ];
 
+    // Which side of the targets the values sit on is a per-user preference
+    const values = parameters.map((parameter) =>
+      this._renderParameter(parameter, platformFields)
+    );
+
     const noteTooltipText = truncateWithEllipsis(
       this.condition.note?.trim() || "",
       250
@@ -296,17 +311,11 @@ export default class HaAutomationConditionRow extends LitElement {
             </div>`
       }
       <h3 slot="header">
-        ${description}
-        ${parameters.map((parameter) =>
-          this._renderParameter(parameter, platformFields)
-        )}
+        ${description} ${this._valuesFirst ? values : nothing}
         ${
           // Behavior qualifies the targets ("any target"), so it closes the
-          // header immediately before them, after the values that describe the
-          // condition on its own.
-          behavior
-            ? this._renderParameter(behavior, platformFields, true)
-            : nothing
+          // header immediately before them.
+          behavior ? this._renderParameter(behavior, platformFields) : nothing
         }
         ${
           target !== undefined || (descriptionHasTarget && !this._isNew)
@@ -318,6 +327,7 @@ export default class HaAutomationConditionRow extends LitElement {
               )
             : nothing
         }
+        ${this._valuesFirst ? nothing : values}
         ${
           this.condition.note?.trim()
             ? html`
@@ -862,8 +872,7 @@ export default class HaAutomationConditionRow extends LitElement {
 
   private _renderParameter(
     parameter: RowParameter,
-    fields: ConditionDescriptions[string]["fields"] | undefined,
-    filled = false
+    fields: ConditionDescriptions[string]["fields"] | undefined
   ) {
     return html`
       <ha-automation-row-parameter
@@ -875,7 +884,6 @@ export default class HaAutomationConditionRow extends LitElement {
         .platform=${this.condition.condition}
         .editable=${this._inlineParameters}
         .disabled=${this.disabled}
-        .filled=${filled}
         @parameter-changed=${this._parameterChanged}
       ></ha-automation-row-parameter>
     `;

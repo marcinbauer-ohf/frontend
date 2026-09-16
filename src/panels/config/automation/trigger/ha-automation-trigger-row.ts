@@ -82,7 +82,10 @@ import { showEditorToast } from "../editor-toast";
 import "../ha-automation-editor-warning";
 import "../ha-automation-row-parameter";
 import type { ParameterChangedEvent } from "../ha-automation-row-parameter";
-import { INLINE_PARAMETERS_STORAGE_KEY } from "../inline-parameters";
+import {
+  INLINE_PARAMETERS_STORAGE_KEY,
+  VALUES_FIRST_STORAGE_KEY,
+} from "../inline-parameters";
 import { overflowStyles, rowStyles } from "../styles";
 import "../target/ha-automation-row-targets";
 import "./ha-automation-trigger-editor";
@@ -193,6 +196,13 @@ export default class HaAutomationTriggerRow extends LitElement {
   })
   private _inlineParameters = false;
 
+  @storage({
+    key: VALUES_FIRST_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _valuesFirst = true;
+
   @state()
   @consume({ context: fullEntitiesContext, subscribe: true })
   _entityReg: EntityRegistryEntry[] = [];
@@ -295,6 +305,11 @@ export default class HaAutomationTriggerRow extends LitElement {
       ...(forDuration ? [forDuration] : []),
     ];
 
+    // Which side of the targets the values sit on is a per-user preference
+    const values = parameters.map((parameter) =>
+      this._renderParameter(parameter, platformFields, options)
+    );
+
     const noteTooltipText = truncateWithEllipsis(
       (type !== "list" &&
         (this.trigger as Exclude<Trigger, TriggerList>).note?.trim()) ||
@@ -317,16 +332,12 @@ export default class HaAutomationTriggerRow extends LitElement {
             ></ha-trigger-icon>`
       }
       <h3 slot="header">
-        ${description}
-        ${parameters.map((parameter) =>
-          this._renderParameter(parameter, platformFields, options)
-        )}
+        ${description} ${this._valuesFirst ? values : nothing}
         ${
           // Behavior qualifies the targets ("each target"), so it closes the
-          // header immediately before them, after the values that describe the
-          // trigger on its own.
+          // header immediately before them.
           behavior
-            ? this._renderParameter(behavior, platformFields, options, true)
+            ? this._renderParameter(behavior, platformFields, options)
             : nothing
         }
         ${
@@ -339,6 +350,7 @@ export default class HaAutomationTriggerRow extends LitElement {
               )
             : nothing
         }
+        ${this._valuesFirst ? nothing : values}
         ${
           type !== "list" &&
           (this.trigger as Exclude<Trigger, TriggerList>).note?.trim()
@@ -929,8 +941,7 @@ export default class HaAutomationTriggerRow extends LitElement {
   private _renderParameter(
     parameter: RowParameter,
     fields: TriggerDescriptions[string]["fields"] | undefined,
-    options: Record<string, unknown> | undefined,
-    filled = false
+    options: Record<string, unknown> | undefined
   ) {
     return html`
       <ha-automation-row-parameter
@@ -942,7 +953,6 @@ export default class HaAutomationTriggerRow extends LitElement {
         .platform=${(this.trigger as PlatformTrigger).trigger}
         .editable=${this._inlineParameters}
         .disabled=${this.disabled}
-        .filled=${filled}
         @parameter-changed=${this._parameterChanged}
       ></ha-automation-row-parameter>
     `;

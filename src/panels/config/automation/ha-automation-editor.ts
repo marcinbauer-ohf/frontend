@@ -4,6 +4,7 @@ import {
   mdiCog,
   mdiContentSave,
   mdiCursorDefaultClick,
+  mdiSwapHorizontal,
   mdiDebugStepOver,
   mdiDelete,
   mdiDotsVertical,
@@ -34,7 +35,10 @@ import "../../../components/ha-button";
 import "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
 import { storage } from "../../../common/decorators/storage";
-import { INLINE_PARAMETERS_STORAGE_KEY } from "./inline-parameters";
+import {
+  INLINE_PARAMETERS_STORAGE_KEY,
+  VALUES_FIRST_STORAGE_KEY,
+} from "./inline-parameters";
 import "../../../components/ha-icon";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-svg-icon";
@@ -136,6 +140,15 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
     subscribe: true,
   })
   private _inlineParameters = false;
+
+  // Experiment: put the set values before the behavior and targets in a row
+  // header instead of after them.
+  @storage({
+    key: VALUES_FIRST_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _valuesFirst = true;
 
   private _configSubscriptions: Record<
     string,
@@ -436,6 +449,13 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
               slot="icon"
               .path=${mdiCursorDefaultClick}
             ></ha-svg-icon>
+          </ha-dropdown-item>
+
+          <ha-dropdown-item value="toggle_values_first">
+            ${this.hass.localize(
+              `ui.panel.config.automation.editor.values_first.${this._valuesFirst ? "disable" : "enable"}`
+            )}
+            <ha-svg-icon slot="icon" .path=${mdiSwapHorizontal}></ha-svg-icon>
           </ha-dropdown-item>
 
           <ha-dropdown-item value="toggle_yaml_mode">
@@ -1248,6 +1268,9 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
         break;
       case "toggle_inline_parameters":
         this._inlineParameters = !this._inlineParameters;
+        break;
+      case "toggle_values_first":
+        this._valuesFirst = !this._valuesFirst;
         break;
       case "toggle_yaml_mode":
         if (this.mode === "gui") {

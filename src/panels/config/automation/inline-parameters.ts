@@ -6,3 +6,9 @@
  * property. Lives in its own module so rows do not have to import the editor.
  */
 export const INLINE_PARAMETERS_STORAGE_KEY = "automation-inline-parameters";
+
+/**
+ * Shared storage key for the row-header order: targets and behavior first (the
+ * default) or the set values first. Same mechanism as the key above.
+ */
+export const VALUES_FIRST_STORAGE_KEY = "automation-values-first";

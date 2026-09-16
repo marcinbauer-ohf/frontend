@@ -5150,6 +5150,10 @@
               "enable": "Edit parameters in rows",
               "disable": "Stop editing parameters in rows"
             },
+            "values_first": {
+              "enable": "Show values before targets",
+              "disable": "Show values after targets"
+            },
             "description": {
               "label": "Description",
               "placeholder": "Optional description",
