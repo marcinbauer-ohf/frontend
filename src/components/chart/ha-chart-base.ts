@@ -981,7 +981,8 @@ export class HaChartBase extends MobileAwareMixin(LitElement) {
       this._updateSankeyRoam();
       if (
         !this._isTouchDevice &&
-        !this.options?.dataZoom &&
+        this.options?.xAxis &&
+        !this.options.dataZoom &&
         this._getDataZoomConfig()
       ) {
         // drag to zoom
@@ -1534,7 +1535,7 @@ export class HaChartBase extends MobileAwareMixin(LitElement) {
       -start,
       Math.min(
         100 - end,
-        (direction * pixels * (end - start)) / this.chart.getWidth()
+        (direction * pixels * (end - start)) / this._getXAxisPixelWidth()
       )
     );
     if (shift) {
@@ -1633,6 +1634,19 @@ export class HaChartBase extends MobileAwareMixin(LitElement) {
       this.chart?.dispatchAction({ type: "hideTip", from: "outside" });
     }
   };
+
+  // The zoom window spans the plot area, not the canvas, which also holds the
+  // axis labels.
+  private _getXAxisPixelWidth(): number {
+    const axisModel = this.chart
+      // @ts-ignore private method but no public way to get the axis extent
+      ?.getModel()
+      .getComponent("xAxis", 0) as
+      { axis?: { getExtent(): [number, number] } } | undefined;
+    const extent = axisModel?.axis?.getExtent();
+    const width = extent ? Math.abs(extent[1] - extent[0]) : 0;
+    return width || this.chart!.getWidth();
+  }
 
   private _setZoomRange(start: number, end: number) {
     this._zoomRange = [start, end];
