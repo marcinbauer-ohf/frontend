@@ -3,6 +3,7 @@ import {
   mdiDotsVertical,
   mdiDownload,
   mdiImagePlus,
+  mdiRestart,
   mdiTuneVariant,
 } from "@mdi/js";
 import { differenceInHours } from "date-fns";
@@ -98,6 +99,8 @@ class HaPanelHistory extends LitElement {
 
   @state() private _isLoading = false;
 
+  @state() private _chartsZoomed = false;
+
   @state() private _filters: SourceFilters = {};
 
   @storage({
@@ -184,6 +187,18 @@ class HaPanelHistory extends LitElement {
         <h1 class="page-title" slot="title">
           ${this.hass.localize("panel.history")}
         </h1>
+        ${
+          this._chartsZoomed && !loading
+            ? html`<ha-icon-button
+                slot="actionItems"
+                .label=${this.hass.localize(
+                  "ui.components.history_charts.zoom_reset"
+                )}
+                .path=${mdiRestart}
+                @click=${this._resetZoom}
+              ></ha-icon-button>`
+            : nothing
+        }
         <ha-dropdown slot="actionItems" @wa-select=${this._handleMenuAction}>
           <ha-icon-button
             slot="trigger"
@@ -271,6 +286,7 @@ class HaPanelHistory extends LitElement {
                             .narrow=${this.narrow}
                             sync-charts
                             inside-labels
+                            @history-charts-zoomed=${this._chartsZoomedChanged}
                           >
                           </state-history-charts>
                         `
@@ -281,6 +297,16 @@ class HaPanelHistory extends LitElement {
         </div>
       </ha-top-app-bar-fixed>
     `;
+  }
+
+  private _chartsZoomedChanged(
+    ev: HASSDomEvent<HASSDomEvents["history-charts-zoomed"]>
+  ) {
+    this._chartsZoomed = ev.detail.zoomed;
+  }
+
+  private _resetZoom() {
+    this._stateHistoryCharts?.resetZoom();
   }
 
   private _renderEmptyState(hasTargets: boolean) {
@@ -472,6 +498,8 @@ class HaPanelHistory extends LitElement {
     }
 
     this._isLoading = true;
+    // The charts are rebuilt once loaded, so they start unzoomed.
+    this._chartsZoomed = false;
 
     if (this._subscribed) {
       this._unsubscribeHistory();

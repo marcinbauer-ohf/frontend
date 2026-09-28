@@ -152,6 +152,13 @@ export class MoreInfoInfo extends LitElement {
       margin-bottom: var(--ha-space-4);
     }
 
+    /* History and logbook pad their own content (they run edge to edge in the
+       History view), so cancel this view's padding instead of doubling it. */
+    ha-more-info-history,
+    ha-more-info-logbook {
+      margin-inline: calc(-1 * var(--ha-space-6));
+    }
+
     ha-alert {
       display: block;
     }

@@ -1,7 +1,6 @@
 import type { RenderItemFunction } from "@lit-labs/virtualizer/virtualize";
-import { mdiRestart } from "@mdi/js";
 import type { PropertyValues } from "lit";
-import { css, html, LitElement, nothing } from "lit";
+import { css, html, LitElement } from "lit";
 import {
   customElement,
   eventOptions,
@@ -11,6 +10,7 @@ import {
 } from "lit/decorators";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import { restoreScroll } from "../../common/decorators/restore-scroll";
+import { fireEvent } from "../../common/dom/fire_event";
 import type {
   HASSDomEvent,
   HASSDomTargetEvent,
@@ -22,8 +22,6 @@ import type {
 } from "../../data/history";
 import { loadVirtualizer } from "../../resources/virtualizer";
 import type { HomeAssistant } from "../../types";
-import "../ha-button";
-import "../ha-svg-icon";
 import "./state-history-chart-line";
 import type { StateHistoryChartLine } from "./state-history-chart-line";
 import "./state-history-chart-timeline";
@@ -49,6 +47,7 @@ declare global {
       end: number;
       chartIndex: number;
     };
+    "history-charts-zoomed": { zoomed: boolean };
   }
 }
 
@@ -117,7 +116,7 @@ export class StateHistoryCharts extends LitElement {
 
   @state() private _chartCount = 0;
 
-  @state() private _hasZoomedCharts = false;
+  private _hasZoomedCharts = false;
 
   @queryAll("state-history-chart-line, state-history-chart-timeline")
   private _chartComponents!: NodeListOf<
@@ -179,23 +178,6 @@ export class StateHistoryCharts extends LitElement {
     `;
   }
 
-  // Shown once, in the first chart, since resetting it resets the synced
-  // charts too.
-  private _renderResetButton(index: number) {
-    if (index !== 0 || !this.syncCharts || !this._hasZoomedCharts) {
-      return nothing;
-    }
-    return html`<ha-button
-      size="xs"
-      appearance="filled"
-      class="reset-button"
-      @click=${this._handleGlobalZoomReset}
-    >
-      <ha-svg-icon slot="start" .path=${mdiRestart}></ha-svg-icon>
-      ${this.hass.localize("ui.components.history_charts.zoom_reset")}
-    </ha-button>`;
-  }
-
   private _renderHistoryItem: RenderItemFunction<
     TimelineEntity[] | LineChartUnit
   > = (item, index) => {
@@ -228,7 +210,6 @@ export class StateHistoryCharts extends LitElement {
           .expandLegend=${this.expandLegend}
           ?hide-reset-button=${this.syncCharts}
         ></state-history-chart-line>
-        ${this._renderResetButton(index)}
       </div> `;
     }
     return html`<div class="entry-container timeline">
@@ -249,7 +230,6 @@ export class StateHistoryCharts extends LitElement {
         @chart-zoom-with-index=${this._handleTimelineSync}
         ?hide-reset-button=${this.syncCharts}
       ></state-history-chart-timeline>
-      ${this._renderResetButton(index)}
     </div> `;
   };
 
@@ -347,7 +327,7 @@ export class StateHistoryCharts extends LitElement {
 
     const { start, end, chartIndex } = e.detail;
 
-    this._hasZoomedCharts = start !== 0 || end !== 100;
+    this._setHasZoomedCharts(start !== 0 || end !== 100);
     this._syncZoomToAllCharts(start, end, chartIndex);
   }
 
@@ -373,8 +353,18 @@ export class StateHistoryCharts extends LitElement {
     });
   }
 
-  private _handleGlobalZoomReset() {
-    this._hasZoomedCharts = false;
+  // The reset button lives with the page controls, since it resets all the
+  // synced charts together.
+  private _setHasZoomedCharts(zoomed: boolean) {
+    if (this._hasZoomedCharts !== zoomed) {
+      this._hasZoomedCharts = zoomed;
+      fireEvent(this, "history-charts-zoomed", { zoomed });
+    }
+  }
+
+  /** Resets the zoom of all synced charts. */
+  public resetZoom() {
+    this._setHasZoomedCharts(false);
     this._isSyncing = true;
 
     requestAnimationFrame(() => {
@@ -428,7 +418,6 @@ export class StateHistoryCharts extends LitElement {
     }
 
     .entry-container {
-      position: relative;
       width: 100%;
       overflow: visible;
     }
@@ -475,16 +464,6 @@ export class StateHistoryCharts extends LitElement {
     state-history-chart-timeline,
     state-history-chart-line {
       width: 100%;
-    }
-    /* Same spot as the chart's own controls in ha-chart-base. */
-    .reset-button {
-      position: absolute;
-      top: var(--ha-space-4);
-      inset-inline-end: var(--ha-space-2);
-      z-index: 2;
-    }
-    .entry-container.line .reset-button {
-      top: calc(var(--ha-space-6) + 8px);
     }
   `;
 }
