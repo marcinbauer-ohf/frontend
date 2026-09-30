@@ -4,10 +4,18 @@ import { customElement, property, query, state } from "lit/decorators";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import "../../../../components/ha-alert";
 import "../../../../components/ha-button";
+import type { ConfigEntry } from "../../../../data/config_entries";
+import {
+  configEntriesContext,
+  fullEntitiesContext,
+} from "../../../../data/context";
 import {
   dirtyStateContext,
   type DirtyStateContext,
 } from "../../../../data/context/dirty-state";
+import type { DeviceRegistryEntryMutableParams } from "../../../../data/device/device_registry";
+import type { EntityRegistryEntry } from "../../../../data/entity/entity_registry";
+import { updateDeviceWithSideEffects } from "../../../../panels/config/devices/device-detail/device-actions";
 import "../../../../panels/config/devices/device-registry-detail/device-registry-settings-editor";
 import type { DeviceRegistrySettingsEditor } from "../../../../panels/config/devices/device-registry-detail/device-registry-settings-editor";
 import type { HomeAssistant } from "../../../../types";
@@ -25,6 +33,15 @@ export class HaMoreInfoViewDeviceSettings extends LitElement {
   @consume({ context: dirtyStateContext, subscribe: true })
   @state()
   private _dirtyState?: DirtyStateContext;
+
+  @state()
+  @consume({ context: fullEntitiesContext, subscribe: true })
+  private _entityRegistry: EntityRegistryEntry[] = [];
+
+  /** For offering to disable a config entry along with its last device. */
+  @state()
+  @consume({ context: configEntriesContext, subscribe: true })
+  private _entries?: ConfigEntry[];
 
   @state() private _error?: string;
 
@@ -54,6 +71,7 @@ export class HaMoreInfoViewDeviceSettings extends LitElement {
         .hass=${this.hass}
         .device=${device}
         .disabled=${this._submitting}
+        .updateEntry=${this._updateEntry}
       ></device-registry-settings-editor>
       <div class="buttons">
         <ha-button
@@ -66,6 +84,20 @@ export class HaMoreInfoViewDeviceSettings extends LitElement {
       </div>
     `;
   }
+
+  /**
+   * The device page's save: disabling the last device of an entry offers to
+   * disable the entry, and a rename carries over to the entity names.
+   */
+  private _updateEntry = (updates: Partial<DeviceRegistryEntryMutableParams>) =>
+    updateDeviceWithSideEffects(
+      this,
+      this.hass,
+      this.hass.devices[this.params.deviceId],
+      this._entries ?? [],
+      this._entityRegistry,
+      updates
+    );
 
   private async _save() {
     this._error = undefined;

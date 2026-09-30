@@ -183,6 +183,14 @@ describe("ha-more-info-device", () => {
     return el;
   };
 
+  /** Opens one of the view's tabs, the way its bar does. */
+  const openTab = async (el: HaMoreInfoDevice, value: string) => {
+    el.shadowRoot!.querySelector(".bar ha-control-select")!.dispatchEvent(
+      new CustomEvent("value-changed", { detail: { value } })
+    );
+    await el.updateComplete;
+  };
+
   it("features the primary entity and puts the device's entities in a strip", async () => {
     const el = await renderView();
 
@@ -331,7 +339,7 @@ describe("ha-more-info-device", () => {
 
   it("offers a menu of the entities only once the strip runs out of room", async () => {
     const el = await renderView();
-    const menu = () => el.shadowRoot!.querySelector("ha-dropdown");
+    const menu = () => el.shadowRoot!.querySelector("ha-dropdown.entity-list");
 
     // Every chip fits: the strip already shows the whole device.
     expect(menu()).toBeNull();
@@ -394,17 +402,17 @@ describe("ha-more-info-device", () => {
 
     sensor.click();
     await el.updateComplete;
-    // A sensor has no control, so it gets its record and the big state header.
+    // A sensor has no control, so its history is what fills the tab under
+    // the big state header, where a control would have been.
     expect(
       el.shadowRoot!.querySelector<
         HTMLElement & { stateObj: { entity_id: string } }
       >("ha-more-info-state-header")!.stateObj.entity_id
     ).toBe(SENSOR);
+    expect(el.shadowRoot!.querySelector(".reading-icon")).toBeNull();
     expect(
-      el.shadowRoot!.querySelector<HTMLElement & { entityId: string }>(
-        ".chart-timeline"
-      )!.entityId
-    ).toBe(SENSOR);
+      el.shadowRoot!.querySelector(".pane.reading .chart-card .chart-timeline")
+    ).not.toBeNull();
     expect(el.shadowRoot!.querySelector("ha-more-info-info")).toBeNull();
     expect(rowFor(el, SENSOR).classList.contains("selected")).toBe(true);
 
@@ -419,7 +427,7 @@ describe("ha-more-info-device", () => {
     ).toBe(PRIMARY);
   });
 
-  it("draws a numeric reading's history where its icon would be, and reads it back on hover", async () => {
+  it("draws a numeric reading's history under it, and reads it back on hover", async () => {
     const el = await renderView();
     // A reading with a unit has a line worth drawing; the fixture's sensor has
     // neither, so it is given one for this test only.
@@ -524,22 +532,22 @@ describe("ha-more-info-device", () => {
         >(".bar ha-control-select")!
         .options.map((option) => option.value);
 
-    expect(tabs()).toEqual(["info", "history", "settings"]);
+    expect(tabs()).toEqual(["info", "activity", "settings"]);
 
     // A sensor has no control and no logbook, and the tabs must not move.
     rowFor(el, SENSOR).click();
     await el.updateComplete;
 
-    expect(tabs()).toEqual(["info", "history", "settings"]);
+    expect(tabs()).toEqual(["info", "activity", "settings"]);
   });
 
-  it("gives a word-valued reading the timeline, in place of its icon", async () => {
+  it("gives a word-valued reading the timeline on its info tab", async () => {
     const el = await renderView();
     rowFor(el, SENSOR).click();
     await el.updateComplete;
 
-    // Nothing to operate and nothing to plot as a line: what there is to look
-    // at is the run of states, which is what the icon's block becomes.
+    // Nothing to plot as a line: what there is to look at is the run of
+    // states.
     expect(
       el.shadowRoot!.querySelector("ha-more-info-state-header")
     ).not.toBeNull();
@@ -549,7 +557,7 @@ describe("ha-more-info-device", () => {
         ".chart-timeline"
       )!.hideHeader
     ).toBe(true);
-    // The activity is the history tab's other half and stays there.
+    // The activity has a tab of its own.
     expect(el.shadowRoot!.querySelector("ha-more-info-logbook")).toBeNull();
 
     // Pointing at a band reads it back in the header, the way pointing at a
@@ -577,11 +585,21 @@ describe("ha-more-info-device", () => {
     expect(header().stateOverride).toBeUndefined();
   });
 
-  it("keeps history out of an operable entity's control pane", async () => {
+  it("puts an operable entity's history under its control", async () => {
     const el = await renderView();
 
+    // The light's own control leads the info tab, and its past follows it.
     expect(el.shadowRoot!.querySelector("ha-more-info-info")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("ha-more-info-history")).toBeNull();
+
+    // The domain's header is out of the chart's reach, so the chart says what
+    // is under the pointer itself.
+    const card = el.shadowRoot!.querySelector(".pane.below .chart-card")!;
+    expect(card.querySelector(".record-bar ha-dropdown")).not.toBeNull();
+    expect(
+      card.querySelector<HTMLElement & { hideTooltip: boolean }>(
+        "ha-more-info-history"
+      )!.hideTooltip
+    ).toBe(false);
     expect(el.shadowRoot!.querySelector("ha-more-info-logbook")).toBeNull();
   });
 
@@ -601,10 +619,8 @@ describe("ha-more-info-device", () => {
     expect(changes).toEqual([SENSOR, PRIMARY]);
   });
 
-  it("names the record it is showing even when it is the only one", async () => {
+  it("says when a reading has no activity", async () => {
     const el = await renderView();
-    // A numeric sensor is a continuous reading: a chart of it says everything
-    // an activity list would, so it has no activity.
     el.hass = {
       ...el.hass,
       states: {
@@ -617,44 +633,34 @@ describe("ha-more-info-device", () => {
       },
     } as unknown as HomeAssistant;
     rowFor(el, SENSOR).click();
-    el.shadowRoot!.querySelector(".bar ha-control-select")!.dispatchEvent(
-      new CustomEvent("value-changed", { detail: { value: "history" } })
-    );
     await el.updateComplete;
+    await openTab(el, "activity");
 
-    // Nothing to switch to, so the card says what is in it as a heading rather
-    // than as a control that does nothing.
-    expect(el.shadowRoot!.querySelector(".record")).toBeNull();
+    // A numeric sensor is a continuous reading with no activity of its own.
+    expect(el.shadowRoot!.querySelector(".record-card")).toBeNull();
     expect(
-      el.shadowRoot!.querySelector(".record-heading")!.textContent!.trim()
-    ).toBe("ui.dialogs.more_info_control.history");
-    expect(el.shadowRoot!.querySelector("ha-more-info-logbook")).toBeNull();
+      el.shadowRoot!.querySelector(".pane.empty")!.textContent!.trim()
+    ).toBe("ui.dialogs.more_info_control.no_activity");
   });
 
-  it("shows one record of the past at a time, with the settings for it", async () => {
+  it("keeps the activity tab to the activity, with the settings for it", async () => {
     const el = await renderView();
 
-    el.shadowRoot!.querySelector(".bar ha-control-select")!.dispatchEvent(
-      new CustomEvent("value-changed", { detail: { value: "history" } })
-    );
-    await el.updateComplete;
+    await openTab(el, "activity");
 
-    // The chart, unframed, with the range to show and the way out to the full
-    // history beside the switch. The primary entity is a light, so there is
-    // nothing to aggregate and no bucket size to pick.
+    // What happened, and nothing else: no chart and no switch to one.
     const bar = () => el.shadowRoot!.querySelector(".record-bar")!;
-    expect(
-      el.shadowRoot!.querySelector<HTMLElement & { hideHeader: boolean }>(
-        "ha-more-info-history"
-      )!.hideHeader
-    ).toBe(true);
-    expect(el.shadowRoot!.querySelector("ha-more-info-logbook")).toBeNull();
-    expect(bar().querySelectorAll("ha-dropdown")).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector("ha-more-info-history")).toBeNull();
+    expect(el.shadowRoot!.querySelector("ha-more-info-logbook")).not.toBeNull();
+    expect(bar().querySelector("ha-control-select")).toBeNull();
+    expect(bar().querySelector(".record-heading")!.textContent!.trim()).toBe(
+      "ui.dialogs.more_info_control.logbook"
+    );
     expect(
       bar().querySelector<HTMLElement & { href: string }>(".show-more")!.href
-    ).toContain("/history?");
+    ).toContain("/logbook?");
 
-    // Picking a range reaches the chart.
+    // Picking a range reaches the activity.
     const range = bar().querySelector("ha-dropdown")!;
     expect(
       range.querySelector("ha-dropdown-item[selected]")!.textContent!.trim()
@@ -665,24 +671,9 @@ describe("ha-more-info-device", () => {
     await el.updateComplete;
     expect(
       el.shadowRoot!.querySelector<HTMLElement & { hoursToShow: number }>(
-        "ha-more-info-history"
+        "ha-more-info-logbook"
       )!.hoursToShow
     ).toBe(168);
-
-    // The activity replaces the chart rather than stacking under it, and keeps
-    // the range: how far back to look is a question about either record.
-    bar()
-      .querySelector(".record")!
-      .dispatchEvent(
-        new CustomEvent("value-changed", { detail: { value: "logbook" } })
-      );
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("ha-more-info-history")).toBeNull();
-    expect(el.shadowRoot!.querySelector("ha-more-info-logbook")).not.toBeNull();
-    expect(bar().querySelectorAll("ha-dropdown")).toHaveLength(1);
-    expect(
-      bar().querySelector<HTMLElement & { href: string }>(".show-more")!.href
-    ).toContain("/logbook?");
   });
 
   it("states every compared line's value at the top, at the hovered moment", async () => {
@@ -878,21 +869,18 @@ describe("ha-more-info-device", () => {
       ".bar ha-control-select"
     )!;
 
-    bar.dispatchEvent(
-      new CustomEvent("value-changed", { detail: { value: "history" } })
-    );
-    await el.updateComplete;
+    await openTab(el, "activity");
 
     rowFor(el, SENSOR).click();
     await el.updateComplete;
 
-    // The tab is a way of looking at the device, so the row swaps what history
-    // is shown rather than sending the view back to the controls.
-    expect(bar.value).toBe("history");
-    expect(el.shadowRoot!.querySelector("ha-more-info-history")).not.toBeNull();
+    // The tab is a way of looking at the device, so the row swaps what is
+    // shown rather than sending the view back to the controls.
+    expect(bar.value).toBe("activity");
+    expect(el.shadowRoot!.querySelector("ha-more-info-logbook")).not.toBeNull();
   });
 
-  it("draws the same chart on the charts tab, and states nothing over it", async () => {
+  it("gives the history chart its range and the way to the full history", async () => {
     const el = await renderView();
     el.hass = {
       ...el.hass,
@@ -906,20 +894,19 @@ describe("ha-more-info-device", () => {
       },
     } as unknown as HomeAssistant;
     rowFor(el, SENSOR).click();
-    el.shadowRoot!.querySelector(".bar ha-control-select")!.dispatchEvent(
-      new CustomEvent("value-changed", { detail: { value: "history" } })
-    );
     await el.updateComplete;
 
-    // The tabs are two frames around one chart, not two charts: a numeric
-    // reading is the same line here as on the info tab.
-    expect(el.shadowRoot!.querySelector(".chart-line")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("ha-more-info-history")).toBeNull();
-    // The card is the whole tab here, so the chart is all of it — the value is
-    // stated on the info tab, where the reading is the subject.
+    // The chart with its settings: how far back it reaches, and the full
+    // history.
+    const bar = el.shadowRoot!.querySelector(
+      ".pane.reading .chart-card .record-bar"
+    )!;
+    expect(bar).not.toBeNull();
+    expect(bar.querySelector("ha-dropdown")).not.toBeNull();
+    expect(bar.querySelector(".show-more")).not.toBeNull();
     expect(
-      el.shadowRoot!.querySelector("ha-more-info-state-header")
-    ).toBeNull();
+      el.shadowRoot!.querySelector(".pane.reading .chart-card .chart-line")
+    ).not.toBeNull();
   });
 
   it("says what stretch of time a hovered band covers, and how long it held", async () => {
@@ -1012,21 +999,31 @@ describe("ha-more-info-device", () => {
       ),
     ];
     expect(groups.map((group) => group.header)).toEqual([
-      // The facts need no heading of their own — the tab is the device.
+      // The facts need no heading of their own — the tab is the device — and
+      // neither do the things that can be done with it.
+      undefined,
       undefined,
       "ui.dialogs.more_info_control.configure_entities",
     ]);
 
-    // The device's own settings are the group's one action.
-    const deviceRows = groups[0].querySelectorAll(
+    // The device's own settings lead its actions; with no integration to ask,
+    // recreating its entity IDs is the only other one.
+    const deviceRows = groups[1].querySelectorAll(
       "ha-list-item-button:not([href])"
     );
-    expect(deviceRows).toHaveLength(1);
+    expect(
+      [...deviceRows].map((row) =>
+        row.querySelector('[slot="headline"]')!.textContent!.trim()
+      )
+    ).toEqual([
+      "ui.dialogs.more_info_control.device_settings",
+      "ui.panel.config.devices.restore_entity_ids",
+    ]);
 
     // Every entity of the device is settable from here, the hidden and the
     // stateless ones included.
     const entityRows = [
-      ...groups[1].querySelectorAll<HTMLElement & { entityId: string }>(
+      ...groups[2].querySelectorAll<HTMLElement & { entityId: string }>(
         "ha-list-item-button"
       ),
     ];
@@ -1080,6 +1077,141 @@ describe("ha-more-info-device", () => {
         viewParams: { entityId: SENSOR },
       },
     ]);
+  });
+
+  it("states what the device page says about the device, and offers what it offers", async () => {
+    const hass = fakeHass();
+    Object.assign(hass.devices[DEVICE], {
+      disabled_by: "user",
+      parent_device_id: "hub",
+      via_device_id: "bridge",
+      labels: ["kitchen"],
+      connections: [["zigbee", "00:11:22"]],
+      config_entries: ["e1"],
+      primary_config_entry: "e1",
+    });
+    Object.assign(hass.devices, {
+      hub: { id: "hub", name: "Hub", connections: [], labels: [] },
+      bridge: { id: "bridge", name: "Bridge", connections: [], labels: [] },
+    });
+    const el = document.createElement(
+      "ha-more-info-device"
+    ) as HaMoreInfoDevice;
+    // What the registry contexts would hand the view in the app.
+    const contexts = el as unknown as {
+      _configEntries: unknown[];
+      _labelRegistry: unknown[];
+    };
+    el.hass = hass;
+    el.deviceId = DEVICE;
+    el.primaryEntityId = PRIMARY;
+    contexts._configEntries = [
+      {
+        entry_id: "e1",
+        domain: "hue",
+        state: "loaded",
+        supports_remove_device: true,
+      },
+    ];
+    contexts._labelRegistry = [
+      { label_id: "kitchen", name: "Kitchen", color: null, icon: null },
+    ];
+    document.body.append(el);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector(".bar ha-control-select")!.dispatchEvent(
+      new CustomEvent("value-changed", { detail: { value: "settings" } })
+    );
+    await el.updateComplete;
+    const pane = el.shadowRoot!.querySelector(".pane.device")!;
+
+    // A disabled device says so first, with the way back when it was the
+    // user who disabled it.
+    const alert = pane.querySelector("ha-alert")!;
+    expect(alert.textContent).toContain(
+      "ui.panel.config.devices.enabled_cause"
+    );
+    expect(alert.querySelector('ha-button[slot="action"]')).not.toBeNull();
+
+    // The device page's facts: its Zigbee address, its labels, the
+    // integration that provides it, and the devices it is part of and reached
+    // through — which, with nothing to show in the dialog, lead to their page.
+    const values = [
+      ...pane.querySelectorAll<HTMLElement & { label: string }>(
+        "ha-list-item-value"
+      ),
+    ].map((row) => [row.label, row.textContent!.trim()]);
+    expect(values).toContainEqual(["Zigbee", "00:11:22"]);
+    expect(values).toContainEqual([
+      "ui.components.label-picker.labels",
+      "Kitchen",
+    ]);
+    const links = [
+      ...pane.querySelectorAll<HTMLElement & { href: string }>(
+        "ha-list-item-button[href]"
+      ),
+    ].map((row) => [row.querySelector(".label")?.textContent, row.href]);
+    expect(links).toContainEqual([
+      "ui.components.related-items.integration",
+      "/config/integrations/integration/hue#config_entry=e1",
+    ]);
+    expect(links).toContainEqual([
+      "ui.panel.config.integrations.config_entry.part_of",
+      "/config/devices/device/hub",
+    ]);
+    expect(links).toContainEqual([
+      "ui.panel.config.integrations.config_entry.via",
+      "/config/devices/device/bridge",
+    ]);
+
+    // Removing the device is there, and last, and reads as what it is.
+    const actions = [...pane.querySelectorAll(".action")];
+    const last = actions[actions.length - 1];
+    expect(last.classList.contains("danger")).toBe(true);
+    expect(last.textContent!.trim()).toBe(
+      "ui.panel.config.devices.delete_device"
+    );
+  });
+
+  it("lists the devices made of this one and reached through it", async () => {
+    const hass = fakeHass();
+    Object.assign(hass.devices, {
+      child: {
+        id: "child",
+        name: "Child",
+        parent_device_id: DEVICE,
+        connections: [],
+        labels: [],
+      },
+      node: {
+        id: "node",
+        name: "Node",
+        via_device_id: DEVICE,
+        connections: [],
+        labels: [],
+      },
+    });
+    const el = document.createElement(
+      "ha-more-info-device"
+    ) as HaMoreInfoDevice;
+    el.hass = hass;
+    el.deviceId = DEVICE;
+    el.primaryEntityId = PRIMARY;
+    document.body.append(el);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector(".bar ha-control-select")!.dispatchEvent(
+      new CustomEvent("value-changed", { detail: { value: "settings" } })
+    );
+    await el.updateComplete;
+
+    const headers = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement & { header?: string }>(
+        ".pane.device ha-grouped-list"
+      ),
+    ].map((group) => group.header);
+    expect(headers).toContain("ui.panel.config.devices.child_devices.heading");
+    expect(headers).toContain(
+      "ui.panel.config.devices.connected_devices.heading"
+    );
   });
 
   it("pins the entity the card leads with, wherever the strip is", async () => {
@@ -1231,5 +1363,20 @@ describe("more info dialog device scope", () => {
     expect(dialog._parentEntityIds).toEqual([]);
     expect(dialog._currView).toBe("info");
     expect(dialog._deviceId).toBe(DEVICE);
+  });
+  it("becomes another device's when one of its lists opens it", () => {
+    const dialog = openOnDevice();
+    const showDialog = vi.fn();
+    dialog.showDialog = showDialog;
+
+    dialog._handleMoreInfoEvent(
+      new CustomEvent("hass-more-info", {
+        detail: { entityId: null, deviceId: "dev2" },
+      })
+    );
+    expect(showDialog).toHaveBeenCalledWith({
+      entityId: null,
+      deviceId: "dev2",
+    });
   });
 });

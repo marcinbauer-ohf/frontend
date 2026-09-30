@@ -2,13 +2,8 @@ import { startOfYesterday } from "date-fns";
 import "@home-assistant/webawesome/dist/components/divider/divider";
 import { consume } from "@lit/context";
 import {
-  mdiCog,
   mdiChevronRight,
-  mdiDelete,
   mdiDotsVertical,
-  mdiDownload,
-  mdiMicrophone,
-  mdiOpenInNew,
   mdiPalette,
   mdiPencil,
   mdiPlus,
@@ -59,33 +54,16 @@ import "../../../components/list/ha-list-nav";
 import "../../../components/ha-spinner";
 import "../../../components/ha-svg-icon";
 import "../../../components/ha-tooltip";
-import { assistSatelliteSupportsSetupFlow } from "../../../data/assist_satellite";
-import { getSignedPath } from "../../../data/auth";
-import type {
-  ConfigEntry,
-  DisableConfigEntryResult,
-} from "../../../data/config_entries";
-import {
-  disableConfigEntry,
-  sortConfigEntries,
-} from "../../../data/config_entries";
+import type { ConfigEntry } from "../../../data/config_entries";
+import { sortConfigEntries } from "../../../data/config_entries";
 import { fireRelatedContext, fullEntitiesContext } from "../../../data/context";
 import type { DeviceRegistryEntry } from "../../../data/device/device_registry";
-import {
-  removeDeviceFromRegistry,
-  updateDeviceRegistryEntry,
-} from "../../../data/device/device_registry";
-import type { DiagnosticInfo } from "../../../data/diagnostics";
-import {
-  fetchDiagnosticHandler,
-  getConfigEntryDiagnosticsDownloadUrl,
-  getDeviceDiagnosticsDownloadUrl,
-} from "../../../data/diagnostics";
+import { updateDeviceRegistryEntry } from "../../../data/device/device_registry";
+
 import type { EntityRegistryEntry } from "../../../data/entity/entity_registry";
 import {
   findBatteryChargingEntity,
   findBatteryEntity,
-  updateEntityRegistryEntry,
 } from "../../../data/entity/entity_registry";
 import type { IntegrationManifest } from "../../../data/integration";
 import { domainToName } from "../../../data/integration";
@@ -93,30 +71,31 @@ import { regenerateEntityIds } from "../../../data/regenerate_entity_ids";
 import type { RelatedResult } from "../../../data/search";
 import { findRelated } from "../../../data/search";
 import { filterAddToSceneEntityIds } from "../../../dialogs/add-to/add-to";
-import {
-  showAlertDialog,
-  showConfirmationDialog,
-} from "../../../dialogs/generic/show-dialog-box";
-import { showVoiceAssistantSetupDialog } from "../../../dialogs/voice-assistant-setup/show-voice-assistant-setup-dialog";
+import { showAlertDialog } from "../../../dialogs/generic/show-dialog-box";
 import "../../../layouts/hass-error-screen";
 import "../../../layouts/hass-subpage";
 import { haStyle } from "../../../resources/styles";
 import type { HomeAssistant } from "../../../types";
 import { isHelperDomain } from "../helpers/const";
-import {
-  isHomeAssistantUrl,
-  sanitizeLinkUrl,
-} from "../../../common/url/sanitize-http-url";
+
 import { createSearchParam } from "../../../common/url/search-params";
 import { brandsUrl } from "../../../util/brands-url";
-import { fileDownload } from "../../../util/file_download";
 import "../../logbook/ha-logbook";
 import "./device-detail/ha-device-child-devices-card";
 import "./device-detail/ha-device-entities-card";
 import "./device-detail/ha-device-info-card";
 import "./device-detail/ha-device-linked-devices-card";
 import "./device-detail/ha-device-via-devices-card";
-import { showDeviceAddToDialog } from "./device-detail/show-dialog-device-add-to";
+import type { DeviceAction, DeviceAlert } from "./device-detail/device-actions";
+import {
+  DEVICE_ALERTS_INTERVAL,
+  deviceDeleteActions,
+  fetchDeviceActions,
+  fetchDeviceAlerts,
+  fetchDeviceDiagnosticActions,
+  showDeviceAddTo,
+  updateDeviceWithSideEffects,
+} from "./device-detail/device-actions";
 import {
   loadDeviceRegistryDetailDialog,
   showDeviceRegistryDetailDialog,
@@ -167,22 +146,7 @@ export interface EntityRegistryStateEntry extends EntityRegistryEntry {
   stateName?: string | null;
 }
 
-export interface DeviceAction {
-  href?: string;
-  target?: string;
-  action?: (ev: Event) => void;
-  label: string;
-  icon?: string;
-  trailingIcon?: string;
-  classes?: string;
-}
-
-export interface DeviceAlert {
-  level: "warning" | "error" | "info";
-  text: string;
-}
-
-const DEVICE_ALERTS_INTERVAL = 30000;
+export type { DeviceAction, DeviceAlert } from "./device-detail/device-actions";
 
 const MAX_COLUMNS = 3;
 
@@ -1095,301 +1059,73 @@ export class HaConfigDevicePage extends LitElement {
 
   private async _getDiagnosticButtons(): Promise<void> {
     const deviceId = this.deviceId;
-    if (!isComponentLoaded(this.hass.config, "diagnostics")) {
-      return;
-    }
-
-    const device = this.hass.devices[this.deviceId];
-
+    const device = this.hass.devices[deviceId];
     if (!device) {
       return;
     }
-
-    let links = await Promise.all(
-      this._integrations(device, this.entries, this.manifests).map(
-        async (entry): Promise<boolean | { link: string; domain: string }> => {
-          if (entry.state !== "loaded") {
-            return false;
-          }
-          let info: DiagnosticInfo;
-          try {
-            info = await fetchDiagnosticHandler(this.hass, entry.domain);
-          } catch (err: unknown) {
-            if (err instanceof Error && err.message.includes("not_found")) {
-              return false;
-            }
-            throw err;
-          }
-
-          if (!info.handlers.device && !info.handlers.config_entry) {
-            return false;
-          }
-          return {
-            link: info.handlers.device
-              ? getDeviceDiagnosticsDownloadUrl(entry.entry_id, this.deviceId)
-              : getConfigEntryDiagnosticsDownloadUrl(entry.entry_id),
-            domain: entry.domain,
-          };
-        }
-      )
+    const actions = await fetchDeviceDiagnosticActions(
+      this.hass,
+      device,
+      this.entries
     );
-
-    links = links.filter(Boolean);
-
-    if (this.deviceId !== deviceId) {
-      // abort if the device has changed
-      return;
-    }
-    if (links.length > 0) {
-      this._diagnosticDownloadLinks = (
-        links as { link: string; domain: string }[]
-      ).map((link) => ({
-        icon: mdiDownload,
-        action: () => this._signUrl(link.link),
-        label:
-          links.length > 1
-            ? this.hass.localize(
-                `ui.panel.config.devices.download_diagnostics_integration`,
-                {
-                  integration: domainToName(this.hass.localize, link.domain),
-                }
-              )
-            : this.hass.localize(
-                `ui.panel.config.devices.download_diagnostics`
-              ),
-      }));
+    if (this.deviceId === deviceId && actions.length > 0) {
+      this._diagnosticDownloadLinks = actions;
     }
   }
 
   private _getDeleteActions() {
-    const deviceId = this.deviceId;
     const device = this.hass.devices[this.deviceId];
-
     if (!device) {
       return;
     }
-
-    const buttons: DeviceAction[] = [];
-    this._integrations(device, this.entries, this.manifests).forEach(
-      (entry) => {
-        if (entry.state !== "loaded" || !entry.supports_remove_device) {
-          return;
-        }
-        buttons.push({
-          action: async () => {
-            const confirmed = await showConfirmationDialog(this, {
-              text:
-                this._integrations(device, this.entries, this.manifests)
-                  .length > 1
-                  ? this.hass.localize(
-                      `ui.panel.config.devices.confirm_delete_integration`,
-                      {
-                        integration: domainToName(
-                          this.hass.localize,
-                          entry.domain
-                        ),
-                      }
-                    )
-                  : this.hass.localize(
-                      `ui.panel.config.devices.confirm_delete`
-                    ),
-              confirmText: this.hass.localize("ui.common.delete"),
-              dismissText: this.hass.localize("ui.common.cancel"),
-              destructive: true,
-            });
-
-            if (!confirmed) {
-              return;
-            }
-
-            try {
-              await removeDeviceFromRegistry(this.hass, this.deviceId);
-            } catch (err: unknown) {
-              showAlertDialog(this, {
-                title: this.hass.localize(
-                  "ui.panel.config.devices.error_delete"
-                ),
-                text: err instanceof Error ? err.message : String(err),
-              });
-            }
-          },
-          classes: "warning",
-          icon: mdiDelete,
-          label:
-            this._integrations(device, this.entries, this.manifests).length > 1
-              ? this.hass.localize(
-                  `ui.panel.config.devices.delete_device_integration`,
-                  {
-                    integration: domainToName(this.hass.localize, entry.domain),
-                  }
-                )
-              : this.hass.localize(`ui.panel.config.devices.delete_device`),
-        });
-      }
-    );
-
-    if (this.deviceId !== deviceId) {
-      // abort if the device has changed
-      return;
-    }
-
-    if (buttons.length > 0) {
-      this._deleteButtons = buttons;
+    const actions = deviceDeleteActions(this, this.hass, device, this.entries);
+    if (actions.length > 0) {
+      this._deleteButtons = actions;
     }
   }
 
   private async _getDeviceActions() {
     const deviceId = this.deviceId;
-    const device = this.hass.devices[this.deviceId];
-
+    const device = this.hass.devices[deviceId];
     if (!device) {
       return;
     }
-
-    const deviceActions: DeviceAction[] = [];
-
-    const configurationUrlIsHomeAssistant = isHomeAssistantUrl(
-      device.configuration_url
-    );
-
-    const configurationUrl = sanitizeLinkUrl(device.configuration_url);
-
-    if (configurationUrl) {
-      deviceActions.push({
-        href: configurationUrl,
-        target: configurationUrlIsHomeAssistant ? undefined : "_blank",
-        icon: mdiCog,
-        label: this.hass.localize(
-          "ui.panel.config.devices.open_configuration_url"
-        ),
-        trailingIcon: mdiOpenInNew,
-      });
-    }
-
-    const entities = this._entities(
-      this.deviceId,
+    const entityIds = this._entities(
+      deviceId,
       this._entityReg,
       this.hass.devices
-    );
+    ).map((entity) => entity.entity_id);
 
-    const assistSatellite = entities.find(
-      (ent) => computeDomain(ent.entity_id) === "assist_satellite"
-    );
-
-    const domains = this._integrations(
+    const actions = await fetchDeviceActions(
+      this,
+      this.hass,
       device,
       this.entries,
-      this.manifests
-    ).map((int) => int.domain);
-
-    if (
-      !domains.includes("voip") &&
-      assistSatellite &&
-      assistSatelliteSupportsSetupFlow(
-        this.hass.states[assistSatellite.entity_id]
-      )
-    ) {
-      deviceActions.push({
-        action: this._voiceAssistantSetup,
-        label: this.hass.localize(
-          "ui.panel.config.devices.set_up_voice_assistant"
-        ),
-        icon: mdiMicrophone,
-      });
-    }
-
-    if (domains.includes("mqtt")) {
-      const mqtt =
-        await import("./device-detail/integration-elements/mqtt/device-actions");
-      const actions = mqtt.getMQTTDeviceActions(this, device);
-      deviceActions.push(...actions);
-    }
-    if (domains.includes("zha")) {
-      const zha =
-        await import("./device-detail/integration-elements/zha/device-actions");
-      const actions = await zha.getZHADeviceActions(this, this.hass, device);
-      deviceActions.push(...actions);
-    }
-    if (domains.includes("zwave_js")) {
-      const zwave =
-        await import("./device-detail/integration-elements/zwave_js/device-actions");
-      const actions = await zwave.getZwaveDeviceActions(
-        this,
-        this.hass,
-        device
-      );
-      deviceActions.push(...actions);
-    }
-    if (domains.includes("esphome")) {
-      const esphome =
-        await import("./device-detail/integration-elements/esphome/device-actions");
-      const actions = await esphome.getESPHomeDeviceActions(
-        this,
-        this.hass,
-        device
-      );
-      deviceActions.push(...actions);
-    }
-    if (domains.includes("matter")) {
-      const matter =
-        await import("./device-detail/integration-elements/matter/device-actions");
-      const defaultActions = matter.getMatterDeviceDefaultActions(
-        this,
-        this.hass,
-        device
-      );
-      deviceActions.push(...defaultActions);
-
-      // load matter device actions async to avoid an UI with 0 actions when the matter integration needs very long to get node diagnostics
-      matter.getMatterDeviceActions(this, this.hass, device).then((actions) => {
-        if (this.deviceId !== deviceId) {
-          // abort if the device has changed
-          return;
+      entityIds,
+      (late) => {
+        // Drop them if the device has changed while they were asked for.
+        if (this.deviceId === deviceId) {
+          this._deviceActions = [...late, ...(this._deviceActions || [])];
         }
-        this._deviceActions = [...actions, ...(this._deviceActions || [])];
-      });
+      }
+    );
+    if (this.deviceId === deviceId) {
+      this._deviceActions = actions;
     }
-
-    if (this.deviceId !== deviceId) {
-      // abort if the device has changed
-      return;
-    }
-
-    this._deviceActions = deviceActions;
   }
 
   private async _getDeviceAlerts() {
     const deviceId = this.deviceId;
-
-    const device = this.hass.devices[this.deviceId];
-
+    const device = this.hass.devices[deviceId];
     if (!device) {
       return;
     }
-
-    const deviceAlerts: DeviceAlert[] = [];
-
-    const domains = this._integrations(
-      device,
-      this.entries,
-      this.manifests
-    ).map((int) => int.domain);
-
-    if (domains.includes("zwave_js")) {
-      const zwave =
-        await import("./device-detail/integration-elements/zwave_js/device-alerts");
-
-      const alerts = await zwave.getZwaveDeviceAlerts(this.hass, device);
-      deviceAlerts.push(...alerts);
-    }
-
+    const alerts = await fetchDeviceAlerts(this.hass, device, this.entries);
     if (this.deviceId !== deviceId) {
-      // abort if the device has changed
       return;
     }
-
-    this._deviceAlerts = deviceAlerts;
-    if (deviceAlerts.length) {
+    this._deviceAlerts = alerts;
+    if (alerts.length) {
       this._deviceAlertsActionsTimeout = window.setTimeout(() => {
         this._getDeviceAlerts();
         this._getDeviceActions();
@@ -1422,24 +1158,9 @@ export class HaConfigDevicePage extends LitElement {
 
   private _showAddToDialog() {
     const device = this.hass.devices[this.deviceId];
-    if (!device) return;
-    const entityIds = this._entities(
-      this.deviceId,
-      this._entityReg,
-      this.hass.devices
-    ).map((entity) => entity.entity_id);
-    const sceneEntityIds = filterAddToSceneEntityIds(
-      entityIds,
-      this._entityReg,
-      this.hass.states
-    );
-    showDeviceAddToDialog(this, {
-      device,
-      entityIds: sceneEntityIds,
-      canCreateScene:
-        isComponentLoaded(this.hass.config, "scene") &&
-        sceneEntityIds.length > 0,
-    });
+    if (device) {
+      showDeviceAddTo(this, this.hass, device, this._entityReg);
+    }
   }
 
   private _renderIntegrationInfo(
@@ -1503,72 +1224,15 @@ export class HaConfigDevicePage extends LitElement {
     showDeviceRegistryDetailDialog(this, {
       device,
       updateEntry: async (updates) => {
-        const oldDeviceName = device.name_by_user || device.name;
-        const newDeviceName = updates.name_by_user;
-        const disabled =
-          updates.disabled_by === "user" && device.disabled_by !== "user";
-
-        if (disabled) {
-          for (const cnfg_entry of device.config_entries) {
-            if (
-              !Object.values(this.hass.devices).some(
-                (dvc) =>
-                  dvc.id !== device.id &&
-                  dvc.config_entries.includes(cnfg_entry)
-              )
-            ) {
-              const config_entry = this.entries.find(
-                (entry) => entry.entry_id === cnfg_entry
-              );
-              if (
-                config_entry &&
-                !config_entry.disabled_by &&
-                // eslint-disable-next-line no-await-in-loop
-                (await showConfirmationDialog(this, {
-                  title: this.hass.localize(
-                    "ui.panel.config.devices.confirm_disable_config_entry_title"
-                  ),
-                  text: this.hass.localize(
-                    "ui.panel.config.devices.confirm_disable_config_entry_message",
-                    { name: config_entry.title }
-                  ),
-                  destructive: true,
-                  confirmText: this.hass.localize("ui.common.yes"),
-                  dismissText: this.hass.localize("ui.common.no"),
-                }))
-              ) {
-                let result: DisableConfigEntryResult;
-                try {
-                  // eslint-disable-next-line no-await-in-loop
-                  result = await disableConfigEntry(this.hass, cnfg_entry);
-                } catch (err: unknown) {
-                  showAlertDialog(this, {
-                    title: this.hass.localize(
-                      "ui.panel.config.integrations.config_entry.disable_error"
-                    ),
-                    text: err instanceof Error ? err.message : String(err),
-                  });
-                  return;
-                }
-                if (result.require_restart) {
-                  showAlertDialog(this, {
-                    text: this.hass.localize(
-                      "ui.panel.config.integrations.config_entry.disable_restart_confirm"
-                    ),
-                  });
-                }
-                delete updates.disabled_by;
-              }
-            }
-          }
-        } else if (
-          updates.disabled_by !== null &&
-          updates.disabled_by !== "user"
-        ) {
-          delete updates.disabled_by;
-        }
         try {
-          await updateDeviceRegistryEntry(this.hass, this.deviceId, updates);
+          await updateDeviceWithSideEffects(
+            this,
+            this.hass,
+            device,
+            this.entries,
+            this._entityReg,
+            updates
+          );
         } catch (err: unknown) {
           showAlertDialog(this, {
             title: this.hass.localize(
@@ -1576,47 +1240,7 @@ export class HaConfigDevicePage extends LitElement {
             ),
             text: err instanceof Error ? err.message : String(err),
           });
-          return;
         }
-
-        if (
-          !oldDeviceName ||
-          !newDeviceName ||
-          oldDeviceName === newDeviceName
-        ) {
-          return;
-        }
-        const entities = this._entities(
-          this.deviceId,
-          this._entityReg,
-          this.hass.devices
-        );
-
-        const updateProms = entities.map((entity) => {
-          const name = entity.name || entity.stateName;
-          let newName: string | null | undefined;
-
-          if (entity.has_entity_name && !entity.name) {
-            return undefined;
-          }
-
-          if (
-            entity.has_entity_name &&
-            (entity.name === oldDeviceName || entity.name === newDeviceName)
-          ) {
-            // clear name if it matches the device name and it uses the device name (entity naming)
-            newName = null;
-          } else if (name?.includes(oldDeviceName)) {
-            newName = name.replace(oldDeviceName, newDeviceName);
-          } else {
-            return undefined;
-          }
-
-          return updateEntityRegistryEntry(this.hass, entity.entity_id, {
-            name: newName,
-          });
-        });
-        await Promise.all(updateProms);
       },
     });
   };
@@ -1625,11 +1249,6 @@ export class HaConfigDevicePage extends LitElement {
     await updateDeviceRegistryEntry(this.hass, this.deviceId, {
       disabled_by: null,
     });
-  }
-
-  private async _signUrl(link: string) {
-    const signedUrl = await getSignedPath(this.hass, link);
-    fileDownload(signedUrl.path);
   }
 
   private _deviceActionSelected(
@@ -1654,12 +1273,6 @@ export class HaConfigDevicePage extends LitElement {
 
     ev.currentTarget.action(ev);
   }
-
-  private _voiceAssistantSetup = () => {
-    showVoiceAssistantSetupDialog(this, {
-      deviceId: this.deviceId,
-    });
-  };
 
   static get styles(): CSSResultGroup {
     return [

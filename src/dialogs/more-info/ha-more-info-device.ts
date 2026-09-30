@@ -1,21 +1,26 @@
+import { consume } from "@lit/context";
 import {
   mdiCancel,
-  mdiChartBoxOutline,
+  mdiTimelineClockOutline,
   mdiChevronRight,
   mdiCogOutline,
-  mdiDownload,
   mdiFormatListBulleted,
   mdiPin,
   mdiInformationOutline,
   mdiMenuDown,
+  mdiPlus,
+  mdiRestore,
 } from "@mdi/js";
 import { ResizeController } from "@lit-labs/observers/resize-controller";
 import type { HassEntity } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing, unsafeCSS } from "lit";
+import { html as staticHtml, unsafeStatic } from "lit/static-html";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
+import { ifDefined } from "lit/directives/if-defined";
 import { repeat } from "lit/directives/repeat";
+import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
 import type { HASSDomEvent } from "../../common/dom/fire_event";
 import { fireEvent } from "../../common/dom/fire_event";
@@ -26,6 +31,7 @@ import { formatShortDateTime } from "../../common/datetime/format_date_time";
 import { formatTime } from "../../common/datetime/format_time";
 import millisecondsToDuration from "../../common/datetime/milliseconds_to_duration";
 import { computeAreaName } from "../../common/entity/compute_area_name";
+import { computeDeviceNameDisplay } from "../../common/entity/compute_device_name";
 import { computeDomain } from "../../common/entity/compute_domain";
 import { computeFloorName } from "../../common/entity/compute_floor_name";
 import { computeEntityName } from "../../common/entity/compute_entity_name";
@@ -40,6 +46,7 @@ import {
   domainPriority,
   PRESS_LABEL,
   PRESS_SERVICE,
+  resolveDeviceCardEntities,
 } from "../../panels/lovelace/cards/device/device-card-entities";
 import { titleCase } from "../../common/string/title-case";
 import { ADAPTIVE_DIALOG_MEDIA_QUERY } from "../../components/ha-adaptive-dialog";
@@ -55,28 +62,50 @@ import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
 import "../../components/ha-dropdown-item";
 import "../../components/ha-state-icon";
 import "../../components/ha-svg-icon";
+import "../../components/ha-icon";
 import "../../components/ha-icon-button";
+import "../../components/ha-label";
 import "../../components/ha-related-items";
 import "../../components/item/ha-list-item-base";
 import "../../components/item/ha-list-item-button";
 import "../../components/item/ha-list-item-value";
 import "../../components/list/ha-grouped-list";
-import { getConfigEntries } from "../../data/config_entries";
+import type { ConfigEntry } from "../../data/config_entries";
+import {
+  configEntriesContext,
+  fullEntitiesContext,
+  labelsContext,
+} from "../../data/context";
 import { domainToName } from "../../data/integration";
 import type { DeviceRegistryEntry } from "../../data/device/device_registry";
 import {
-  fetchDiagnosticHandler,
-  getConfigEntryDiagnosticsDownloadUrl,
-  getDeviceDiagnosticsDownloadUrl,
-} from "../../data/diagnostics";
+  fetchLinkedDevices,
+  updateDeviceRegistryEntry,
+} from "../../data/device/device_registry";
+import type { LabelRegistryEntry } from "../../data/label/label_registry";
+import { regenerateEntityIds } from "../../data/regenerate_entity_ids";
+import type {
+  DeviceAction,
+  DeviceAlert,
+} from "../../panels/config/devices/device-detail/device-actions";
+import {
+  DEVICE_ALERTS_INTERVAL,
+  deviceConfigEntries,
+  deviceDeleteActions,
+  fetchDeviceActions,
+  fetchDeviceAlerts,
+  fetchDeviceDiagnosticActions,
+  showDeviceAddTo,
+} from "../../panels/config/devices/device-detail/device-actions";
 import type {
   EntityRegistryDisplayEntry,
+  EntityRegistryEntry,
   ExtEntityRegistryEntry,
 } from "../../data/entity/entity_registry";
-import { getSignedPath } from "../../data/auth";
 import { getExtendedEntityRegistryEntry } from "../../data/entity/entity_registry";
 import { forwardHaptic } from "../../data/haptics";
 import { UNAVAILABLE } from "../../data/entity/entity";
+import type { RelatedResult } from "../../data/search";
 import "../../panels/lovelace/card-features/hui-card-feature";
 import { sparklineSeriesColor } from "../../panels/lovelace/cards/device/hui-device-card-sparkline";
 import {
@@ -105,7 +134,6 @@ import "./ha-more-info-info";
 import { logbookShowMoreUrl } from "./ha-more-info-logbook";
 import "./more-info-content";
 import { stateMoreInfoType } from "./state_more_info_control";
-import { fileDownload } from "../../util/file_download";
 
 declare global {
   interface HASSDomEvents {
@@ -116,7 +144,7 @@ declare global {
   }
 }
 
-type FeaturedView = "info" | "history" | "settings";
+type FeaturedView = "info" | "activity" | "settings";
 
 /**
  * How far the pane has to be scrolled for the value it leads with to be gone.
@@ -126,14 +154,9 @@ type FeaturedView = "info" | "history" | "settings";
  */
 const HERO_HIDDEN_SCROLL = 96;
 
-/** The two readings of an entity's past, in the order they are offered. */
-const RECORDS = ["history", "logbook"] as const;
-
-type RecordView = (typeof RECORDS)[number];
-
 const VIEW_ICON: Record<FeaturedView, string> = {
   info: mdiInformationOutline,
-  history: mdiChartBoxOutline,
+  activity: mdiTimelineClockOutline,
   settings: mdiCogOutline,
 };
 
@@ -193,6 +216,31 @@ const RANGES = [
  */
 const TIMELINE_ROW_HEIGHT = 210;
 
+/** Connections worth stating: the addresses a person would recognize. */
+const ADDRESS_TYPES = ["mac", "bluetooth", "zigbee"];
+
+/** Integrations with a panel of facts of their own, loaded when needed. */
+const INTEGRATION_INFO: [string, () => Promise<unknown>, string][] = [
+  [
+    "zha",
+    () =>
+      import("../../panels/config/devices/device-detail/integration-elements/zha/ha-device-info-zha"),
+    "ha-device-info-zha",
+  ],
+  [
+    "zwave_js",
+    () =>
+      import("../../panels/config/devices/device-detail/integration-elements/zwave_js/ha-device-info-zwave_js"),
+    "ha-device-info-zwave_js",
+  ],
+  [
+    "matter",
+    () =>
+      import("../../panels/config/devices/device-detail/integration-elements/matter/ha-device-info-matter"),
+    "ha-device-info-matter",
+  ],
+];
+
 /**
  * The device view of the more info dialog: one entity in full at the top, and
  * the device's other entities listed below it. Picking a row swaps what the top
@@ -203,6 +251,13 @@ const TIMELINE_ROW_HEIGHT = 210;
  * text fields is easy to change by accident while scrolling, and it makes every
  * row a different height.
  */
+// The facts and entity list above already state these.
+const DEVICE_RELATED_EXCLUDE: (keyof RelatedResult)[] = [
+  "entity",
+  "integration",
+  "area",
+];
+
 @customElement("ha-more-info-device")
 export class HaMoreInfoDevice extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
@@ -236,9 +291,6 @@ export class HaMoreInfoDevice extends LitElement {
    */
   @state() private _compareEntityIds: string[] = [];
 
-  /** Which reading of the past the history tab is showing. */
-  @state() private _record: RecordView = "history";
-
   /**
    * The point of the featured entity's history the pointer is on, while it is
    * on one. The header reads it instead of the current state, so pointing at
@@ -267,13 +319,31 @@ export class HaMoreInfoDevice extends LitElement {
 
   private _entryFor?: string;
 
-  /** Set when the device's integration offers a diagnostics download. */
-  @state() private _diagnosticsUrl?: string;
+  @state()
+  @consume({ context: configEntriesContext, subscribe: true })
+  private _configEntries?: ConfigEntry[];
 
-  /** The integration that provides the device, from its primary config entry. */
-  @state() private _integration?: { domain: string; entryId: string };
+  @state()
+  @consume({ context: fullEntitiesContext, subscribe: true })
+  private _entityRegistry: EntityRegistryEntry[] = [];
 
-  private _entryInfoFor?: string;
+  @state()
+  @consume({ context: labelsContext, subscribe: true })
+  private _labelRegistry?: LabelRegistryEntry[];
+
+  /** What the device's integrations offer to do with it. */
+  @state() private _deviceActions: DeviceAction[] = [];
+
+  @state() private _diagnosticActions: DeviceAction[] = [];
+
+  @state() private _alerts: DeviceAlert[] = [];
+
+  /** Devices other integrations make of the same hardware. */
+  @state() private _linkedDeviceIds?: string[];
+
+  private _extrasFor?: string;
+
+  private _alertsTimeout?: number;
 
   @query(".chip.selected") private _selectedChip?: HTMLElement;
 
@@ -296,6 +366,12 @@ export class HaMoreInfoDevice extends LitElement {
       return undefined;
     },
   });
+
+  /**
+   * The room the entities menu has: from the button it hangs off to the far
+   * edge of the dialog, since it opens aligned to the button's end.
+   */
+  @state() private _entityListWidth?: number;
 
   /** Whether the chip strip has something scrolled off that side. */
   @state() private _fadeLeft = false;
@@ -344,7 +420,7 @@ export class HaMoreInfoDevice extends LitElement {
       this.hass.loadFragmentTranslation("config");
       // The integration is named by its own translations.
       this.hass.loadBackendTranslation("title");
-      this._loadEntryInfo();
+      this._loadDeviceExtras();
     }
   }
 
@@ -587,7 +663,14 @@ export class HaMoreInfoDevice extends LitElement {
                     this._fadeLeft || this._fadeRight
                       ? html`
                           <ha-dropdown
+                            class="entity-list"
                             placement="bottom-end"
+                            style=${styleMap({
+                              "--entity-list-width": this._entityListWidth
+                                ? `${this._entityListWidth}px`
+                                : undefined,
+                            })}
+                            @wa-show=${this._sizeEntityList}
                             @closed=${stopPropagation}
                             @wa-select=${this._listSelect}
                           >
@@ -646,11 +729,10 @@ export class HaMoreInfoDevice extends LitElement {
 
     const views: FeaturedView[] = ["info"];
 
-    if (
-      isComponentLoaded(this.hass.config, "history") ||
-      isComponentLoaded(this.hass.config, "logbook")
-    ) {
-      views.push("history");
+    // What happened to the entity. Where its value has been is on the info
+    // tab, under what it is now.
+    if (isComponentLoaded(this.hass.config, "logbook")) {
+      views.push("activity");
     }
     // What else in the config refers to this device, and the device's own
     // settings: both need the registries, so both are for admins.
@@ -662,8 +744,10 @@ export class HaMoreInfoDevice extends LitElement {
       value,
       path: VIEW_ICON[value],
       // The icon is the tab; its name is what a pointer and a screen reader
-      // get, so the bar is the same three widths in every language.
-      ariaLabel: this.hass.localize(`ui.dialogs.more_info_control.${value}`),
+      // get, so the bar is the same widths in every language.
+      ariaLabel: this.hass.localize(
+        `ui.dialogs.more_info_control.${value === "activity" ? "logbook" : value}`
+      ),
     }));
   }
 
@@ -676,8 +760,8 @@ export class HaMoreInfoDevice extends LitElement {
       return this._renderSettings();
     }
 
-    if (view === "history") {
-      return this._renderHistory(entityId);
+    if (view === "activity") {
+      return this._renderActivity(entityId);
     }
 
     const stateObj = this.hass.states[entityId];
@@ -695,22 +779,34 @@ export class HaMoreInfoDevice extends LitElement {
       !computeShowNewMoreInfo(stateObj) &&
       !DOMAINS_NO_INFO.includes(computeDomain(entityId));
 
+    // Every entity's info tab reads the same way down: what it is now, how to
+    // operate it if it can be, and where it has been.
+    const history = computeShowHistoryComponent(this.hass, entityId);
+
     if (!readOnly && !legacyControl) {
+      // The domain states the value in a header of its own, which the chart
+      // cannot reach, so the chart says what is under the pointer itself.
       return html`
         <ha-more-info-info
           .hass=${this.hass}
           .entityId=${entityId}
           .entry=${this._entry}
         ></ha-more-info-info>
+        ${
+          history
+            ? html`<div class="pane below">
+                ${this._renderChartBlock(entityId, true)}
+              </div>`
+            : nothing
+        }
       `;
     }
 
     // With nothing to operate the reading itself is the content: give it the
     // room a control would have had, with the icon standing in for the control
     // a light or a cover would have shown — which is why it comes after the
-    // name and state, exactly where a controllable entity has its control. Its
-    // history lives in the history tab, the same place a controllable entity
-    // keeps it.
+    // name and state, exactly where a controllable entity has its control —
+    // unless its history is there to fill the tab, which says more.
     const feature = readOnly ? this._featureFor(entityId) : undefined;
     const domain = computeDomain(entityId);
     // Pressing is the whole entity, so the press is the control: the icon goes
@@ -721,101 +817,124 @@ export class HaMoreInfoDevice extends LitElement {
       readOnly && OPTION_DOMAINS.has(domain)
         ? (stateObj.attributes.options as string[] | undefined)
         : undefined;
-    // A reading shows where its value has been rather than a picture of what
-    // kind of thing it is: that is what there is to look at when there is
-    // nothing to operate. Nothing else in the pane moves — it takes the same
-    // block, in the same place the icon had.
-    const recorded =
-      readOnly &&
-      !press &&
-      !options &&
-      computeShowHistoryComponent(this.hass, entityId);
-    // A number is a line, which can be pointed at to read a value off it. A
-    // state that is a word is a run of bands instead — the same timeline the
-    // history tab draws for it.
-    const graph = recorded && this._isLine(entityId);
-    const timeline = recorded && !graph;
     return html`
       <div class="pane reading" data-entity=${entityId}>
-        ${this._renderHeaders(entityId, graph, graph || timeline)}
-        <div class="reading-control">
-          ${
-            press
-              ? html`
-                  <ha-control-button
-                    class="press"
-                    .label=${this.hass.localize(PRESS_LABEL[press])}
-                    .disabled=${stateObj.state === UNAVAILABLE}
-                    @click=${this._press}
-                  >
-                    <div class="press-content">
-                      <ha-state-icon
-                        .hass=${this.hass}
-                        .stateObj=${stateObj}
-                      ></ha-state-icon>
-                      <span>${this.hass.localize(PRESS_LABEL[press])}</span>
-                    </div>
-                  </ha-control-button>
-                `
-              : options
-                ? html`
-                    <ha-control-select-menu
-                      class="options"
-                      show-arrow
-                      hide-label
-                      .label=${this._entityName(stateObj)}
-                      .value=${stateObj.state}
-                      .disabled=${stateObj.state === UNAVAILABLE}
-                      .options=${options.map((option) => ({
-                        value: option,
-                        label: this.hass.formatEntityState(stateObj, option),
-                      }))}
-                      @wa-select=${this._selectOption}
-                    >
-                      <ha-state-icon
-                        slot="icon"
-                        .hass=${this.hass}
-                        .stateObj=${stateObj}
-                      ></ha-state-icon>
-                    </ha-control-select-menu>
-                  `
-                : graph
-                  ? this._renderLine(entityId)
-                  : timeline
-                    ? this._renderTimeline(entityId)
-                    : legacyControl
-                      ? // The domain's own control follows, so there is nothing
-                        // for a picture of the entity to stand in for.
-                        nothing
-                      : html`
-                          <div class="reading-icon">
-                            <ha-state-icon
-                              .hass=${this.hass}
-                              .stateObj=${stateObj}
-                            ></ha-state-icon>
-                          </div>
+        ${this._renderHeaders(entityId, history && this._isLine(entityId), history)}
+        ${
+          press || options || feature || legacyControl || !history
+            ? html`
+                <div class="reading-control">
+                  ${
+                    press
+                      ? html`
+                          <ha-control-button
+                            class="press"
+                            .label=${this.hass.localize(PRESS_LABEL[press])}
+                            .disabled=${stateObj.state === UNAVAILABLE}
+                            @click=${this._press}
+                          >
+                            <div class="press-content">
+                              <ha-state-icon
+                                .hass=${this.hass}
+                                .stateObj=${stateObj}
+                              ></ha-state-icon>
+                              <span
+                                >${this.hass.localize(PRESS_LABEL[press])}</span
+                              >
+                            </div>
+                          </ha-control-button>
                         `
-          }
+                      : options
+                        ? html`
+                            <ha-control-select-menu
+                              class="options"
+                              show-arrow
+                              hide-label
+                              .label=${this._entityName(stateObj)}
+                              .value=${stateObj.state}
+                              .disabled=${stateObj.state === UNAVAILABLE}
+                              .options=${options.map((option) => ({
+                                value: option,
+                                label: this.hass.formatEntityState(
+                                  stateObj,
+                                  option
+                                ),
+                              }))}
+                              @wa-select=${this._selectOption}
+                            >
+                              <ha-state-icon
+                                slot="icon"
+                                .hass=${this.hass}
+                                .stateObj=${stateObj}
+                              ></ha-state-icon>
+                            </ha-control-select-menu>
+                          `
+                        : legacyControl || history
+                          ? // The domain's own control or the chart follows, so there
+                            // is nothing for a picture of the entity to stand in for.
+                            nothing
+                          : html`
+                              <div class="reading-icon">
+                                <ha-state-icon
+                                  .hass=${this.hass}
+                                  .stateObj=${stateObj}
+                                ></ha-state-icon>
+                              </div>
+                            `
+                  }
+                  ${
+                    feature
+                      ? html`
+                          <hui-card-feature
+                            .hass=${this.hass}
+                            .context=${this._featureContext(entityId)}
+                            .feature=${feature}
+                          ></hui-card-feature>
+                        `
+                      : nothing
+                  }
+                  ${
+                    legacyControl
+                      ? html`
+                          <more-info-content
+                            .hass=${this.hass}
+                            .stateObj=${stateObj}
+                          ></more-info-content>
+                        `
+                      : nothing
+                  }
+                </div>
+              `
+            : nothing
+        }
+        ${history ? this._renderChartBlock(entityId, false) : nothing}
+      </div>
+    `;
+  }
+
+  /**
+   * The entity's chart in the same card the activity tab frames its list in:
+   * named, with how far back it reaches and the way to the full history in the
+   * bar above it. A numeric reading is a line, a state that is a word is a
+   * timeline.
+   */
+  private _renderChartBlock(entityId: string, tooltip: boolean) {
+    return html`
+      <div class="record-card chart-card">
+        <div class="record-bar">
+          <h2 class="record-heading">
+            ${this.hass.localize("ui.dialogs.more_info_control.history")}
+          </h2>
+          <div class="record-actions">
+            ${this._renderRangeMenu()}
+            ${this._renderShowMore(historyShowMoreUrl(entityId))}
+          </div>
+        </div>
+        <div class="record-content">
           ${
-            feature
-              ? html`
-                  <hui-card-feature
-                    .hass=${this.hass}
-                    .context=${this._featureContext(entityId)}
-                    .feature=${feature}
-                  ></hui-card-feature>
-                `
-              : nothing
-          }
-          ${
-            legacyControl
-              ? html`
-                  <more-info-content
-                    .hass=${this.hass}
-                    .stateObj=${stateObj}
-                  ></more-info-content>
-                `
-              : nothing
+            this._isLine(entityId)
+              ? this._renderLine(entityId)
+              : this._renderTimeline(entityId, tooltip)
           }
         </div>
       </div>
@@ -823,17 +942,20 @@ export class HaMoreInfoDevice extends LitElement {
   }
 
   /**
-   * The tab is scoped to the device: what it is, what can be changed about it,
-   * and one row per entity it provides. Everything opens as a view of this
-   * dialog, so one back arrow lands here again. The device's full page stays in
-   * the dialog's overflow menu.
+   * The tab is everything the device page offers, scoped to the device: what
+   * integrations want said about it, what it is, what can be done with it, one
+   * row per entity it provides, and the devices and items around it.
+   * Everything opens as a view of this dialog or on top of it, so one back
+   * arrow lands here again.
    */
   private _renderSettings() {
     const device = this.hass.devices[this.deviceId];
 
     return html`
       <div class="pane device">
-        ${this._renderDeviceInfo(device)}
+        ${this._renderDeviceAlerts(device)} ${this._renderDeviceInfo(device)}
+        ${this._renderIntegrationInfo(device)}
+        ${this._renderDeviceActions(device)}
         <ha-grouped-list
           .header=${this.hass.localize(
             "ui.dialogs.more_info_control.configure_entities"
@@ -845,15 +967,14 @@ export class HaMoreInfoDevice extends LitElement {
             (entry) => this._renderEntitySettingsRow(entry)
           )}
         </ha-grouped-list>
+        ${this._renderRelatedDevices(device)}
         <!--
           What else in the config refers to the device, scoped to the device
           like everything else on this tab. Its entities are left out — the
           strip and the list above have them.
         -->
         <ha-related-items
-          hide-entities
-          hide-integration
-          hide-area
+          .exclude=${DEVICE_RELATED_EXCLUDE}
           .hass=${this.hass}
           .itemId=${this.deviceId}
           .itemType=${"device"}
@@ -936,9 +1057,50 @@ export class HaMoreInfoDevice extends LitElement {
   }
 
   /**
+   * Said before anything else: a disabled device shows nothing live anywhere
+   * else in the dialog, and an integration's warning is about the device as a
+   * whole.
+   */
+  private _renderDeviceAlerts(device: DeviceRegistryEntry) {
+    return html`
+      ${
+        device.disabled_by
+          ? html`
+              <ha-alert alert-type="warning">
+                ${this.hass.localize("ui.panel.config.devices.enabled_cause", {
+                  type: this.hass.localize(
+                    `ui.panel.config.devices.type.${device.entry_type || "device"}`
+                  ),
+                  cause: this.hass.localize(
+                    `ui.panel.config.devices.disabled_by.${device.disabled_by}`
+                  ),
+                })}
+                ${
+                  device.disabled_by === "user"
+                    ? html`<ha-button
+                        slot="action"
+                        size="s"
+                        appearance="plain"
+                        @click=${this._enableDevice}
+                      >
+                        ${this.hass.localize("ui.common.enable")}
+                      </ha-button>`
+                    : nothing
+                }
+              </ha-alert>
+            `
+          : nothing
+      }
+      ${this._alerts.map(
+        (alert) =>
+          html`<ha-alert .alertType=${alert.level}>${alert.text}</ha-alert>`
+      )}
+    `;
+  }
+
+  /**
    * What the device is: the facts the device page states in its info card, as
-   * label and value rows, then the ones that lead somewhere, then the actions
-   * that belong to the device itself.
+   * label and value rows, then the ones that lead somewhere.
    */
   private _renderDeviceInfo(device: DeviceRegistryEntry) {
     const model = device.model
@@ -965,6 +1127,14 @@ export class HaMoreInfoDevice extends LitElement {
     // are places of their own, so both lead there.
     const area = device.area_id ? this.hass.areas[device.area_id] : undefined;
     const floor = area?.floor_id ? this.hass.floors[area.floor_id] : undefined;
+    const entries = this._configEntries
+      ? deviceConfigEntries(device, this._configEntries)
+      : [];
+    const labels = this._deviceLabels(
+      device.labels ?? [],
+      this._labelRegistry,
+      this.hass.locale.language
+    );
 
     return html`
       <!--
@@ -981,20 +1151,25 @@ export class HaMoreInfoDevice extends LitElement {
               </ha-list-item-value>
             `
           )}
-        ${this._addresses(device).map(
-          ([label, value]) => html`
-            <ha-list-item-value .label=${label}>${value}</ha-list-item-value>
-          `
+        ${this._addresses(device).map(([label, value, href]) =>
+          href
+            ? this._renderFactLink(label, value, href)
+            : html`
+                <ha-list-item-value .label=${label}
+                  >${value}</ha-list-item-value
+                >
+              `
         )}
         ${
-          // What provides the device, where the group of one row used to say it.
-          this._integration
-            ? this._renderFactLink(
-                this.hass.localize("ui.components.related-items.integration"),
-                domainToName(this.hass.localize, this._integration.domain),
-                `/config/integrations/integration/${this._integration.domain}#config_entry=${this._integration.entryId}`
-              )
-            : nothing
+          // Every integration that provides the device, primary first: one
+          // device can be two integrations' at once.
+          entries.map((entry) =>
+            this._renderFactLink(
+              this.hass.localize("ui.components.related-items.integration"),
+              domainToName(this.hass.localize, entry.domain),
+              `/config/integrations/integration/${entry.domain}#config_entry=${entry.entry_id}`
+            )
+          )
         }
         ${
           area
@@ -1016,6 +1191,203 @@ export class HaMoreInfoDevice extends LitElement {
               )
             : nothing
         }
+        ${this._renderDeviceLink(
+          "ui.panel.config.integrations.config_entry.part_of",
+          device.parent_device_id
+        )}
+        ${this._renderDeviceLink(
+          "ui.panel.config.integrations.config_entry.via",
+          device.via_device_id
+        )}
+        ${
+          labels.length
+            ? html`
+                <ha-list-item-value
+                  .label=${this.hass.localize(
+                    "ui.components.label-picker.labels"
+                  )}
+                >
+                  <div class="labels">
+                    ${labels.map(
+                      (label) => html`
+                        <ha-label
+                          .color=${label.color}
+                          .description=${label.description}
+                        >
+                          ${
+                            label.icon
+                              ? html`<ha-icon
+                                  slot="icon"
+                                  .icon=${label.icon}
+                                ></ha-icon>`
+                              : nothing
+                          }
+                          ${label.name}
+                        </ha-label>
+                      `
+                    )}
+                  </div>
+                </ha-list-item-value>
+              `
+            : nothing
+        }
+      </ha-grouped-list>
+    `;
+  }
+
+  private _deviceLabels = memoizeOne(
+    (
+      labelIds: string[],
+      registry: LabelRegistryEntry[] | undefined,
+      language: string
+    ): Pick<LabelRegistryEntry, "name" | "color" | "icon" | "description">[] =>
+      labelIds
+        .map(
+          (labelId) =>
+            registry?.find((label) => label.label_id === labelId) ?? {
+              name: labelId,
+              color: null,
+              icon: null,
+              description: null,
+            }
+        )
+        .sort((a, b) => stringCompare(a.name, b.name, language))
+  );
+
+  /** A device the device belongs to or is reached through. */
+  private _renderDeviceLink(label: LocalizeKeys, deviceId?: string | null) {
+    if (!deviceId) {
+      return nothing;
+    }
+    const other = this.hass.devices[deviceId];
+    return this._renderFactLink(
+      this.hass.localize(label),
+      other
+        ? computeDeviceNameDisplay(other, this.hass.localize, this.hass.states)
+        : this.hass.localize(
+            "ui.panel.config.integrations.config_entry.unknown_via_device"
+          ),
+      this._deviceHref(deviceId),
+      this._deviceHref(deviceId) ? undefined : deviceId
+    );
+  }
+
+  /**
+   * A device with something to show opens in this dialog; one with nothing
+   * the dialog could lead with only has its page.
+   */
+  private _deviceHref(deviceId: string): string | undefined {
+    return resolveDeviceCardEntities(this.hass, {
+      type: "device",
+      device: deviceId,
+    }).hero
+      ? undefined
+      : `/config/devices/device/${deviceId}`;
+  }
+
+  /**
+   * A fact that is also a place: reads like a value row, behaves like a link.
+   * Given a device id instead of an href, it opens that device in the dialog.
+   */
+  private _renderFactLink(
+    label: string,
+    value: string,
+    href?: string,
+    deviceId?: string
+  ) {
+    return html`
+      <ha-list-item-button
+        href=${ifDefined(href)}
+        .deviceId=${deviceId}
+        @click=${deviceId ? this._openDevice : undefined}
+      >
+        <div slot="content" class="fact">
+          <span class="label">${label}</span>
+          <span class="value">${value}</span>
+        </div>
+        <ha-svg-icon slot="end" .path=${mdiChevronRight}></ha-svg-icon>
+      </ha-list-item-button>
+    `;
+  }
+
+  private _openDevice(ev: Event) {
+    const deviceId = (ev.currentTarget as HTMLElement & { deviceId: string })
+      .deviceId;
+    fireEvent(this, "hass-more-info", { entityId: null, deviceId });
+  }
+
+  /**
+   * How the device is reached, which is often how you recognize it. An
+   * address the network tools know about leads to them.
+   */
+  private _addresses(
+    device: DeviceRegistryEntry
+  ): [string, string, string | undefined][] {
+    return device.connections
+      .filter(([type]) => ADDRESS_TYPES.includes(type))
+      .map(([type, value]) => {
+        const address = value.toUpperCase();
+        if (type === "mac") {
+          return [
+            "MAC",
+            address,
+            isComponentLoaded(this.hass.config, "dhcp")
+              ? `/config/dhcp?mac_address=${encodeURIComponent(value)}`
+              : undefined,
+          ];
+        }
+        return [
+          titleCase(type),
+          address,
+          type === "bluetooth" &&
+          isComponentLoaded(this.hass.config, "bluetooth")
+            ? `/config/bluetooth/advertisement-monitor?address=${encodeURIComponent(value)}`
+            : undefined,
+        ];
+      });
+  }
+
+  /** The integration's own panel of facts, where it has one. */
+  private _renderIntegrationInfo(device: DeviceRegistryEntry) {
+    const domains = this._configEntries
+      ? deviceConfigEntries(device, this._configEntries).map(
+          (entry) => entry.domain
+        )
+      : [];
+    const panels = INTEGRATION_INFO.filter(([domain]) =>
+      domains.includes(domain)
+    );
+    if (!panels.length) {
+      return nothing;
+    }
+    return html`
+      <div class="integration-info">
+        ${panels.map(([, load, tag]) => {
+          load();
+          return staticHtml`<${unsafeStatic(tag)}
+            .hass=${this.hass}
+            .device=${device}
+          ></${unsafeStatic(tag)}>`;
+        })}
+      </div>
+    `;
+  }
+
+  /**
+   * What can be done with the device, in the device page's order: its
+   * settings and what it can be added to, then its own page and whatever its
+   * integrations offer, then the housekeeping, and removing it last.
+   */
+  private _renderDeviceActions(device: DeviceRegistryEntry) {
+    const deleteActions = this._configEntries
+      ? this._deleteActions(device, this._configEntries)
+      : [];
+    const warnings = this._deviceActions.filter((action) =>
+      action.classes?.includes("warning")
+    );
+
+    return html`
+      <ha-grouped-list>
         <ha-list-item-button @click=${this._openDeviceSettings}>
           <ha-svg-icon slot="start" .path=${mdiCogOutline}></ha-svg-icon>
           <span slot="headline"
@@ -1026,103 +1398,267 @@ export class HaMoreInfoDevice extends LitElement {
           <ha-svg-icon slot="end" .path=${mdiChevronRight}></ha-svg-icon>
         </ha-list-item-button>
         ${
-          this._diagnosticsUrl
+          isComponentLoaded(this.hass.config, "automation") ||
+          isComponentLoaded(this.hass.config, "script") ||
+          isComponentLoaded(this.hass.config, "scene")
             ? html`
                 <ha-list-item-button
                   class="action"
-                  @click=${this._downloadDiagnostics}
+                  .disabled=${!!device.disabled_by}
+                  @click=${this._addTo}
                 >
-                  <ha-svg-icon slot="start" .path=${mdiDownload}></ha-svg-icon>
+                  <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
                   <span slot="headline"
                     >${this.hass.localize(
-                      "ui.panel.config.devices.download_diagnostics"
+                      "ui.dialogs.more_info_control.add_to.item"
                     )}</span
                   >
                 </ha-list-item-button>
               `
             : nothing
         }
+        ${this._deviceActions
+          .filter((action) => !warnings.includes(action))
+          .map((action) => this._renderActionRow(action))}
+        <ha-list-item-button class="action" @click=${this._recreateEntityIds}>
+          <ha-svg-icon slot="start" .path=${mdiRestore}></ha-svg-icon>
+          <span slot="headline"
+            >${this.hass.localize(
+              "ui.panel.config.devices.restore_entity_ids"
+            )}</span
+          >
+        </ha-list-item-button>
+        ${this._diagnosticActions.map((action) => this._renderActionRow(action))}
+        ${[...warnings, ...deleteActions].map((action) =>
+          this._renderActionRow(action)
+        )}
       </ha-grouped-list>
     `;
   }
 
-  /** A fact that is also a place: reads like a value row, behaves like a link. */
-  private _renderFactLink(label: string, value: string, href: string) {
+  private _deleteActions = memoizeOne(
+    (device: DeviceRegistryEntry, entries: ConfigEntry[]) =>
+      deviceDeleteActions(this, this.hass, device, entries)
+  );
+
+  private _renderActionRow(action: DeviceAction) {
+    const danger = !!action.classes?.includes("warning");
     return html`
-      <ha-list-item-button href=${href}>
-        <div slot="content" class="fact">
-          <span class="label">${label}</span>
-          <span class="value">${value}</span>
-        </div>
+      <ha-list-item-button
+        class=${classMap({ action: true, danger })}
+        href=${ifDefined(action.href)}
+        target=${ifDefined(action.target)}
+        rel=${ifDefined(action.target ? "noreferrer" : undefined)}
+        .deviceAction=${action}
+        @click=${this._runDeviceAction}
+      >
+        ${
+          action.icon
+            ? html`<ha-svg-icon
+                slot="start"
+                .path=${action.icon}
+              ></ha-svg-icon>`
+            : nothing
+        }
+        <span slot="headline">${action.label}</span>
+        ${
+          action.trailingIcon
+            ? html`<ha-svg-icon
+                slot="end"
+                .path=${action.trailingIcon}
+              ></ha-svg-icon>`
+            : nothing
+        }
+      </ha-list-item-button>
+    `;
+  }
+
+  private _runDeviceAction(ev: Event) {
+    const action = (
+      ev.currentTarget as HTMLElement & { deviceAction: DeviceAction }
+    ).deviceAction;
+    if (action.action) {
+      ev.preventDefault();
+      action.action(ev);
+    }
+  }
+
+  /**
+   * The devices around this one, each its own list the way the device page
+   * gives each its own card: the ones it is made of, the ones that reach Home
+   * Assistant through it, and the ones other integrations make of the same
+   * hardware.
+   */
+  private _renderRelatedDevices(device: DeviceRegistryEntry) {
+    const { children, connected } = this._relatedDevices(
+      device.id,
+      this.hass.devices
+    );
+    const linked = (this._linkedDeviceIds ?? [])
+      .map((id) => this.hass.devices[id])
+      .filter((other): other is DeviceRegistryEntry => !!other);
+
+    const groups: [LocalizeKeys, DeviceRegistryEntry[]][] = [
+      ["ui.panel.config.devices.child_devices.heading", children],
+      ["ui.panel.config.devices.connected_devices.heading", connected],
+      ["ui.panel.config.devices.linked_devices.heading", linked],
+    ];
+
+    return groups
+      .filter(([, devices]) => devices.length)
+      .map(
+        ([header, devices]) => html`
+          <ha-grouped-list .header=${this.hass.localize(header)}>
+            ${devices.map((other) => this._renderDeviceRow(other))}
+          </ha-grouped-list>
+        `
+      );
+  }
+
+  private _relatedDevices = memoizeOne(
+    (deviceId: string, devices: HomeAssistant["devices"]) => {
+      const all = Object.values(devices).sort((a, b) =>
+        stringCompare(
+          computeDeviceNameDisplay(a, this.hass.localize, this.hass.states),
+          computeDeviceNameDisplay(b, this.hass.localize, this.hass.states),
+          this.hass.locale.language
+        )
+      );
+      return {
+        children: all.filter((other) => other.parent_device_id === deviceId),
+        connected: all.filter((other) => other.via_device_id === deviceId),
+      };
+    }
+  );
+
+  private _renderDeviceRow(other: DeviceRegistryEntry) {
+    const area = other.area_id ? this.hass.areas[other.area_id] : undefined;
+    const href = this._deviceHref(other.id);
+    return html`
+      <ha-list-item-button
+        href=${ifDefined(href)}
+        .deviceId=${other.id}
+        @click=${href ? undefined : this._openDevice}
+      >
+        <span slot="headline"
+          >${computeDeviceNameDisplay(
+            other,
+            this.hass.localize,
+            this.hass.states
+          )}</span
+        >
+        ${
+          area
+            ? html`<span slot="supporting-text"
+                >${computeAreaName(area) || area.area_id}</span
+              >`
+            : nothing
+        }
         <ha-svg-icon slot="end" .path=${mdiChevronRight}></ha-svg-icon>
       </ha-list-item-button>
     `;
   }
 
-  /** How the device is reached, which is often how you recognize it. */
-  private _addresses(device: DeviceRegistryEntry): [string, string][] {
-    return device.connections
-      .filter(([type]) => type === "mac" || type === "bluetooth")
-      .map(([type, value]) => [
-        type === "mac" ? "MAC" : titleCase(type),
-        value.toUpperCase(),
-      ]);
+  /**
+   * What only the device's integrations can say: their actions, their
+   * warnings, whether they can hand over diagnostics, and which devices other
+   * integrations make of the same hardware. Asked for once per device, when
+   * the tab is first opened.
+   */
+  private async _loadDeviceExtras() {
+    const deviceId = this.deviceId;
+    const device = this.hass.devices[deviceId];
+    const entries = this._configEntries;
+    if (!device || !entries || this._extrasFor === deviceId) {
+      return;
+    }
+    this._extrasFor = deviceId;
+    this._deviceActions = [];
+    this._diagnosticActions = [];
+    this._alerts = [];
+    this._linkedDeviceIds = undefined;
+    clearTimeout(this._alertsTimeout);
+
+    const current = () => this._extrasFor === deviceId;
+    const entityIds = this._entityRegistry
+      .filter((entity) => entity.device_id === deviceId)
+      .map((entity) => entity.entity_id);
+
+    fetchDeviceActions(this, this.hass, device, entries, entityIds, (late) => {
+      if (current()) {
+        this._deviceActions = [...late, ...this._deviceActions];
+      }
+    })
+      .then((actions) => {
+        if (current()) {
+          this._deviceActions = [...this._deviceActions, ...actions];
+        }
+      })
+      .catch(() => undefined);
+    fetchDeviceDiagnosticActions(this.hass, device, entries)
+      .then((actions) => {
+        if (current()) {
+          this._diagnosticActions = actions;
+        }
+      })
+      .catch(() => undefined);
+    fetchLinkedDevices(this.hass, deviceId)
+      .then((ids) => {
+        if (current()) {
+          this._linkedDeviceIds = ids;
+        }
+      })
+      .catch(() => undefined);
+    this._pollAlerts(device, entries);
   }
 
-  /**
-   * What provides the device, and whether it can hand over diagnostics.
-   *
-   * ponytail: the primary config entry only. The device page walks every
-   * integration of the device; a device with diagnostics on a secondary entry
-   * still has the link on its own page.
-   */
-  private async _loadEntryInfo() {
-    if (this._entryInfoFor === this.deviceId) {
-      return;
-    }
-    this._entryInfoFor = this.deviceId;
-    this._diagnosticsUrl = undefined;
-    this._integration = undefined;
-
-    const device = this.hass.devices[this.deviceId];
-    if (!device?.primary_config_entry) {
-      return;
-    }
-
+  /** An integration's warnings can change on their own, so they are asked again. */
+  private async _pollAlerts(
+    device: DeviceRegistryEntry,
+    entries: ConfigEntry[]
+  ) {
     try {
-      const entries = await getConfigEntries(this.hass);
-      const entry = entries.find(
-        (candidate) => candidate.entry_id === device.primary_config_entry
-      );
-      if (!entry || this._entryInfoFor !== this.deviceId) {
+      const alerts = await fetchDeviceAlerts(this.hass, device, entries);
+      if (this._extrasFor !== device.id) {
         return;
       }
-      this._integration = { domain: entry.domain, entryId: entry.entry_id };
-      if (
-        !isComponentLoaded(this.hass.config, "diagnostics") ||
-        entry.state !== "loaded"
-      ) {
-        return;
-      }
-      const info = await fetchDiagnosticHandler(this.hass, entry.domain);
-      if (info.handlers.device) {
-        this._diagnosticsUrl = getDeviceDiagnosticsDownloadUrl(
-          entry.entry_id,
-          this.deviceId
-        );
-      } else if (info.handlers.config_entry) {
-        this._diagnosticsUrl = getConfigEntryDiagnosticsDownloadUrl(
-          entry.entry_id
-        );
+      this._alerts = alerts;
+      if (alerts.length) {
+        this._alertsTimeout = window.setTimeout(() => {
+          this._pollAlerts(device, entries);
+        }, DEVICE_ALERTS_INTERVAL);
       }
     } catch (_err) {
-      // No handler for this integration, or it could not be asked.
+      // The integration could not be asked; there is nothing to warn about.
     }
   }
 
-  private async _downloadDiagnostics() {
-    const signed = await getSignedPath(this.hass, this._diagnosticsUrl!);
-    fileDownload(signed.path);
+  public disconnectedCallback() {
+    super.disconnectedCallback();
+    clearTimeout(this._alertsTimeout);
+    // Coming back asks again, rather than showing what was true on leaving.
+    this._extrasFor = undefined;
+  }
+
+  private _enableDevice() {
+    updateDeviceRegistryEntry(this.hass, this.deviceId, { disabled_by: null });
+  }
+
+  private _addTo() {
+    const device = this.hass.devices[this.deviceId];
+    if (device) {
+      showDeviceAddTo(this, this.hass, device, this._entityRegistry);
+    }
+  }
+
+  private _recreateEntityIds() {
+    regenerateEntityIds(
+      this,
+      this.hass,
+      this._entityRegistry
+        .filter((entity) => entity.device_id === this.deviceId)
+        .map((entity) => entity.entity_id)
+    );
   }
 
   private _openDeviceSettings() {
@@ -1136,111 +1672,60 @@ export class HaMoreInfoDevice extends LitElement {
   }
 
   /**
-   * The same drawing the info tab gives the entity, in a frame with the range
-   * to show it at and the way out to the full panel — plus the activity, which
-   * is the other reading of the same past.
-   *
-   * ponytail: `ha-grouped-list` frames rows and marks itself up as a list, and
-   * a chart is not a row. Swap for row items if the activity entries ever get
-   * rendered here directly.
+   * What happened to the entity, and nothing else. An entity with no activity
+   * — a numeric reading has none — says so.
    */
-  private _renderHistory(entityId: string) {
-    const history = computeShowHistoryComponent(this.hass, entityId);
-    const logbook = computeShowLogBookComponent(this.hass, entityId);
-
-    if (!history && !logbook) {
+  private _renderActivity(entityId: string) {
+    if (!computeShowLogBookComponent(this.hass, entityId)) {
       return html`
         <div class="pane empty">
-          ${this.hass.localize("ui.dialogs.more_info_control.nothing_recorded")}
+          ${this.hass.localize("ui.dialogs.more_info_control.no_activity")}
         </div>
       `;
     }
 
-    // Two readings of the same past, one at a time: the chart and the list say
-    // the same thing in different shapes, and stacking them halves both. What
-    // is not available is not offered — but the one that is still names itself,
-    // as the only option there is, so the card says what is in it either way.
-    const activity = logbook && (!history || this._record === "logbook");
-    const records = RECORDS.filter((value) =>
-      value === "history" ? history : logbook
-    );
-    const line = !activity && this._isLine(entityId);
-
     return html`
       <div class="pane history">
+        ${
+          // The value now, as the info tab states it, so the tab says what
+          // the activity is of.
+          this._renderHeaders(entityId, false, false)
+        }
         <div class="record-card">
           <div class="record-bar">
-            ${
-              records.length > 1
-                ? html`
-                    <ha-control-select
-                      class="record"
-                      .options=${records.map((value) => ({
-                        value,
-                        label: this.hass.localize(
-                          `ui.dialogs.more_info_control.${value}`
-                        ),
-                      }))}
-                      .value=${activity ? "logbook" : "history"}
-                      @value-changed=${this._recordChanged}
-                    ></ha-control-select>
-                  `
-                : records.length
-                  ? // Nothing to switch to, so nothing to press: the card says
-                    // what is in it and leaves it at that.
-                    html`<h2 class="record-heading">
-                      ${this.hass.localize(
-                        `ui.dialogs.more_info_control.${records[0]}`
-                      )}
-                    </h2>`
-                  : nothing
-            }
+            <h2 class="record-heading">
+              ${this.hass.localize("ui.dialogs.more_info_control.logbook")}
+            </h2>
             <div class="record-actions">
-              ${
-                // How far back to look is a question about the past, which is
-                // what both records are of.
-                this._renderMenu(
-                  RANGES.map(([hours, key]) => ({
-                    value: String(hours),
-                    label: this.hass.localize(
-                      `ui.components.date-range-picker.ranges.${key}`
-                    ),
-                    selected: hours === this._hours,
-                  })),
-                  this._rangeChanged
-                )
-              }
-              ${this._renderShowMore(
-                activity
-                  ? logbookShowMoreUrl(entityId)
-                  : historyShowMoreUrl(entityId)
-              )}
+              ${this._renderRangeMenu()}
+              ${this._renderShowMore(logbookShowMoreUrl(entityId))}
             </div>
           </div>
           <div class="record-content">
-            ${
-              activity
-                ? html`
-                    <ha-more-info-logbook
-                      hide-header
-                      .hass=${this.hass}
-                      .entityId=${entityId}
-                      .hoursToShow=${this._hours}
-                    ></ha-more-info-logbook>
-                  `
-                : line
-                  ? this._renderLine(entityId)
-                  : this._renderTimeline(entityId, true)
-            }
+            <ha-more-info-logbook
+              hide-header
+              .hass=${this.hass}
+              .entityId=${entityId}
+              .hoursToShow=${this._hours}
+            ></ha-more-info-logbook>
           </div>
         </div>
       </div>
     `;
   }
 
-  private _recordChanged(ev: CustomEvent) {
-    ev.stopPropagation();
-    this._record = ev.detail.value as RecordView;
+  /** How far back the chart and the activity reach, shared by both tabs. */
+  private _renderRangeMenu() {
+    return this._renderMenu(
+      RANGES.map(([hours, key]) => ({
+        value: String(hours),
+        label: this.hass.localize(
+          `ui.components.date-range-picker.ranges.${key}`
+        ),
+        selected: hours === this._hours,
+      })),
+      this._rangeChanged
+    );
   }
 
   /** One of the chart's settings, as the current value with the rest behind it. */
@@ -1371,6 +1856,21 @@ export class HaMoreInfoDevice extends LitElement {
     `;
   }
 
+  private _sizeEntityList(ev: Event) {
+    const toggle = (ev.currentTarget as HTMLElement).querySelector(
+      ".list-toggle"
+    );
+    if (!toggle) {
+      return;
+    }
+    const button = toggle.getBoundingClientRect();
+    const view = this.getBoundingClientRect();
+    this._entityListWidth =
+      getComputedStyle(this).direction === "rtl"
+        ? view.right - button.left
+        : button.right - view.left;
+  }
+
   private _entityName(stateObj: HassEntity): string {
     return (
       computeEntityName(stateObj, this.hass.entities, this.hass.devices) ||
@@ -1476,12 +1976,10 @@ export class HaMoreInfoDevice extends LitElement {
   }
 
   /**
-   * A reading whose values are words, as the run of states it has held. The
-   * pane that states the hovered band itself has no use for a tooltip saying
-   * the same thing; the charts tab, where the chart is the whole content, keeps
-   * the one every other chart in Home Assistant has.
+   * A reading whose values are words, as the run of states it has held. Where
+   * the header over it states the hovered band, a tooltip would say it twice.
    */
-  private _renderTimeline(entityId: string, tooltip = false) {
+  private _renderTimeline(entityId: string, tooltip: boolean) {
     return html`
       <ha-more-info-history
         hide-header
@@ -1802,17 +2300,27 @@ export class HaMoreInfoDevice extends LitElement {
       color: var(--disabled-text-color);
       --mdc-icon-size: 72px;
     }
-    /* The line stands where the icon would have: the same block of the pane,
-       the full width it has to draw in, and the entity's own colour. */
-    /* The same block a light's brightness control takes, so moving between a
-       reading and something operable moves nothing else on the pane. */
-    /* The same block a line takes, so a word-valued reading is given the room
-       a numeric one gets rather than a band floating in an empty pane. The
-       inactive part of the row recedes to a quiet fill, which leaves the states
-       that are actually happening as the thing you see.
-       ponytail: a fixed row height, where the line is half its own width. Close
-       at dialog widths; measure the box if a wide dialog ever makes the two
-       obviously different. */
+    /* A chart is as tall as it is drawn, not as tall as the room left. */
+    .chart-card {
+      flex: none;
+    }
+    .chart-card .record-content {
+      overflow: hidden;
+    }
+    /* Under a domain's own control, which already has the pane's inset. */
+    .pane.below {
+      padding-top: 0;
+      padding-bottom: var(--ha-space-4);
+    }
+    .pane.reading .chart-card {
+      align-self: stretch;
+      margin-top: var(--ha-space-6);
+    }
+    /* The card is the inset, so the line keeps clear of its border. */
+    .chart-card .chart-line {
+      box-sizing: border-box;
+      padding-inline: var(--ha-space-3);
+    }
     .chart-timeline {
       flex: none;
       align-self: stretch;
@@ -1820,25 +2328,11 @@ export class HaMoreInfoDevice extends LitElement {
     }
     /* One block for whatever the reading is drawn as — a line here, a timeline
        below — so switching between two read-only entities moves nothing else on
-       the pane. 210px of drawing with 30px of time scale under it, which is
-       about what the history tab's chart takes at a dialog's width. */
+       the pane. 210px of drawing with 30px of time scale under it. */
     .chart-line {
       flex: none;
       align-self: stretch;
       height: 240px;
-    }
-    /* Nothing is stated over the chart here, so the room that would have gone
-       to a value goes to the drawing: a line has no height of its own and
-       reads better the more of it there is. A timeline's bands are a fixed
-       height, so that one keeps its own. */
-    .pane.history .chart-line {
-      flex: 1 1 auto;
-      height: auto;
-      min-height: 240px;
-    }
-    /* The frame is the inset on the charts tab; on the info tab the pane is. */
-    .pane.reading .chart-timeline {
-      --more-info-history-padding-inline: 0;
     }
     /* A preview is read top to bottom, not centred like a control, and its
        lists want the width of the pane. */
@@ -1945,6 +2439,31 @@ export class HaMoreInfoDevice extends LitElement {
     .pane.device .action ha-svg-icon[slot="start"] {
       color: var(--primary-color);
     }
+    /* Removing the device, or a part of it, reads as what it is. */
+    .danger span[slot="headline"],
+    .pane.device .danger ha-svg-icon[slot="start"] {
+      color: var(--ha-color-on-danger-quiet);
+    }
+    /* The tab's lists stack with the same gap whatever sits between them. */
+    .pane.device {
+      display: flex;
+      flex-direction: column;
+      gap: var(--ha-space-6);
+    }
+    .pane.device ha-related-items {
+      padding: 0;
+    }
+    .labels {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: var(--ha-space-1);
+    }
+    .integration-info {
+      display: flex;
+      flex-direction: column;
+      gap: var(--ha-space-2);
+    }
     /* One record at a time, so it gets the whole pane. */
     .pane.history {
       display: flex;
@@ -1999,20 +2518,6 @@ export class HaMoreInfoDevice extends LitElement {
       font-size: var(--ha-font-size-m);
       font-weight: var(--ha-font-weight-medium);
       color: var(--secondary-text-color);
-    }
-    .record {
-      flex: none;
-      width: auto;
-      min-width: 180px;
-      --control-select-color: var(--primary-text-color);
-      --control-select-selected-color: var(--primary-text-color);
-      --control-select-selected-opacity: 0.12;
-      --control-select-focused-opacity: 0.06;
-      --control-select-background-opacity: 0.08;
-      --control-select-thickness: 36px;
-      --control-select-border-radius: var(--ha-border-radius-pill);
-      color: var(--secondary-text-color);
-      font-size: var(--ha-font-size-m);
     }
     .record-actions {
       display: flex;
@@ -2205,6 +2710,36 @@ export class HaMoreInfoDevice extends LitElement {
     }
     ha-dropdown-item .value {
       color: var(--secondary-text-color);
+    }
+    /* The menu is as wide as its widest row and its own width cap cannot be
+       reached from here, so the rows keep it within the dialog: from the
+       button's end to the dialog's far edge, less the menu's padding and the
+       gap the dialog keeps at its edge. */
+    .entity-list ha-dropdown-item {
+      max-width: calc(
+        var(--entity-list-width, 100vw) - 2 *
+          var(--ha-space-1) - var(--ha-space-4)
+      );
+    }
+    /* The name is what a row is found by, so it keeps its room; a state is a
+       glance, and a long one — an attribute dump, a sentence — is cut off
+       rather than pushing the name out of the row. */
+    .entity-list ha-dropdown-item::part(label) {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .entity-list ha-dropdown-item::part(details) {
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 40%;
+      overflow: hidden;
+    }
+    .entity-list ha-dropdown-item .value {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   `;
 }
