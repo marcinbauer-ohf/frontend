@@ -104,6 +104,8 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
 
   @property({ attribute: "selected-section" }) public selectedSection?: string;
 
+  @property({ attribute: false }) public scope?: PickerComboBoxItem;
+
   @property({ attribute: false }) public popoverAnchor?: Element | null;
 
   @property({ type: Boolean, attribute: "use-top-label" })
@@ -297,6 +299,7 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
         .sections=${this.sections}
         .sectionTitleFunction=${this.sectionTitleFunction}
         .selectedSection=${this.selectedSection}
+        .scope=${this.scope}
         .searchKeys=${this.searchKeys}
         .customValueLabel=${this.customValueLabel}
         .noSort=${this.noSort}
@@ -345,8 +348,8 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
 
   private _initialFieldValue?: string;
 
-  public refreshItems() {
-    this._comboBox?.refreshItems();
+  public refreshItems(reset = false) {
+    this._comboBox?.refreshItems(reset);
   }
 
   private _dialogOpened = () => {

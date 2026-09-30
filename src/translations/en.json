@@ -831,6 +831,7 @@
         "target_details": "Target details",
         "no_targets": "No targets",
         "no_target_found": "No target found for {term}",
+        "show_contents": "Show what is in {name}",
         "type": {
           "area": "Area",
           "areas": "Areas",
@@ -1511,7 +1512,8 @@
         "no_items": "No items available",
         "unknown_item": "Unknown item",
         "search_or_custom": "Search | Add custom item",
-        "add_custom_item": "Add custom item"
+        "add_custom_item": "Add custom item",
+        "select": "Select"
       },
       "suggest_with_ai": {
         "label": "Suggest",

@@ -31,9 +31,11 @@ import { loadVirtualizer } from "../resources/virtualizer";
 import { isTouch } from "../util/is_touch";
 import "./chips/ha-chip-set";
 import "./chips/ha-filter-chip";
+import "./ha-button";
 import "./ha-combo-box-item";
 import "./ha-icon";
 import "./ha-icon-button";
+import "./ha-icon-button-arrow-prev";
 import "./ha-svg-icon";
 import "./input/ha-input-search";
 import type { HaInputSearch } from "./input/ha-input-search";
@@ -63,6 +65,8 @@ export interface PickerComboBoxItem {
   icon_path?: string;
   icon?: string;
   isRelated?: boolean;
+  // The item has contents to drill into with ArrowRight.
+  drillable?: boolean;
 }
 
 export interface PickerComboBoxIndexSelectedDetail {
@@ -188,6 +192,9 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
 
   @property({ type: Boolean, reflect: true }) public clearable = false;
 
+  /** The item the list shows the contents of, with a header to go back or select it. */
+  @property({ attribute: false }) public scope?: PickerComboBoxItem;
+
   @property({ type: Boolean, attribute: "no-sort" }) public noSort = false;
 
   @query("lit-virtualizer") public virtualizerElement?: LitVirtualizer;
@@ -255,7 +262,18 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
     this._removeKeyboardShortcuts?.();
   }
 
-  public refreshItems() {
+  /** `reset` clears the search, section and keyboard selection, focuses the search and scrolls to the top. */
+  public refreshItems(reset = false) {
+    if (reset) {
+      this.setFieldValue("");
+      this._search = "";
+      this._selectedSection = undefined;
+      this._sectionTitle = undefined;
+      this._resetSelectedItem();
+      // The control that triggered the reset may be re-rendered away.
+      this._searchFieldElement?.focus();
+      this.updateComplete.then(() => this._resetListScroll());
+    }
     this._allItems = this._getItems();
     if (!this._search || this.sections?.length) {
       this._items = this._allItems;
@@ -287,7 +305,7 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
         @input=${this._filterChanged}
       >
       </ha-input-search>
-      ${this._renderSectionButtons()}
+      ${this._renderSectionButtons()} ${this._renderScopeHeader()}
       ${
         this.sections?.length
           ? html`
@@ -379,6 +397,29 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
         )}
       </ha-chip-set>
     `;
+  }
+
+  private _renderScopeHeader() {
+    if (!this.scope) {
+      return nothing;
+    }
+
+    return html`
+      <div class="scope-header">
+        <ha-icon-button-arrow-prev
+          .label=${this.i18n?.localize?.("ui.common.back") ?? "Back"}
+          @click=${this._drillOut}
+        ></ha-icon-button-arrow-prev>
+        <span class="scope-title">${this.scope.primary}</span>
+        <ha-button size="s" appearance="plain" @click=${this._selectScope}>
+          ${this.i18n?.localize?.("ui.components.combo-box.select") ?? "Select"}
+        </ha-button>
+      </div>
+    `;
+  }
+
+  private _selectScope() {
+    fireEvent(this, "value-changed", { value: this.scope!.id });
   }
 
   @eventOptions({ passive: true })
@@ -631,6 +672,8 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
       Home: this._selectFirstItem,
       End: this._selectLastItem,
       Enter: this._pickSelectedItem,
+      ArrowRight: this._drillIntoSelectedItem,
+      ArrowLeft: this._drillOutWithKey,
       "$mod+Enter": this._pickSelectedItemNewTab,
     });
   }
@@ -811,6 +854,24 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
     });
   };
 
+  private _drillIntoSelectedItem = () => {
+    const item = this._items[this._selectedItemIndex];
+    if (item && typeof item !== "string" && item.drillable) {
+      fireEvent(this, "picker-drill-in", { value: item.id });
+    }
+  };
+
+  private _drillOut = () => {
+    fireEvent(this, "picker-drill-out");
+  };
+
+  // Keep ArrowLeft for moving the caret while there is a search.
+  private _drillOutWithKey = () => {
+    if (!this._search) {
+      this._drillOut();
+    }
+  };
+
   private _pickSelectedItem = (ev: KeyboardEvent) => {
     this._pickItem(ev, false);
   };
@@ -905,6 +966,34 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
 
         ha-combo-box-item {
           width: 100%;
+        }
+
+        /* Lines up with the rows: the arrow is centered on their icon column
+           (32px, or --ha-picker-scope-icon-width), the title starts where their
+           text does, and the button text ends where their chevron does. */
+        .scope-header {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-4);
+          min-height: 48px;
+          padding-inline-start: var(--ha-space-4);
+        }
+
+        .scope-header ha-icon-button-arrow-prev {
+          margin-inline: calc(
+            (var(--ha-picker-scope-icon-width, 32px) - 48px) / 2
+          );
+        }
+
+        .scope-title {
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: var(--ha-font-size-m);
+          font-weight: var(--ha-font-weight-medium);
+          line-height: var(--ha-line-height-normal);
         }
 
         ha-combo-box-item.selected {
@@ -1068,5 +1157,7 @@ declare global {
 
   interface HASSDomEvents {
     "index-selected": PickerComboBoxIndexSelectedDetail;
+    "picker-drill-in": { value: string };
+    "picker-drill-out": undefined;
   }
 }

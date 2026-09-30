@@ -60,12 +60,15 @@ import type { HaDevicePickerDeviceFilterFunc } from "./device/ha-device-picker";
 import "./ha-generic-picker";
 import type { HaGenericPicker } from "./ha-generic-picker";
 import type { PickerComboBoxItem } from "./ha-picker-combo-box";
+import "./ha-icon-button-next";
 import "./ha-svg-icon";
 import "./ha-tree-indicator";
 import "./target-picker/ha-target-picker-item-group";
 
 const SEPARATOR = "________";
 const CREATE_ID = "___create-new-entity___";
+
+type DrillTarget = TargetItem & { item: PickerComboBoxItem };
 const isTargetType = (value: string): value is TargetType =>
   value === "entity" ||
   value === "device" ||
@@ -136,6 +139,12 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
   @query("ha-generic-picker") private _picker?: HaGenericPicker;
 
   private _newTarget?: TargetItem;
+
+  // Targets the picker has drilled into, outermost first. The list shows what
+  // is inside the last one.
+  @state() private _drillPath: DrillTarget[] = [];
+
+  private _currentItems: (string | PickerComboBoxItem)[] = [];
 
   private _getDevicesMemoized = memoizeOne(
     (
@@ -411,11 +420,19 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
           )}
           .sectionTitleFunction=${this._sectionTitleFunction}
           .selectedSection=${this._selectedSection}
+          .scope=${this._drillPath[this._drillPath.length - 1]?.item}
+          style=${
+            this._drillPath[this._drillPath.length - 1]?.type === "floor"
+              ? "--ha-picker-scope-icon-width: 24px;"
+              : ""
+          }
           .popoverAnchor=${this._replaceTargetAnchor}
           .rowRenderer=${this._renderRow}
           .getItems=${this._getItems}
           @value-changed=${this._targetPicked}
           @picker-closed=${this._handlePickerClosed}
+          @picker-drill-in=${this._handleDrillIn}
+          @picker-drill-out=${this._drillOut}
           .addButtonLabel=${this.hass.localize(
             "ui.components.target-picker.add_target"
           )}
@@ -584,6 +601,71 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
     }
     this._replaceTarget = undefined;
     this._replaceTargetAnchor = undefined;
+    this._drillPath = [];
+  }
+
+  private _handleDrillIn = (
+    ev: HASSDomEvent<HASSDomEvents["picker-drill-in"]>
+  ) => {
+    this._drillIn(ev.detail.value);
+  };
+
+  private _handleDrillClick = (ev: Event) => {
+    // Don't let the row pick the target.
+    ev.stopPropagation();
+    this._drillIn((ev.currentTarget as HTMLElement).dataset.id!);
+  };
+
+  private _drillIn(value: string) {
+    const [type, id] = value.split(SEPARATOR);
+    const item = this._currentItems.find(
+      (currentItem): currentItem is PickerComboBoxItem =>
+        typeof currentItem !== "string" && currentItem.id === value
+    );
+    if (!item || !isTargetType(type) || type === "entity") {
+      return;
+    }
+    this._drillPath = [...this._drillPath, { type, id, item }];
+    this._picker?.refreshItems(true);
+  }
+
+  private _drillOut = () => {
+    if (!this._drillPath.length) {
+      return;
+    }
+    this._drillPath = this._drillPath.slice(0, -1);
+    this._picker?.refreshItems(true);
+  };
+
+  private _isInScope(scope: TargetItem, type: TargetType, id: string) {
+    const { areas, devices, entities } = this.hass;
+    switch (scope.type) {
+      case "floor":
+        return type === "area" && areas[id]?.floor_id === scope.id;
+      case "area":
+        if (type === "device") {
+          return devices[id]?.area_id === scope.id;
+        }
+        // Entities on a device in this area are listed under that device.
+        return (
+          type === "entity" &&
+          entities[id]?.area_id === scope.id &&
+          devices[entities[id].device_id ?? ""]?.area_id !== scope.id
+        );
+      case "device":
+        if (type === "device") {
+          return devices[id]?.parent_device_id === scope.id;
+        }
+        return type === "entity" && entities[id]?.device_id === scope.id;
+      case "label":
+        return (
+          (type === "area" && !!areas[id]?.labels.includes(scope.id)) ||
+          (type === "device" && !!devices[id]?.labels.includes(scope.id)) ||
+          (type === "entity" && !!entities[id]?.labels.includes(scope.id))
+        );
+      default:
+        return false;
+    }
   }
 
   private _removeItem(
@@ -654,7 +736,7 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
   private _getItems = (searchString: string, section: string) => {
     this._selectedSection = section as TargetTypeFloorless | undefined;
 
-    return this._getItemsMemoized(
+    this._currentItems = this._getItemsMemoized(
       this.hass.localize,
       this.entityFilter,
       this.deviceFilter,
@@ -664,8 +746,10 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
       this._replaceTarget,
       searchString,
       this._configEntryLookup,
-      this._selectedSection
+      this._selectedSection,
+      this._drillPath
     );
+    return this._currentItems;
   };
 
   private _getItemsMemoized = memoizeOne(
@@ -679,8 +763,18 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
       replaceTarget: TargetItem | undefined,
       searchTerm: string,
       configEntryLookup: Record<string, ConfigEntry>,
-      filterType?: TargetTypeFloorless
+      filterType: TargetTypeFloorless | undefined,
+      drillPath: DrillTarget[]
     ) => {
+      const scope = drillPath[drillPath.length - 1] as DrillTarget | undefined;
+      const inScope = (item: PickerComboBoxItem) => {
+        if (!scope) {
+          return true;
+        }
+        const [type, id] = item.id.split(SEPARATOR);
+        return isTargetType(type) && this._isInScope(scope, type, id);
+      };
+
       const replacingEntityId =
         replaceTarget?.type === "entity" ? replaceTarget.id : undefined;
       const replacingDeviceId =
@@ -716,7 +810,9 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
             ? `entity${SEPARATOR}${replacingEntityId}`
             : undefined,
           `entity${SEPARATOR}`
-        ).sort(this._sortBySortingLabel);
+        )
+          .filter(inScope)
+          .sort(this._sortBySortingLabel);
 
         if (searchTerm) {
           entityItems = this._filterGroup(
@@ -769,6 +865,17 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
           replacingDeviceId,
           `device${SEPARATOR}`
         );
+        if (scope) {
+          // A child device stays nested only when its parent is listed too.
+          deviceItems = deviceItems.filter(inScope).map((item) => {
+            const parentId =
+              this.hass.devices[item.id.split(SEPARATOR)[1]]?.parent_device_id;
+            return item.is_child &&
+              !(parentId && this._isInScope(scope, "device", parentId))
+              ? { ...item, is_child: false }
+              : item;
+          });
+        }
         // getDevices already returns child devices nested under their parent
         // with the top-level devices sorted; keep that order rather than
         // re-sorting by label, which would separate children from their parent.
@@ -837,7 +944,7 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
                 )
               : ensureArray(targetValue.floor_id)
             : undefined
-        );
+        ).filter(inScope);
 
         if (searchTerm) {
           areasAndFloors = this._filterGroup(
@@ -893,7 +1000,9 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
               : ensureArray(targetValue.label_id)
             : undefined,
           `label${SEPARATOR}`
-        ).sort(this._sortBySortingLabel);
+        )
+          .filter(inScope)
+          .sort(this._sortBySortingLabel);
 
         if (searchTerm) {
           labels = this._filterGroup(
@@ -912,7 +1021,14 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
         items.push(...labels);
       }
 
-      return items;
+      return items.map((item) =>
+        typeof item !== "string" &&
+        ["floor", "area", "device", "label"].includes(
+          item.id.split(SEPARATOR)[0]
+        )
+          ? { ...item, drillable: true }
+          : item
+      );
     }
   );
 
@@ -1014,6 +1130,7 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
     }
 
     const type = getTargetComboBoxItemType(item);
+    const drilled = this._drillPath.length > 0;
     let hasFloor = false;
     let rtl = false;
     let showEntityId = false;
@@ -1024,8 +1141,11 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
         this.hass.language,
         this.hass.translationMetadata.translations
       );
+      // Drilled lists have no floor rows to nest areas under.
       hasFloor =
-        type === "area" && !!(item as FloorComboBoxItem).area?.floor_id;
+        !drilled &&
+        type === "area" &&
+        !!(item as FloorComboBoxItem).area?.floor_id;
     }
 
     if (type === "entity") {
@@ -1041,8 +1161,8 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
         style=${
           ((item as FloorComboBoxItem).type === "area" && hasFloor) ||
           isChildDeviceRow
-            ? "--md-list-item-leading-space: var(--ha-space-12);"
-            : ""
+            ? "flex: 1; min-width: 0; --md-list-item-leading-space: var(--ha-space-12);"
+            : "flex: 1; min-width: 0;"
         }
       >
         ${
@@ -1135,6 +1255,21 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
             : nothing
         }
       </ha-combo-box-item>
+      ${
+        item.drillable
+          ? html`<span
+                style="flex: none; width: 1px; height: var(--ha-space-6); background-color: var(--ha-color-border-neutral-quiet);"
+              ></span>
+              <ha-icon-button-next
+                data-id=${item.id}
+                .label=${this.hass.localize(
+                  "ui.components.target-picker.show_contents",
+                  { name: item.primary }
+                )}
+                @click=${this._handleDrillClick}
+              ></ha-icon-button-next>`
+          : nothing
+      }
     `;
   };
 
