@@ -992,6 +992,9 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
           gap: var(--ha-space-2);
           padding: 0 var(--ha-space-3) var(--ha-space-3);
           overflow: auto;
+          /* overflow lets a flex item shrink below its content; without this a
+             long list squashes the chips under their own scrollbar. */
+          flex-shrink: 0;
         }
 
         :host([mode="dialog"]) .sections {

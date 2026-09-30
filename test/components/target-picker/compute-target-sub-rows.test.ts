@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { computeTargetSubRows } from "../../../src/components/target-picker/compute-target-sub-rows";
+import {
+  collapseExclusions,
+  computeTargetSubRows,
+  keepExclusions,
+} from "../../../src/components/target-picker/compute-target-sub-rows";
 import type { ExtractFromTargetResultReferenced } from "../../../src/data/target";
 import {
+  mockArea,
   mockDevice,
   mockEntity,
 } from "../../common/entity/context/context-mock";
@@ -152,5 +157,141 @@ describe("computeTargetSubRows", () => {
     expect(subRows.deviceRowEntries?.[0].referenced_entities).toEqual([
       "sensor.outlet_1_power",
     ]);
+  });
+
+  it("lays a label's entities out by floor, area and device", () => {
+    const labelEntities = {
+      // In the kitchen through its device, on the ground floor
+      "light.kitchen": mockEntity({
+        entity_id: "light.kitchen",
+        device_id: "kitchen_switch",
+      }),
+      // Assigned to the shed directly; the shed has no floor
+      "light.shed": mockEntity({ entity_id: "light.shed", area_id: "shed" }),
+      // On a device with no area
+      "light.lamp": mockEntity({ entity_id: "light.lamp", device_id: "lamp" }),
+      // Nowhere at all
+      "light.loose": mockEntity({ entity_id: "light.loose" }),
+    };
+    const labelDevices = {
+      kitchen_switch: mockDevice({ id: "kitchen_switch", area_id: "kitchen" }),
+      lamp: mockDevice({ id: "lamp" }),
+    };
+    const areas = {
+      kitchen: mockArea({ area_id: "kitchen", floor_id: "ground" }),
+      shed: mockArea({ area_id: "shed", floor_id: null }),
+    };
+
+    const subRows = computeTargetSubRows(
+      "label",
+      "christmas",
+      entries({ referenced_entities: Object.keys(labelEntities) }),
+      labelEntities,
+      labelDevices,
+      areas
+    );
+
+    expect(subRows.nextType).toBe("floor");
+    expect(subRows.rows).toEqual(["ground"]);
+    // The floor row gets what it needs to nest its areas and devices.
+    expect(subRows.rowEntries?.[0]).toEqual({
+      referenced_areas: ["kitchen"],
+      referenced_devices: ["kitchen_switch"],
+      referenced_entities: ["light.kitchen"],
+    });
+    expect(subRows.areaRows).toEqual(["shed"]);
+    expect(subRows.deviceRows).toEqual(["lamp"]);
+    expect(subRows.deviceRowEntries?.[0].referenced_entities).toEqual([
+      "light.lamp",
+    ]);
+    expect(subRows.entityRows).toEqual(["light.loose"]);
+  });
+});
+
+describe("collapseExclusions", () => {
+  // A floor with a kitchen (a switch with two lights, plus a lamp of its own)
+  // and a hallway light.
+  const floorEntities = {
+    "light.table": mockEntity({
+      entity_id: "light.table",
+      device_id: "switch",
+    }),
+    "light.main": mockEntity({ entity_id: "light.main", device_id: "switch" }),
+    "light.lamp": mockEntity({ entity_id: "light.lamp", area_id: "kitchen" }),
+    "light.hall": mockEntity({ entity_id: "light.hall", area_id: "hallway" }),
+  };
+  const floorDevices = {
+    switch: mockDevice({ id: "switch", area_id: "kitchen" }),
+  };
+  const floor = entries({
+    referenced_areas: ["kitchen", "hallway"],
+    referenced_devices: ["switch"],
+    referenced_entities: Object.keys(floorEntities),
+  });
+  const collapse = (excluded: string[]) =>
+    collapseExclusions(
+      "floor",
+      "ground",
+      floor,
+      new Set(excluded),
+      floorEntities,
+      floorDevices
+    );
+
+  it("stores a fully unchecked area as the area", () => {
+    expect(collapse(["light.table", "light.main", "light.lamp"])).toEqual([
+      { type: "area", id: "kitchen" },
+    ]);
+  });
+
+  it("stores a fully unchecked device as the device", () => {
+    expect(collapse(["light.table", "light.main"])).toEqual([
+      { type: "device", id: "switch" },
+    ]);
+  });
+
+  it("stores single entities when their parent is only partly unchecked", () => {
+    expect(collapse(["light.table", "light.hall"])).toEqual([
+      { type: "entity", id: "light.table" },
+      { type: "area", id: "hallway" },
+    ]);
+  });
+
+  it("never excludes the target from itself", () => {
+    expect(collapse(Object.keys(floorEntities))).toEqual([
+      { type: "area", id: "kitchen" },
+      { type: "area", id: "hallway" },
+    ]);
+  });
+
+  it("has nothing to store when everything is checked", () => {
+    expect(collapse([])).toEqual([]);
+  });
+});
+
+describe("keepExclusions", () => {
+  const hall = { type: "entity" as const, id: "light.hall" };
+  const tv = {
+    type: "device" as const,
+    id: "tv",
+    removed: ["media_player.tv", "sensor.tv_power"],
+  };
+
+  it("keeps an unchanged exclusion as it was made", () => {
+    const { kept, rest } = keepExclusions(
+      [{ ...hall, removed: ["light.hall"] }],
+      new Set(["light.hall"])
+    );
+    expect(kept.map(({ id }) => id)).toEqual(["light.hall"]);
+    expect([...rest]).toEqual([]);
+  });
+
+  it("drops a partly re-checked exclusion and leaves the rest to collapse", () => {
+    const { kept, rest } = keepExclusions(
+      [tv],
+      new Set(["sensor.tv_power", "light.table"])
+    );
+    expect(kept).toEqual([]);
+    expect([...rest]).toEqual(["sensor.tv_power", "light.table"]);
   });
 });

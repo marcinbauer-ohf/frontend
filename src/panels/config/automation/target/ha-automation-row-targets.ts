@@ -32,8 +32,8 @@ import "../../../../components/ha-dropdown-item";
 import "../../../../components/ha-svg-icon";
 import { showTargetDetailsDialog } from "../../../../components/target-picker/dialog/show-dialog-target-details";
 import {
-  getTargetExclusions,
-  setTargetExclusions,
+  resolveExcludedTargets,
+  setExcludedTargets,
   subscribeTargetExclusions,
 } from "../../../../components/target-picker/target-exclusions";
 import type { ConfigEntry } from "../../../../data/config_entries";
@@ -254,14 +254,21 @@ export class HaAutomationRowTargets extends LitElement {
           false,
           this.selector?.target?.primary_entities_only
         )
-          .then((result) => {
-            const excluded = getTargetExclusions(targetType, targetId);
+          .then(async (result) => {
+            const removed = new Set(
+              (
+                await resolveExcludedTargets(
+                  this._api.callWS,
+                  targetType,
+                  targetId,
+                  this.selector?.target?.primary_entities_only
+                )
+              ).flatMap((ex) => ex.entities)
+            );
             return this._countMatchingEntities(
-              excluded.length
-                ? result.referenced_entities.filter(
-                    (entityId) => !excluded.includes(entityId)
-                  )
-                : result.referenced_entities
+              result.referenced_entities.filter(
+                (entityId) => !removed.has(entityId)
+              )
             );
           })
           .catch((err) => {
@@ -630,7 +637,7 @@ export class HaAutomationRowTargets extends LitElement {
     this._showTargetInfo(value.targetId, value.targetType, value.label);
   }
 
-  private _showTargetInfo(
+  private async _showTargetInfo(
     targetId: string,
     targetType: TargetType,
     label: string,
@@ -643,14 +650,29 @@ export class HaAutomationRowTargets extends LitElement {
       return;
     }
 
+    const excludedTargets = await resolveExcludedTargets(
+      this._api.callWS,
+      targetType,
+      targetId,
+      this.selector?.target?.primary_entities_only
+    );
+
     showTargetDetailsDialog(this, {
       title: label,
       type: targetType,
       itemId: targetId,
       selector: this.selector,
-      initialExcludedEntities: getTargetExclusions(targetType, targetId),
-      onEntitiesExcluded: (excludedEntityIds) => {
-        setTargetExclusions(targetType, targetId, excludedEntityIds);
+      excludedTargets: excludedTargets.map(({ entities, ...ex }) => ({
+        ...ex,
+        from: label,
+        removed: entities,
+      })),
+      onExclusionsChanged: (targets) => {
+        // Labels can't be made in the dialog, so they stay as they are.
+        setExcludedTargets([{ type: targetType, id: targetId }], (current) => [
+          ...current.filter((ex) => ex.type === "label"),
+          ...targets,
+        ]);
       },
     });
   }

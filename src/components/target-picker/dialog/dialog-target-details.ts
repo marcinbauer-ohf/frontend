@@ -1,7 +1,7 @@
 import type { HassEntity } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators";
+import { customElement, property, query, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { ensureArray } from "../../../common/array/ensure-array";
 import { fireEvent } from "../../../common/dom/fire_event";
@@ -27,7 +27,11 @@ import "../../ha-icon-button";
 import "../../ha-icon-next";
 import "../../ha-svg-icon";
 import "../../list/ha-list-base";
+import { collapseExclusions, keepExclusions } from "../compute-target-sub-rows";
+import type { TargetExclusion } from "../ha-target-picker-item-group";
 import "../ha-target-picker-item-row";
+import type { HaTargetPickerItemRow } from "../ha-target-picker-item-row";
+import { targetItemName } from "../target-exclusions";
 import type { TargetDetailsDialogParams } from "./show-dialog-target-details";
 
 @customElement("ha-dialog-target-details")
@@ -42,17 +46,38 @@ class DialogTargetDetails extends LitElement implements HassDialog {
 
   @state() private _entitySourcesLoaded = false;
 
+  // What the checkboxes have unchecked, entity by entity, until apply turns
+  // it back into targets.
   @state() private _excludedEntities = new Set<string>();
+
+  // Entities a label takes out, by the label's id. A label cuts across the
+  // tree, so it can't be checked back in here, only removed in the picker.
+  @state() private _locked: Record<string, string> = {};
+
+  @state() private _excludedTargets: TargetExclusion[] = [];
+
+  @query(".tree ha-target-picker-item-row")
+  private _rootRow?: HaTargetPickerItemRow;
 
   private _deviceIntegrationLookup = memoizeOne(getDeviceIntegrationLookup);
 
   private get _selectable(): boolean {
-    return !!this._params?.onEntitiesExcluded;
+    return !!this._params?.onExclusionsChanged;
   }
 
   public showDialog(params: TargetDetailsDialogParams): void {
     this._params = params;
-    this._excludedEntities = new Set(params.initialExcludedEntities);
+    this._excludedTargets = params.excludedTargets ?? [];
+    this._excludedEntities = new Set(
+      this._excludedTargets
+        .filter((ex) => ex.type !== "label")
+        .flatMap((ex) => ex.removed)
+    );
+    this._locked = Object.fromEntries(
+      this._excludedTargets
+        .filter((ex) => ex.type === "label")
+        .flatMap((ex) => ex.removed.map((entityId) => [entityId, ex.id]))
+    );
     this._opened = true;
   }
 
@@ -67,6 +92,8 @@ class DialogTargetDetails extends LitElement implements HassDialog {
     this._entitySources = undefined;
     this._entitySourcesLoaded = false;
     this._excludedEntities = new Set();
+    this._locked = {};
+    this._excludedTargets = [];
   }
 
   private _hasIntegration(selector: TargetSelector) {
@@ -185,7 +212,31 @@ class DialogTargetDetails extends LitElement implements HassDialog {
         )}
         @closed=${this._dialogClosed}
       >
-        <div class="type-wrapper">
+        ${
+          this._params.showExcludedTargets && this._excludedTargets.length
+            ? html`<div class="type-wrapper excluded-targets">
+                <div class="type-label">
+                  ${this.hass.localize(
+                    "ui.components.target-picker.excluded_targets"
+                  )}
+                </div>
+                <ha-list-base>
+                  ${this._excludedTargets.map(
+                    (ex) =>
+                      html`<ha-target-picker-item-row
+                        .hass=${this.hass}
+                        .type=${ex.type}
+                        .itemId=${ex.id}
+                        .removedCount=${ex.removed.length}
+                        exclusion-style="expand"
+                        @remove-target-item=${this._removeExcludedTarget}
+                      ></ha-target-picker-item-row>`
+                  )}
+                </ha-list-base>
+              </div>`
+            : nothing
+        }
+        <div class="type-wrapper tree">
           <div class="type-label">
             ${this.hass.localize(
               `ui.components.target-picker.type.${this._params.type}`
@@ -210,6 +261,7 @@ class DialogTargetDetails extends LitElement implements HassDialog {
                       .primaryEntitiesOnly=${primaryEntitiesOnly}
                       .selectable=${this._selectable}
                       .excludedEntities=${this._excludedEntities}
+                      .removedEntities=${this._locked}
                       expand
                       @toggle-entity-selection=${this._handleToggleEntity}
                     ></ha-target-picker-item-row>
@@ -244,32 +296,90 @@ class DialogTargetDetails extends LitElement implements HassDialog {
     `;
   }
 
+  private _removeExcludedTarget(
+    ev: HASSDomEvent<HASSDomEvents["remove-target-item"]>
+  ) {
+    ev.stopPropagation();
+    const { type, id } = ev.detail;
+    const target = this._excludedTargets.find(
+      (ex) => ex.type === type && ex.id === id
+    );
+    if (!target) {
+      return;
+    }
+    this._params?.onExcludedTargetRemoved?.({ type, id });
+    this._excludedTargets = this._excludedTargets.filter((ex) => ex !== target);
+    // Its entities are back in play, so their checkboxes free up.
+    if (type === "label") {
+      this._locked = Object.fromEntries(
+        Object.entries(this._locked).filter(
+          ([entityId]) => !target.removed.includes(entityId)
+        )
+      );
+    } else {
+      const excluded = new Set(this._excludedEntities);
+      target.removed.forEach((entityId) => excluded.delete(entityId));
+      this._excludedEntities = excluded;
+    }
+  }
+
   private _handleToggleEntity(
     ev: HASSDomEvent<HASSDomEvents["toggle-entity-selection"]>
   ) {
     ev.stopPropagation();
     const { entityIds, selected } = ev.detail;
     const newExcluded = new Set(this._excludedEntities);
-    entityIds.forEach((entityId) => {
-      if (selected) {
-        newExcluded.delete(entityId);
-      } else {
-        newExcluded.add(entityId);
-      }
-    });
+    entityIds
+      .filter((entityId) => !(entityId in this._locked))
+      .forEach((entityId) => {
+        if (selected) {
+          newExcluded.delete(entityId);
+        } else {
+          newExcluded.add(entityId);
+        }
+      });
     this._excludedEntities = newExcluded;
   }
 
   private _applySelection() {
-    if (!this._params?.onEntitiesExcluded) {
+    const params = this._params;
+    const entries = this._rootRow?.resolvedEntries;
+    if (!params?.onExclusionsChanged || !entries) {
       return;
     }
-
-    this._params.onEntitiesExcluded([...this._excludedEntities]);
+    // Unchecking Kitchen stores Kitchen, not its lights, so the exclusion
+    // reads the way it was made. Ones that are still unchecked stay as they
+    // are; only what changed is worked out again.
+    const { kept, rest } = keepExclusions(
+      this._excludedTargets.filter((ex) => ex.type !== "label"),
+      this._excludedEntities
+    );
+    const targets = [
+      ...kept,
+      ...collapseExclusions(
+        params.type,
+        params.itemId,
+        entries,
+        rest,
+        this.hass.entities,
+        this.hass.devices,
+        this.hass.areas
+      ),
+    ];
+    params.onExclusionsChanged(
+      targets.map(({ type, id }) => ({
+        type,
+        id,
+        name: targetItemName(this.hass, { type, id }),
+      }))
+    );
     this.closeDialog();
   }
 
   static styles = css`
+    .excluded-targets {
+      margin-bottom: var(--ha-space-3);
+    }
     .type-wrapper {
       display: flex;
       flex-direction: column;

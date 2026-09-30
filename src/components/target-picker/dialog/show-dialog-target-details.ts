@@ -1,8 +1,10 @@
 import { fireEvent } from "../../../common/dom/fire_event";
 import type { HaEntityPickerEntityFilterFunc } from "../../../data/entity/entity";
 import type { TargetSelector } from "../../../data/selector";
-import type { TargetType } from "../../../data/target";
+import type { TargetItem, TargetType } from "../../../data/target";
 import type { HaDevicePickerDeviceFilterFunc } from "../../device/ha-device-picker";
+import type { TargetExclusion } from "../ha-target-picker-item-group";
+import type { ExcludedTarget } from "../target-exclusions";
 
 export interface TargetDetailsDialogParams {
   title: string;
@@ -15,8 +17,16 @@ export interface TargetDetailsDialogParams {
   includeDomains?: string[];
   includeDeviceClasses?: string[];
   primaryEntitiesOnly?: boolean;
-  initialExcludedEntities?: string[];
-  onEntitiesExcluded?: (excludedEntityIds: string[]) => void;
+  /** Targets excluded from this one, with the entities each takes out. */
+  excludedTargets?: TargetExclusion[];
+  /** List them above the tree as well, to remove them from there. */
+  showExcludedTargets?: boolean;
+  onExcludedTargetRemoved?: (target: TargetItem) => void;
+  /**
+   * Set means the tree gets checkboxes. Called on apply with what is
+   * unchecked, as the fewest targets; label exclusions aren't part of it.
+   */
+  onExclusionsChanged?: (targets: ExcludedTarget[]) => void;
 }
 
 export const loadTargetDetailsDialog = () => import("./dialog-target-details");

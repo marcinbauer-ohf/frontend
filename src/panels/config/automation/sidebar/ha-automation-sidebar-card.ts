@@ -1,4 +1,4 @@
-import { mdiClose, mdiDotsVertical } from "@mdi/js";
+import { mdiClose, mdiDotsVertical, mdiFormatListGroup } from "@mdi/js";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
@@ -7,7 +7,17 @@ import { preventDefaultStopPropagation } from "../../../../common/dom/prevent_de
 import { stopPropagation } from "../../../../common/dom/stop_propagation";
 import "../../../../components/ha-card";
 import "../../../../components/ha-dialog-header";
+import "@home-assistant/webawesome/dist/components/divider/divider";
 import "../../../../components/ha-dropdown";
+import type { HaDropdownSelectEvent } from "../../../../components/ha-dropdown";
+import "../../../../components/ha-dropdown-item";
+import "../../../../components/ha-svg-icon";
+import {
+  EXCLUSION_STYLES,
+  type ExclusionStyle,
+  getExclusionStyle,
+  setExclusionStyle,
+} from "../../../../components/target-picker/target-exclusions";
 import "../../../../components/ha-icon-button";
 import { ScrollableFadeMixin } from "../../../../mixins/scrollable-fade-mixin";
 import { haStyleScrollbar } from "../../../../resources/styles";
@@ -70,6 +80,7 @@ export default class HaAutomationSidebarCard extends ScrollableFadeMixin(
             <ha-dropdown
               @click=${preventDefaultStopPropagation}
               @keydown=${stopPropagation}
+              @wa-select=${this._handleExclusionStyle}
               placement="bottom-end"
             >
               <ha-icon-button
@@ -78,6 +89,28 @@ export default class HaAutomationSidebarCard extends ScrollableFadeMixin(
                 .path=${mdiDotsVertical}
               ></ha-icon-button>
               <slot name="menu-items"></slot>
+              <wa-divider></wa-divider>
+              <ha-dropdown-item>
+                <ha-svg-icon
+                  slot="icon"
+                  .path=${mdiFormatListGroup}
+                ></ha-svg-icon>
+                ${this.hass.localize(
+                  "ui.components.target-picker.exclusion_style_menu"
+                )}
+                ${EXCLUSION_STYLES.map(
+                  (style) =>
+                    html`<ha-dropdown-item
+                      slot="submenu"
+                      value=${`exclusion-style:${style}`}
+                      ?selected=${style === getExclusionStyle()}
+                    >
+                      ${this.hass.localize(
+                        `ui.components.target-picker.exclusion_style.${style}`
+                      )}
+                    </ha-dropdown-item>`
+                )}
+              </ha-dropdown-item>
             </ha-dropdown>
           </slot>
         </ha-dialog-header>
@@ -96,6 +129,16 @@ export default class HaAutomationSidebarCard extends ScrollableFadeMixin(
         </div>
       </ha-card>
     `;
+  }
+
+  // ponytail: prototype switch for how the target picker shows exclusions.
+  private _handleExclusionStyle(ev: HaDropdownSelectEvent) {
+    const value = ev.detail?.item?.value;
+    if (!value?.startsWith("exclusion-style:")) {
+      return;
+    }
+    setExclusionStyle(value.split(":")[1] as ExclusionStyle);
+    this.requestUpdate();
   }
 
   private _closeSidebar() {

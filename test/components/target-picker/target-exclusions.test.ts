@@ -1,19 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
-  getTargetExclusions,
-  setTargetExclusions,
+  getExcludedTargets,
+  setExcludedTargets,
   subscribeTargetExclusions,
 } from "../../../src/components/target-picker/target-exclusions";
 
-describe("target exclusions store", () => {
-  it("reads back what another entry point excluded", () => {
-    // The automation row chip and the target picker both address a target by
-    // type and id, so an exclusion made in one shows up in the other.
-    setTargetExclusions("area", "area_1", ["light.one"]);
+const kitchen = { type: "area" as const, id: "kitchen", name: "Kitchen" };
 
-    expect(getTargetExclusions("area", "area_1")).toEqual(["light.one"]);
-    expect(getTargetExclusions("area", "area_2")).toEqual([]);
-    expect(getTargetExclusions("floor", "area_1")).toEqual([]);
+describe("excluded targets store", () => {
+  it("reads back what another entry point excluded", () => {
+    // The picker, the details dialog and the automation row chip all address
+    // a target by type and id, so an exclusion made in one shows in the others.
+    setExcludedTargets([{ type: "floor", id: "ground" }], () => [kitchen]);
+
+    expect(getExcludedTargets("floor", "ground")).toEqual([kitchen]);
+    expect(getExcludedTargets("floor", "upstairs")).toEqual([]);
+    expect(getExcludedTargets("area", "ground")).toEqual([]);
   });
 
   it("notifies subscribers so cached counts get recomputed", () => {
@@ -22,11 +24,11 @@ describe("target exclusions store", () => {
       calls += 1;
     });
 
-    setTargetExclusions("device", "dev_1", ["light.two"]);
+    setExcludedTargets([{ type: "device", id: "dev_1" }], () => [kitchen]);
     expect(calls).toBe(1);
 
     unsub();
-    setTargetExclusions("device", "dev_1", []);
+    setExcludedTargets([{ type: "device", id: "dev_1" }], () => []);
     expect(calls).toBe(1);
   });
 });
