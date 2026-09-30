@@ -81,6 +81,10 @@ const ZOOM_SLIDER_BOTTOM = 4;
 const ZOOM_SLIDER_SPACE = ZOOM_SLIDER_BOTTOM + ZOOM_SLIDER_HEIGHT + 8;
 // The smallest visible range the thumbs can be dragged to, in percent.
 const ZOOM_SLIDER_MIN_RANGE = 1;
+// Experiment: the built-in ECharts slider, stacked above ours for comparison.
+const ECHARTS_SLIDER_HEIGHT = 24;
+const ECHARTS_SLIDER_SPACE = ECHARTS_SLIDER_HEIGHT + 8;
+const ECHARTS_SLIDER_INSET = 8;
 // The reset button sits left of the slider, below the y-axis labels.
 const ZOOM_RESET_SIZE = 24;
 const ZOOM_RESET_OFFSET = ZOOM_RESET_SIZE + 4;
@@ -600,6 +604,7 @@ export class HaChartBase extends MobileAwareMixin(LitElement) {
               : `${this._getDefaultHeight() + sliderGrowth}px`,
           })}
         >
+          ${this._renderEChartsSliderBackdrop()}
           <div
             id="chart"
             class="chart ${classMap({
@@ -1060,6 +1065,19 @@ export class HaChartBase extends MobileAwareMixin(LitElement) {
       return undefined;
     }
     return [
+      ...(this._hasZoomableXAxis()
+        ? [
+            {
+              id: "dataZoomSlider",
+              type: "slider" as const,
+              xAxisIndex: 0,
+              filterMode: this._getDataZoomFilterMode() as any,
+              height: ECHARTS_SLIDER_HEIGHT,
+              bottom: ZOOM_SLIDER_SPACE,
+              ...this._getEChartsSliderStyle(),
+            },
+          ]
+        : []),
       {
         id: "dataZoom",
         type: "inside",
@@ -1076,6 +1094,84 @@ export class HaChartBase extends MobileAwareMixin(LitElement) {
     ];
   }
 
+  private _getEChartsSliderLeft() {
+    return this.hideResetButton ? ECHARTS_SLIDER_INSET : ZOOM_RESET_OFFSET;
+  }
+
+  // Dresses the ECharts slider like ours. ECharts can only round the slider's
+  // outline, so its track, range and grips are drawn in CSS behind the canvas
+  // instead. ECharts keeps invisible square handles over the drawn grips, and
+  // its slider is inset half a track height at each end, like our thumbs.
+  private _getEChartsSliderStyle(): DataZoomComponentOption {
+    const style = getComputedStyle(this);
+    const color = (name: string) => style.getPropertyValue(name).trim();
+    const shadow = color("--ha-color-on-neutral-quiet");
+    const selectedShadow = color("--ha-color-on-neutral-normal");
+    const hidden = { opacity: 0 };
+    return {
+      left: this._getEChartsSliderLeft() + ECHARTS_SLIDER_HEIGHT / 2,
+      right: ECHARTS_SLIDER_INSET + ECHARTS_SLIDER_HEIGHT / 2,
+      backgroundColor: "transparent",
+      borderColor: "transparent",
+      fillerColor: "transparent",
+      showDataShadow: true,
+      dataBackground: {
+        lineStyle: { color: shadow, opacity: 0.5, width: 1 },
+        areaStyle: { color: shadow, opacity: 0.1 },
+      },
+      selectedDataBackground: {
+        lineStyle: { color: selectedShadow, opacity: 0.8, width: 1 },
+        areaStyle: { color: selectedShadow, opacity: 0.2 },
+      },
+      showDetail: false,
+      brushSelect: false,
+      moveHandleSize: 0,
+      handleIcon: "rect",
+      handleSize: "100%",
+      handleStyle: hidden,
+      emphasis: { handleStyle: hidden, moveHandleStyle: hidden },
+    } as DataZoomComponentOption;
+  }
+
+  private _renderEChartsSliderBackdrop() {
+    if (!this.chart || !this._hasZoomableXAxis()) {
+      return nothing;
+    }
+    const left = this._getEChartsSliderLeft();
+    const width = this.chart.getWidth() - left - ECHARTS_SLIDER_INSET;
+    const [start, end] = this._zoomRange;
+    const at = (percent: number) =>
+      `calc((100% - ${ECHARTS_SLIDER_HEIGHT}px) * ${percent / 100})`;
+    return html`<div
+      class="echarts-slider-track"
+      style=${styleMap({
+        left: `${left}px`,
+        width: `${width}px`,
+        bottom: `${ZOOM_SLIDER_SPACE}px`,
+        height: `${ECHARTS_SLIDER_HEIGHT}px`,
+      })}
+    >
+      <div
+        class="echarts-slider-range"
+        style=${styleMap({
+          left: at(start),
+          width: `calc(${at(end - start)} + ${ECHARTS_SLIDER_HEIGHT}px)`,
+        })}
+      ></div>
+      ${[start, end].map(
+        (percent) =>
+          html`<div
+            class="zoom-slider-thumb"
+            style=${styleMap({
+              left: `calc(${at(percent)} + ${ZOOM_SLIDER_THUMB_INSET}px)`,
+            })}
+          >
+            <ha-svg-icon .path=${mdiDragVerticalVariant}></ha-svg-icon>
+          </div>`
+      )}
+    </div>`;
+  }
+
   // Spans the chart rather than the plot, which ECharts resizes as axis labels
   // come and go while panning, so the slider holds still under the pointer.
   private _getZoomSliderPlacement():
@@ -1088,8 +1184,7 @@ export class HaChartBase extends MobileAwareMixin(LitElement) {
   }
 
   private _showZoomSlider() {
-    const [start, end] = this._zoomRange;
-    return this._hasZoomableXAxis() && (start !== 0 || end !== 100);
+    return this._hasZoomableXAxis();
   }
 
   // ponytail: assumes an x-axis that runs left to right; no chart inverts it.
@@ -1109,7 +1204,7 @@ export class HaChartBase extends MobileAwareMixin(LitElement) {
     const resetLabel = localize("ui.components.history_charts.zoom_reset");
     return html`
       ${
-        this.hideResetButton
+        this.hideResetButton || !this._isZoomed
           ? nothing
           : html`<ha-icon-button
               class="slider-reset"
@@ -1277,7 +1372,7 @@ export class HaChartBase extends MobileAwareMixin(LitElement) {
   // fills a share of a fixed-size card, where the plot gives up the room.
   private _getZoomSliderGrowth() {
     return this._hasZoomableXAxis() && !this.height?.endsWith("%")
-      ? ZOOM_SLIDER_SPACE
+      ? ZOOM_SLIDER_SPACE + ECHARTS_SLIDER_SPACE
       : 0;
   }
 
@@ -1289,7 +1384,13 @@ export class HaChartBase extends MobileAwareMixin(LitElement) {
     }
     const [first, ...rest] = ensureArray(grid);
     const bottom = typeof first.bottom === "number" ? first.bottom : 0;
-    return [{ ...first, bottom: bottom + ZOOM_SLIDER_SPACE }, ...rest];
+    return [
+      {
+        ...first,
+        bottom: bottom + ZOOM_SLIDER_SPACE + ECHARTS_SLIDER_SPACE,
+      },
+      ...rest,
+    ];
   }
 
   // "boundaryFilter" is a custom mode added via axis-proxy-patch.ts.
@@ -2183,20 +2284,31 @@ export class HaChartBase extends MobileAwareMixin(LitElement) {
       bottom: ${ZOOM_SLIDER_BOTTOM}px;
       height: ${ZOOM_SLIDER_HEIGHT}px;
       border-radius: var(--ha-border-radius-pill);
-      background-color: var(
-        --ha-switch-background-color,
-        var(--ha-color-fill-disabled-quiet-resting)
-      );
+      background-color: var(--ha-color-fill-neutral-quiet-resting);
       touch-action: none;
       cursor: pointer;
       z-index: 1;
+    }
+    .echarts-slider-track {
+      position: absolute;
+      overflow: hidden;
+      border-radius: var(--ha-border-radius-pill);
+      background-color: var(--ha-color-fill-neutral-quiet-resting);
+      pointer-events: none;
+    }
+    .echarts-slider-range {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      border-radius: var(--ha-border-radius-pill);
+      background-color: var(--ha-color-fill-neutral-normal-resting);
     }
     .zoom-slider-range {
       position: absolute;
       top: 0;
       bottom: 0;
       border-radius: var(--ha-border-radius-pill);
-      background-color: var(--primary-color);
+      background-color: var(--ha-color-fill-neutral-normal-resting);
       cursor: grab;
     }
     .zoom-slider-range:active {
@@ -2210,7 +2322,7 @@ export class HaChartBase extends MobileAwareMixin(LitElement) {
       width: ${ZOOM_SLIDER_THUMB_SIZE}px;
       height: ${ZOOM_SLIDER_THUMB_SIZE}px;
       border-radius: var(--ha-border-radius-sm);
-      color: var(--text-primary-color);
+      color: var(--ha-color-on-neutral-normal);
       --mdc-icon-size: ${ZOOM_SLIDER_THUMB_SIZE}px;
       cursor: ew-resize;
     }
