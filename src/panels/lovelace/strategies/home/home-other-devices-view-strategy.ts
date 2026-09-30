@@ -1,6 +1,5 @@
 import { ReactiveElement } from "lit";
 import { customElement } from "lit/decorators";
-import { computeDeviceName } from "../../../../common/entity/compute_device_name";
 import { getEntityContext } from "../../../../common/entity/context/get_entity_context";
 import {
   findEntities,
@@ -12,11 +11,31 @@ import type { LovelaceViewConfig } from "../../../../data/lovelace/config/view";
 import type { HomeAssistant } from "../../../../types";
 import type {
   EmptyStateCardConfig,
-  EntitiesCardConfig,
   HeadingCardConfig,
+  DeviceCardConfig,
 } from "../../cards/types";
+import { deviceCardEntities } from "../../cards/device/device-card-entities";
 import type { LovelaceStrategyDependency } from "../types";
 import { OTHER_DEVICES_FILTERS } from "./helpers/other-devices-filters";
+
+/**
+ * One device, as the device card shows one: its entities under its name, the
+ * card deciding which leads and how much of the rest it lists. The ones the
+ * view shows elsewhere, or leaves off, are kept off the card.
+ */
+const computeDeviceCard = (
+  hass: HomeAssistant,
+  deviceId: string,
+  entities: string[],
+  showArea: boolean
+): DeviceCardConfig => ({
+  type: "device",
+  device: deviceId,
+  show_area: showArea,
+  hidden_entities: deviceCardEntities(hass, deviceId).filter(
+    (entityId) => !entities.includes(entityId)
+  ),
+});
 
 export interface HomeOtherDevicesViewStrategyConfig {
   type: "home-other-devices";
@@ -88,29 +107,22 @@ export class HomeOtherDevicesViewStrategy extends ReactiveElement {
 
       const deviceId = deviceEntities.device_id;
       const device = hass.devices[deviceId];
-      let heading = "";
-      if (device) {
-        heading =
-          computeDeviceName(device) ||
-          hass.localize("ui.panel.lovelace.strategy.home.unnamed_device");
+      if (!device) {
+        continue;
       }
 
       sections.push({
         type: "grid",
         cards: [
-          {
-            type: "heading",
-            heading: heading,
-            tap_action:
-              device && hass.user?.is_admin
-                ? {
-                    action: "navigate",
-                    navigation_path: `/config/devices/device/${device.id}`,
-                  }
-                : { action: "none" },
-            badges: [
-              ...(config.home_panel && device && hass.user?.is_admin
-                ? [
+          // The card names the device, so the heading is only there for the
+          // one thing the card cannot do: give the device an area.
+          ...(config.home_panel && hass.user?.is_admin
+            ? [
+                {
+                  type: "heading",
+                  heading: "",
+                  heading_style: "subtitle",
+                  badges: [
                     {
                       type: "button",
                       icon: "mdi:home-plus",
@@ -125,17 +137,11 @@ export class HomeOtherDevicesViewStrategy extends ReactiveElement {
                         },
                       },
                     },
-                  ]
-                : []),
-            ],
-          } satisfies HeadingCardConfig,
-          {
-            type: "entities",
-            entities: entities.map((e) => ({
-              entity: e,
-              name: { type: "entity" },
-            })),
-          } satisfies EntitiesCardConfig,
+                  ],
+                } satisfies HeadingCardConfig,
+              ]
+            : []),
+          computeDeviceCard(hass, deviceId, entities, true),
         ],
       });
     }

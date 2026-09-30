@@ -1,6 +1,5 @@
 import { ReactiveElement } from "lit";
 import { customElement } from "lit/decorators";
-import { computeDeviceName } from "../../../../common/entity/compute_device_name";
 import { getEntityContext } from "../../../../common/entity/context/get_entity_context";
 import {
   findEntities,
@@ -14,9 +13,11 @@ import type { HomeAssistant } from "../../../../types";
 import type {
   EmptyStateCardConfig,
   HeadingCardConfig,
+  DeviceCardConfig,
 } from "../../cards/types";
 import type { ButtonHeadingBadgeConfig } from "../../heading-badges/types";
 import { computeAreaTileCardConfig } from "../areas/helpers/areas-strategy-helper";
+import { deviceCardEntities } from "../../cards/device/device-card-entities";
 import type { LovelaceStrategyDependency } from "../types";
 import {
   getSummaryLabel,
@@ -25,6 +26,25 @@ import {
   HOME_SUMMARIES_ICONS,
   type HomeSummary,
 } from "./helpers/home-summaries";
+
+/**
+ * One device, as the device card shows one: its entities under its name, the
+ * card deciding which leads and how much of the rest it lists. The ones the
+ * view shows elsewhere, or leaves off, are kept off the card.
+ */
+const computeDeviceCard = (
+  hass: HomeAssistant,
+  deviceId: string,
+  entities: string[],
+  showArea: boolean
+): DeviceCardConfig => ({
+  type: "device",
+  device: deviceId,
+  show_area: showArea,
+  hidden_entities: deviceCardEntities(hass, deviceId).filter(
+    (entityId) => !entities.includes(entityId)
+  ),
+});
 
 export interface HomeAreaViewStrategyConfig {
   type: "home-area";
@@ -331,14 +351,18 @@ export class HomeAreaViewStrategy extends ReactiveElement {
 
       const deviceId = deviceEntities.device_id;
       const device = hass.devices[deviceId];
-      let heading: string;
+
+      // A device is a device card: its name, its battery and its entities are
+      // the card's to show, and tapping it opens everything about it.
       if (device) {
-        heading =
-          computeDeviceName(device) ||
-          hass.localize("ui.panel.lovelace.strategy.home.unnamed_device");
-      } else {
-        heading = hass.localize("ui.panel.lovelace.strategy.home.others");
+        deviceSections.push({
+          type: "grid",
+          cards: [computeDeviceCard(hass, deviceId, entities, false)],
+        });
+        continue;
       }
+
+      const heading = hass.localize("ui.panel.lovelace.strategy.home.others");
 
       deviceSections.push({
         type: "grid",
@@ -346,13 +370,6 @@ export class HomeAreaViewStrategy extends ReactiveElement {
           {
             type: "heading",
             heading: heading,
-            tap_action:
-              hass.user?.is_admin && device
-                ? {
-                    action: "navigate",
-                    navigation_path: `/config/devices/device/${device.id}`,
-                  }
-                : undefined,
             badges: [
               ...batteryEntities.slice(0, 1).map((e) => ({
                 entity: e,
