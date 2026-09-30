@@ -26,6 +26,19 @@ export class HuiGraphBase extends LitElement {
 
   @property({ attribute: false }) public gradient?: HuiGraphGradient;
 
+  /**
+   * Draw the line exactly where the data is: straight through every point,
+   * rather than smoothed toward it. For a chart whose points are marked and
+   * read, where a smoothed line would sit beside its own markers.
+   */
+  @property({ type: Boolean }) public exact = false;
+
+  /**
+   * Set while the line eases from one set of points to the next, so whatever
+   * is drawn over it at those points can wait for it to arrive.
+   */
+  @property({ type: Boolean, reflect: true }) public animating = false;
+
   private _uniqueId = `graph-${Math.random().toString(36).substring(2, 9)}`;
 
   @state()
@@ -43,7 +56,8 @@ export class HuiGraphBase extends LitElement {
     const height = this.clientHeight || width / 5;
     const yAxisOrigin = this.yAxisOrigin ?? height;
     const path =
-      (this._displayCoordinates && getPath(this._displayCoordinates)) ??
+      (this._displayCoordinates &&
+        getPath(this._displayCoordinates, !this.exact)) ??
       (this.loading ? `M 0,${height / 2} L ${width},${height / 2}` : undefined);
     const lastX = this._displayCoordinates?.length
       ? this._displayCoordinates[this._displayCoordinates.length - 1][0]
@@ -189,9 +203,11 @@ export class HuiGraphBase extends LitElement {
         this._animationFrame = requestAnimationFrame(animate);
       } else {
         this._animationFrame = undefined;
+        this.animating = false;
       }
     };
 
+    this.animating = true;
     this._animationFrame = requestAnimationFrame(animate);
   }
 
@@ -233,6 +249,7 @@ export class HuiGraphBase extends LitElement {
 
     cancelAnimationFrame(this._animationFrame);
     this._animationFrame = undefined;
+    this.animating = false;
   }
 
   static styles = css`

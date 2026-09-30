@@ -125,6 +125,15 @@ export class HuiDeviceCardSparkline extends LitElement {
     return this.interactive || this.axes ? DOT_SIZE / 2 : 0;
   }
 
+  /**
+   * A chart with a scale or a pointer is read value by value, so its line has
+   * to pass through the points the markers sit on. The bare sparkline on a
+   * card is only a shape, and keeps the smoothed one.
+   */
+  private get _exact() {
+    return this.interactive || this.axes;
+  }
+
   /** The drawing's box, which the points are scaled to. */
   private get _plotWidth() {
     return (
@@ -185,6 +194,7 @@ export class HuiDeviceCardSparkline extends LitElement {
                           : nothing
                       }
                       ?loading=${this._loading}
+                      ?exact=${this._exact}
                       .coordinates=${series.points}
                     ></hui-graph-base>
                   `
@@ -196,7 +206,7 @@ export class HuiDeviceCardSparkline extends LitElement {
           ${
             // Where the line has got to, until a pointer asks about somewhere
             // else: two haloed dots on one line is two answers to one question.
-            this.axes && last && !hovered
+            this.axes && last && !hovered && !this._loading
               ? html`<div class="now" style=${styleMap(this._at(last))}></div>`
               : nothing
           }
@@ -390,7 +400,12 @@ export class HuiDeviceCardSparkline extends LitElement {
     if (!this.hass || !this.entity) {
       return;
     }
-    if (changedProps.has("entity") || changedProps.has("compareEntities")) {
+    // Another range is another window of the past to ask the recorder for.
+    if (
+      changedProps.has("entity") ||
+      changedProps.has("compareEntities") ||
+      changedProps.has("hoursToShow")
+    ) {
       this._unsubscribeHistory();
       this._subscribeHistory();
     } else if (
@@ -413,6 +428,10 @@ export class HuiDeviceCardSparkline extends LitElement {
       return;
     }
     const entityIds = this._entityIds;
+    // Until the recorder answers, the line lies flat at the value it has now
+    // and shimmers, the way a tile's graph loads; the answer eases it into
+    // shape. Asking again for another range goes through the same.
+    this._loading = true;
     this._setLoadingCoordinates();
     this._subscribed = subscribeHistoryStatesTimeWindow(
       this.hass,
@@ -663,6 +682,11 @@ export class HuiDeviceCardSparkline extends LitElement {
           var(--device-card-color, var(--graph-color-1, var(--color-1))) 25%,
           transparent
         );
+    }
+    /* A marker sits on a point the line is only on its way to while the line
+       eases into a new shape, so it waits for the line to get there. */
+    .plot:has(hui-graph-base[animating]) :is(.now, .marker) {
+      opacity: 0;
     }
     /* Where on the line the value at the top is being read from. */
     .now,

@@ -9,9 +9,21 @@ const midPoint = (
   return [zX, zY];
 };
 
-export const getPath = (coords: number[][]): string => {
+/**
+ * An SVG path through the points. Smoothed, each point is the control point of
+ * a curve that only runs near it; straight, the path passes through every point,
+ * which is what a chart that is read value by value needs.
+ */
+export const getPath = (coords: number[][], smooth = true): string => {
   if (!coords.length) {
     return "";
+  }
+
+  if (!smooth) {
+    return coords
+      .filter(Boolean)
+      .map(([x, y], index) => `${index ? "L" : "M"} ${x},${y}`)
+      .join(" ");
   }
 
   let next: number[];
