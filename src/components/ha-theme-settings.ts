@@ -1,3 +1,4 @@
+import { mdiRestore } from "@mdi/js";
 import type { TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
@@ -8,14 +9,11 @@ import {
   DefaultPrimaryColor,
 } from "../resources/theme/color/color.globals";
 import type { HomeAssistant, ThemeSettings, ValueChangedEvent } from "../types";
-import "./ha-button";
 import "./item/ha-list-item-base";
 import "./list/ha-list-base";
 import "./ha-theme-picker";
-import "./input/ha-input";
-import "./radio/ha-radio-group";
-import type { HaRadioGroup } from "./radio/ha-radio-group";
-import "./radio/ha-radio-option";
+import "./ha-button-toggle-group";
+import "./ha-icon-button";
 
 const HOME_ASSISTANT_THEME = "default";
 
@@ -26,7 +24,6 @@ export interface ThemeSettingsLabels {
   autoMode?: string;
   lightMode?: string;
   darkMode?: string;
-  colors?: string;
   primaryColor?: string;
   accentColor?: string;
   reset?: string;
@@ -91,7 +88,7 @@ export class HaThemeSettings extends LitElement {
                   }
                   <ha-theme-picker
                     slot="end"
-                    .label=${this.labels?.theme}
+                    .label=${this.heading ? "" : this.labels?.theme}
                     .noThemeLabel=${this.labels?.noTheme}
                     .value=${themeSettings?.theme || undefined}
                     .disabled=${this.themePickerDisabled}
@@ -109,73 +106,72 @@ export class HaThemeSettings extends LitElement {
                   <span slot="headline"
                     >${this.labels?.mode ?? "Theme mode"}</span
                   >
-                  <ha-radio-group
+                  <ha-button-toggle-group
                     slot="end"
-                    @change=${this._handleDarkMode}
-                    name="dark_mode"
-                    .value=${
+                    size="s"
+                    .buttons=${[
+                      { value: "auto", label: this.labels?.autoMode ?? "Auto" },
+                      {
+                        value: "light",
+                        label: this.labels?.lightMode ?? "Light",
+                      },
+                      { value: "dark", label: this.labels?.darkMode ?? "Dark" },
+                    ]}
+                    .active=${
                       themeSettings?.dark === undefined
                         ? "auto"
                         : themeSettings.dark
                           ? "dark"
                           : "light"
                     }
-                    orientation="horizontal"
-                  >
-                    <ha-radio-option value="auto">
-                      ${this.labels?.autoMode ?? "Auto"}
-                    </ha-radio-option>
-                    <ha-radio-option value="light">
-                      ${this.labels?.lightMode ?? "Light"}
-                    </ha-radio-option>
-                    <ha-radio-option value="dark">
-                      ${this.labels?.darkMode ?? "Dark"}
-                    </ha-radio-option>
-                  </ha-radio-group>
+                    @value-changed=${this._handleDarkMode}
+                  ></ha-button-toggle-group>
                 </ha-list-item-base>
               `
             : nothing
         }
         ${
           curTheme === HOME_ASSISTANT_THEME
-            ? html`
-                <ha-list-item-base>
-                  <span slot="headline"
-                    >${this.labels?.colors ?? "Custom colors"}</span
-                  >
-                  <div slot="end" class="color-pickers">
-                    <ha-input
-                      .value=${themeSettings?.primaryColor || DefaultPrimaryColor}
-                      type="color"
-                      .label=${this.labels?.primaryColor ?? "Primary color"}
-                      .name=${"primaryColor"}
-                      @change=${this._handleColorChange}
-                    ></ha-input>
-                    <ha-input
-                      .value=${themeSettings?.accentColor || DefaultAccentColor}
-                      type="color"
-                      .label=${this.labels?.accentColor ?? "Accent color"}
-                      .name=${"accentColor"}
-                      @change=${this._handleColorChange}
-                    ></ha-input>
-                  </div>
-                </ha-list-item-base>
-                ${
-                  themeSettings?.primaryColor || themeSettings?.accentColor
-                    ? html`
-                        <div class="reset-row">
-                          <ha-button
-                            appearance="plain"
-                            size="s"
-                            @click=${this._resetColors}
-                          >
-                            ${this.labels?.reset ?? "Reset"}
-                          </ha-button>
-                        </div>
-                      `
-                    : nothing
-                }
-              `
+            ? [
+                {
+                  name: "primaryColor",
+                  label: this.labels?.primaryColor ?? "Primary color",
+                  value: themeSettings?.primaryColor,
+                  defaultValue: DefaultPrimaryColor,
+                },
+                {
+                  name: "accentColor",
+                  label: this.labels?.accentColor ?? "Accent color",
+                  value: themeSettings?.accentColor,
+                  defaultValue: DefaultAccentColor,
+                },
+              ].map(
+                (color) => html`
+                  <ha-list-item-base>
+                    <span slot="headline">${color.label}</span>
+                    <div slot="end" class="swatches">
+                      ${
+                        color.value
+                          ? html`<ha-icon-button
+                              .path=${mdiRestore}
+                              .label=${this.labels?.reset ?? "Reset"}
+                              data-name=${color.name}
+                              @click=${this._resetColor}
+                            ></ha-icon-button>`
+                          : nothing
+                      }
+                      <input
+                        class="swatch"
+                        type="color"
+                        name=${color.name}
+                        .value=${color.value || color.defaultValue}
+                        aria-label=${color.label}
+                        @change=${this._handleColorChange}
+                      />
+                    </div>
+                  </ha-list-item-base>
+                `
+              )
             : nothing
         }
       </ha-list-base>
@@ -195,11 +191,10 @@ export class HaThemeSettings extends LitElement {
     } as Partial<ThemeSettings>);
   }
 
-  private _resetColors() {
+  private _resetColor(ev: Event) {
     fireEvent(this, "theme-settings-changed", {
-      primaryColor: undefined,
-      accentColor: undefined,
-    });
+      [(ev.currentTarget as HTMLElement).dataset.name!]: undefined,
+    } as Partial<ThemeSettings>);
   }
 
   private _supportsModeSelection(themeName: string): boolean {
@@ -211,9 +206,10 @@ export class HaThemeSettings extends LitElement {
     return !!(theme.modes && "light" in theme.modes && "dark" in theme.modes);
   }
 
-  private _handleDarkMode(ev: Event) {
+  private _handleDarkMode(ev: ValueChangedEvent<string>) {
+    ev.stopPropagation();
     let dark: boolean | undefined;
-    switch ((ev.currentTarget as HaRadioGroup).value) {
+    switch (ev.detail.value) {
       case "light":
         dark = false;
         break;
@@ -262,29 +258,35 @@ export class HaThemeSettings extends LitElement {
     ha-theme-picker {
       min-width: 150px;
     }
-    .color-pickers {
+    .swatches {
       display: flex;
+      align-items: center;
       gap: var(--ha-space-2);
     }
-    .color-pickers ha-input {
-      min-width: 150px;
-      flex: 1;
+    .swatch {
+      appearance: none;
+      inline-size: 32px;
+      block-size: 32px;
+      padding: 0;
+      border: var(--ha-border-width-sm) solid var(--divider-color);
+      border-radius: var(--ha-border-radius-circle);
+      background: none;
+      cursor: pointer;
     }
-    :host([narrow]) ha-list-item-base::part(base) {
-      flex-direction: column;
-      align-items: flex-start;
+    .swatch::-webkit-color-swatch-wrapper {
+      padding: 0;
     }
-    :host([narrow]) ha-list-item-base::part(end) {
-      width: 100%;
+    .swatch::-webkit-color-swatch {
+      border: none;
+      border-radius: var(--ha-border-radius-circle);
     }
-    :host([narrow]) .color-pickers {
-      width: 100%;
+    .swatch::-moz-color-swatch {
+      border: none;
+      border-radius: var(--ha-border-radius-circle);
     }
-    .reset-row {
-      display: flex;
-      justify-content: flex-end;
-      padding-inline-end: var(--ha-space-4);
-      padding-bottom: var(--ha-space-4);
+    .swatch:focus-visible {
+      outline: var(--ha-border-width-md) solid var(--primary-color);
+      outline-offset: 2px;
     }
   `;
 }

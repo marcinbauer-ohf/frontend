@@ -1,4 +1,11 @@
-import { mdiCellphone, mdiEarth, mdiLock, mdiMonitor, mdiTune } from "@mdi/js";
+import {
+  mdiCellphone,
+  mdiEarth,
+  mdiLock,
+  mdiMonitor,
+  mdiTablet,
+  mdiTune,
+} from "@mdi/js";
 import type { CSSResultGroup, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
@@ -7,15 +14,30 @@ import { fireEvent } from "../../common/dom/fire_event";
 import "../../components/ha-button";
 import "../../components/ha-card";
 import "../../components/ha-config-navigation-list";
+import "../../components/list/ha-grouped-list";
 import "../../components/user/ha-user-badge";
 import "./ha-pick-theme-row";
-import { isExternal } from "../../data/external";
 import { showConfirmationDialog } from "../../dialogs/generic/show-dialog-box";
 import "../../layouts/hass-subpage";
 import type { PageNavigation } from "../../layouts/hass-tabs-subpage";
 import { haStyle } from "../../resources/styles";
 import type { HomeAssistant, Route } from "../../types";
 import { showEditProfileDialog } from "./show-dialog-edit-profile";
+
+// iPadOS reports a Mac user agent, so touch support tells them apart.
+const deviceIcon = (() => {
+  const ua = navigator.userAgent;
+  if (/iphone|android.*mobile/i.test(ua)) {
+    return mdiCellphone;
+  }
+  if (
+    /ipad|android/i.test(ua) ||
+    (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1)
+  ) {
+    return mdiTablet;
+  }
+  return mdiMonitor;
+})();
 
 @customElement("ha-profile-dashboard")
 class HaProfileDashboard extends LitElement {
@@ -26,7 +48,7 @@ class HaProfileDashboard extends LitElement {
   @property({ attribute: false }) public route!: Route;
 
   protected render(): TemplateResult {
-    const pages: PageNavigation[] = [
+    const appearancePages: PageNavigation[] = [
       {
         path: "/profile/preferences",
         name: this.hass.localize("ui.panel.profile.user_preferences_header"),
@@ -35,6 +57,9 @@ class HaProfileDashboard extends LitElement {
         ),
         iconPath: mdiTune,
       },
+    ];
+
+    const pages: PageNavigation[] = [
       {
         path: "/profile/localization",
         name: this.hass.localize("ui.panel.profile.localization_header"),
@@ -45,13 +70,9 @@ class HaProfileDashboard extends LitElement {
       },
       {
         path: "/profile/browser",
-        name: this.hass.localize(
-          isExternal
-            ? "ui.panel.profile.mobile_app_settings"
-            : "ui.panel.profile.browser_settings"
-        ),
+        name: this.hass.localize("ui.panel.profile.device_settings"),
         description: this.hass.localize("ui.panel.profile.browser_description"),
-        iconPath: isExternal ? mdiCellphone : mdiMonitor,
+        iconPath: deviceIcon,
       },
       {
         path: "/profile/security",
@@ -111,22 +132,34 @@ class HaProfileDashboard extends LitElement {
               </div>
             </div>
           </ha-card>
-          <ha-card
-            .header=${this.hass.localize("ui.panel.profile.themes.header")}
-          >
-            <ha-pick-theme-row
-              .narrow=${this.narrow}
-              .hass=${this.hass}
-            ></ha-pick-theme-row>
-          </ha-card>
-          <ha-card outlined>
-            <ha-config-navigation-list
-              .hass=${this.hass}
-              .pages=${pages}
-              has-secondary
-              .label=${this.hass.localize("panel.profile")}
-            ></ha-config-navigation-list>
-          </ha-card>
+          <div class="groups">
+            <ha-grouped-list
+              .header=${this.hass.localize("ui.panel.profile.appearance_header")}
+            >
+              <ha-pick-theme-row
+                .narrow=${this.narrow}
+                .hass=${this.hass}
+              ></ha-pick-theme-row>
+              <ha-config-navigation-list
+                .hass=${this.hass}
+                .pages=${appearancePages}
+                has-secondary
+                .label=${this.hass.localize(
+                  "ui.panel.profile.appearance_header"
+                )}
+              ></ha-config-navigation-list>
+            </ha-grouped-list>
+            <ha-grouped-list
+              .header=${this.hass.localize("ui.panel.profile.settings_header")}
+            >
+              <ha-config-navigation-list
+                .hass=${this.hass}
+                .pages=${pages}
+                has-secondary
+                .label=${this.hass.localize("panel.profile")}
+              ></ha-config-navigation-list>
+            </ha-grouped-list>
+          </div>
         </div>
       </hass-subpage>
     `;
@@ -164,8 +197,16 @@ class HaProfileDashboard extends LitElement {
           max-width: 600px;
         }
 
-        ha-card[outlined] {
-          overflow: hidden;
+        .groups {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-6);
+          margin: 0 auto;
+          max-width: 600px;
+        }
+
+        ha-grouped-list::part(base) {
+          background: var(--card-background-color);
         }
 
         .heading {

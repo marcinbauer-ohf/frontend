@@ -28,20 +28,10 @@ class HaProfileSectionBrowser extends LitElement {
         .hass=${this.hass}
         .narrow=${this.narrow}
         back-path="/profile"
-        .header=${this.hass.localize(
-          isExternal
-            ? "ui.panel.profile.mobile_app_settings"
-            : "ui.panel.profile.browser_settings"
-        )}
+        .header=${this.hass.localize("ui.panel.profile.device_settings")}
       >
         <div class="container">
-          <ha-card
-            .header=${this.hass.localize(
-              isExternal
-                ? "ui.panel.profile.mobile_app_settings"
-                : "ui.panel.profile.browser_settings"
-            )}
-          >
+          <ha-card>
             <div class="card-content">
               ${this.hass.localize("ui.panel.profile.client_settings_detail")}
             </div>

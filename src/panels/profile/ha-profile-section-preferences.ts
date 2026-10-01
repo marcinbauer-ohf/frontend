@@ -68,11 +68,7 @@ class HaProfileSectionPreferences extends LitElement {
         )}
       >
         <div class="container">
-          <ha-card
-            .header=${this.hass.localize(
-              "ui.panel.profile.user_preferences_header"
-            )}
-          >
+          <ha-card>
             <div class="card-content">
               ${this.hass.localize("ui.panel.profile.user_preferences_detail")}
             </div>

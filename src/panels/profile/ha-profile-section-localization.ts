@@ -29,11 +29,7 @@ class HaProfileSectionLocalization extends LitElement {
         .header=${this.hass.localize("ui.panel.profile.localization_header")}
       >
         <div class="container">
-          <ha-card
-            .header=${this.hass.localize(
-              "ui.panel.profile.localization_header"
-            )}
-          >
+          <ha-card>
             <div class="card-content">
               ${this.hass.localize("ui.panel.profile.localization_detail")}
             </div>

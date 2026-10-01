@@ -11529,14 +11529,15 @@
           "security": "Security"
         },
         "is_owner": "You are an owner.",
-        "user_preferences_header": "Appearance",
-        "user_preferences_description": "Default dashboard and sidebar",
+        "appearance_header": "Appearance",
+        "settings_header": "Settings",
+        "user_preferences_header": "Dashboard and sidebar",
+        "user_preferences_description": "Choose your default dashboard and arrange the sidebar",
         "user_preferences_detail": "The following settings are tied to your account and will persist across all sessions and devices.",
         "localization_header": "Localization",
         "localization_description": "Language, time zone, date, time, and number formats",
         "localization_detail": "These settings are tied to your account and control how dates, times, and numbers are displayed.",
-        "mobile_app_settings": "This mobile app",
-        "browser_settings": "This browser",
+        "device_settings": "This device",
         "browser_description": "Notifications, display, and shortcuts",
         "security_description": "Password, multi-factor authentication, and access tokens",
         "client_settings_detail": "The following settings are local to this client only, and may reset to defaults on logout or when local data is cleared.",
@@ -11663,15 +11664,14 @@
           "migrate_success": "Theme settings migrated.",
           "migrate_failed": "Failed to migrate theme settings.",
           "theme_mode": "Theme mode",
-          "colors": "Custom colors",
           "dark_mode": {
-            "auto": "Auto",
+            "auto": "System",
             "light": "Light",
             "dark": "Dark"
           },
           "primary_color": "Primary color",
           "accent_color": "Accent color",
-          "reset": "Reset colors",
+          "reset": "Reset to default",
           "use_default": "Use default theme"
         },
         "dashboard": {
