@@ -1,3 +1,4 @@
+import { mdiPaperclip } from "@mdi/js";
 import type { CSSResultGroup } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
@@ -12,6 +13,7 @@ import type { ControlSelectOption } from "../../components/ha-control-select";
 import "../../components/ha-dialog-footer";
 import "../../components/ha-select";
 import type { HaSelectSelectEvent } from "../../components/ha-select";
+import "../../components/ha-svg-icon";
 import "../../components/ha-switch";
 import type { HaSwitch } from "../../components/ha-switch";
 import "../../components/ha-textarea";
@@ -55,7 +57,7 @@ const MESSAGE_MAX_LENGTH = 2000;
 
 const TYPE_EMOJI: Record<BetaFeedbackType, string> = {
   bug: "🐛",
-  reaction: "💬",
+  feedback: "💬",
 };
 
 const BROWSERS: [RegExp, string][] = [
@@ -223,7 +225,7 @@ class DialogBetaFeedback extends LitElement {
   }
 
   private _typeOptions(): ControlSelectOption[] {
-    return (["bug", "reaction"] as const).map((value) => {
+    return (["bug", "feedback"] as const).map((value) => {
       const label = this.hass.localize(
         `ui.dialogs.beta_feedback.type.${value}`
       );
@@ -430,6 +432,7 @@ class DialogBetaFeedback extends LitElement {
                 appearance="plain"
                 @click=${this._pickScreenshot}
               >
+                <ha-svg-icon slot="start" .path=${mdiPaperclip}></ha-svg-icon>
                 ${this.hass.localize("ui.dialogs.beta_feedback.screenshot.add")}
               </ha-button>`
         }
@@ -655,6 +658,10 @@ class DialogBetaFeedback extends LitElement {
         }
         input[type="file"] {
           display: none;
+        }
+        ha-row-item::part(headline),
+        ha-row-item::part(supporting-text) {
+          white-space: wrap;
         }
         ha-row-item ha-button[slot="end"] {
           margin-inline-end: var(--ha-space-2);

@@ -18,7 +18,7 @@ export const BETA_FEEDBACK_PRODUCT_AREAS = [
 /** Fallback endpoint, used when `hass.config` does not expose `beta_feedback_url`. */
 export const BETA_FEEDBACK_ENDPOINT = "";
 
-export type BetaFeedbackType = "bug" | "reaction";
+export type BetaFeedbackType = "bug" | "feedback";
 
 export interface BetaFeedbackReport {
   report_id: string;

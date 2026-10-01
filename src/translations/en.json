@@ -1541,13 +1541,13 @@
         "type": {
           "label": "Type of feedback",
           "bug": "Bug",
-          "reaction": "Feature reaction"
+          "feedback": "General feedback"
         },
         "message": {
           "label": "What happened?",
           "placeholder": {
             "bug": "What did you do, what did you expect, and what happened instead?",
-            "reaction": "What do you think of this feature so far?"
+            "feedback": "What do you like, what is missing, or what would you change?"
           }
         },
         "product_area": {

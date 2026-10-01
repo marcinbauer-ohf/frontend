@@ -100,7 +100,7 @@ below the optional contact field.
 interface BetaFeedbackReport {
   report_id: string; // "bf_" + 8 base32 chars, generated client-side
   created_at: string; // ISO 8601
-  type: "bug" | "reaction"; // chosen first in the dialog
+  type: "bug" | "feedback"; // chosen first in the dialog
   product_area: string; // one of BETA_FEEDBACK_PRODUCT_AREAS, required
   message: string; // max 2000 chars
   contact?: string; // optional email
