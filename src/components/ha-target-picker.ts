@@ -1,5 +1,5 @@
 import "@home-assistant/webawesome/dist/components/popover/popover";
-import { mdiPlaylistRemove, mdiPlus, mdiTextureBox } from "@mdi/js";
+import { mdiPlaylistMinus, mdiPlus, mdiTextureBox } from "@mdi/js";
 import Fuse from "fuse.js";
 import type { HassServiceTarget } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
@@ -722,7 +722,7 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
                     @click=${this._openExcludePicker}
                   >
                     <ha-svg-icon
-                      .path=${mdiPlaylistRemove}
+                      .path=${mdiPlaylistMinus}
                       slot="start"
                     ></ha-svg-icon>
                     ${this.hass.localize(

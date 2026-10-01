@@ -5,6 +5,7 @@ import {
   mdiDevices,
   mdiHome,
   mdiLabel,
+  mdiMinus,
   mdiMinusBox,
   mdiSwapHorizontal,
   mdiTextureBox,
@@ -342,6 +343,15 @@ export class HaTargetPickerItemRow extends LitElement {
     const removedBy = this._removedByLabel(entries);
 
     const content = html`
+      ${
+        this.exclusion && this.exclusionStyle === "tag"
+          ? html`<ha-svg-icon
+              class="minus"
+              slot="start"
+              .path=${mdiMinus}
+            ></ha-svg-icon>`
+          : nothing
+      }
       <div class="icon" slot="start">
         ${
           iconPath
@@ -1271,8 +1281,11 @@ export class HaTargetPickerItemRow extends LitElement {
       }
       /* Tag: nested under the target and quieter than it, so it reads as
          taken out of it. */
-      :host([exclusion][exclusion-style="tag"]) ha-list-item-base::part(base) {
-        padding-inline-start: var(--ha-space-12);
+      /* The minus fills what was the indent: padding, minus and this gap
+         add up to it, so the icon stays where it was. */
+      :host([exclusion][exclusion-style="tag"]) .minus {
+        color: var(--ha-color-text-secondary);
+        margin-inline-end: var(--ha-space-2);
       }
       :host([exclusion][exclusion-style="tag"]) .icon {
         opacity: 0.6;
