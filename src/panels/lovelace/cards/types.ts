@@ -715,6 +715,22 @@ export interface HeadingCardConfig extends LovelaceCardConfig {
   entities?: LovelaceHeadingBadgeConfig[];
 }
 
+export interface AutomationActivityCardConfig extends LovelaceCardConfig {
+  type: "automation-activity";
+  title?: string;
+}
+
+export type AutomationStat = "runs" | "most_active" | "not_run" | "failed";
+
+export interface AutomationStatCardConfig extends LovelaceCardConfig {
+  type: "automation-stat";
+  stat: AutomationStat;
+}
+
+export interface AutomationDateSelectionCardConfig extends LovelaceCardConfig {
+  type: "automation-date-selection";
+}
+
 export interface HomeSummaryCard extends LovelaceCardConfig {
   summary: HomeSummary;
   alert_entities?: SecurityAlertEntityConfig[];

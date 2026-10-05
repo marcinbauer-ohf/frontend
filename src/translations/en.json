@@ -226,6 +226,33 @@
       "logbook": {
         "device_not_found": "{count, plural,\n one {A device used by this card no longer exists.}\n other {# devices used by this card no longer exist.}\n}"
       },
+      "automation-activity": {
+        "no_runs": "No automations ran in this period",
+        "automation": "Automation",
+        "runs": "Runs",
+        "last_ran": "Last ran",
+        "never": "Never",
+        "open_automation": "Open automation",
+        "clear_filter": "Clear filter",
+        "show_more": "Show more",
+        "show_less": "Show less",
+        "all_automations": "All automations",
+        "time": "Time",
+        "hour": "{start} – {end}",
+        "tooltip_title": "{hour} · {count} {count, plural,\n one {run}\n other {runs}\n}"
+      },
+      "automation-stat": {
+        "runs": "Runs",
+        "runs_value": "{runs} {runs, plural,\n one {run}\n other {runs}\n} · {automations} {automations, plural,\n one {automation}\n other {automations}\n}",
+        "most_active": "Most active",
+        "most_active_value": "{name} · {count}",
+        "enabled_count": "{count} enabled",
+        "disabled_count": "{count} disabled",
+        "not_run": "Didn't run",
+        "failed": "Failed",
+        "automations_value": "{count} {count, plural,\n one {automation}\n other {automations}\n}",
+        "none": "None"
+      },
       "home-summary": {
         "all_lights_off": "All off",
         "count_active_alerts": "{count} {count, plural,\n one {active alert}\n other {active alerts}\n}",
@@ -235,6 +262,8 @@
         "count_warnings": "{count} {count, plural,\n one {warning}\n other {warnings}\n}",
         "all_secure": "All secure",
         "no_media_playing": "No media playing",
+        "count_automations_enabled": "{count} enabled",
+        "no_automations": "No automations",
         "count_media_playing": "{count} {count, plural,\n one {playing}\n other {playing}\n}",
         "count_maintenance_low_battery_issues": "{count} {count, plural,\n one {low battery}\n other {low batteries}\n}",
         "count_maintenance_issues_unavailable_battery_entities": "{count} {count, plural,\n one {unavailable device}\n other {unavailable devices}\n}",
@@ -9441,6 +9470,7 @@
             "summary_list": {
               "alerts": "Alerts",
               "media_players": "Media players",
+              "automations": "Automations",
               "other_devices": "Other devices",
               "weather": "Weather",
               "maintenance": "Maintenance",
@@ -9486,6 +9516,10 @@
           "maintenance": {
             "devices": "Devices",
             "other_devices": "Other devices"
+          },
+          "home_automations": {
+            "activity_title": "Automation runs",
+            "summary_title": "Summary"
           },
           "home_media_players": {
             "media_players": "Media players",

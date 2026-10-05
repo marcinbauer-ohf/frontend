@@ -19,6 +19,7 @@ export const DEFAULT_SUMMARY_KEYS = [
   "climate",
   "security",
   "media_players",
+  "automations",
   "maintenance",
   "weather",
   "energy",

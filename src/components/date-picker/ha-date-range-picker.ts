@@ -112,6 +112,9 @@ export class HaDateRangePicker extends LitElement {
   @property({ attribute: "time-picker", type: Boolean })
   public timePicker = false;
 
+  @property({ attribute: "single-day", type: Boolean })
+  public singleDay = false;
+
   @property({ type: Boolean, reflect: true })
   public backdrop = false;
 
@@ -299,6 +302,7 @@ export class HaDateRangePicker extends LitElement {
         .startDate=${this.startDate}
         .endDate=${this.endDate}
         .timePicker=${this.timePicker}
+        .singleDay=${this.singleDay}
         @cancel-date-picker=${this._closePicker}
         @value-changed=${this._closePicker}
       >

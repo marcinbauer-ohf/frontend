@@ -27,6 +27,11 @@ export interface EntityHeadingBadgeConfig extends LovelaceHeadingBadgeConfig {
   double_tap_action?: ActionConfig;
 }
 
+export interface AutomationCountHeadingBadgeConfig extends LovelaceHeadingBadgeConfig {
+  type: "automation-count";
+  state: "on" | "off";
+}
+
 export interface ButtonHeadingBadgeConfig extends LovelaceHeadingBadgeConfig {
   type: "button";
   text?: string;

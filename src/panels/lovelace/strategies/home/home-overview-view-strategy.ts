@@ -429,6 +429,16 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
               },
             } satisfies HomeSummaryCard)
           : undefined,
+      // Always shown, also when there are no automations yet
+      automations: () =>
+        ({
+          type: "home-summary",
+          summary: "automations",
+          tap_action: {
+            action: "navigate",
+            navigation_path: "automations",
+          },
+        }) satisfies HomeSummaryCard,
       maintenance: () =>
         hasMaintenance
           ? ({

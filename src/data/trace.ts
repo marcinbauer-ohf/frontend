@@ -187,7 +187,8 @@ export const loadTrace = <T extends keyof TraceTypes>(
 export const loadTraces = <T extends keyof TraceTypes>(
   hass: HomeAssistant,
   domain: T,
-  item_id: string
+  // Omit to list the stored traces of every item in the domain
+  item_id?: string
 ): Promise<TraceTypes[T]["short"][]> =>
   hass.callWS({
     type: "trace/list",

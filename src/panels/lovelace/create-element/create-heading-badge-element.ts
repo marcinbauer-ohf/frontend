@@ -10,15 +10,25 @@ import type { LovelaceHeadingBadgeConfig } from "../heading-badges/types";
 
 const ALWAYS_LOADED_TYPES = new Set(["error", "entity", "button"]);
 
+const LAZY_LOAD_TYPES = {
+  "automation-count": () =>
+    import("../heading-badges/hui-automation-count-heading-badge"),
+};
+
 export const createHeadingBadgeElement = (config: LovelaceHeadingBadgeConfig) =>
   createLovelaceElement(
     "heading-badge",
     config,
     ALWAYS_LOADED_TYPES,
-    undefined,
+    LAZY_LOAD_TYPES,
     undefined,
     "entity"
   );
 
 export const getHeadingBadgeElementClass = (type: string) =>
-  getLovelaceElementClass(type, "heading-badge", ALWAYS_LOADED_TYPES);
+  getLovelaceElementClass(
+    type,
+    "heading-badge",
+    ALWAYS_LOADED_TYPES,
+    LAZY_LOAD_TYPES
+  );

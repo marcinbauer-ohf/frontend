@@ -77,6 +77,10 @@ const LAZY_LOAD_TYPES = {
   "entity-filter": () => import("../cards/hui-entity-filter-card"),
   error: () => import("../cards/hui-error-card"),
   "home-summary": () => import("../cards/hui-home-summary-card"),
+  "automation-activity": () => import("../cards/hui-automation-activity-card"),
+  "automation-stat": () => import("../cards/hui-automation-stat-card"),
+  "automation-date-selection": () =>
+    import("../cards/hui-automation-date-selection-card"),
   shortcut: () => import("../cards/hui-shortcut-card"),
   "discovered-devices": () => import("../cards/hui-discovered-devices-card"),
   repairs: () => import("../cards/hui-repairs-card"),

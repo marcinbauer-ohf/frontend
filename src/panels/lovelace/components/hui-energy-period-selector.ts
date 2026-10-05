@@ -82,6 +82,8 @@ const RANGE_KEYS: DateRange[] = [
   "now-12m",
 ];
 
+const SINGLE_DAY_RANGE_KEYS: DateRange[] = ["today", "yesterday"];
+
 interface OverflowMenuItem {
   path: string;
   label: string;
@@ -93,6 +95,13 @@ interface OverflowMenuItem {
 
 type VerticalOpeningDirection = "up" | "down";
 
+// Lets the selector drive a period other than the energy collection's.
+// Compare, download and the remembered default preset are energy only.
+export interface PeriodSelectorSource {
+  subscribe(callback: (start: Date, end?: Date) => void): UnsubscribeFunc;
+  setPeriod(start: Date, end: Date): void;
+}
+
 type OpeningDirection = "right" | "left" | "center" | "inline";
 
 @customElement("hui-energy-period-selector")
@@ -100,6 +109,12 @@ export class HuiEnergyPeriodSelector extends SubscribeMixin(LitElement) {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @property({ attribute: "collection-key" }) public collectionKey?: string;
+
+  @property({ attribute: false }) public source?: PeriodSelectorSource;
+
+  // Only whole single days: a one day calendar and single day presets
+  @property({ type: Boolean, attribute: "single-day" }) public singleDay =
+    false;
 
   @property({ type: Boolean, reflect: true }) public narrow?: boolean;
 
@@ -133,6 +148,14 @@ export class HuiEnergyPeriodSelector extends SubscribeMixin(LitElement) {
   private _resizeObserver?: ResizeObserver;
 
   public hassSubscribe(): UnsubscribeFunc[] {
+    if (this.source) {
+      return [
+        this.source.subscribe((start, end) => {
+          this._startDate = start;
+          this._endDate = end || endOfToday();
+        }),
+      ];
+    }
     return [
       getEnergyDataCollection(this.hass, {
         key: this.collectionKey,
@@ -183,7 +206,7 @@ export class HuiEnergyPeriodSelector extends SubscribeMixin(LitElement) {
     ) {
       // pre defined date ranges
       this._ranges = {};
-      RANGE_KEYS.forEach((key) => {
+      this._rangeKeys().forEach((key) => {
         this._ranges[
           this.hass.localize(`ui.components.date-range-picker.ranges.${key}`)
         ] = calcDateRange(this.hass.locale, this.hass.config, key);
@@ -254,6 +277,7 @@ export class HuiEnergyPeriodSelector extends SubscribeMixin(LitElement) {
         path: this._compare ? mdiCheckboxOutline : mdiCheckboxBlankOutline,
         disabled: !this.allowCompare,
         alwaysCollapse: true,
+        hidden: !!this.source,
         label: this.hass.localize(
           "ui.panel.lovelace.components.energy_period_selector.compare"
         ),
@@ -262,6 +286,7 @@ export class HuiEnergyPeriodSelector extends SubscribeMixin(LitElement) {
       {
         path: mdiDownload,
         alwaysCollapse: true,
+        hidden: !!this.source,
         label: this.hass.localize(
           "ui.panel.lovelace.components.energy_period_selector.download_data"
         ),
@@ -283,6 +308,7 @@ export class HuiEnergyPeriodSelector extends SubscribeMixin(LitElement) {
               .startDate=${this._startDate}
               .endDate=${this._endDate || new Date()}
               .ranges=${this._ranges}
+              .singleDay=${this.singleDay}
               @value-changed=${this._dateRangeChanged}
               @preset-selected=${this._presetSelected}
               @toggle=${this._handleDatepickerToggle}
@@ -396,7 +422,8 @@ export class HuiEnergyPeriodSelector extends SubscribeMixin(LitElement) {
                     ></ha-icon-button>`
               )}
               ${
-                this._collapseButtons || buttons.some((x) => x.alwaysCollapse)
+                this._collapseButtons ||
+                buttons.some((x) => x.alwaysCollapse && !x.hidden)
                   ? html`<ha-dropdown
                       @wa-show=${this._handleIconOverflowMenuOpened}
                       @click=${stopPropagation}
@@ -429,6 +456,10 @@ export class HuiEnergyPeriodSelector extends SubscribeMixin(LitElement) {
         </div>
       </div>
     `;
+  }
+
+  private _rangeKeys(): DateRange[] {
+    return this.singleDay ? SINGLE_DAY_RANGE_KEYS : RANGE_KEYS;
   }
 
   private _simpleRange = memoizeOne(
@@ -518,6 +549,10 @@ export class HuiEnergyPeriodSelector extends SubscribeMixin(LitElement) {
   }
 
   private _updateCollectionPeriod() {
+    if (this.source) {
+      this.source.setPeriod(this._startDate!, this._endDate!);
+      return;
+    }
     const energyCollection = getEnergyDataCollection(this.hass, {
       key: this.collectionKey,
     });
@@ -544,9 +579,12 @@ export class HuiEnergyPeriodSelector extends SubscribeMixin(LitElement) {
   }
 
   private _presetSelected(ev) {
+    if (this.source) {
+      return;
+    }
     localStorage.setItem(
       getEnergyDefaultPeriodStorageKey(this.hass, this.collectionKey),
-      RANGE_KEYS[ev.detail.index]
+      this._rangeKeys()[ev.detail.index]
     );
   }
 
@@ -675,6 +713,9 @@ export class HuiEnergyPeriodSelector extends SubscribeMixin(LitElement) {
     }
 
     this._updateCollectionPeriod();
+    if (this.source) {
+      return;
+    }
 
     // "yesterday" is the only preset whose range never includes today, making
     // it the only remembered default that keeps reopening in the past.

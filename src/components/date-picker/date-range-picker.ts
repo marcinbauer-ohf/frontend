@@ -72,6 +72,10 @@ export class DateRangePicker extends MobileAwareMixin(LitElement) {
   @property({ attribute: "time-picker", type: Boolean })
   public timePicker = false;
 
+  // Pick one day instead of a range. The value stays a day/day range.
+  @property({ attribute: "single-day", type: Boolean })
+  public singleDay = false;
+
   @state()
   @consume({ context: internationalizationContext, subscribe: true })
   private _i18n!: ContextType<typeof internationalizationContext>;
@@ -182,33 +186,31 @@ export class DateRangePicker extends MobileAwareMixin(LitElement) {
             : nothing
         }
         <div class="range">
-          <calendar-range
-            .value=${this._dateValue}
-            .locale=${this._i18n.locale.language}
-            .focusedDate=${this._focusDate}
-            @focusday=${this._focusChanged}
-            @change=${this._handleChange}
-            show-outside-days
-            .firstDayOfWeek=${firstWeekdayIndex(this._i18n.locale)}
-          >
-            <ha-icon-button-prev
-              tabindex="-1"
-              slot="previous"
-            ></ha-icon-button-prev>
-            <div class="heading" slot="heading">
-              <span class="month-year">${this._pickerMonthYear}</span>
-              <ha-icon-button
-                @click=${this._focusToday}
-                .path=${mdiCalendarToday}
-                .label=${this._i18n.localize("ui.dialogs.date-picker.today")}
-              ></ha-icon-button>
-            </div>
-            <ha-icon-button-next
-              tabindex="-1"
-              slot="next"
-            ></ha-icon-button-next>
-            <calendar-month dir=${this.dir}></calendar-month>
-          </calendar-range>
+          ${
+            this.singleDay
+              ? html`<calendar-date
+                  .value=${this._dateValue?.split("/")[0] ?? ""}
+                  .locale=${this._i18n.locale.language}
+                  .focusedDate=${this._focusDate}
+                  @focusday=${this._focusChanged}
+                  @change=${this._handleChange}
+                  show-outside-days
+                  .firstDayOfWeek=${firstWeekdayIndex(this._i18n.locale)}
+                >
+                  ${this._renderCalendarContent()}
+                </calendar-date>`
+              : html`<calendar-range
+                  .value=${this._dateValue}
+                  .locale=${this._i18n.locale.language}
+                  .focusedDate=${this._focusDate}
+                  @focusday=${this._focusChanged}
+                  @change=${this._handleChange}
+                  show-outside-days
+                  .firstDayOfWeek=${firstWeekdayIndex(this._i18n.locale)}
+                >
+                  ${this._renderCalendarContent()}
+                </calendar-range>`
+          }
           ${
             this.timePicker
               ? html`
@@ -265,6 +267,22 @@ export class DateRangePicker extends MobileAwareMixin(LitElement) {
       this._i18n.locale,
       this._hassConfig
     );
+  }
+
+  private _renderCalendarContent() {
+    return html`
+      <ha-icon-button-prev tabindex="-1" slot="previous"></ha-icon-button-prev>
+      <div class="heading" slot="heading">
+        <span class="month-year">${this._pickerMonthYear}</span>
+        <ha-icon-button
+          @click=${this._focusToday}
+          .path=${mdiCalendarToday}
+          .label=${this._i18n.localize("ui.dialogs.date-picker.today")}
+        ></ha-icon-button>
+      </div>
+      <ha-icon-button-next tabindex="-1" slot="next"></ha-icon-button-next>
+      <calendar-month dir=${this.dir}></calendar-month>
+    `;
   }
 
   private _cancel() {
@@ -324,10 +342,15 @@ export class DateRangePicker extends MobileAwareMixin(LitElement) {
   }
 
   private _handleChange(
-    ev: HASSDomTargetEvent<HTMLElementTagNameMap["calendar-range"]>
+    ev: HASSDomTargetEvent<
+      | HTMLElementTagNameMap["calendar-range"]
+      | HTMLElementTagNameMap["calendar-date"]
+    >
   ) {
-    const dateElement = ev.target as HTMLElementTagNameMap["calendar-range"];
-    this._dateValue = dateElement.value;
+    const dateElement = ev.target;
+    this._dateValue = this.singleDay
+      ? `${dateElement.value}/${dateElement.value}`
+      : dateElement.value;
     this._focusDate = dateElement.focusedDate;
   }
 

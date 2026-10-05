@@ -275,6 +275,23 @@ export class HuiHomeSummaryCard
             })
           : this.hass.localize("ui.card.home-summary.no_media_playing");
       }
+      case "automations": {
+        // Status right now, like the other summaries: how many are turned on
+        const automations = allEntities.filter((entityId) =>
+          entityId.startsWith("automation.")
+        );
+        if (!automations.length) {
+          return this.hass.localize("ui.card.home-summary.no_automations");
+        }
+        return this.hass.localize(
+          "ui.card.home-summary.count_automations_enabled",
+          {
+            count: automations.filter(
+              (entityId) => this.hass!.states[entityId].state === "on"
+            ).length,
+          }
+        );
+      }
       case "maintenance": {
         const maintenanceFilters = HOME_SUMMARIES_FILTERS.maintenance.map(
           (filter) => generateEntityFilter(this.hass!, filter)
