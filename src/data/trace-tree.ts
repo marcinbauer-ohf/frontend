@@ -44,7 +44,14 @@ export interface TraceNode<T = unknown> {
   /** Own `enabled === false` or inherited from an ancestor action. */
   disabled: boolean;
   notTriggered?: boolean;
-  condition?: { executed: boolean; passed: boolean; failed: boolean };
+  condition?: ConditionOutcome;
+}
+
+/** How a condition evaluated, across every time the run evaluated it. */
+export interface ConditionOutcome {
+  executed: boolean;
+  passed: boolean;
+  failed: boolean;
 }
 
 export interface TraceActionNode<
@@ -64,6 +71,8 @@ export interface TraceBranch {
   unfinished: boolean;
   disabled: boolean;
   option?: Option;
+  /** The conditions of a choose option, unset when they never ran. */
+  outcome?: ConditionOutcome;
 }
 
 const isDisabled = (config: unknown, parentDisabled: boolean): boolean =>
@@ -196,17 +205,20 @@ export class TraceTree {
     parentDisabled: boolean
   ): TraceNode<T> {
     const node = this._base(config, path, type, parentDisabled);
+    node.condition = this._conditionOutcome(path);
+    node.track = node.condition.executed;
+    return node;
+  }
+
+  private _conditionOutcome(path: string): ConditionOutcome {
     const records = this.trace.trace[path] as ConditionTraceStep[] | undefined;
-    const executed = !!records?.some((record) => record.result || record.error);
-    node.condition = {
-      executed,
+    return {
+      executed: !!records?.some((record) => record.result || record.error),
       passed: !!records?.some((record) => record.result?.result),
       failed: !!records?.some(
         (record) => record.result && !record.result.result
       ),
     };
-    node.track = executed;
-    return node;
   }
 
   private _actions(
@@ -278,6 +290,7 @@ export class TraceTree {
                 choices.includes(i) || this._hasTracedSteps(prefix)
               ),
               option,
+              outcome: this._conditionOutcome(branchPath),
             };
           }
         );

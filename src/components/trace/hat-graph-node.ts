@@ -150,6 +150,17 @@ export class HatGraphNode extends LitElement {
           }
         </g>
       </svg>
+      ${
+        // The error badge takes the same corner.
+        this.error
+          ? nothing
+          : html`<span
+              class="status"
+              style="top: ${centerY + BADGE_Y}px; left: calc(50% + ${BADGE_X}px)"
+            >
+              <slot name="status"></slot>
+            </span>`
+      }
       <span class="icon" style="top: ${centerY}px">
         <slot name="icon">
           ${
@@ -275,6 +286,11 @@ export class HatGraphNode extends LitElement {
     .number text {
       font-size: var(--ha-font-size-s);
       fill: var(--text-primary-color);
+    }
+    /* A zero size anchor on the corner, the slotted badge centers on it. */
+    .status {
+      position: absolute;
+      z-index: 1;
     }
     .icon {
       position: absolute;

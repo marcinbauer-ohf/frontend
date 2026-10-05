@@ -25,7 +25,7 @@ type StatefulNode = Pick<TraceNode, "disabled" | "error" | "track"> &
 
 /**
  * Whether a condition passed is drawn as the tracked path, and failing as a
- * cross on a node that is aria-hidden, so the outcome needs saying. A repeated
+ * badge on the node, so the outcome needs saying. A repeated
  * condition can have done both across its evaluations.
  */
 const conditionOutcome = (

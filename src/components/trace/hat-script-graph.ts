@@ -7,7 +7,6 @@ import {
   mdiCheckboxMarkedOutline,
   mdiChevronDown,
   mdiChevronUp,
-  mdiClose,
   mdiCodeBrackets,
   mdiFormatListNumbered,
   mdiRefresh,
@@ -43,6 +42,7 @@ import type { TraceExtended } from "../../data/trace";
 import { TraceTree } from "../../data/trace-tree";
 import type {
   NodeInfo,
+  ConditionOutcome,
   TraceActionNode,
   TraceNode,
 } from "../../data/trace-tree";
@@ -50,6 +50,7 @@ import "../ha-icon-button";
 import "../ha-condition-icon";
 import "../ha-service-icon";
 import "../ha-trigger-icon";
+import "../automation/ha-automation-row-live-test";
 import "./hat-graph-branch";
 import { BRANCH_HEIGHT, NODE_SIZE, SPACING } from "./hat-graph-const";
 import "./hat-graph-node";
@@ -99,6 +100,19 @@ export class HatScriptGraph extends LitElement {
     };
   }
 
+  // The same pass and fail badge as the live test in the editor, for how a
+  // condition evaluated in this run. A condition that did both, in a repeat,
+  // let the run continue, so it counts as passed.
+  private _renderOutcome(outcome?: ConditionOutcome) {
+    return outcome?.executed
+      ? html`<ha-automation-row-live-test
+          slot="status"
+          inert
+          .state=${outcome.failed && !outcome.passed ? "fail" : "pass"}
+        ></ha-automation-row-live-test>`
+      : nothing;
+  }
+
   private _renderTrigger(node: TraceNode<Trigger>) {
     const { config, path, track, hasTrace } = node;
     return html`
@@ -139,22 +153,41 @@ export class HatScriptGraph extends LitElement {
     other: this._renderOtherNode,
   };
 
-  private _renderActionNode(node: TraceActionNode, graphStart = false) {
+  private _renderActionNode(
+    node: TraceActionNode,
+    graphStart = false,
+    graphEnd = false
+  ) {
     const type = node.actionType ?? "other";
     return (this._typeRenderers[type] ?? this._renderOtherNode).bind(this)(
       node,
-      graphStart
+      graphStart,
+      graphEnd
+    );
+  }
+
+  // Nothing follows the last action at the end of the graph, so a branch
+  // there should not draw lines that lead nowhere.
+  private _renderActions(actions: TraceActionNode[], graphEnd: boolean) {
+    return actions.map((action, i) =>
+      this._renderActionNode(
+        action,
+        false,
+        graphEnd && i === actions.length - 1
+      )
     );
   }
 
   private _renderChooseNode(
     node: TraceActionNode<ChooseAction>,
-    graphStart = false
+    graphStart = false,
+    graphEnd = false
   ) {
     const { config, path, track } = node;
     const defaultBranch = node.branches[node.branches.length - 1];
     return html`
       <hat-graph-branch
+        .end=${graphEnd}
         tabindex=${node.hasTrace ? "0" : "-1"}
         @focus=${this._selectNode(config, path, "action")}
         ?track=${track}
@@ -202,32 +235,42 @@ export class HatScriptGraph extends LitElement {
                 role="img"
                 aria-label=${ifDefined(this.labels?.[branch.path])}
                 aria-current=${ifDefined(this.selected === branch.path || undefined)}
-              ></hat-graph-node>
-              ${branch.children.map((action) => this._renderActionNode(action))}
+              >
+                ${this._renderOutcome(branch.outcome)}
+              </hat-graph-node>
+              ${this._renderActions(branch.children, graphEnd)}
             </div>
           `
         )}
-        <div
-          ?track=${defaultBranch.hasTrace}
-          ?unfinished=${defaultBranch.unfinished}
-        >
-          <hat-graph-spacer
-            aria-hidden="true"
-            ?track=${defaultBranch.hasTrace}
-          ></hat-graph-spacer>
-          ${defaultBranch.children.map((action) =>
-            this._renderActionNode(action)
-          )}
-        </div>
+        ${
+          // An empty default path at the end of the graph leads nowhere.
+          graphEnd && !defaultBranch.children.length && node.branches.length > 1
+            ? nothing
+            : html`<div
+                ?track=${defaultBranch.hasTrace}
+                ?unfinished=${defaultBranch.unfinished}
+              >
+                <hat-graph-spacer
+                  aria-hidden="true"
+                  ?track=${defaultBranch.hasTrace}
+                ></hat-graph-spacer>
+                ${this._renderActions(defaultBranch.children, graphEnd)}
+              </div>`
+        }
       </hat-graph-branch>
     `;
   }
 
-  private _renderIfNode(node: TraceActionNode<IfAction>, graphStart = false) {
+  private _renderIfNode(
+    node: TraceActionNode<IfAction>,
+    graphStart = false,
+    graphEnd = false
+  ) {
     const { config, path, track } = node;
     const [thenBranch, elseBranch] = node.branches;
     return html`
       <hat-graph-branch
+        .end=${graphEnd}
         tabindex=${node.hasTrace ? "0" : "-1"}
         @focus=${this._selectNode(config, path, "action")}
         ?track=${track}
@@ -265,14 +308,14 @@ export class HatScriptGraph extends LitElement {
                   nofocus
                   aria-hidden="true"
                 ></hat-graph-node
-                >${elseBranch.children.map((action) =>
-                  this._renderActionNode(action)
-                )}
+                >${this._renderActions(elseBranch.children, graphEnd)}
               </div>`
-            : html`<hat-graph-spacer
-                aria-hidden="true"
-                ?track=${elseBranch.hasTrace}
-              ></hat-graph-spacer>`
+            : graphEnd
+              ? nothing
+              : html`<hat-graph-spacer
+                  aria-hidden="true"
+                  ?track=${elseBranch.hasTrace}
+                ></hat-graph-spacer>`
         }
         <div
           class="graph-container"
@@ -287,7 +330,7 @@ export class HatScriptGraph extends LitElement {
             nofocus
             aria-hidden="true"
           ></hat-graph-node>
-          ${thenBranch.children.map((action) => this._renderActionNode(action))}
+          ${this._renderActions(thenBranch.children, graphEnd)}
         </div>
       </hat-graph-branch>
     `;
@@ -298,64 +341,41 @@ export class HatScriptGraph extends LitElement {
     graphStart = false
   ) {
     const { config: node, path, track, hasTrace } = model;
-    const passed = model.condition?.passed ?? false;
-    const failed = model.condition?.failed ?? false;
     const condition = expandConditionWithShorthand(node).condition;
+    // The tracked path stops here when the condition failed.
     return html`
-      <hat-graph-branch
+      <hat-graph-node
+        .graphStart=${graphStart}
         @focus=${this._selectNode(node, path, "condition")}
         ?track=${track}
         ?active=${this.selected === path}
         .notEnabled=${model.disabled}
-        role="group"
+        .error=${model.error}
+        ?building-block=${CONDITION_BUILDING_BLOCKS.includes(condition)}
+        role="img"
         aria-label=${ifDefined(this.labels?.[path])}
         aria-current=${ifDefined(this.selected === path || undefined)}
-        aria-disabled=${ifDefined(model.disabled || undefined)}
         tabindex=${hasTrace ? "0" : "-1"}
-        short
       >
-        <hat-graph-node
-          .graphStart=${graphStart}
-          slot="head"
-          ?track=${track}
-          ?active=${this.selected === path}
-          .notEnabled=${model.disabled}
-          .error=${model.error}
-          ?building-block=${CONDITION_BUILDING_BLOCKS.includes(condition)}
-          nofocus
-          aria-hidden="true"
-        >
-          <ha-condition-icon
-            slot="icon"
-            .condition=${condition}
-          ></ha-condition-icon>
-        </hat-graph-node>
-        <div
-          style=${`width: ${NODE_SIZE + SPACING}px;`}
-          graph-start
-          graph-end
-        ></div>
-        <div ?track=${passed}></div>
-        <hat-graph-node
-          .iconPath=${mdiClose}
-          nofocus
-          aria-hidden="true"
-          ?track=${failed}
-          ?active=${this.selected === path}
-          .notEnabled=${model.disabled}
-        ></hat-graph-node>
-      </hat-graph-branch>
+        <ha-condition-icon
+          slot="icon"
+          .condition=${condition}
+        ></ha-condition-icon>
+        ${this._renderOutcome(model.condition)}
+      </hat-graph-node>
     `;
   }
 
   private _renderRepeatNode(
     model: TraceActionNode<RepeatAction>,
-    graphStart = false
+    graphStart = false,
+    graphEnd = false
   ) {
     const { config: node, path, track } = model;
     const [branch] = model.branches;
     return html`
       <hat-graph-branch
+        .end=${graphEnd}
         tabindex=${model.hasTrace ? "0" : "-1"}
         @focus=${this._selectNode(node, path, "action")}
         ?track=${track}
@@ -384,7 +404,7 @@ export class HatScriptGraph extends LitElement {
           ?track=${branch.hasTrace}
           ?unfinished=${branch.unfinished}
         >
-          ${branch.children.map((action) => this._renderActionNode(action))}
+          ${this._renderActions(branch.children, graphEnd)}
         </div>
       </hat-graph-branch>
     `;
@@ -455,12 +475,14 @@ export class HatScriptGraph extends LitElement {
 
   private _renderSequenceNode(
     model: TraceActionNode<SequenceAction>,
-    graphStart = false
+    graphStart = false,
+    graphEnd = false
   ) {
     const { config: node, path, track } = model;
     const [branch] = model.branches;
     return html`
       <hat-graph-branch
+        .end=${graphEnd}
         tabindex=${model.hasTrace ? "0" : "-1"}
         @focus=${this._selectNode(node, path, "action")}
         ?track=${track}
@@ -488,7 +510,7 @@ export class HatScriptGraph extends LitElement {
             nofocus
             aria-hidden="true"
           ></hat-graph-node>
-          ${branch.children.map((action) => this._renderActionNode(action))}
+          ${this._renderActions(branch.children, graphEnd)}
         </div>
       </hat-graph-branch>
     `;
@@ -496,11 +518,13 @@ export class HatScriptGraph extends LitElement {
 
   private _renderParallelNode(
     model: TraceActionNode<ParallelAction>,
-    graphStart = false
+    graphStart = false,
+    graphEnd = false
   ) {
     const { config: node, path, track } = model;
     return html`
       <hat-graph-branch
+        .end=${graphEnd}
         tabindex=${model.hasTrace ? "0" : "-1"}
         @focus=${this._selectNode(node, path, "action")}
         ?track=${track}
@@ -529,9 +553,7 @@ export class HatScriptGraph extends LitElement {
               ?track=${branch.hasTrace}
               ?unfinished=${branch.unfinished}
             >
-              ${branch.children.map((sAction) =>
-                this._renderActionNode(sAction)
-              )}
+              ${this._renderActions(branch.children, graphEnd)}
             </div>`
         )}
       </hat-graph-branch>
@@ -577,9 +599,13 @@ export class HatScriptGraph extends LitElement {
                 : ""
             }
             ${tree.conditions.map((node) => this._renderConditionNode(node))}
-            ${tree.actions.map((node) => this._renderActionNode(node))}
+            ${this._renderActions(tree.actions, !tree.sequence.length)}
             ${tree.sequence.map((node, i) =>
-              this._renderActionNode(node, i === 0)
+              this._renderActionNode(
+                node,
+                i === 0,
+                i === tree.sequence.length - 1
+              )
             )}
           </div>
         </div>

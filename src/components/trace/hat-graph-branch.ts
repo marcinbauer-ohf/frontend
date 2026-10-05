@@ -29,6 +29,9 @@ export class HatGraphBranch extends LitElement {
 
   @property({ type: Boolean }) short = false;
 
+  // Nothing follows this branch, so the branches are not joined below it.
+  @property({ type: Boolean }) end = false;
+
   @state() _branches: BranchConfig[] = [];
 
   private _totalWidth = 0;
@@ -146,7 +149,7 @@ export class HatGraphBranch extends LitElement {
       <div id="branches">
         <svg id="lines" width=${this._totalWidth} height=${this._maxHeight}>
           ${this._branches.map((branch) => {
-            if (branch.end) return "";
+            if (branch.end || this.end) return "";
             return svg`
                     <path
                       class=${classMap({
@@ -163,7 +166,7 @@ export class HatGraphBranch extends LitElement {
       </div>
 
       ${
-        !this.short
+        !this.short && !this.end
           ? html`
               <svg id="bottom" width=${this._totalWidth}>
                 ${this._branches.map((branch) => {
