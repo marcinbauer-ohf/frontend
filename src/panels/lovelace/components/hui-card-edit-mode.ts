@@ -2,6 +2,7 @@ import "@home-assistant/webawesome/dist/components/divider/divider";
 import {
   mdiContentCopy,
   mdiContentCut,
+  mdiContentPaste,
   mdiCursorMove,
   mdiDelete,
   mdiDotsVertical,
@@ -12,6 +13,8 @@ import type { CSSResultGroup, TemplateResult } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
+import deepClone from "deep-clone-simple";
+import { storage } from "../../../common/decorators/storage";
 import { consumeLocalize } from "../../../common/decorators/consume-context-entry";
 import type { LocalizeFunc } from "../../../common/translations/localize";
 import { fireEvent } from "../../../common/dom/fire_event";
@@ -20,8 +23,14 @@ import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-svg-icon";
+import type { LovelaceCardConfig } from "../../../data/lovelace/config/card";
 import { haStyle } from "../../../resources/styles";
-import type { LovelaceCardPath } from "../editor/lovelace-path";
+import { insertCard } from "../editor/config-util";
+import {
+  type LovelaceCardPath,
+  getLovelaceContainerPath,
+  parseLovelaceCardPath,
+} from "../editor/lovelace-path";
 import type { Lovelace } from "../types";
 
 @customElement("hui-card-edit-mode")
@@ -45,6 +54,15 @@ export class HuiCardEditMode extends LitElement {
   @state()
   @consumeLocalize()
   private _localize!: LocalizeFunc;
+
+  @state()
+  @storage({
+    key: "dashboardCardClipboard",
+    state: true,
+    subscribe: true,
+    storage: "sessionStorage",
+  })
+  private _clipboard?: LovelaceCardConfig;
 
   @state()
   public _hover = false;
@@ -175,6 +193,21 @@ export class HuiCardEditMode extends LitElement {
                     ></ha-svg-icon>
                     ${this._localize("ui.panel.lovelace.editor.edit_card.cut")}
                   </ha-dropdown-item>
+                  ${
+                    this._clipboard
+                      ? html`
+                          <ha-dropdown-item value="paste">
+                            <ha-svg-icon
+                              slot="icon"
+                              .path=${mdiContentPaste}
+                            ></ha-svg-icon>
+                            ${this._localize(
+                              "ui.panel.lovelace.editor.edit_card.paste"
+                            )}
+                          </ha-dropdown-item>
+                        `
+                      : nothing
+                  }
                 `
           }
           ${
@@ -227,6 +260,9 @@ export class HuiCardEditMode extends LitElement {
       case "cut":
         this._cutCard();
         break;
+      case "paste":
+        this._pasteCard();
+        break;
       case "delete":
         this._deleteCard();
         break;
@@ -244,10 +280,42 @@ export class HuiCardEditMode extends LitElement {
   private _cutCard(): void {
     fireEvent(this, "ll-copy-card", { path: this.path! });
     fireEvent(this, "ll-delete-card", { path: this.path!, silent: true });
+    // Shown through lovelace, as the cut card is already removed from the DOM
+    this.lovelace.showToast({
+      message: this._localize(
+        "ui.panel.lovelace.editor.edit_card.cut_to_clipboard"
+      ),
+      duration: 8000,
+      dismissable: true,
+      action: {
+        action: () => fireEvent(window, "undo-change"),
+        text: this._localize("ui.common.undo"),
+      },
+    });
   }
 
   private _copyCard(): void {
     fireEvent(this, "ll-copy-card", { path: this.path! });
+    this.lovelace.showToast({
+      message: this._localize(
+        "ui.panel.lovelace.editor.edit_card.copied_to_clipboard"
+      ),
+      duration: 2000,
+      dismissable: true,
+    });
+  }
+
+  // Pastes below this card, like Paste in the automation editor
+  private _pasteCard(): void {
+    const lovelace = this.lovelace!;
+    const { cardIndex } = parseLovelaceCardPath(this.path!);
+    const path = [
+      ...getLovelaceContainerPath(this.path!),
+      cardIndex + 1,
+    ] as LovelaceCardPath;
+    lovelace.saveConfig(
+      insertCard(lovelace.config, path, deepClone(this._clipboard!))
+    );
   }
 
   private _deleteCard(): void {
