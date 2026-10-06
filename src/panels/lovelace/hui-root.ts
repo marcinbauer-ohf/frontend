@@ -147,6 +147,10 @@ class HUIRoot extends LitElement {
 
   @property({ type: Boolean, attribute: "no-edit" }) public noEdit = false;
 
+  // Keep add and search as buttons on narrow screens
+  @property({ type: Boolean, attribute: "expand-actions" })
+  public expandActions = false;
+
   @property({ attribute: false }) public backButton = false;
 
   @property({ attribute: false }) public backPath?: string;
@@ -258,7 +262,7 @@ class HUIRoot extends LitElement {
         key: "ui.panel.lovelace.menu.add",
         visible:
           !this._editMode && this.hass.user?.is_admin && !this.hass.kioskMode,
-        overflow: this.narrow,
+        overflow: this.narrow && !this.expandActions,
         subItems: [
           {
             icon: mdiDevices,
@@ -299,7 +303,7 @@ class HUIRoot extends LitElement {
             ? `(${ctrlOrCmdLabel(this.hass.localize)} + K)`
             : undefined,
         visible: !this._editMode && !this.hass.kioskMode,
-        overflow: this.narrow,
+        overflow: this.narrow && !this.expandActions,
       },
       {
         icon: mdiCommentProcessingOutline,

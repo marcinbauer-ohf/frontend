@@ -341,6 +341,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
         .route=${this.route}
         .panel=${this.panel}
         no-edit
+        expand-actions
         .extraActionItems=${this._extraActionItems}
         @ll-custom=${this._handleLLCustomEvent}
         style=${huiRootStyle}
