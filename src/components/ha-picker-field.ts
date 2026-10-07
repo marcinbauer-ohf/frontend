@@ -18,7 +18,6 @@ import { PickerMixin } from "../mixins/picker-mixin";
 import "./ha-combo-box-item";
 import "./ha-icon";
 import "./ha-icon-button";
-import "./ha-ripple";
 import "./ha-svg-icon";
 
 declare global {
@@ -77,7 +76,6 @@ export class HaPickerField extends PickerMixin(LitElement) {
 
     return html`
       <div class=${classMap({ field: true, disabled: this.disabled })}>
-        <ha-ripple .disabled=${this.disabled}></ha-ripple>
         ${
           hiddenLabel
             ? html`<span id="hidden-label" hidden>${hiddenLabel}</span>`
@@ -154,11 +152,14 @@ export class HaPickerField extends PickerMixin(LitElement) {
           padding-inline-end: var(--ha-space-2);
           box-sizing: border-box;
           background-color: var(--ha-color-form-background);
-          border-radius: var(--ha-border-radius-sm);
-          border-end-end-radius: 0;
-          border-end-start-radius: 0;
+          border-radius: var(--ha-border-radius-lg);
+          outline-offset: -2px;
           cursor: pointer;
-          --ha-ripple-color: var(--primary-text-color);
+          transition: background-color var(--wa-transition-normal) ease-in-out;
+        }
+
+        :host(:not([unknown])) .field:not(.disabled):hover {
+          background-color: var(--ha-color-form-background-hover);
         }
 
         .field.disabled {
@@ -183,7 +184,7 @@ export class HaPickerField extends PickerMixin(LitElement) {
           -webkit-tap-highlight-color: transparent;
         }
 
-        /* The bottom line shows focus instead */
+        /* The field shows focus instead */
         .trigger:focus-visible {
           outline: none;
         }
@@ -200,34 +201,16 @@ export class HaPickerField extends PickerMixin(LitElement) {
           --ha-combo-box-item-disabled-opacity: 0.5;
         }
 
-        .field:after {
-          display: block;
-          content: "";
-          position: absolute;
-          pointer-events: none;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          height: 1px;
-          width: 100%;
-          background-color: var(--ha-color-border-neutral-loud);
-          transform:
-            height 180ms ease-in-out,
-            background-color 180ms ease-in-out;
-        }
-
-        .field:focus-within:after {
-          height: 2px;
-          background-color: var(--mdc-theme-primary);
+        .field:focus-within {
+          outline: 2px solid var(--primary-color);
         }
 
         :host([unknown]) .field {
           background-color: var(--ha-color-fill-warning-quiet-resting);
         }
 
-        :host([invalid]) .field:after {
-          height: 2px;
-          background-color: var(--mdc-theme-error, var(--error-color, #b00020));
+        :host([invalid]) .field {
+          outline: 2px solid var(--ha-color-border-danger-normal);
         }
 
         .clear {

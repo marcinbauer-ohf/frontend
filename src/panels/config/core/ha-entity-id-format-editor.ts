@@ -280,35 +280,12 @@ export class HaEntityIdFormatEditor extends LitElement {
 
     .field {
       position: relative;
-      background-color: var(--mdc-text-field-fill-color, whitesmoke);
-      border-radius: var(--ha-border-radius-sm);
-      border-end-end-radius: var(--ha-border-radius-square);
-      border-end-start-radius: var(--ha-border-radius-square);
+      background-color: var(--ha-color-form-background);
+      border-radius: var(--ha-border-radius-lg);
+      outline-offset: -2px;
     }
-    .field:after {
-      display: block;
-      content: "";
-      position: absolute;
-      pointer-events: none;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 1px;
-      width: 100%;
-      background-color: var(
-        --mdc-text-field-idle-line-color,
-        rgba(0, 0, 0, 0.42)
-      );
-    }
-    :host([disabled]) .field:after {
-      background-color: var(
-        --mdc-text-field-disabled-line-color,
-        rgba(0, 0, 0, 0.42)
-      );
-    }
-    .field:focus-within:after {
-      height: 2px;
-      background-color: var(--mdc-theme-primary);
+    .field:focus-within {
+      outline: 2px solid var(--primary-color);
     }
 
     ha-chip-set {

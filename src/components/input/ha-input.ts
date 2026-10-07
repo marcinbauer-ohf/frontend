@@ -63,7 +63,7 @@ export type InputType =
  * @cssprop --ha-input-text-align - Text alignment of the input. Defaults to `start`.
  * @cssprop --ha-input-required-marker - The marker shown after the label for required fields. Defaults to `"*"`.
  *
- * @attr {("material"|"outlined")} appearance - Sets the input appearance style. "material" is the default filled style, "outlined" uses a bordered style.
+ * @attr {("material"|"outlined")} appearance - Sets the input appearance style. "material" is the default rounded filled style, "outlined" uses a bordered style.
  * @attr {("date"|"datetime-local"|"email"|"number"|"password"|"search"|"tel"|"text"|"time"|"color"|"url")} type - Sets the input type.
  * @attr {string} label - The input's label text.
  * @attr {string} hint - The input's hint/helper text.
@@ -442,32 +442,8 @@ export class HaInput extends WaInputMixin(LitElement) {
         border: 1px solid var(--ha-color-border-neutral-quiet);
         background-color: var(--card-background-color);
         border-radius: var(--ha-border-radius-md);
+        outline: none;
         transition: border-color var(--wa-transition-normal) ease-in-out;
-      }
-
-      :host([appearance="material"]) ::part(base)::after {
-        content: "";
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background-color: var(--ha-color-border-neutral-loud);
-        transition:
-          height var(--wa-transition-normal) ease-in-out,
-          background-color var(--wa-transition-normal) ease-in-out;
-      }
-
-      :host([appearance="material"]:focus-within) wa-input::part(base)::after {
-        height: 2px;
-        background-color: var(--primary-color);
-      }
-
-      :host([appearance="material"]:focus-within)
-        wa-input.invalid::part(base)::after,
-      :host([appearance="material"])
-        wa-input.invalid:not([disabled])::part(base)::after {
-        background-color: var(--ha-color-border-danger-normal);
       }
 
       wa-input::part(input) {
@@ -502,6 +478,7 @@ export class HaInput extends WaInputMixin(LitElement) {
       }
       :host([appearance="outlined"]:focus-within) wa-input::part(base) {
         border-color: var(--primary-color);
+        outline: none;
       }
 
       wa-input:disabled::part(base) {

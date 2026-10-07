@@ -299,18 +299,24 @@ export const waInputStyles = css`
   /* Base common */
   .input::part(base) {
     background-color: var(--ha-color-form-background);
-    border-top-left-radius: var(--ha-border-radius-sm);
-    border-top-right-radius: var(--ha-border-radius-sm);
-    border-bottom-left-radius: var(--ha-border-radius-square);
-    border-bottom-right-radius: var(--ha-border-radius-square);
+    border-radius: var(--ha-border-radius-lg);
     border: none;
+    outline: 0 solid transparent;
+    outline-offset: -2px;
     position: relative;
-    transition: background-color var(--wa-transition-normal) ease-in-out;
+    transition:
+      background-color var(--wa-transition-normal) ease-in-out,
+      outline-color var(--wa-transition-normal) ease-in-out;
   }
 
-  /* Focus outline removal */
+  /* Focus ring, drawn inside the field so the layout does not shift */
   :host(:focus-within) .input::part(base) {
-    outline: none;
+    outline: 2px solid var(--primary-color);
+  }
+
+  :host(:focus-within) .input.invalid::part(base),
+  .input.invalid:not([disabled])::part(base) {
+    outline: 2px solid var(--ha-color-border-danger-normal);
   }
 
   /* Hint */

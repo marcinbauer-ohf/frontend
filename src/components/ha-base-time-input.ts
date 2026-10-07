@@ -448,9 +448,7 @@ export class HaBaseTimeInput extends LitElement {
     .time-input-wrap {
       display: flex;
       flex: var(--time-input-flex, unset);
-      border-radius: var(--mdc-shape-small, var(--ha-border-radius-sm))
-        var(--mdc-shape-small, var(--ha-border-radius-sm))
-        var(--ha-border-radius-square) var(--ha-border-radius-square);
+      border-radius: var(--ha-border-radius-lg);
       overflow: hidden;
       position: relative;
       direction: ltr;
@@ -471,6 +469,7 @@ export class HaBaseTimeInput extends LitElement {
 
     ha-input::part(wa-base) {
       padding: var(--ha-space-1);
+      border-radius: var(--ha-border-radius-square);
     }
 
     ha-input:first-child::part(wa-base) {
@@ -501,7 +500,6 @@ export class HaBaseTimeInput extends LitElement {
       padding: 0;
       padding-inline: var(--ha-space-3) var(--ha-space-1);
       border: none;
-      border-bottom: 1px solid var(--ha-color-border-neutral-loud);
       background-color: var(--ha-color-form-background);
       color: var(--ha-color-text-secondary);
       cursor: pointer;
@@ -532,7 +530,6 @@ export class HaBaseTimeInput extends LitElement {
       height: 56px;
       padding-inline: 0 var(--ha-space-1);
       background-color: var(--ha-color-form-background);
-      border-bottom: 1px solid var(--ha-color-border-neutral-loud);
     }
     .sign-divider::after {
       content: "";
@@ -544,7 +541,6 @@ export class HaBaseTimeInput extends LitElement {
     ha-icon-button {
       background-color: var(--ha-color-form-background);
       color: var(--ha-color-text-secondary);
-      border-bottom: 1px solid var(--ha-color-border-neutral-loud);
       box-sizing: border-box;
       height: 56px;
       margin-inline-start: calc(var(--ha-space-1) * -1);
@@ -564,7 +560,6 @@ export class HaBaseTimeInput extends LitElement {
     ha-icon-button {
       position: relative;
       --ha-icon-button-size: 36px;
-      border-start-end-radius: var(--ha-border-radius-sm);
       --mdc-icon-size: 20px;
       direction: var(--direction);
       display: flex;
