@@ -10,15 +10,15 @@ import {
 import "../../../../components/ha-yaml-editor";
 import "../ha-automation-element-description";
 import type { HaYamlEditor } from "../../../../components/ha-yaml-editor";
-import { COLLAPSIBLE_ACTION_ELEMENTS } from "../../../../data/action";
+import {
+  COLLAPSIBLE_ACTION_ELEMENTS,
+  getAutomationActionType,
+} from "../../../../data/action";
 import { migrateAutomationAction, type Action } from "../../../../data/script";
 import type { HomeAssistant } from "../../../../types";
 import "../ha-automation-editor-warning";
 import { editorStyles, indentStyle } from "../styles";
-import {
-  getAutomationActionType,
-  type ActionElement,
-} from "./ha-automation-action-row";
+import type { ActionElement } from "./ha-automation-action-row";
 
 @customElement("ha-automation-action-editor")
 export default class HaAutomationActionEditor extends LitElement {

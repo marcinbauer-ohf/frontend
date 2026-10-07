@@ -60,6 +60,7 @@ export const securityEntityFilters: EntityFilter[] = [
       // Safety
       "carbon_monoxide",
       "gas",
+      "glass_break",
       "moisture",
       "safety",
       "smoke",
@@ -83,7 +84,14 @@ export const isSecurityPanelEntity = (
   stateObj: HassEntity
 ): boolean =>
   securityEntityFilters.some((filter) =>
-    generateEntityFilter(hass, filter)(stateObj.entity_id)
+    generateEntityFilter(
+      hass.states,
+      hass.entities,
+      hass.devices,
+      hass.areas,
+      hass.floors,
+      filter
+    )(stateObj.entity_id)
   );
 
 const processAreasForSecurity = (
@@ -97,9 +105,16 @@ const processAreasForSecurity = (
     const area = hass.areas[areaId];
     if (!area) continue;
 
-    const areaFilter = generateEntityFilter(hass, {
-      area: area.area_id,
-    });
+    const areaFilter = generateEntityFilter(
+      hass.states,
+      hass.entities,
+      hass.devices,
+      hass.areas,
+      hass.floors,
+      {
+        area: area.area_id,
+      }
+    );
     const areaSecurityEntities = entities.filter(areaFilter);
     const areaCards: LovelaceCardConfig[] = [];
 
@@ -132,9 +147,16 @@ const processUnassignedEntities = (
   hass: HomeAssistant,
   entities: string[]
 ): LovelaceCardConfig[] => {
-  const unassignedFilter = generateEntityFilter(hass, {
-    area: null,
-  });
+  const unassignedFilter = generateEntityFilter(
+    hass.states,
+    hass.entities,
+    hass.devices,
+    hass.areas,
+    hass.floors,
+    {
+      area: null,
+    }
+  );
   const unassignedLights = entities.filter(unassignedFilter);
   const areaCards: LovelaceCardConfig[] = [];
   const computeTileCard = computeAreaTileCardConfig(hass, "", false);
@@ -161,7 +183,14 @@ export class SecurityViewStrategy extends ReactiveElement {
     const allEntities = Object.keys(hass.states);
 
     const securityFilters = securityEntityFilters.map((filter) =>
-      generateEntityFilter(hass, filter)
+      generateEntityFilter(
+        hass.states,
+        hass.entities,
+        hass.devices,
+        hass.areas,
+        hass.floors,
+        filter
+      )
     );
 
     const entities = findEntities(allEntities, securityFilters);

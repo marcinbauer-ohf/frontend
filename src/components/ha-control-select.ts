@@ -56,7 +56,7 @@ export class HaControlSelect extends LitElement {
     this.updateComplete.then(() => {
       // eslint-disable-next-line lit/prefer-query-decorators
       const option = this.shadowRoot?.querySelector(
-        `#option-${this.options![index].value}`
+        `[data-index="${index}"]`
       ) as HTMLElement;
       option?.focus();
     });
@@ -144,7 +144,11 @@ export class HaControlSelect extends LitElement {
                 this.options,
                 (option) => option.value,
                 (option, index) =>
-                  this._renderOption(option, index === this._tabbableIndex)
+                  this._renderOption(
+                    option,
+                    index,
+                    index === this._tabbableIndex
+                  )
               )
             : nothing
         }
@@ -159,12 +163,17 @@ export class HaControlSelect extends LitElement {
     return selectedIndex === -1 ? 0 : selectedIndex;
   }
 
-  private _renderOption(option: ControlSelectOption, tabbable: boolean) {
+  private _renderOption(
+    option: ControlSelectOption,
+    index: number,
+    tabbable: boolean
+  ) {
     const isSelected = this.value === option.value;
 
     return html`
       <div
         id=${`option-${option.value}`}
+        data-index=${index}
         class=${classMap({
           option: true,
           selected: isSelected,
@@ -323,9 +332,23 @@ export class HaControlSelect extends LitElement {
     .option .content span {
       display: block;
       width: 100%;
-      -webkit-hyphens: auto;
-      -moz-hyphens: auto;
       hyphens: auto;
+    }
+    :host(:not([vertical])) .option {
+      min-width: 0;
+    }
+    :host(:not([vertical])) .option .content {
+      padding-inline: var(--ha-space-1);
+    }
+    :host(:not([vertical])) .option .content span {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      hyphens: manual;
+      line-height: var(--ha-line-height-condensed);
     }
     :host([vertical]) {
       width: var(--control-select-thickness);

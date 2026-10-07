@@ -1,12 +1,5 @@
 import "@home-assistant/webawesome/dist/components/divider/divider";
-import { consume } from "@lit/context";
-import {
-  mdiAppleKeyboardCommand,
-  mdiClose,
-  mdiContentPaste,
-  mdiHelpCircleOutline,
-  mdiPlus,
-} from "@mdi/js";
+import { mdiClose, mdiHelpCircleOutline } from "@mdi/js";
 import type { HassServiceTarget } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { LitElement, css, html, nothing } from "lit";
@@ -14,15 +7,21 @@ import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { repeat } from "lit/directives/repeat";
 import memoizeOne from "memoize-one";
+import { consume } from "../../../common/decorators/consume";
 import { ensureArray } from "../../../common/array/ensure-array";
 import { storage } from "../../../common/decorators/storage";
-import type { HASSDomEvent } from "../../../common/dom/fire_event";
+import type {
+  HASSDomEvent,
+  HASSDomTargetEvent,
+} from "../../../common/dom/fire_event";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { mainWindow } from "../../../common/dom/get_main_window";
 import { computeAreaName } from "../../../common/entity/compute_area_name";
+import { computeDeviceName } from "../../../common/entity/compute_device_name";
 import { computeDomain } from "../../../common/entity/compute_domain";
-import { computeEntityNameList } from "../../../common/entity/compute_entity_name_display";
+import { computeEntityPickerDisplay } from "../../../common/entity/compute_entity_name_display";
 import { computeFloorName } from "../../../common/entity/compute_floor_name";
+import { getDeviceArea } from "../../../common/entity/context/get_device_context";
 import { isNumericState } from "../../../common/number/format_number";
 import { stringCompare } from "../../../common/string/compare";
 import type {
@@ -123,8 +122,8 @@ import { KeyboardShortcutMixin } from "../../../mixins/keyboard-shortcut-mixin";
 import { haStyleScrollbar } from "../../../resources/styles";
 import type { HomeAssistant, ValueChangedEvent } from "../../../types";
 import { documentationUrl } from "../../../util/documentation-url";
-import { isMac } from "../../../util/is_mac";
 import { showToast } from "../../../util/toast";
+import "./add-automation-element/ha-automation-add-element-paste";
 import "./add-automation-element/ha-automation-add-from-target";
 import "./add-automation-element/ha-automation-add-items";
 import type { ElementSort } from "./add-automation-element/element-group";
@@ -780,6 +779,9 @@ class DialogAddAutomationElement
                       (this._narrow && !!this._selectedGroup),
                   })}
                   .manifests=${this._manifests}
+                  .clipboardItem=${this._params!.clipboardItem}
+                  .automationElementType=${automationElementType}
+                  @paste-element=${this._paste}
                 ></ha-automation-add-from-target>
                 <ha-list-base
                   class=${classMap({
@@ -788,56 +790,12 @@ class DialogAddAutomationElement
                     "ha-scrollbar": true,
                   })}
                 >
-                  ${
-                    this._params!.clipboardItem
-                      ? html`<ha-list-item-button
-                            class="paste"
-                            @click=${this._paste}
-                          >
-                            <div slot="headline" class="label">
-                              ${this.hass.localize(
-                                `ui.panel.config.automation.editor.${automationElementType}s.paste`
-                              )}
-                            </div>
-                            <div slot="supporting-text">
-                              ${this.hass.localize(
-                                // @ts-ignore
-                                `ui.panel.config.automation.editor.${automationElementType}s.type.${this._params.clipboardItem}.label`
-                              )}
-                            </div>
-                            ${
-                              !this._narrow
-                                ? html`<span slot="end" class="shortcut">
-                                    <span
-                                      >${
-                                        isMac
-                                          ? html`<ha-svg-icon
-                                              slot="start"
-                                              .path=${mdiAppleKeyboardCommand}
-                                            ></ha-svg-icon>`
-                                          : this.hass.localize(
-                                              "ui.panel.config.automation.editor.ctrl"
-                                            )
-                                      }</span
-                                    >
-                                    <span>+</span>
-                                    <span>V</span>
-                                  </span>`
-                                : nothing
-                            }
-                            <ha-svg-icon
-                              slot="start"
-                              .path=${mdiContentPaste}
-                            ></ha-svg-icon
-                            ><ha-svg-icon
-                              class="plus"
-                              slot="end"
-                              .path=${mdiPlus}
-                            ></ha-svg-icon>
-                          </ha-list-item-button>
-                          <wa-divider></wa-divider>`
-                      : nothing
-                  }
+                  <ha-automation-add-element-paste
+                    .automationElementType=${automationElementType}
+                    .clipboardItem=${this._params!.clipboardItem}
+                    @paste-element=${this._paste}
+                    divider
+                  ></ha-automation-add-element-paste>
                   ${
                     recentElements.length
                       ? html`<ha-section-title>
@@ -1088,6 +1046,12 @@ class DialogAddAutomationElement
       const [targetType, targetId] = this._extractTypeAndIdFromTarget(
         this._selectedTarget
       );
+      const separator = computeRTL(
+        this.hass.language,
+        this.hass.translationMetadata.translations
+      )
+        ? " ◂ "
+        : " ▸ ";
 
       if (targetId) {
         if (targetType === "area") {
@@ -1100,11 +1064,23 @@ class DialogAddAutomationElement
             );
           }
         } else if (targetType === "device") {
-          const areaId = this.hass.devices[targetId]?.area_id;
-          if (areaId) {
-            subtitle = computeAreaName(this.hass.areas[areaId]) || areaId;
+          const device = this.hass.devices[targetId];
+          const area = device
+            ? getDeviceArea(device, this.hass.areas, this.hass.devices)
+            : undefined;
+          const parentDevice =
+            device?.parent_device_id &&
+            device.next_name_part === "parent_device"
+              ? this.hass.devices[device.parent_device_id]
+              : undefined;
+          if (area) {
+            subtitle = [
+              computeAreaName(area) || area.area_id,
+              parentDevice ? computeDeviceName(parentDevice) : undefined,
+            ]
+              .filter(Boolean)
+              .join(separator);
           } else {
-            const device = this.hass.devices[targetId];
             subtitle = this.hass.localize(
               `ui.panel.config.automation.editor.${device?.entry_type === "service" ? "services" : "unassigned_devices"}`
             );
@@ -1119,26 +1095,10 @@ class DialogAddAutomationElement
               this._manifests?.[domain]
             );
           } else {
-            const stateObj = this.hass.states[targetId];
-            const [entityName, deviceName, areaName] = computeEntityNameList(
-              stateObj,
-              [{ type: "entity" }, { type: "device" }, { type: "area" }],
-              this.hass.entities,
-              this.hass.devices,
-              this.hass.areas,
-              this.hass.floors
-            );
-
-            subtitle = [areaName, entityName ? deviceName : undefined]
-              .filter(Boolean)
-              .join(
-                computeRTL(
-                  this.hass.language,
-                  this.hass.translationMetadata.translations
-                )
-                  ? " ◂ "
-                  : " ▸ "
-              );
+            subtitle = computeEntityPickerDisplay(
+              this.hass,
+              this.hass.states[targetId]
+            ).secondary;
           }
         }
 
@@ -1251,6 +1211,8 @@ class DialogAddAutomationElement
       this._selectedCollectionIndex ?? 0,
       this.hass.localize,
       this.hass.services,
+      this._triggerDescriptions,
+      this._conditionDescriptions,
       this._manifests,
       this._systemDomains?.byEntityDomain,
       this._sort
@@ -1567,6 +1529,8 @@ class DialogAddAutomationElement
       collectionIndex: number,
       localize: LocalizeFunc,
       services: HomeAssistant["services"],
+      triggerDescriptions: TriggerDescriptions,
+      conditionDescriptions: ConditionDescriptions,
       manifests?: DomainManifestLookup,
       systemDomainsByEntityDomain?: Map<string, Set<string>>,
       sort: ElementSort = "common"
@@ -1574,7 +1538,7 @@ class DialogAddAutomationElement
       if (type === "trigger" && isDynamic(group)) {
         return this._triggers(
           localize,
-          this._triggerDescriptions,
+          triggerDescriptions,
           systemDomainsByEntityDomain,
           group
         );
@@ -1582,7 +1546,7 @@ class DialogAddAutomationElement
       if (type === "condition" && isDynamic(group)) {
         return this._conditions(
           localize,
-          this._conditionDescriptions,
+          conditionDescriptions,
           manifests,
           systemDomainsByEntityDomain,
           group
@@ -1596,9 +1560,17 @@ class DialogAddAutomationElement
 
       let result: AddAutomationElementListItem[];
 
+      const descriptions =
+        type === "condition" ? conditionDescriptions : triggerDescriptions;
+
       if (groupDef?.domains && !groupDef.members) {
         // Curated group whose items come solely from backend domains (e.g. Sun).
-        result = this._getDomainElementItems(type, groupDef.domains, localize);
+        result = this._getDomainElementItems(
+          type,
+          groupDef.domains,
+          localize,
+          descriptions
+        );
       } else {
         const groups = this._getGroups(type, group, collectionIndex);
         result = Object.entries(groups).map(([key, options]) =>
@@ -1607,7 +1579,12 @@ class DialogAddAutomationElement
         if (groupDef?.domains) {
           // Curated group with both static members and backend domains (Time).
           result.push(
-            ...this._getDomainElementItems(type, groupDef.domains, localize)
+            ...this._getDomainElementItems(
+              type,
+              groupDef.domains,
+              localize,
+              descriptions
+            )
           );
         }
       }
@@ -1980,18 +1957,19 @@ class DialogAddAutomationElement
   private _getDomainElementItems(
     type: AddAutomationElementDialogParams["type"],
     domains: string[],
-    localize: LocalizeFunc
+    localize: LocalizeFunc,
+    descriptions: TriggerDescriptions | ConditionDescriptions
   ): AddAutomationElementListItem[] {
     const domainSet = new Set(domains);
     if (type === "trigger") {
-      return Object.keys(this._triggerDescriptions)
+      return Object.keys(descriptions)
         .filter((trigger) => domainSet.has(getTriggerDomain(trigger)))
         .map((trigger) =>
           this._getTriggerListItem(localize, getTriggerDomain(trigger), trigger)
         );
     }
     if (type === "condition") {
-      return Object.keys(this._conditionDescriptions)
+      return Object.keys(descriptions)
         .filter((condition) => domainSet.has(getConditionDomain(condition)))
         .map((condition) =>
           this._getConditionListItem(
@@ -2462,8 +2440,8 @@ class DialogAddAutomationElement
     }
   }
 
-  private _handleFilterInput = (ev: InputEvent) => {
-    this._debounceFilterChanged((ev.target as HaInputSearch).value ?? "");
+  private _handleFilterInput = (ev: HASSDomTargetEvent<HaInputSearch>) => {
+    this._debounceFilterChanged(ev.target.value ?? "");
   };
 
   private _debounceFilterChanged = debounce((value: string) => {
@@ -2743,15 +2721,16 @@ class DialogAddAutomationElement
           border-radius: var(--ha-border-radius-xl);
           border: 1px solid var(--ha-color-border-neutral-quiet);
           margin: var(--ha-space-3);
-        }
-
-        ha-automation-add-from-target,
-        .groups {
           overflow: auto;
-          /* Fixed-width left column so it does not resize as the right
-             panel's content width changes between groups. */
           flex: 0 0 360px;
           margin-inline-end: var(--ha-space-2);
+        }
+
+        @media (max-width: 870px), (max-height: 500px) {
+          ha-automation-add-from-target,
+          .groups {
+            flex: 1 1 auto;
+          }
         }
 
         ha-automation-add-from-target.hidden {
@@ -2872,27 +2851,8 @@ class DialogAddAutomationElement
           width: var(--ha-space-6);
         }
 
-        wa-divider {
-          --spacing: 0;
-        }
-
         ha-svg-icon.plus {
           color: var(--primary-color);
-        }
-
-        .shortcut {
-          direction: ltr;
-          --mdc-icon-size: var(--ha-space-3);
-          display: inline-flex;
-          flex-direction: row;
-          align-items: center;
-          gap: 2px;
-          margin-right: var(--ha-space-4);
-        }
-        .shortcut span {
-          font-size: var(--ha-font-size-s);
-          font-family: var(--ha-font-family-code);
-          color: var(--ha-color-text-secondary);
         }
 
         .section-title-wrapper {

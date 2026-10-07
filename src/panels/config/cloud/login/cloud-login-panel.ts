@@ -1,6 +1,7 @@
 import type { TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query } from "lit/decorators";
+import type { HASSDomEvent } from "../../../../common/dom/fire_event";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import { navigate } from "../../../../common/navigate";
 import "../../../../components/ha-alert";
@@ -50,7 +51,6 @@ export class CloudLoginPanel extends LitElement {
           <cloud-login
             .hass=${this.hass}
             .email=${this.email}
-            .localize=${this.hass.localize}
             .lead=${this.hass.localize(
               "ui.panel.config.cloud.login.sign_in_lead"
             )}
@@ -71,11 +71,11 @@ export class CloudLoginPanel extends LitElement {
     cloudLogin.emailField?.focus();
   }
 
-  private _handleForgotPassword() {
+  private _handleForgotPassword(
+    ev: HASSDomEvent<HASSDomEvents["cloud-forgot-password"]>
+  ) {
     this._dismissFlash();
-    fireEvent(this, "cloud-email-changed", {
-      value: this._cloudLoginElement?.emailField?.value ?? this.email ?? "",
-    });
+    fireEvent(this, "cloud-email-changed", { value: ev.detail.email });
     navigate("/config/cloud/forgot-password");
   }
 

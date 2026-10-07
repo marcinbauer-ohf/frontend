@@ -27,6 +27,7 @@ import memoizeOne from "memoize-one";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import { UndoRedoController } from "../../common/controllers/undo-redo-controller";
 import { fireEvent } from "../../common/dom/fire_event";
+import { ctrlOrCmdLabel } from "../../common/keyboard/ctrl-or-cmd";
 import { goBack, navigate, replaceCurrentUrl } from "../../common/navigate";
 import type { LocalizeKeys } from "../../common/translations/localize";
 import { constructUrlCurrentPath } from "../../common/url/construct-url";
@@ -77,7 +78,6 @@ import { handleBackClick } from "../../layouts/back-navigation";
 import { ChildPanelReady } from "../../layouts/panel-ready";
 import type { HomeAssistant, PanelInfo } from "../../types";
 import { documentationUrl } from "../../util/documentation-url";
-import { isMac } from "../../util/is_mac";
 import { isMobileClient } from "../../util/is_mobile";
 import { showToast } from "../../util/toast";
 import { showAreaRegistryDetailDialog } from "../config/areas/show-dialog-area-registry-detail";
@@ -211,14 +211,7 @@ class HUIRoot extends LitElement {
             @click=${this._editModeDisable}
           >
             ${this.hass!.localize("ui.panel.lovelace.menu.exit_edit_mode")}
-          </ha-button>
-          <ha-icon-button
-            .label=${this.hass!.localize("ui.panel.lovelace.menu.help")}
-            .path=${mdiHelpCircleOutline}
-            href=${documentationUrl(this.hass, "/dashboards/")}
-            rel="noreferrer"
-            target="_blank"
-          ></ha-icon-button>`
+          </ha-button>`
       );
     }
 
@@ -250,6 +243,13 @@ class HUIRoot extends LitElement {
         icon: mdiFileMultiple,
         key: "ui.panel.lovelace.editor.menu.manage_resources",
         overflowAction: this._handleManageResources,
+        visible: this._editMode,
+        overflow: true,
+      },
+      {
+        icon: mdiHelpCircleOutline,
+        key: "ui.panel.lovelace.menu.help",
+        overflowAction: this._handleHelp,
         visible: this._editMode,
         overflow: true,
       },
@@ -296,9 +296,7 @@ class HUIRoot extends LitElement {
         overflowAction: this._showQuickBar,
         suffix:
           this.hass.enableShortcuts && !isMobileClient
-            ? isMac
-              ? "(⌘ + K)"
-              : "(Ctrl + K)"
+            ? `(${ctrlOrCmdLabel(this.hass.localize)} + K)`
             : undefined,
         visible: !this._editMode && !this.hass.kioskMode,
         overflow: this.narrow,
@@ -1054,6 +1052,14 @@ class HUIRoot extends LitElement {
     this.lovelace!.setEditMode(true);
   };
 
+  private _handleHelp = () => {
+    window.open(
+      documentationUrl(this.hass, "/dashboards/"),
+      "_blank",
+      "noreferrer"
+    );
+  };
+
   private _editModeDisable(): void {
     this.lovelace!.setEditMode(false);
     this._undoRedoController.reset();
@@ -1336,9 +1342,7 @@ class HUIRoot extends LitElement {
       haStyle,
       css`
         :host {
-          -ms-user-select: none;
-          -webkit-user-select: none;
-          -moz-user-select: none;
+          user-select: none;
         }
         .header {
           background-color: var(--app-header-background-color);
@@ -1351,7 +1355,6 @@ class HUIRoot extends LitElement {
                 0px
               )
           );
-          -webkit-backdrop-filter: var(--app-header-backdrop-filter, none);
           backdrop-filter: var(--app-header-backdrop-filter, none);
           padding-top: var(--safe-area-inset-top);
           padding-right: var(--safe-area-inset-right);
@@ -1385,6 +1388,8 @@ class HUIRoot extends LitElement {
           align-items: center;
           font-size: var(--ha-font-size-xl);
           padding: 0px 12px;
+          padding-right: calc(12px + var(--safe-area-inset-right, 0px));
+          width: calc(100% + var(--safe-area-inset-right, 0px));
           font-weight: var(--ha-font-weight-normal);
           box-sizing: border-box;
         }
@@ -1392,7 +1397,13 @@ class HUIRoot extends LitElement {
           border-bottom: none;
         }
         .narrow .toolbar {
-          padding: 0 4px;
+          padding: 0 calc(4px + var(--safe-area-inset-right, 0px)) 0
+            calc(4px + var(--safe-area-inset-left, 0px));
+          width: calc(
+            100% + var(--safe-area-inset-left, 0px) +
+              var(--safe-area-inset-right, 0px)
+          );
+          margin-left: calc(-1 * var(--safe-area-inset-left, 0px));
         }
         .main-title {
           margin-inline-start: var(--ha-space-6);
@@ -1537,20 +1548,22 @@ class HUIRoot extends LitElement {
           display: flex;
           min-height: 100vh;
           box-sizing: border-box;
+          --view-container-inset-left: 0px;
+          --view-container-inset-right: var(--safe-area-inset-right);
+          --view-container-inset-bottom: var(--safe-area-inset-bottom);
           padding-top: calc(
             var(--header-height) + var(--safe-area-inset-top) +
               var(--view-container-padding-top, 0px)
           );
-          padding-right: var(--safe-area-inset-right);
-          padding-inline-end: var(--safe-area-inset-right);
+          padding-right: var(--view-container-inset-right);
           padding-bottom: calc(
-            var(--safe-area-inset-bottom) +
+            var(--view-container-inset-bottom) +
               var(--view-container-padding-bottom, 0px)
           );
         }
         .narrow hui-view-container {
-          padding-left: var(--safe-area-inset-left);
-          padding-inline-start: var(--safe-area-inset-left);
+          --view-container-inset-left: var(--safe-area-inset-left);
+          padding-left: var(--view-container-inset-left);
         }
         hui-view-container > * {
           display: flex;
