@@ -811,9 +811,8 @@
       "target-picker": {
         "add_target": "Add target",
         "exclude_target": "Exclude target",
-        "excluded": "Excluded, no effect",
+        "excluded": "Unavailable exclusions",
         "removes_count": "Excludes {count} {count, plural,\n one {entity}\n other {entities}\n}",
-        "exclusion_no_effect": "Doesn't affect any target",
         "excluded_by_label": "Excluded by",
         "excluded_from": "Excluded from {name}",
         "except": "Except",

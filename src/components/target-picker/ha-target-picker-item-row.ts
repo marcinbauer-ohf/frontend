@@ -456,23 +456,19 @@ export class HaTargetPickerItemRow extends LitElement {
             : nothing
       }
       ${
-        this.removedCount !== undefined
+        this.removedCount
           ? html`<div slot="end" class="summary">
               <span class="removed">
                 ${
-                  !this.removedCount
+                  this.exclusionStyle === "tag"
                     ? this.hass.localize(
-                        "ui.components.target-picker.exclusion_no_effect"
+                        "ui.components.target-picker.excluded_tag",
+                        { count: this.removedCount }
                       )
-                    : this.exclusionStyle === "tag"
-                      ? this.hass.localize(
-                          "ui.components.target-picker.excluded_tag",
-                          { count: this.removedCount }
-                        )
-                      : this.hass.localize(
-                          "ui.components.target-picker.removes_count",
-                          { count: this.removedCount }
-                        )
+                    : this.hass.localize(
+                        "ui.components.target-picker.removes_count",
+                        { count: this.removedCount }
+                      )
                 }
               </span>
             </div>`
@@ -493,8 +489,18 @@ export class HaTargetPickerItemRow extends LitElement {
                         ${this._countsLabel(entries, excludedCount)}
                       </ha-button>`
                     : html`<span class="main">
-                        ${this._countsLabel(entries, excludedCount)}
-                      </span>`
+                          ${this._entitiesLabel(entries, excludedCount)}
+                        </span>
+                        ${
+                          excludedCount && this.exclusionStyle !== "tag"
+                            ? html`<span class="secondary">
+                                ${this.hass.localize(
+                                  "ui.components.target-picker.excluded_tag",
+                                  { count: excludedCount }
+                                )}
+                              </span>`
+                            : nothing
+                        }`
                 }
               </div>
             `
@@ -655,7 +661,7 @@ export class HaTargetPickerItemRow extends LitElement {
     };
   }
 
-  // Reads the same either way; only the picker's collapsed row makes it a button.
+  // The picker's collapsed button fits one line, so the excluded count joins it.
   private _countsLabel(
     entries: ExtractFromTargetResultReferenced,
     excludedCount: number
@@ -1285,6 +1291,7 @@ export class HaTargetPickerItemRow extends LitElement {
          add up to it, so the icon stays where it was. */
       :host([exclusion][exclusion-style="tag"]) .minus {
         color: var(--ha-color-text-secondary);
+        --icon-primary-color: var(--ha-color-text-secondary);
         margin-inline-end: var(--ha-space-2);
       }
       :host([exclusion][exclusion-style="tag"]) .icon {

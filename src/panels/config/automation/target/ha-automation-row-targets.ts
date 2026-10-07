@@ -298,7 +298,12 @@ export class HaAutomationRowTargets extends LitElement {
   }
 
   protected render() {
-    const length = Object.keys(this.target || {}).length;
+    // `exclude` is the mocked exclusion list, not a target type.
+    const { exclude: _exclude, ...target } = (this.target ?? {}) as Record<
+      string,
+      string | string[]
+    >;
+    const length = Object.keys(target).length;
     if (!length) {
       return this._renderTargetBadge(
         this.targetRequired
@@ -311,13 +316,13 @@ export class HaAutomationRowTargets extends LitElement {
         this.targetRequired
       );
     }
-    const totalLength = Object.values(this.target || {}).reduce(
+    const totalLength = Object.values(target).reduce(
       (acc, val) => acc + ensureArray(val).length,
       0
     );
 
     if (totalLength <= 5) {
-      const targets = Object.entries(this.target!).reduce<
+      const targets = Object.entries(target).reduce<
         ["floor" | "area" | "device" | "entity" | "label", string][]
       >((acc, [targetType, targetId]) => {
         const type = targetType.replace("_id", "") as
@@ -339,7 +344,7 @@ export class HaAutomationRowTargets extends LitElement {
       );
     }
 
-    const rows = Object.entries(this.target!)
+    const rows = Object.entries(target)
       .reduce<["floor" | "area" | "device" | "entity" | "label", string][]>(
         (acc, [targetType, targetId]) => {
           const type = targetType.replace("_id", "") as

@@ -101,6 +101,20 @@ const targetItems = (value?: HassServiceTarget): TargetItem[] =>
   TARGET_TYPES.flatMap((type) =>
     ensureArray(value?.[`${type}_id`] ?? []).map((id: string) => ({ type, id }))
   );
+// ponytail: mock of the proposed YAML shape, `target.exclude` holding targets
+// like `target` itself. Core doesn't accept it yet, so configs using it won't
+// save.
+type TargetWithExclude = HassServiceTarget & { exclude?: HassServiceTarget };
+
+const sameTargets = (a: TargetItem[], b: TargetItem[]) => {
+  const keys = (items: TargetItem[]) =>
+    items
+      .map(({ type, id }) => `${type}:${id}`)
+      .sort()
+      .join();
+  return keys(a) === keys(b);
+};
+
 const CREATE_ID = "___create-new-entity___";
 const isTargetType = (value: string): value is TargetType =>
   value === "entity" ||
@@ -286,6 +300,7 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
     super.connectedCallback();
     this._unsubExclusions = subscribeTargetExclusions(() => {
       this._exclusionsVersion++;
+      this._writeExclusionsToValue();
       this._resolve();
     });
   }
@@ -300,6 +315,7 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
     super.willUpdate(changedProps);
 
     if (changedProps.has("value") && this.hass) {
+      this._readExclusionsFromValue();
       this._resolve();
     }
 
@@ -735,6 +751,31 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
         }
       </div>
     `;
+  }
+
+  // The YAML lists exclusions once for the whole target, so each is filed under
+  // every included target; _resolve shows it only under the ones it cuts from.
+  // ponytail: the store is shared by target, so another picker including the
+  // same target picks these up too. Key the store per picker if that matters.
+  private _readExclusionsFromValue() {
+    const exclude = targetItems((this.value as TargetWithExclude)?.exclude);
+    if (sameTargets(exclude, targetItems(this._excluded))) {
+      return;
+    }
+    setExcludedTargets(targetItems(this.value), () =>
+      exclude.map((target) => ({ ...target, name: this._targetName(target) }))
+    );
+  }
+
+  private _writeExclusionsToValue() {
+    const { exclude, ...rest } = (this.value ?? {}) as TargetWithExclude;
+    const excluded = this._excluded;
+    if (sameTargets(targetItems(exclude), targetItems(excluded))) {
+      return;
+    }
+    fireEvent(this, "value-changed", {
+      value: excluded ? { ...rest, exclude: excluded } : rest,
+    });
   }
 
   private _openExcludePicker(ev: Event) {
