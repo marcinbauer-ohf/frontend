@@ -1,23 +1,25 @@
-import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
-import { css, html, LitElement } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
+import { fireEvent } from "../../common/dom/fire_event";
 import "../../components/ha-alert";
 import "../../components/ha-button";
-import "../../components/ha-card";
-import "../../components/ha-spinner";
+import "../../components/ha-dialog";
+import "../../components/ha-dialog-footer";
 import "../../components/input/ha-input";
 import { changePassword, deleteAllRefreshTokens } from "../../data/auth";
-import type { RefreshToken } from "../../data/refresh_token";
 import {
   showAlertDialog,
   showConfirmationDialog,
 } from "../../dialogs/generic/show-dialog-box";
-import { haStyle } from "../../resources/styles";
 import type { HomeAssistant } from "../../types";
 
-@customElement("ha-change-password-card")
-class HaChangePasswordCard extends LitElement {
+@customElement("ha-change-password-dialog")
+export class HaChangePasswordDialog extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
+
+  @state() private _open = false;
+
+  @state() private _renderDialog = false;
 
   @state() private _loading = false;
 
@@ -31,29 +33,56 @@ class HaChangePasswordCard extends LitElement {
 
   @state() private _passwordConfirm = "";
 
-  @property({ attribute: false }) public refreshTokens?: RefreshToken[];
+  public showDialog(): void {
+    this._renderDialog = true;
+    this._open = true;
+  }
 
-  protected render(): TemplateResult {
+  public closeDialog() {
+    this._open = false;
+  }
+
+  private _dialogClosed() {
+    this._open = false;
+    this._renderDialog = false;
+    this._loading = false;
+    this._statusMsg = undefined;
+    this._errorMsg = undefined;
+    this._currentPassword = "";
+    this._password = "";
+    this._passwordConfirm = "";
+    fireEvent(this, "dialog-closed", { dialog: this.localName });
+  }
+
+  protected render() {
+    if (!this._renderDialog) {
+      return nothing;
+    }
+
     return html`
-      <ha-card
-        .header=${this.hass.localize("ui.panel.profile.change_password.header")}
+      <ha-dialog
+        .open=${this._open}
+        header-title=${this.hass.localize(
+          "ui.panel.profile.change_password.header"
+        )}
+        .preventScrimClose=${!!this._currentPassword}
+        @closed=${this._dialogClosed}
       >
-        <div class="card-content">
+        <div class="content" @keypress=${this._keyPressed}>
           ${
             this._errorMsg
               ? html`<ha-alert alert-type="error">${this._errorMsg}</ha-alert>`
-              : ""
+              : nothing
           }
           ${
             this._statusMsg
               ? html`<ha-alert alert-type="success"
                   >${this._statusMsg}</ha-alert
                 >`
-              : ""
+              : nothing
           }
-
           <ha-input
-            id="currentPassword"
+            autofocus
             type="password"
             password-toggle
             name="currentPassword"
@@ -66,7 +95,6 @@ class HaChangePasswordCard extends LitElement {
             @change=${this._currentPasswordChanged}
             required
           ></ha-input>
-
           ${
             this._currentPassword
               ? html`<ha-input
@@ -97,21 +125,27 @@ class HaChangePasswordCard extends LitElement {
                     required
                     autoValidate
                   ></ha-input>`
-              : ""
+              : nothing
           }
         </div>
-
-        <div class="card-actions">
+        <ha-dialog-footer slot="footer">
           <ha-button
-            .loading=${this._loading}
-            @click=${this._changePassword}
-            .disabled=${!this._passwordConfirm}
-            >${this.hass.localize(
-              "ui.panel.profile.change_password.submit"
-            )}</ha-button
+            slot="secondaryAction"
+            appearance="plain"
+            @click=${this.closeDialog}
           >
-        </div>
-      </ha-card>
+            ${this.hass.localize("ui.common.cancel")}
+          </ha-button>
+          <ha-button
+            slot="primaryAction"
+            .loading=${this._loading}
+            .disabled=${!this._passwordConfirm}
+            @click=${this._changePassword}
+          >
+            ${this.hass.localize("ui.panel.profile.change_password.submit")}
+          </ha-button>
+        </ha-dialog-footer>
+      </ha-dialog>
     `;
   }
 
@@ -127,14 +161,11 @@ class HaChangePasswordCard extends LitElement {
     this._passwordConfirm = ev.target.value;
   }
 
-  protected firstUpdated(changedProps: PropertyValues<this>) {
-    super.firstUpdated(changedProps);
-    this.addEventListener("keypress", (ev) => {
-      this._statusMsg = undefined;
-      if (ev.key === "Enter") {
-        this._changePassword();
-      }
-    });
+  private _keyPressed(ev: KeyboardEvent) {
+    this._statusMsg = undefined;
+    if (ev.key === "Enter") {
+      this._changePassword();
+    }
   }
 
   private async _changePassword() {
@@ -174,8 +205,7 @@ class HaChangePasswordCard extends LitElement {
     );
 
     if (
-      this.refreshTokens &&
-      (await showConfirmationDialog(this, {
+      await showConfirmationDialog(this, {
         title: this.hass.localize(
           "ui.panel.profile.change_password.logout_all_sessions"
         ),
@@ -185,7 +215,7 @@ class HaChangePasswordCard extends LitElement {
         dismissText: this.hass.localize("ui.common.no"),
         confirmText: this.hass.localize("ui.common.yes"),
         destructive: true,
-      }))
+      })
     ) {
       try {
         await deleteAllRefreshTokens(this.hass);
@@ -199,29 +229,19 @@ class HaChangePasswordCard extends LitElement {
       }
     }
 
-    this._currentPassword = "";
-    this._password = "";
-    this._passwordConfirm = "";
+    this.closeDialog();
   }
 
-  static get styles(): CSSResultGroup {
-    return [
-      haStyle,
-      css`
-        #currentPassword {
-          margin-top: 0;
-        }
-        .card-actions {
-          display: flex;
-          justify-content: flex-end;
-        }
-      `,
-    ];
-  }
+  static styles = css`
+    .content {
+      display: grid;
+      gap: var(--ha-space-4);
+    }
+  `;
 }
 
 declare global {
   interface HTMLElementTagNameMap {
-    "ha-change-password-card": HaChangePasswordCard;
+    "ha-change-password-dialog": HaChangePasswordDialog;
   }
 }

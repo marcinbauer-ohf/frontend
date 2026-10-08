@@ -1,7 +1,7 @@
 import type { CSSResultGroup, TemplateResult } from "lit";
-import { css, html, LitElement } from "lit";
+import { html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators";
-import "../../components/ha-card";
+import "../../components/list/ha-grouped-list";
 import "../../layouts/hass-subpage";
 import { haStyle } from "../../resources/styles";
 import type { HomeAssistant, Route } from "../../types";
@@ -11,6 +11,7 @@ import "./ha-pick-language-row";
 import "./ha-pick-number-format-row";
 import "./ha-pick-time-format-row";
 import "./ha-pick-time-zone-row";
+import { profilePageStyles } from "./profile-page-styles";
 
 @customElement("ha-profile-section-localization")
 class HaProfileSectionLocalization extends LitElement {
@@ -29,10 +30,7 @@ class HaProfileSectionLocalization extends LitElement {
         .header=${this.hass.localize("ui.panel.profile.localization_header")}
       >
         <div class="container">
-          <ha-card>
-            <div class="card-content">
-              ${this.hass.localize("ui.panel.profile.localization_detail")}
-            </div>
+          <ha-grouped-list>
             <ha-pick-language-row
               .narrow=${this.narrow}
               .hass=${this.hass}
@@ -57,31 +55,17 @@ class HaProfileSectionLocalization extends LitElement {
               .narrow=${this.narrow}
               .hass=${this.hass}
             ></ha-pick-first-weekday-row>
-          </ha-card>
+          </ha-grouped-list>
+          <p class="footer">
+            ${this.hass.localize("ui.panel.profile.localization_detail")}
+          </p>
         </div>
       </hass-subpage>
     `;
   }
 
   static get styles(): CSSResultGroup {
-    return [
-      haStyle,
-      css`
-        :host {
-          user-select: initial;
-        }
-
-        .container {
-          padding: var(--ha-space-2) var(--ha-space-4)
-            calc(var(--ha-space-4) + var(--safe-area-inset-bottom));
-        }
-
-        ha-card {
-          margin: 0 auto var(--ha-space-4);
-          max-width: 600px;
-        }
-      `,
-    ];
+    return [haStyle, profilePageStyles];
   }
 }
 

@@ -11528,19 +11528,20 @@
         "tabs": {
           "security": "Security"
         },
-        "is_owner": "You are an owner.",
+        "owner": "Owner",
         "appearance_header": "Appearance",
-        "settings_header": "Settings",
+        "appearance_value": "{theme} · {mode}",
+        "notifications_header": "Notifications",
+        "notifications_description": "Push notifications and vibration",
+        "general_header": "General",
+        "general_description": "Shortcuts, connection, and other preferences",
         "user_preferences_header": "Dashboard and sidebar",
-        "user_preferences_description": "Choose your default dashboard and arrange the sidebar",
-        "user_preferences_detail": "The following settings are tied to your account and will persist across all sessions and devices.",
+        "user_preferences_description": "Default dashboard and sidebar layout",
+        "user_preferences_detail": "Settings marked \"Only on this device\" are saved in this browser or app and may reset when you log out. Everything else is saved to your account and follows you to every device.",
+        "device_only": "Only on this device",
         "localization_header": "Localization",
-        "localization_description": "Language, time zone, date, time, and number formats",
         "localization_detail": "These settings are tied to your account and control how dates, times, and numbers are displayed.",
-        "device_settings": "This device",
-        "browser_description": "Notifications, display, and shortcuts",
         "security_description": "Password, multi-factor authentication, and access tokens",
-        "client_settings_detail": "The following settings are local to this client only, and may reset to defaults on logout or when local data is cleared.",
         "logout": "Log out",
         "logout_title": "Log out?",
         "logout_text": "Are you sure you want to log out?",
@@ -11559,8 +11560,8 @@
           "description": "This will hide the sidebar by default, similar to the mobile experience."
         },
         "customize_sidebar": {
-          "header": "Change the order and hide items from the sidebar",
-          "description": "You can also press and hold the header of the sidebar to activate edit mode.",
+          "header": "Sidebar",
+          "description": "Change the order and hide items. You can also press and hold the sidebar header to edit it.",
           "button": "Edit"
         },
         "vibrate": {
@@ -11665,7 +11666,7 @@
           "migrate_failed": "Failed to migrate theme settings.",
           "theme_mode": "Theme mode",
           "dark_mode": {
-            "auto": "System",
+            "system": "System",
             "light": "Light",
             "dark": "Dark"
           },
@@ -11675,7 +11676,7 @@
           "use_default": "Use default theme"
         },
         "dashboard": {
-          "header": "Dashboard",
+          "header": "Default dashboard",
           "description": "Pick a default dashboard to show.",
           "dropdown_label": "Dashboard",
           "lovelace": "Overview",
@@ -11700,7 +11701,11 @@
           "header": "Multi-factor authentication modules",
           "disable": "Disable",
           "enable": "Enable",
-          "confirm_disable": "Are you sure you want to disable {name}?"
+          "confirm_disable": "Are you sure you want to disable {name}?",
+          "confirm_disable_title": "Disable {name}?",
+          "disable_failed": "Failed to disable {name}",
+          "enabled": "Enabled",
+          "disabled": "Disabled"
         },
         "mfa_setup": {
           "title_aborted": "Aborted",
@@ -11715,7 +11720,9 @@
         },
         "refresh_tokens": {
           "header": "Refresh tokens",
-          "description": "Each refresh token represents a login session. Refresh tokens will be automatically deleted when you log out. Unused refresh tokens will be automatically deleted after 90 days. The following refresh tokens are currently active for your account.",
+          "description": "Each refresh token represents a login session. Refresh tokens will be automatically deleted when you log out. Unused refresh tokens will be automatically deleted after 90 days.",
+          "count": "{count} {count, plural,\n one {session}\n other {sessions}\n}",
+          "empty_state": "You have no active sessions.",
           "ios_app": "iOS app",
           "android_app": "Android app",
           "current_session": "Your current session",

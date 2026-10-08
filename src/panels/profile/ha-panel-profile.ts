@@ -18,6 +18,10 @@ class HaPanelProfile extends HassRouterPage {
         tag: "ha-profile-dashboard",
         load: () => import("./ha-profile-dashboard"),
       },
+      appearance: {
+        tag: "ha-profile-section-appearance",
+        load: () => import("./ha-profile-section-appearance"),
+      },
       preferences: {
         tag: "ha-profile-section-preferences",
         load: () => import("./ha-profile-section-preferences"),
@@ -26,13 +30,26 @@ class HaPanelProfile extends HassRouterPage {
         tag: "ha-profile-section-localization",
         load: () => import("./ha-profile-section-localization"),
       },
+      notifications: {
+        tag: "ha-profile-section-notifications",
+        load: () => import("./ha-profile-section-notifications"),
+      },
+      general: {
+        tag: "ha-profile-section-general",
+        load: () => import("./ha-profile-section-general"),
+      },
+      // Old "This device" page, kept so existing links still land here.
       browser: {
-        tag: "ha-profile-section-browser",
-        load: () => import("./ha-profile-section-browser"),
+        tag: "ha-profile-section-general",
+        load: () => import("./ha-profile-section-general"),
       },
       security: {
         tag: "ha-profile-section-security",
         load: () => import("./ha-profile-section-security"),
+      },
+      sessions: {
+        tag: "ha-profile-section-sessions",
+        load: () => import("./ha-profile-section-sessions"),
       },
     },
   };

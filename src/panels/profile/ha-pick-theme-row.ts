@@ -73,7 +73,7 @@ export class HaPickThemeRow extends SubscribeMixin(LitElement) {
           noTheme: this.hass.localize("ui.panel.profile.themes.use_default"),
           mode: this.hass.localize("ui.panel.profile.themes.theme_mode"),
           autoMode: this.hass.localize(
-            "ui.panel.profile.themes.dark_mode.auto"
+            "ui.panel.profile.themes.dark_mode.system"
           ),
           lightMode: this.hass.localize(
             "ui.panel.profile.themes.dark_mode.light"

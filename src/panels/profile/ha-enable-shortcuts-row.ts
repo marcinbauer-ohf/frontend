@@ -7,6 +7,7 @@ import "../../components/ha-switch";
 import type { HaSwitch } from "../../components/ha-switch";
 import "../../components/item/ha-row-item";
 import type { HomeAssistant } from "../../types";
+import { wrapSupportingText } from "./profile-page-styles";
 
 @customElement("ha-enable-shortcuts-row")
 class HaEnableShortcutsRow extends LitElement {
@@ -23,7 +24,7 @@ class HaEnableShortcutsRow extends LitElement {
         <span slot="supporting-text"
           >${this.hass.localize(
             "ui.panel.profile.enable_shortcuts.description"
-          )}</span
+          )}<br />${this.hass.localize("ui.panel.profile.device_only")}</span
         >
         <ha-switch
           slot="end"
@@ -42,6 +43,8 @@ class HaEnableShortcutsRow extends LitElement {
 
     fireEvent(this, "hass-enable-shortcuts", enabled);
   }
+
+  static styles = wrapSupportingText;
 }
 
 declare global {

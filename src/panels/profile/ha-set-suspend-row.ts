@@ -10,6 +10,7 @@ import "../../components/ha-switch";
 import type { HaSwitch } from "../../components/ha-switch";
 import "../../components/item/ha-row-item";
 import type { HomeAssistant } from "../../types";
+import { wrapSupportingText } from "./profile-page-styles";
 
 declare global {
   // for fire event
@@ -35,7 +36,7 @@ class HaSetSuspendRow extends LitElement {
           >${this.hass.localize("ui.panel.profile.suspend.header")}</span
         >
         <span slot="supporting-text"
-          >${this.hass.localize("ui.panel.profile.suspend.description")}</span
+          >${this.hass.localize("ui.panel.profile.suspend.description")}<br />${this.hass.localize("ui.panel.profile.device_only")}</span
         >
         <ha-switch
           slot="end"
@@ -55,6 +56,8 @@ class HaSetSuspendRow extends LitElement {
       suspend,
     });
   }
+
+  static styles = wrapSupportingText;
 }
 
 declare global {

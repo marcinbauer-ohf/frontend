@@ -1,18 +1,16 @@
-import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { CSSResultGroup, TemplateResult } from "lit";
-import { css, html, LitElement } from "lit";
-import { customElement, property, state } from "lit/decorators";
+import { html, LitElement, nothing } from "lit";
+import { customElement, property } from "lit/decorators";
 import "../../components/ha-button";
-import "../../components/ha-card";
 import "../../components/item/ha-row-item";
-import type { CoreFrontendUserData } from "../../data/frontend";
-import { subscribeFrontendUserData } from "../../data/frontend";
+import "../../components/list/ha-grouped-list";
 import { showEditSidebarDialog } from "../../dialogs/sidebar/show-dialog-edit-sidebar";
 import "../../layouts/hass-subpage";
 import { haStyle } from "../../resources/styles";
 import type { HomeAssistant, Route } from "../../types";
-import "./ha-entity-id-picker-row";
+import "./ha-force-narrow-row";
 import "./ha-pick-dashboard-row";
+import { profilePageStyles } from "./profile-page-styles";
 
 @customElement("ha-profile-section-preferences")
 class HaProfileSectionPreferences extends LitElement {
@@ -21,41 +19,6 @@ class HaProfileSectionPreferences extends LitElement {
   @property({ type: Boolean }) public narrow = false;
 
   @property({ attribute: false }) public route!: Route;
-
-  @state() private _coreUserData?: CoreFrontendUserData | null;
-
-  private _unsubCoreData?: Promise<UnsubscribeFunc>;
-
-  private _getCoreData() {
-    this._unsubCoreData = subscribeFrontendUserData(
-      this.hass.connection,
-      "core",
-      ({ value }) => {
-        this._coreUserData = value;
-      }
-    );
-  }
-
-  public connectedCallback() {
-    super.connectedCallback();
-    if (this.hass) {
-      this._getCoreData();
-    }
-  }
-
-  public firstUpdated() {
-    if (!this._unsubCoreData) {
-      this._getCoreData();
-    }
-  }
-
-  public disconnectedCallback() {
-    super.disconnectedCallback();
-    if (this._unsubCoreData) {
-      this._unsubCoreData.then((unsub) => unsub());
-      this._unsubCoreData = undefined;
-    }
-  }
 
   protected render(): TemplateResult {
     return html`
@@ -68,10 +31,7 @@ class HaProfileSectionPreferences extends LitElement {
         )}
       >
         <div class="container">
-          <ha-card>
-            <div class="card-content">
-              ${this.hass.localize("ui.panel.profile.user_preferences_detail")}
-            </div>
+          <ha-grouped-list>
             <ha-pick-dashboard-row
               .narrow=${this.narrow}
               .hass=${this.hass}
@@ -99,16 +59,16 @@ class HaProfileSectionPreferences extends LitElement {
               </ha-button>
             </ha-row-item>
             ${
-              this.hass.user!.is_admin
-                ? html`
-                    <ha-entity-id-picker-row
-                      .hass=${this.hass}
-                      .coreUserData=${this._coreUserData}
-                    ></ha-entity-id-picker-row>
-                  `
-                : ""
+              this.hass.dockedSidebar !== "auto" || !this.narrow
+                ? html`<ha-force-narrow-row
+                    .hass=${this.hass}
+                  ></ha-force-narrow-row>`
+                : nothing
             }
-          </ha-card>
+          </ha-grouped-list>
+          <p class="footer">
+            ${this.hass.localize("ui.panel.profile.user_preferences_detail")}
+          </p>
         </div>
       </hass-subpage>
     `;
@@ -119,24 +79,7 @@ class HaProfileSectionPreferences extends LitElement {
   }
 
   static get styles(): CSSResultGroup {
-    return [
-      haStyle,
-      css`
-        :host {
-          user-select: initial;
-        }
-
-        .container {
-          padding: var(--ha-space-2) var(--ha-space-4)
-            calc(var(--ha-space-4) + var(--safe-area-inset-bottom));
-        }
-
-        ha-card {
-          margin: 0 auto var(--ha-space-4);
-          max-width: 600px;
-        }
-      `,
-    ];
+    return [haStyle, profilePageStyles];
   }
 }
 
