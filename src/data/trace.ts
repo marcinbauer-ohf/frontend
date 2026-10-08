@@ -1,3 +1,4 @@
+import { computeStateName } from "../common/entity/compute_state_name";
 import { strStartsWith } from "../common/string/starts-with";
 import type { Context, HomeAssistant } from "../types";
 import type {
@@ -5,6 +6,7 @@ import type {
   ManualAutomationConfig,
 } from "./automation";
 import { flattenTriggers } from "./automation";
+import type { EntityRegistryEntry } from "./entity/entity_registry";
 import type { BlueprintScriptConfig, ScriptConfig } from "./script";
 
 interface BaseTraceStep {
@@ -203,6 +205,20 @@ export const getTracePath = (domain: string, itemId: string): string =>
 
 export const getTraceUrl = ({ domain, item_id, run_id }: TraceId): string =>
   `${getTracePath(domain, item_id)}?run_id=${run_id}`;
+
+// Scripts and automations are registered with their config id as unique id.
+// A removed script or an automation without an id has no name to show.
+export const computeTraceItemName = (
+  hass: HomeAssistant,
+  entityReg: EntityRegistryEntry[],
+  { domain, item_id }: TraceId
+): string | undefined => {
+  const entityId = entityReg.find(
+    (entry) => entry.platform === domain && entry.unique_id === item_id
+  )?.entity_id;
+  const stateObj = entityId ? hass.states[entityId] : undefined;
+  return stateObj ? computeStateName(stateObj) : entityId;
+};
 
 export type TraceContexts = Record<string, TraceId>;
 

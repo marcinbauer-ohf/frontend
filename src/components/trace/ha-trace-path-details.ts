@@ -6,7 +6,6 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { consume } from "../../common/decorators/consume";
 import { formatDateTimeWithSeconds } from "../../common/datetime/format_date_time";
-import { computeStateName } from "../../common/entity/compute_state_name";
 import type { Trigger, TriggerCondition } from "../../data/automation";
 import { migrateAutomationTrigger } from "../../data/automation";
 import { describeCondition, describeTrigger } from "../../data/automation_i18n";
@@ -30,7 +29,12 @@ import type {
   TraceId,
 } from "../../data/trace";
 import type { TargetSelector } from "../../data/selector";
-import { getDataFromPath, getTraceUrl, isTriggerPath } from "../../data/trace";
+import {
+  computeTraceItemName,
+  getDataFromPath,
+  getTraceUrl,
+  isTriggerPath,
+} from "../../data/trace";
 import { getTraceTriggers } from "../../data/trace-tree";
 import type { TriggerDescriptions } from "../../data/trigger";
 import { getDeviceTarget } from "../../panels/config/automation/target/get_device_target";
@@ -389,20 +393,8 @@ export class HaTracePathDetails extends LitElement {
     </div>`;
   }
 
-  // The child is a script or automation; both are registered with their config
-  // id as unique id. A removed script or an automation without an id has no
-  // name to show.
-  private _childTraceName(childId: TraceId): string | undefined {
-    const entityId = this._entityReg.find(
-      (entry) =>
-        entry.platform === childId.domain && entry.unique_id === childId.item_id
-    )?.entity_id;
-    const stateObj = entityId ? this.hass.states[entityId] : undefined;
-    return stateObj ? computeStateName(stateObj) : entityId;
-  }
-
   private _renderChildTraceLink(childId: TraceId) {
-    const name = this._childTraceName(childId);
+    const name = computeTraceItemName(this.hass, this._entityReg, childId);
     return html`<a class="trace-link" href=${getTraceUrl(childId)}
         >${
           name

@@ -7,6 +7,7 @@ import {
   mdiProgressWrench,
   mdiRecordCircleOutline,
 } from "@mdi/js";
+import type { HassEntity } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -14,6 +15,7 @@ import { ifDefined } from "lit/directives/if-defined";
 import { consume } from "../../common/decorators/consume";
 import { formatDateTimeWithSeconds } from "../../common/datetime/format_date_time";
 import { relativeTime } from "../../common/datetime/relative_time";
+import { computeStateName } from "../../common/entity/compute_state_name";
 import { fireEvent } from "../../common/dom/fire_event";
 import { fullEntitiesContext } from "../../data/context";
 import type { EntityRegistryEntry } from "../../data/entity/entity_registry";
@@ -32,11 +34,21 @@ import { describeAction } from "../../data/script_i18n";
 import type {
   ActionTraceStep,
   AutomationTraceExtended,
+  CallServiceActionTraceStep,
   ChooseActionTraceStep,
   IfActionTraceStep,
+  TraceContexts,
+  TraceId,
   TriggerTraceStep,
 } from "../../data/trace";
-import { getDataFromPath, isTriggerPath } from "../../data/trace";
+import {
+  computeTraceItemName,
+  getDataFromPath,
+  getTraceUrl,
+  isTriggerPath,
+  loadTraceContexts,
+} from "../../data/trace";
+import { transitionArrow } from "../../panels/logbook/logbook-entry-templates";
 import type { HomeAssistant } from "../../types";
 import "./ha-timeline";
 import type { HaTimeline } from "./ha-timeline";
@@ -195,7 +207,9 @@ class ActionRenderer {
     private entries: TemplateResult[],
     private trace: AutomationTraceExtended,
     private logbookRenderer: LogbookRenderer,
-    private timeTracker: RenderedTimeTracker
+    private timeTracker: RenderedTimeTracker,
+    // The script or automation run that started this one.
+    private parentRun?: TraceId
   ) {
     this.keys = Object.keys(trace.trace);
   }
@@ -304,11 +318,13 @@ class ActionRenderer {
       return this._handleParallel(index);
     }
 
+    const childId = (value as CallServiceActionTraceStep).child_id;
     this._renderEntry(
       path,
       describeAction(this.hass, this.entityReg, data, actionType),
       undefined,
-      data.enabled === false
+      data.enabled === false,
+      childId ? this._renderChildRunLink(childId) : undefined
     );
 
     let i = index + 1;
@@ -361,9 +377,61 @@ class ActionRenderer {
           ),
         }
       ),
-      mdiCircle
+      mdiCircle,
+      false,
+      this._renderTriggerCause(triggerStep)
     );
     return index + 1;
+  }
+
+  private _renderTriggerCause(
+    triggerStep: TriggerTraceStep
+  ): TemplateResult | undefined {
+    if (this.parentRun) {
+      const name = computeTraceItemName(
+        this.hass,
+        this.entityReg,
+        this.parentRun
+      );
+      return html`<a class="run-link" href=${getTraceUrl(this.parentRun)}
+        >${
+          name
+            ? this.hass.localize(
+                "ui.panel.config.automation.trace.messages.started_by",
+                { name }
+              )
+            : this.hass.localize(
+                "ui.panel.config.automation.trace.messages.started_by_unnamed"
+              )
+        }</a
+      >`;
+    }
+    const { from_state, to_state } = triggerStep.changed_variables.trigger as {
+      from_state?: HassEntity | null;
+      to_state?: HassEntity | null;
+    };
+    if (!from_state || !to_state) {
+      return undefined;
+    }
+    return html`${computeStateName(to_state)}:
+    ${this.hass.formatEntityState(from_state)} ${transitionArrow(this.hass)}
+    ${this.hass.formatEntityState(to_state)}`;
+  }
+
+  private _renderChildRunLink(childId: TraceId) {
+    const name = computeTraceItemName(this.hass, this.entityReg, childId);
+    return html`<a class="run-link" href=${getTraceUrl(childId)}
+      >${
+        name
+          ? this.hass.localize(
+              "ui.panel.config.automation.trace.path.view_child_trace",
+              { name }
+            )
+          : this.hass.localize(
+              "ui.panel.config.automation.trace.path.view_child_trace_unnamed"
+            )
+      }</a
+    >`;
   }
 
   private _handleChoose(index: number): number {
@@ -639,7 +707,8 @@ class ActionRenderer {
     path: string,
     description: string,
     icon = mdiRecordCircleOutline,
-    disabled = false
+    disabled = false,
+    secondary?: TemplateResult
   ) {
     this.entries.push(html`
       <ha-timeline .icon=${icon} data-path=${path} .notEnabled=${disabled}>
@@ -652,6 +721,7 @@ class ActionRenderer {
               >`
             : ""
         }
+        ${secondary ? html`<div class="secondary">${secondary}</div>` : nothing}
       </ha-timeline>
     `);
   }
@@ -678,6 +748,27 @@ export class HaAutomationTracer extends LitElement {
   @consume({ context: fullEntitiesContext, subscribe: true })
   _entityReg: EntityRegistryEntry[] = [];
 
+  @state() private _traceContexts?: TraceContexts;
+
+  protected willUpdate(changedProps: PropertyValues<this>) {
+    super.willUpdate(changedProps);
+    if (
+      changedProps.has("trace") &&
+      this.trace?.context.parent_id &&
+      !this._traceContexts?.[this.trace.context.parent_id]
+    ) {
+      this._loadTraceContexts();
+    }
+  }
+
+  private async _loadTraceContexts() {
+    try {
+      this._traceContexts = await loadTraceContexts(this.hass);
+    } catch (_err: unknown) {
+      // Without the contexts the trigger step just shows no parent run link.
+    }
+  }
+
   protected render() {
     if (!this.trace) {
       return nothing;
@@ -697,7 +788,10 @@ export class HaAutomationTracer extends LitElement {
       entries,
       this.trace,
       logbookRenderer,
-      timeTracker
+      timeTracker,
+      this.trace.context.parent_id
+        ? this._traceContexts?.[this.trace.context.parent_id]
+        : undefined
     );
 
     while (actionRenderer.hasNext) {
@@ -913,6 +1007,18 @@ export class HaAutomationTracer extends LitElement {
         .error {
           --timeline-ball-color: var(--error-color);
           color: var(--error-color);
+        }
+        .secondary {
+          margin-top: var(--ha-space-1);
+          font-size: var(--ha-font-size-s);
+          color: var(--secondary-text-color);
+        }
+        .run-link {
+          color: var(--primary-color);
+          text-decoration: none;
+        }
+        .run-link:hover {
+          text-decoration: underline;
         }
       `,
     ];
