@@ -5445,6 +5445,7 @@
             "home": "Home",
             "unassigned": "Unassigned",
             "time_sun": "Time and sun",
+            "recently_used": "Recently used",
             "blocks": "Blocks",
             "tabs": {
               "target": "By target",
