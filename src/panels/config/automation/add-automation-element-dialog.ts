@@ -186,7 +186,14 @@ const DYNAMIC_KEYWORDS = ["dynamicGroups", "helpers", "integrationGroups"];
 
 const DYNAMIC_TO_GENERIC = new Set([`${DYNAMIC_PREFIX}event`]);
 
-const MAX_RECENT = 5;
+const MAX_RECENT = 4;
+
+// A recent that is used again keeps its place, so the row you just clicked
+// doesn't jump; only a new one goes on top and pushes the oldest out.
+const addRecent = (recents: string[] | undefined, value: string) =>
+  recents?.includes(value)
+    ? recents
+    : [value, ...(recents ?? [])].slice(0, MAX_RECENT);
 
 // Only targets that point at a concrete registry item are remembered; the
 // structural buckets ("unassigned devices", a domain group, ...) are not.
@@ -2090,12 +2097,7 @@ class DialogAddAutomationElement
 
     this._recentElements = {
       ...this._recentElements,
-      [type]: [
-        key,
-        ...(this._recentElements?.[type] ?? []).filter(
-          (recent) => recent !== key
-        ),
-      ].slice(0, MAX_RECENT),
+      [type]: addRecent(this._recentElements?.[type], key),
     };
 
     if (!target) {
@@ -2106,10 +2108,7 @@ class DialogAddAutomationElement
       return;
     }
     const recent = `${targetType}${TARGET_SEPARATOR}${targetId}`;
-    this._recentTargets = [
-      recent,
-      ...(this._recentTargets ?? []).filter((t) => t !== recent),
-    ].slice(0, MAX_RECENT);
+    this._recentTargets = addRecent(this._recentTargets, recent);
   }
 
   private _selected(ev: ValueChangedEvent<string>) {
