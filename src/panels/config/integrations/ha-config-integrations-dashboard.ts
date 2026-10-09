@@ -32,7 +32,7 @@ import "../../../components/ha-svg-icon";
 import "../../../components/input/ha-input-search";
 import type { HaInputSearch } from "../../../components/input/ha-input-search";
 import type { ConfigEntry } from "../../../data/config_entries";
-import { getConfigEntries } from "../../../data/config_entries";
+import { ERROR_STATES, getConfigEntries } from "../../../data/config_entries";
 import type { EntityRegistryEntry } from "../../../data/entity/entity_registry";
 import { subscribeEntityRegistry } from "../../../data/entity/entity_registry";
 import { fetchEntitySourcesWithCache } from "../../../data/entity/entity_sources";
@@ -68,6 +68,7 @@ import { KeyboardShortcutMixin } from "../../../mixins/keyboard-shortcut-mixin";
 import { SubscribeMixin } from "../../../mixins/subscribe-mixin";
 import { haStyle } from "../../../resources/styles";
 import type { HomeAssistant, Route } from "../../../types";
+import { brandsUrl } from "../../../util/brands-url";
 import { configSections } from "../config-sections";
 import { isHelperDomain } from "../helpers/const";
 import "./ha-config-flow-card";
@@ -473,6 +474,7 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
         this.hass.localize,
         this._filter
       );
+    const [attention, installed] = this._splitAttention(integrations);
     const configEntriesInProgress = this._filterConfigEntriesInProgress(
       this.configEntriesInProgress,
       this._improvDiscovered,
@@ -592,6 +594,29 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
               `
         }
         ${
+          attention.length
+            ? html`<h1>
+                  ${this.hass.localize("ui.panel.config.integrations.attention")}
+                </h1>
+                <div class="container">
+                  ${attention.map(
+                    ([domain, items]) =>
+                      html`<ha-integration-card
+                        data-domain=${domain}
+                        .domain=${domain}
+                        .items=${items}
+                        .manifest=${this._manifests[domain]}
+                        .entityRegistryEntries=${this._entityRegistryEntries}
+                        .domainEntities=${this._domainEntities[domain] || []}
+                        .logInfo=${
+                          this._logInfos ? this._logInfos[domain] : nothing
+                        }
+                      ></ha-integration-card>`
+                  )}
+                </div>`
+            : nothing
+        }
+        ${
           this._showIgnored
             ? html`<h1>
                   ${this.hass.localize(
@@ -663,105 +688,106 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
             : ""
         }
         ${
-          configEntriesInProgress.length ||
-          this._showDisabled ||
-          this._showIgnored
+          installed.length
             ? html`<h1>
-                ${this.hass.localize("ui.panel.config.integrations.configured")}
-              </h1>`
-            : ""
+                  ${this.hass.localize(
+                    "ui.panel.config.integrations.catalog.your_integrations"
+                  )}
+                </h1>
+                <div class="tiles">
+                  ${installed.map(([domain, items]) =>
+                    this._renderInstalled(domain, items)
+                  )}
+                </div>`
+            : nothing
         }
-        <div class="container">
-          ${
-            integrations.length
-              ? integrations.map(
-                  ([domain, items]) =>
-                    html`<ha-integration-card
-                      data-domain=${domain}
-                      .domain=${domain}
-                      .items=${items}
-                      .manifest=${this._manifests[domain]}
-                      .entityRegistryEntries=${this._entityRegistryEntries}
-                      .domainEntities=${this._domainEntities[domain] || []}
-                      .logInfo=${
-                        this._logInfos ? this._logInfos[domain] : nothing
-                      }
-                    ></ha-integration-card>`
-                )
-              : this._filter &&
-                  !configEntriesInProgress.length &&
-                  !integrations.length &&
-                  this.configEntries.length
-                ? html`
-                    <div class="empty-message">
-                      <h1>
-                        ${this.hass.localize(
-                          "ui.panel.config.integrations.none_found"
-                        )}
-                      </h1>
-                      <p>
-                        ${this.hass.localize(
-                          "ui.panel.config.integrations.none_found_detail"
-                        )}
-                      </p>
-                      <ha-button
-                        @click=${this._createFlow}
-                        appearance="filled"
-                        size="s"
-                      >
-                        <ha-svg-icon
-                          slot="start"
-                          .path=${mdiPlus}
-                        ></ha-svg-icon>
-                        ${this.hass.localize(
-                          "ui.panel.config.integrations.add_integration"
-                        )}
-                      </ha-button>
-                    </div>
-                  `
-                : // If we have a filter, never show a card
-                  this._filter
-                  ? ""
-                  : // If we're showing 0 cards, show empty state text
-                    (!this._showIgnored || ignoredConfigEntries.length === 0) &&
-                      (!this._showDisabled ||
-                        disabledConfigEntries.length === 0) &&
-                      integrations.length === 0
-                    ? html`
-                        <div class="empty-message">
-                          <h1>
-                            ${this.hass.localize(
-                              "ui.panel.config.integrations.none"
-                            )}
-                          </h1>
-                          <p>
-                            ${this.hass.localize(
-                              "ui.panel.config.integrations.no_integrations"
-                            )}
-                          </p>
-                          <ha-button
-                            @click=${this._createFlow}
-                            appearance="filled"
-                            size="s"
-                          >
-                            <ha-svg-icon
-                              slot="start"
-                              .path=${mdiPlus}
-                            ></ha-svg-icon>
-                            ${this.hass.localize(
-                              "ui.panel.config.integrations.add_integration"
-                            )}
-                          </ha-button>
-                        </div>
-                      `
-                    : ""
-          }
-        </div>
         <ha-button slot="fab" size="l" @click=${this._createFlow}>
           <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
           ${this.hass.localize("ui.panel.config.integrations.add_integration")}
         </ha-button>
       </hass-tabs-subpage>
+    `;
+  }
+
+  // Integrations with an entry that failed get the full card on top, the rest
+  // are listed compactly, their details live on the integration page
+  private _splitAttention = memoizeOne(
+    (integrations: [string, ConfigEntryExtended[]][]) => {
+      const attention: [string, ConfigEntryExtended[]][] = [];
+      const installed: [string, ConfigEntryExtended[]][] = [];
+      for (const integration of integrations) {
+        (integration[1].some((entry) => ERROR_STATES.includes(entry.state))
+          ? attention
+          : installed
+        ).push(integration);
+      }
+      return [attention, installed];
+    }
+  );
+
+  private _deviceCounts = memoizeOne(
+    (
+      devices: HomeAssistant["devices"],
+      configEntries: ConfigEntryExtended[]
+    ) => {
+      const entryDomains = new Map(
+        configEntries.map((entry) => [entry.entry_id, entry.domain])
+      );
+      const counts: Record<string, number> = {};
+      for (const device of Object.values(devices)) {
+        for (const domain of new Set(
+          device.config_entries.map((entryId) => entryDomains.get(entryId))
+        )) {
+          if (domain) {
+            counts[domain] = (counts[domain] || 0) + 1;
+          }
+        }
+      }
+      return counts;
+    }
+  );
+
+  private _renderInstalled(domain: string, items: ConfigEntryExtended[]) {
+    const devices =
+      this._deviceCounts(this.hass.devices, this.configEntries!)[domain] || 0;
+    return html`
+      <a
+        class="tile"
+        data-domain=${domain}
+        href=${`/config/integrations/integration/${domain}`}
+      >
+        <img
+          alt=""
+          crossorigin="anonymous"
+          referrerpolicy="no-referrer"
+          src=${brandsUrl(
+            {
+              domain,
+              type: "icon",
+              darkOptimized: this.hass.themes?.darkMode,
+            },
+            this.hass.auth.data.hassUrl
+          )}
+        />
+        <span class="text">
+          <span class="name">
+            ${items[0].localized_domain_name || domain}
+          </span>
+          <span class="details">
+            ${
+              devices
+                ? this.hass.localize(
+                    "ui.panel.config.integrations.catalog.devices",
+                    { count: devices }
+                  )
+                : this.hass.localize(
+                    "ui.panel.config.integrations.catalog.entries",
+                    { count: items.length }
+                  )
+            }
+          </span>
+        </span>
+      </a>
     `;
   }
 
@@ -862,10 +888,7 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
   }
 
   private _createFlow() {
-    showAddIntegrationDialog(this, {
-      initialFilter: this._filter,
-      navigateToResult: true,
-    });
+    navigate("/config/integrations/browse");
   }
 
   private _handleMenuAction(ev: HaDropdownSelectEvent) {
@@ -1082,6 +1105,57 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
           gap: var(--ha-space-4);
           padding: var(--ha-space-4);
           margin: var(--ha-space-2);
+        }
+        .tiles {
+          display: grid;
+          grid-template-columns: repeat(
+            auto-fill,
+            minmax(min(240px, 100%), 1fr)
+          );
+          gap: var(--ha-space-3);
+          padding: 0 var(--ha-space-4) var(--ha-space-4);
+        }
+        .tile {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-3);
+          padding: var(--ha-space-3);
+          border: 1px solid var(--divider-color);
+          border-radius: var(
+            --ha-card-border-radius,
+            var(--ha-border-radius-lg)
+          );
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          text-decoration: none;
+          min-width: 0;
+        }
+        .tile:hover {
+          background: var(--ha-color-fill-neutral-quiet-hover);
+        }
+        .tile.highlight {
+          outline: 2px solid var(--primary-color);
+        }
+        .tile img {
+          width: 40px;
+          height: 40px;
+          object-fit: contain;
+          flex-shrink: 0;
+        }
+        .tile .text {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+        }
+        .tile .name {
+          font-weight: var(--ha-font-weight-medium);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .tile .details {
+          color: var(--secondary-text-color);
+          font-size: var(--ha-font-size-s);
         }
         .empty-message {
           margin: auto;

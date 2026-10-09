@@ -33,7 +33,6 @@ import {
   mdiStarFourPoints,
   mdiStore,
   mdiTextBoxOutline,
-  mdiTools,
   mdiTransitConnectionVariant,
   mdiUpdate,
   mdiViewDashboard,
@@ -58,7 +57,7 @@ const getHasDomainCheck = (domain: string) => {
 export const configSections: Record<string, PageNavigation[]> = {
   dashboard: [
     {
-      path: "/config/integrations",
+      path: "/config/devices",
       translationKey: "devices",
       iconPath: mdiDevices,
       iconColor: "#0D47A1",
@@ -287,16 +286,10 @@ export const configSections: Record<string, PageNavigation[]> = {
       adminOnly: true,
     },
   ],
+  // Entities and helpers live inside the devices list now: entities are
+  // the features of a device and helpers are virtual devices. Their pages
+  // stay reachable by URL, without a tab.
   devices: [
-    {
-      component: "integrations",
-      path: "/config/integrations",
-      translationKey: "ui.panel.config.integrations.caption",
-      iconPath: mdiPuzzle,
-      iconColor: "#2D338F",
-      core: true,
-      adminOnly: true,
-    },
     {
       component: "devices",
       path: "/config/devices",
@@ -307,20 +300,11 @@ export const configSections: Record<string, PageNavigation[]> = {
       adminOnly: true,
     },
     {
-      component: "entities",
-      path: "/config/entities",
-      translationKey: "ui.panel.config.entities.caption",
-      iconPath: mdiShape,
+      component: "integrations",
+      path: "/config/integrations",
+      translationKey: "ui.panel.config.integrations.caption",
+      iconPath: mdiPuzzle,
       iconColor: "#2D338F",
-      core: true,
-      adminOnly: true,
-    },
-    {
-      component: "helpers",
-      path: "/config/helpers",
-      translationKey: "ui.panel.config.helpers.caption",
-      iconPath: mdiTools,
-      iconColor: "#4D2EA4",
       core: true,
       adminOnly: true,
     },

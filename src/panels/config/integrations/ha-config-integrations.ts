@@ -61,6 +61,10 @@ class HaConfigIntegrations extends SubscribeMixin(HassRouterPage) {
       integration: {
         tag: "ha-config-integration-page",
       },
+      browse: {
+        tag: "ha-config-integrations-browse",
+        load: () => import("./ha-config-integrations-browse"),
+      },
     },
   };
 

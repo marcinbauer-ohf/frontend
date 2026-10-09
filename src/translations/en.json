@@ -7015,6 +7015,12 @@
           "add_prompt_enabled": "You can add one by pressing the + button above.",
           "add_prompt_disabled": "You can re-enable the device then add one by pressing the + button above.",
           "add_device": "Add device",
+          "add": {
+            "device": "Device or service",
+            "device_description": "Hardware or an online service, set up through an integration",
+            "virtual": "Virtual device",
+            "virtual_description": "A helper that only lives in Home Assistant, like a toggle, timer or template"
+          },
           "caption": "Devices",
           "description": "Manage configured devices",
           "filtering_by_config_entry": "[%key:ui::panel::config::entities::picker::filtering_by_config_entry%]",
@@ -7142,6 +7148,10 @@
             "part_of_device": "Part of {name}",
             "firmware_version": "Firmware",
             "battery": "Battery",
+            "kind": "Type",
+            "kind_device": "Device",
+            "kind_service": "Service",
+            "kind_virtual": "Virtual device",
             "disabled_by": "Disabled",
             "no_devices": "No devices",
             "no_integration": "No integration",
@@ -7378,6 +7388,34 @@
           "available_integrations": "Available integrations",
           "new_flow": "Set up another instance of {integration}",
           "attention": "Attention required",
+          "catalog": {
+            "your_integrations": "Your integrations",
+            "devices": "{count} {count, plural,\n  one {device}\n  other {devices}\n}",
+            "entries": "{count} {count, plural,\n  one {entry}\n  other {entries}\n}",
+            "category": {
+              "all": "All",
+              "device": "Devices",
+              "hub": "Hubs",
+              "service": "Services",
+              "local": "Works locally",
+              "zigbee": "Zigbee",
+              "zwave": "Z-Wave",
+              "matter": "Matter",
+              "marketplace": "Marketplace"
+            },
+            "type": {
+              "device": "Device",
+              "hub": "Hub",
+              "service": "Service"
+            },
+            "brand": "Brand",
+            "local": "Local",
+            "cloud": "Cloud",
+            "installed": "Installed",
+            "custom": "Custom",
+            "show_more": "Show {count} more",
+            "no_results": "No integrations match your search"
+          },
           "configured": "Configured",
           "new": "Select brand",
           "confirm_new": "Do you want to set up {integration}?",

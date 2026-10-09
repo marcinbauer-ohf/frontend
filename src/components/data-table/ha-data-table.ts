@@ -1,5 +1,10 @@
 import type { ContextType } from "@lit/context";
-import { mdiArrowDown, mdiArrowUp, mdiChevronUp } from "@mdi/js";
+import {
+  mdiArrowDown,
+  mdiArrowUp,
+  mdiChevronRight,
+  mdiChevronUp,
+} from "@mdi/js";
 import deepClone from "deep-clone-simple";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { LitElement, css, html, nothing } from "lit";
@@ -110,6 +115,9 @@ export type ClonedDataTableColumnData = Omit<DataTableColumnData, "title"> & {
 export interface DataTableRowData {
   [key: string]: any;
   selectable?: boolean;
+  // Rows shown under this row when it is expanded, rendered with the same
+  // columns. Matching children are also revealed while searching.
+  subRows?: DataTableRowData[];
 }
 
 export type SortableColumnContainer = Record<string, ClonedDataTableColumnData>;
@@ -194,6 +202,8 @@ export class HaDataTable extends LitElement {
   @query("lit-virtualizer") private _scroller?: HTMLElement;
 
   @state() private _collapsedGroups: string[] = [];
+
+  @state() private _expandedRows: string[] = [];
 
   @state() private _lastSelectedRowId: string | null = null;
 
@@ -475,6 +485,14 @@ export class HaDataTable extends LitElement {
                     `
                   : ""
               }
+              ${
+                this._hasChildren(this.data)
+                  ? html`<div
+                      class="mdc-data-table__header-cell mdc-data-table__header-cell--expand"
+                      role="columnheader"
+                    ></div>`
+                  : nothing
+              }
               ${Object.entries(columns).map(([key, column]) => {
                 if (!this._isColumnVisible(key, column)) {
                   return nothing;
@@ -659,7 +677,11 @@ export class HaDataTable extends LitElement {
                     tabindex=${ifDefined(!this.autoHeight ? "0" : undefined)}
                     @scroll=${this._saveScrollPos}
                     .items=${this._groupData(
-                      this._filteredData,
+                      this._withChildren(
+                        this._filteredData,
+                        this._expandedRows,
+                        this._filter
+                      ),
                       this._i18n?.localize,
                       this._i18n?.locale,
                       this.appendRow,
@@ -708,6 +730,7 @@ export class HaDataTable extends LitElement {
             String(row[this.id])
           ),
           clickable: this.clickable,
+          "child-row": Boolean(row.isChild),
         })}"
         aria-selected=${ifDefined(
           this._checkedRows.includes(String(row[this.id])) ? true : undefined
@@ -715,23 +738,53 @@ export class HaDataTable extends LitElement {
         .selectable=${row.selectable !== false}
       >
         ${
-          this.selectable
-            ? html`
-                <div
-                  class="mdc-data-table__cell mdc-data-table__cell--checkbox"
-                  role="cell"
-                >
-                  <ha-checkbox
-                    class="mdc-data-table__row-checkbox"
-                    @click=${this._handleRowCheckboxClicked}
-                    .rowId=${row[this.id]}
-                    .disabled=${row.selectable === false}
-                    .checked=${this._checkedRows.includes(String(row[this.id]))}
+          this.selectable && row.isChild
+            ? html`<div
+                class="mdc-data-table__cell mdc-data-table__cell--checkbox"
+                role="cell"
+              ></div>`
+            : this.selectable
+              ? html`
+                  <div
+                    class="mdc-data-table__cell mdc-data-table__cell--checkbox"
+                    role="cell"
                   >
-                  </ha-checkbox>
-                </div>
-              `
-            : ""
+                    <ha-checkbox
+                      class="mdc-data-table__row-checkbox"
+                      @click=${this._handleRowCheckboxClicked}
+                      .rowId=${row[this.id]}
+                      .disabled=${row.selectable === false}
+                      .checked=${this._checkedRows.includes(String(row[this.id]))}
+                    >
+                    </ha-checkbox>
+                  </div>
+                `
+              : ""
+        }
+        ${
+          this._hasChildren(this.data)
+            ? html`<div
+                class="mdc-data-table__cell mdc-data-table__cell--expand"
+                role="cell"
+              >
+                ${
+                  row.subRows?.length
+                    ? html`<ha-icon-button
+                        class=${row.expanded ? "expanded" : ""}
+                        .path=${mdiChevronRight}
+                        .label=${
+                          this._i18n?.localize?.(
+                            `ui.components.data-table.${row.expanded ? "collapse" : "expand"}`
+                          ) || (row.expanded ? "Collapse" : "Expand")
+                        }
+                        .rowId=${row[this.id]}
+                        aria-expanded=${row.expanded ? "true" : "false"}
+                        @click=${this._toggleExpanded}
+                      ></ha-icon-button>`
+                    : nothing
+                }
+              </div>`
+            : nothing
         }
         ${Object.entries(columns).map(([key, column]) => {
           if (
@@ -883,6 +936,66 @@ export class HaDataTable extends LitElement {
     this._filteredData = data;
     this._filteredDataSourceLength = sourceData.length;
   }
+
+  private _hasChildren = memoizeOne((data: DataTableRowData[]) =>
+    data.some((row) => row.subRows?.length)
+  );
+
+  // Inserts the children of expanded rows after their parent. While searching,
+  // children matching the search are revealed even if the parent is collapsed.
+  private _withChildren = memoizeOne(
+    (
+      data: DataTableRowData[] | undefined,
+      expandedRows: string[],
+      filter: string
+    ): DataTableRowData[] => {
+      if (!data || !this._hasChildren(this.data)) {
+        return data || [];
+      }
+      const terms = filter.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const filterKeys = Object.entries(this.columns)
+        .filter(([, column]) => column.filterable)
+        .map(([key]) => key);
+      const matches = (child: DataTableRowData) =>
+        terms.every((term) =>
+          filterKeys.some((key) =>
+            String(child[key] ?? "")
+              .toLowerCase()
+              .includes(term)
+          )
+        );
+      const rows: DataTableRowData[] = [];
+      for (const row of data) {
+        if (!row.subRows?.length) {
+          rows.push(row);
+          continue;
+        }
+        const expanded = expandedRows.includes(String(row[this.id]));
+        const shown = expanded
+          ? row.subRows
+          : terms.length
+            ? row.subRows.filter(matches)
+            : [];
+        rows.push({ ...row, expanded: shown.length > 0 });
+        for (const child of shown) {
+          rows.push({ ...child, isChild: true, selectable: false });
+        }
+      }
+      return rows;
+    }
+  );
+
+  // Arrow function: rows are rendered by the virtualizer, which does not bind
+  // `this` to the table
+  private _toggleExpanded = (
+    ev: HASSDomCurrentTargetEvent<HTMLElement & { rowId: string }>
+  ) => {
+    ev.stopPropagation();
+    const rowId = String(ev.currentTarget.rowId);
+    this._expandedRows = this._expandedRows.includes(rowId)
+      ? this._expandedRows.filter((id) => id !== rowId)
+      : [...this._expandedRows, rowId];
+  };
 
   private _groupData = memoizeOne(
     (
@@ -1054,7 +1167,11 @@ export class HaDataTable extends LitElement {
     const rowId = checkboxElement.rowId;
 
     const groupedData = this._groupData(
-      this._filteredData || [],
+      this._withChildren(
+        this._filteredData || [],
+        this._expandedRows,
+        this._filter
+      ),
       this._i18n?.localize,
       this._i18n?.locale,
       this.appendRow,
@@ -1368,6 +1485,38 @@ export class HaDataTable extends LitElement {
 
         .mdc-data-table__cell.mdc-data-table__cell--icon {
           overflow: initial;
+        }
+
+        .mdc-data-table__header-cell--expand,
+        .mdc-data-table__cell--expand {
+          width: 40px;
+          min-width: 40px;
+          padding: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: initial;
+        }
+
+        .mdc-data-table__cell--expand ha-icon-button {
+          --ha-icon-button-size: 36px;
+          transform: scaleX(var(--scale-direction, 1));
+          transition: transform var(--ha-animation-duration-normal, 150ms) ease;
+        }
+
+        .mdc-data-table__cell--expand ha-icon-button.expanded {
+          transform: rotate(90deg);
+        }
+
+        .mdc-data-table__row.child-row {
+          background-color: var(--ha-color-fill-neutral-quiet-resting);
+        }
+
+        .mdc-data-table__row.child-row
+          .mdc-data-table__cell:not(.mdc-data-table__cell--checkbox):not(
+            .mdc-data-table__cell--expand
+          ):first-of-type {
+          padding-inline-start: var(--ha-space-6);
         }
 
         .mdc-data-table__header-cell--checkbox,

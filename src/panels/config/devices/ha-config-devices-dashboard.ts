@@ -3,9 +3,11 @@ import { ResizeController } from "@lit-labs/observers/resize-controller";
 import {
   mdiCancel,
   mdiDelete,
+  mdiDevices,
   mdiDotsVertical,
   mdiMenuDown,
   mdiPlus,
+  mdiShapeOutline,
   mdiTextureBox,
 } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
@@ -17,7 +19,9 @@ import { storage } from "../../../common/decorators/storage";
 import type { HASSDomEvent } from "../../../common/dom/fire_event";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { computeDeviceNameDisplay } from "../../../common/entity/compute_device_name";
+import { computeEntityEntryName } from "../../../common/entity/compute_entity_name";
 import { computeFloorName } from "../../../common/entity/compute_floor_name";
+import { computeStateName } from "../../../common/entity/compute_state_name";
 import { computeStateDomain } from "../../../common/entity/compute_state_domain";
 import { getDeviceArea } from "../../../common/entity/context/get_device_context";
 import {
@@ -54,6 +58,7 @@ import "../../../components/ha-filter-integrations";
 import "../../../components/ha-filter-labels";
 import "../../../components/ha-filter-states";
 import "../../../components/ha-icon-button";
+import "../../../components/ha-state-icon";
 import { createAreaRegistryEntry } from "../../../data/area/area_registry";
 import type { ConfigEntry, SubEntry } from "../../../data/config_entries";
 import { getSubEntries, sortConfigEntries } from "../../../data/config_entries";
@@ -78,12 +83,14 @@ import {
   findBatteryEntity,
 } from "../../../data/entity/entity_registry";
 import type { IntegrationManifest } from "../../../data/integration";
+import { domainToName } from "../../../data/integration";
 import type { LabelRegistryEntry } from "../../../data/label/label_registry";
 import { createLabelRegistryEntry } from "../../../data/label/label_registry";
 import {
   showAlertDialog,
   showConfirmationDialog,
 } from "../../../dialogs/generic/show-dialog-box";
+import { showMoreInfoDialog } from "../../../dialogs/more-info/show-ha-more-info-dialog";
 import "../../../layouts/hass-tabs-subpage-data-table";
 import type { HaTabsSubpageDataTable } from "../../../layouts/hass-tabs-subpage-data-table";
 import { haStyle } from "../../../resources/styles";
@@ -100,6 +107,7 @@ import {
 import { configSections } from "../config-sections";
 import "../integrations/ha-integration-overflow-menu";
 import { showAddIntegrationDialog } from "../integrations/show-add-integration-dialog";
+import { showHelperDetailDialog } from "../helpers/show-dialog-helper-detail";
 import { showLabelDetailDialog } from "../labels/show-dialog-label-detail";
 
 interface DeviceRowData extends DeviceRegistryEntry {
@@ -526,8 +534,19 @@ export class HaConfigDeviceDashboard extends LitElement {
             ? computeFloorName(this.hass.floors[floorId])
             : undefined;
 
+        const children = (deviceEntityLookup[device.id] || [])
+          .filter((entity) => showDisabled || !entity.disabled_by)
+          .map((entity) => this._entityRow(entity, areas));
+
         return {
           ...device,
+          kind: localize(
+            device.entry_type === "service"
+              ? "ui.panel.config.devices.data_table.kind_service"
+              : "ui.panel.config.devices.data_table.kind_device"
+          ),
+          subRows: children,
+          entity_search: children.map((child) => child.entity_search),
           name: computeDeviceNameDisplay(
             device,
             this.hass.localize,
@@ -594,18 +613,128 @@ export class HaConfigDeviceDashboard extends LitElement {
         };
       });
 
+      // Helpers and other entities without a device are shown as virtual
+      // devices, so the list covers everything that was on the entities and
+      // helpers pages. Entities of one config entry share a virtual device.
+      // ponytail: only the integration filter applies to virtual devices, any
+      // other active filter hides them.
+      const integrationFilter = filters["ha-filter-integrations"]?.value as
+        string[] | undefined;
+      const otherFilterActive = Object.entries(filters).some(
+        ([key, filter]) =>
+          key !== "ha-filter-integrations" &&
+          key !== "ha-filter-states" &&
+          (Array.isArray(filter.value)
+            ? filter.value.length
+            : filter.value &&
+              Object.values(filter.value).some((val) =>
+                Array.isArray(val) ? val.length : val
+              ))
+      );
+      const virtualGroups = new Map<string, EntityRegistryEntry[]>();
+      if (!otherFilterActive) {
+        for (const entity of entities) {
+          if (
+            entity.device_id ||
+            (!showDisabled && entity.disabled_by) ||
+            (integrationFilter?.length &&
+              !integrationFilter.includes(entity.platform))
+          ) {
+            continue;
+          }
+          const key = entity.config_entry_id ?? entity.entity_id;
+          virtualGroups.set(key, [...(virtualGroups.get(key) || []), entity]);
+        }
+        // Entities without a unique id are not in the registry at all
+        const registered = new Set(entities.map((entity) => entity.entity_id));
+        for (const entityId of Object.keys(this.hass.states)) {
+          if (!registered.has(entityId) && !integrationFilter?.length) {
+            virtualGroups.set(entityId, [
+              {
+                entity_id: entityId,
+                platform: computeStateDomain(this.hass.states[entityId]),
+                labels: [],
+              } as unknown as EntityRegistryEntry,
+            ]);
+          }
+        }
+      }
+
+      const virtualDevices = [...virtualGroups].map(([key, groupEntities]) => {
+        const entry = entryLookup[key] as ConfigEntry | undefined;
+        const single = groupEntities.length === 1;
+        const children = single
+          ? []
+          : groupEntities.map((entity) => this._entityRow(entity, areas));
+        const first = single
+          ? this._entityRow(groupEntities[0], areas)
+          : undefined;
+        const domain = entry?.domain ?? groupEntities[0].platform;
+        return {
+          id: first?.id ?? `config_entry:${key}`,
+          virtual: true,
+          selectable: false,
+          entity_id: first?.entity_id,
+          kind: localize("ui.panel.config.devices.data_table.kind_virtual"),
+          name: first?.name ?? entry?.title ?? key,
+          area: first?.area,
+          domains: [domain],
+          integration: domainToName(localize, domain),
+          config_entry_id: entry?.entry_id,
+          subRows: children,
+          entity_search: first
+            ? [first.entity_search]
+            : children.map((child) => child.entity_search),
+          labels: [],
+          label_entries: [],
+          battery_entity: [undefined, undefined],
+          created_at: groupEntities[0].created_at,
+          modified_at: groupEntities[0].modified_at,
+        };
+      });
+
       return {
-        devicesOutput: formattedOutputDevices,
+        devicesOutput: [
+          ...formattedOutputDevices,
+          ...virtualDevices,
+        ] as typeof formattedOutputDevices,
         filteredConfigEntry,
         filteredDomains,
       };
     }
   );
 
+  private _entityRow(
+    entity: EntityRegistryEntry,
+    areas: HomeAssistant["areas"]
+  ) {
+    const stateObj = this.hass.states[entity.entity_id];
+    const name =
+      computeEntityEntryName(entity, this.hass.devices, stateObj) ||
+      (stateObj ? computeStateName(stateObj) : entity.entity_id);
+    return {
+      id: entity.entity_id,
+      entity_id: entity.entity_id,
+      name,
+      entity_search: `${name} ${entity.entity_id}`,
+      area: entity.area_id ? areas[entity.area_id]?.name : undefined,
+      disabled_by: entity.disabled_by,
+      labels: [],
+      label_entries: [],
+      created_at: entity.created_at,
+      modified_at: entity.modified_at,
+    };
+  }
+
   private _columns = memoizeOne((localize: LocalizeFunc) => {
+    // Device rows, plus virtual devices and the entity rows under a device
     type DeviceItem = ReturnType<
       typeof this._devicesAndFilterDomains
-    >["devicesOutput"][number];
+    >["devicesOutput"][number] & {
+      entity_id?: string;
+      isChild?: boolean;
+      virtual?: boolean;
+    };
 
     return {
       icon: {
@@ -615,23 +744,28 @@ export class HaConfigDeviceDashboard extends LitElement {
         moveable: false,
         showNarrow: true,
         template: (device) =>
-          !this.entries
-            ? html`<ha-skeleton-icon></ha-skeleton-icon>`
-            : device.domains.length
-              ? html`<img
-                  alt=""
-                  crossorigin="anonymous"
-                  referrerpolicy="no-referrer"
-                  src=${brandsUrl(
-                    {
-                      domain: device.domains[0],
-                      type: "icon",
-                      darkOptimized: this.hass.themes?.darkMode,
-                    },
-                    this.hass.auth.data.hassUrl
-                  )}
-                />`
-              : "",
+          device.entity_id
+            ? html`<ha-state-icon
+                .hass=${this.hass}
+                .stateObj=${this.hass.states[device.entity_id]}
+              ></ha-state-icon>`
+            : !this.entries
+              ? html`<ha-skeleton-icon></ha-skeleton-icon>`
+              : device.domains.length
+                ? html`<img
+                    alt=""
+                    crossorigin="anonymous"
+                    referrerpolicy="no-referrer"
+                    src=${brandsUrl(
+                      {
+                        domain: device.domains[0],
+                        type: "icon",
+                        darkOptimized: this.hass.themes?.darkMode,
+                      },
+                      this.hass.auth.data.hassUrl
+                    )}
+                  />`
+                : "",
       },
       name: {
         title: localize("ui.panel.config.devices.data_table.device"),
@@ -643,6 +777,15 @@ export class HaConfigDeviceDashboard extends LitElement {
         flex: 2,
         minWidth: "150px",
         extraTemplate: (device) => html`
+          ${
+            device.entity_id && this.hass.states[device.entity_id]
+              ? html`<div class="secondary">
+                  ${this.hass.formatEntityState(
+                    this.hass.states[device.entity_id]
+                  )}
+                </div>`
+              : nothing
+          }
           ${
             device.parent_device_name
               ? html`<div style="color: var(--secondary-text-color);">
@@ -666,6 +809,18 @@ export class HaConfigDeviceDashboard extends LitElement {
           }
         `,
       },
+      entity_search: {
+        title: "",
+        hidden: true,
+        filterable: true,
+      },
+      kind: {
+        title: localize("ui.panel.config.devices.data_table.kind"),
+        sortable: true,
+        filterable: true,
+        groupable: true,
+        minWidth: "120px",
+      },
       area: getAreaTableColumn(localize),
       floor: getFloorTableColumn(localize),
       integration: {
@@ -675,9 +830,11 @@ export class HaConfigDeviceDashboard extends LitElement {
         groupable: true,
         minWidth: "120px",
         template: (device) =>
-          !this.entries
-            ? html`<ha-skeleton-text></ha-skeleton-text>`
-            : device.integration,
+          device.isChild
+            ? nothing
+            : !this.entries
+              ? html`<ha-skeleton-text></ha-skeleton-text>`
+              : device.integration,
       },
       device_family_name: {
         title: localize("ui.panel.config.devices.data_table.parent_device"),
@@ -721,6 +878,9 @@ export class HaConfigDeviceDashboard extends LitElement {
         minWidth: "101px",
         valueColumn: "battery_level",
         template: (device) => {
+          if (device.isChild || device.virtual) {
+            return nothing;
+          }
           if (!this.entities) {
             return html`<ha-skeleton-text></ha-skeleton-text>`;
           }
@@ -927,10 +1087,34 @@ export class HaConfigDeviceDashboard extends LitElement {
           .hass=${this.hass}
           slot="toolbar-icon"
         ></ha-integration-overflow-menu>
-        <ha-button slot="fab" size="l" @click=${this._addDevice}>
-          <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
-          ${this.hass.localize("ui.panel.config.devices.add_device")}
-        </ha-button>
+        <ha-dropdown slot="fab" @wa-select=${this._handleAdd}>
+          <ha-button slot="trigger" size="l">
+            <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
+            ${this.hass.localize("ui.panel.config.devices.add_device")}
+          </ha-button>
+          <ha-dropdown-item value="device">
+            <ha-svg-icon slot="icon" .path=${mdiDevices}></ha-svg-icon>
+            <div class="add-item">
+              ${this.hass.localize("ui.panel.config.devices.add.device")}
+              <span class="secondary">
+                ${this.hass.localize(
+                  "ui.panel.config.devices.add.device_description"
+                )}
+              </span>
+            </div>
+          </ha-dropdown-item>
+          <ha-dropdown-item value="virtual">
+            <ha-svg-icon slot="icon" .path=${mdiShapeOutline}></ha-svg-icon>
+            <div class="add-item">
+              ${this.hass.localize("ui.panel.config.devices.add.virtual")}
+              <span class="secondary">
+                ${this.hass.localize(
+                  "ui.panel.config.devices.add.virtual_description"
+                )}
+              </span>
+            </div>
+          </ha-dropdown-item>
+        </ha-dropdown>
         ${
           Array.isArray(this._filters.config_entry?.value) &&
           this._filters.config_entry?.value.length
@@ -1142,14 +1326,37 @@ export class HaConfigDeviceDashboard extends LitElement {
   }
 
   private _handleRowClicked(ev: HASSDomEvent<RowClickedEvent>) {
-    const deviceId = ev.detail.id;
+    const id = ev.detail.id;
+    // Entity ids always contain a dot, device ids never do
+    if (id.includes(".")) {
+      showMoreInfoDialog(this, { entityId: id });
+      return;
+    }
     this._ignoreLocationChange = true;
-    navigate(`/config/devices/device/${deviceId}`);
+    if (id.startsWith("config_entry:")) {
+      const entryId = id.substring("config_entry:".length);
+      const domain = this.entries?.find(
+        (entry) => entry.entry_id === entryId
+      )?.domain;
+      navigate(
+        `/config/integrations/integration/${domain}#config_entry=${entryId}`
+      );
+      return;
+    }
+    navigate(`/config/devices/device/${id}`);
   }
 
   private _handleSearchChange(ev: CustomEvent) {
     this._filter = ev.detail.value;
     updateHistoryState({ filter: this._filter });
+  }
+
+  private _handleAdd(ev: HaDropdownSelectEvent) {
+    if (ev.detail.item.value === "virtual") {
+      showHelperDetailDialog(this, {});
+      return;
+    }
+    this._addDevice();
   }
 
   private _addDevice() {
@@ -1177,10 +1384,12 @@ export class HaConfigDeviceDashboard extends LitElement {
       });
       return;
     }
-    showAddIntegrationDialog(this, {
-      domain: this._searchParms.get("domain") || undefined,
-      navigateToResult: true,
-    });
+    const domain = this._searchParms.get("domain");
+    if (domain) {
+      showAddIntegrationDialog(this, { domain, navigateToResult: true });
+      return;
+    }
+    navigate("/config/integrations/browse");
   }
 
   private _handleSelectionChanged(
@@ -1403,6 +1612,16 @@ ${rejected
         ha-dropdown::part(menu),
         ha-dropdown::part(submenu) {
           --auto-size-available-width: calc(50vw - var(--ha-space-4));
+        }
+        .add-item {
+          display: flex;
+          flex-direction: column;
+          white-space: normal;
+        }
+        .add-item .secondary,
+        .secondary {
+          color: var(--secondary-text-color);
+          font-size: var(--ha-font-size-s);
         }
         ha-dropdown ha-assist-chip {
           --md-assist-chip-trailing-space: 8px;
