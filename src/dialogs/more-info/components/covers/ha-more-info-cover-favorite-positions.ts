@@ -10,7 +10,11 @@ import type { HASSDomEvent } from "../../../../common/dom/fire_event";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import type { LocalizeFunc } from "../../../../common/translations/localize";
 import "../../../../components/ha-control-button";
-import { apiContext, configContext } from "../../../../data/context";
+import {
+  apiContext,
+  configContext,
+  formattersContext,
+} from "../../../../data/context";
 import type { CoverEntity } from "../../../../data/cover";
 import {
   DEFAULT_COVER_FAVORITE_POSITIONS,
@@ -29,6 +33,7 @@ import type {
   HomeAssistant,
   HomeAssistantApi,
   HomeAssistantConfig,
+  HomeAssistantFormatters,
 } from "../../../../types";
 import {
   showConfirmationDialog,
@@ -62,6 +67,10 @@ export class HaMoreInfoCoverFavoritePositions extends LitElement {
   @state()
   @consumeLocalize()
   private _localize!: LocalizeFunc;
+
+  @state()
+  @consume({ context: formattersContext, subscribe: true })
+  private _formatters!: HomeAssistantFormatters;
 
   @state()
   @consume({ context: configContext, subscribe: true })
@@ -307,16 +316,31 @@ export class HaMoreInfoCoverFavoritePositions extends LitElement {
           })}
           style=${styleMap({
             "--control-button-border-radius": "var(--ha-border-radius-pill)",
-            width: "72px",
+            // Grows for a long state name.
+            width: "auto",
+            "min-width": "72px",
+            "--control-button-padding": "0 var(--ha-space-3)",
             height: "36px",
           })}
           .label=${label}
           .disabled=${this.stateObj.state === UNAVAILABLE}
         >
-          ${favorite as number}%
+          ${this._favoriteText(kind, favorite as number)}
         </ha-control-button>
       `;
     };
+
+  // Fully open and fully closed read as the state, e.g. "Open" for a curtain
+  // at 100%.
+  private _favoriteText(kind: FavoriteKind, favorite: number) {
+    if (kind === "position" && (favorite === 0 || favorite === 100)) {
+      return this._formatters.formatEntityState(
+        this.stateObj,
+        favorite === 100 ? "open" : "closed"
+      );
+    }
+    return `${favorite}%`;
+  }
 
   private _deleteLabel =
     (kind: FavoriteKind): HaMoreInfoFavorites["deleteLabel"] =>

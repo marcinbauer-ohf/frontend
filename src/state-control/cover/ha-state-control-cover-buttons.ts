@@ -15,6 +15,8 @@ import type { LocalizeFunc } from "../../common/translations/localize";
 import "../../components/ha-control-button";
 import "../../components/ha-control-button-group";
 import "../../components/ha-control-slider";
+import "../../components/ha-icon-button";
+import "../../components/ha-icon-button-group";
 import "../../components/ha-svg-icon";
 import { apiContext } from "../../data/context";
 import type { CoverEntity } from "../../data/cover";
@@ -26,11 +28,16 @@ import {
   canOpenTilt,
   canStop,
   canStopTilt,
+  coverSupportsTiltPosition,
 } from "../../data/cover";
 import type { HomeAssistantApi } from "../../types";
+import { getCoverSliderLayout } from "./ha-state-control-cover-position";
 
 type CoverButton =
   "open" | "close" | "stop" | "open-tilt" | "close-tilt" | "none";
+
+const COMPACT_MOVE_BUTTONS: CoverButton[] = ["open", "stop", "close"];
+const COMPACT_TILT_BUTTONS: CoverButton[] = ["open-tilt", "close-tilt"];
 
 interface CoverLayout {
   type: "line" | "cross";
@@ -112,35 +119,38 @@ export class HaStateControlCoverButtons extends LitElement {
 
   @property({ attribute: false }) public stateObj!: CoverEntity;
 
-  private _onOpenTap(ev): void {
+  /** Render a small icon button row, used next to the position sliders. */
+  @property({ type: Boolean }) public compact = false;
+
+  private _onOpenTap(ev: Event): void {
     ev.stopPropagation();
     this._api.callService("cover", "open_cover", {
       entity_id: this.stateObj!.entity_id,
     });
   }
 
-  private _onCloseTap(ev): void {
+  private _onCloseTap(ev: Event): void {
     ev.stopPropagation();
     this._api.callService("cover", "close_cover", {
       entity_id: this.stateObj!.entity_id,
     });
   }
 
-  private _onOpenTiltTap(ev): void {
+  private _onOpenTiltTap(ev: Event): void {
     ev.stopPropagation();
     this._api.callService("cover", "open_cover_tilt", {
       entity_id: this.stateObj!.entity_id,
     });
   }
 
-  private _onCloseTiltTap(ev): void {
+  private _onCloseTiltTap(ev: Event): void {
     ev.stopPropagation();
     this._api.callService("cover", "close_cover_tilt", {
       entity_id: this.stateObj!.entity_id,
     });
   }
 
-  private _onStopTap(ev): void {
+  private _onStopTap(ev: Event): void {
     ev.stopPropagation();
     if (supportsFeature(this.stateObj, CoverEntityFeature.STOP)) {
       this._api.callService("cover", "stop_cover", {
@@ -154,71 +164,107 @@ export class HaStateControlCoverButtons extends LitElement {
     }
   }
 
-  protected renderButton(button: CoverButton | undefined) {
-    if (button === "open") {
-      return html`
-        <ha-control-button
-          .label=${this._localize("ui.card.cover.open_cover")}
-          @click=${this._onOpenTap}
-          .disabled=${!canOpen(this.stateObj)}
-          data-button="open"
-        >
-          <ha-svg-icon .path=${computeOpenIcon(this.stateObj)}></ha-svg-icon>
-        </ha-control-button>
-      `;
+  private _buttonConfig(button: CoverButton) {
+    switch (button) {
+      case "open":
+        return {
+          label: this._localize("ui.card.cover.open_cover"),
+          path: computeOpenIcon(this.stateObj),
+          disabled: !canOpen(this.stateObj),
+          action: this._onOpenTap,
+        };
+      case "close":
+        return {
+          label: this._localize("ui.card.cover.close_cover"),
+          path: computeCloseIcon(this.stateObj),
+          disabled: !canClose(this.stateObj),
+          action: this._onCloseTap,
+        };
+      case "stop":
+        return {
+          label: this._localize("ui.card.cover.stop_cover"),
+          path: mdiStop,
+          disabled: !canStop(this.stateObj) && !canStopTilt(this.stateObj),
+          action: this._onStopTap,
+        };
+      case "open-tilt":
+        return {
+          label: this._localize("ui.card.cover.open_tilt_cover"),
+          path: mdiArrowTopRight,
+          disabled: !canOpenTilt(this.stateObj),
+          action: this._onOpenTiltTap,
+        };
+      case "close-tilt":
+        return {
+          label: this._localize("ui.card.cover.close_tilt_cover"),
+          path: mdiArrowBottomLeft,
+          disabled: !canCloseTilt(this.stateObj),
+          action: this._onCloseTiltTap,
+        };
+      default:
+        return undefined;
     }
-    if (button === "close") {
-      return html`
-        <ha-control-button
-          .label=${this._localize("ui.card.cover.close_cover")}
-          @click=${this._onCloseTap}
-          .disabled=${!canClose(this.stateObj)}
-          data-button="close"
-        >
-          <ha-svg-icon .path=${computeCloseIcon(this.stateObj)}></ha-svg-icon>
-        </ha-control-button>
-      `;
+  }
+
+  protected renderButton(button: CoverButton) {
+    const config = this._buttonConfig(button);
+    if (!config) {
+      return nothing;
     }
-    if (button === "stop") {
-      return html`
-        <ha-control-button
-          .label=${this._localize("ui.card.cover.stop_cover")}
-          @click=${this._onStopTap}
-          .disabled=${!canStop(this.stateObj) && !canStopTilt(this.stateObj)}
-          data-button="stop"
-        >
-          <ha-svg-icon .path=${mdiStop}></ha-svg-icon>
-        </ha-control-button>
-      `;
+    return html`
+      <ha-control-button
+        .label=${config.label}
+        @click=${config.action}
+        .disabled=${config.disabled}
+        data-button=${button}
+      >
+        <ha-svg-icon .path=${config.path}></ha-svg-icon>
+      </ha-control-button>
+    `;
+  }
+
+  private _renderCompact() {
+    const { buttons } = getCoverLayout(this.stateObj);
+    // A tilt position slider is shown next to this row, so it replaces the
+    // tilt buttons.
+    const showTilt = !coverSupportsTiltPosition(this.stateObj);
+    const moveButtons = COMPACT_MOVE_BUTTONS.filter((b) => buttons.includes(b));
+    // A horizontal slider is closed at the start, so close comes first to
+    // match it.
+    if (!getCoverSliderLayout(this.stateObj).vertical) {
+      moveButtons.reverse();
     }
-    if (button === "open-tilt") {
+    const tiltButtons = showTilt
+      ? COMPACT_TILT_BUTTONS.filter((b) => buttons.includes(b))
+      : [];
+    const renderIconButton = (button: CoverButton) => {
+      const config = this._buttonConfig(button)!;
       return html`
-        <ha-control-button
-          .label=${this._localize("ui.card.cover.open_tilt_cover")}
-          @click=${this._onOpenTiltTap}
-          .disabled=${!canOpenTilt(this.stateObj)}
-          data-button="open-tilt"
-        >
-          <ha-svg-icon .path=${mdiArrowTopRight}></ha-svg-icon>
-        </ha-control-button>
+        <ha-icon-button
+          .label=${config.label}
+          .path=${config.path}
+          .disabled=${config.disabled}
+          @click=${config.action}
+        ></ha-icon-button>
       `;
-    }
-    if (button === "close-tilt") {
-      return html`
-        <ha-control-button
-          .label=${this._localize("ui.card.cover.close_tilt_cover")}
-          @click=${this._onCloseTiltTap}
-          .disabled=${!canCloseTilt(this.stateObj)}
-          data-button="close-tilt"
-        >
-          <ha-svg-icon .path=${mdiArrowBottomLeft}></ha-svg-icon>
-        </ha-control-button>
-      `;
-    }
-    return nothing;
+    };
+    return html`
+      <ha-icon-button-group>
+        ${moveButtons.map(renderIconButton)}
+        ${
+          moveButtons.length && tiltButtons.length
+            ? html`<div class="separator"></div>`
+            : nothing
+        }
+        ${tiltButtons.map(renderIconButton)}
+      </ha-icon-button-group>
+    `;
   }
 
   protected render(): TemplateResult {
+    if (this.compact) {
+      return this._renderCompact();
+    }
     const layout = getCoverLayout(this.stateObj);
 
     return html`

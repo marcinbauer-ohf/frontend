@@ -175,7 +175,7 @@ export class HaControlSwitch extends LitElement {
         ?disabled=${this.disabled}
       >
         <div class="background"></div>
-        <div class="button" aria-hidden="true">
+        <div class="button" part="button" aria-hidden="true">
           ${
             this.checked
               ? this.pathOn
@@ -220,7 +220,14 @@ export class HaControlSwitch extends LitElement {
       position: relative;
       height: 100%;
       width: 100%;
-      border-radius: var(--control-switch-border-radius);
+      /* The bottom corners can be set apart, e.g. squarer for a door. */
+      --switch-bottom-radius: var(
+        --control-switch-bottom-border-radius,
+        var(--control-switch-border-radius)
+      );
+      border-radius: var(--control-switch-border-radius)
+        var(--control-switch-border-radius) var(--switch-bottom-radius)
+        var(--switch-bottom-radius);
       outline: none;
       padding: var(--control-switch-padding);
       display: flex;
@@ -263,9 +270,15 @@ export class HaControlSwitch extends LitElement {
       width: 50%;
       height: 100%;
       background: lightgrey;
-      border-radius: calc(
+      --button-radius: calc(
         var(--control-switch-border-radius) - var(--control-switch-padding)
       );
+      --button-bottom-radius: max(
+        0px,
+        var(--switch-bottom-radius) - var(--control-switch-padding)
+      );
+      border-radius: var(--button-radius) var(--button-radius)
+        var(--button-bottom-radius) var(--button-bottom-radius);
       transition:
         transform 180ms ease-in-out,
         background-color 180ms ease-in-out;

@@ -112,6 +112,13 @@ export class HaStateControlLightBrightness extends LitElement {
       --control-slider-background: var(--disabled-color);
       --control-slider-background-opacity: 0.2;
       --control-slider-tooltip-font-size: var(--ha-font-size-xl);
+      /* The same handle as the cover position slider. */
+      --control-slider-handle-surface: color-mix(
+        in srgb,
+        var(--control-slider-color) 80%,
+        white
+      );
+      --control-slider-handle-surface-size: 8px;
     }
   `;
 }

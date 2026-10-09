@@ -23,10 +23,16 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { ifDefined } from "lit/directives/if-defined";
+import { live } from "lit/directives/live";
 import memoizeOne from "memoize-one";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import { UndoRedoController } from "../../common/controllers/undo-redo-controller";
 import { fireEvent } from "../../common/dom/fire_event";
+import type { SliderDragEffect } from "../../data/slider_prototype";
+import {
+  SliderPrototypeController,
+  setSliderPrototype,
+} from "../../data/slider_prototype";
 import { ctrlOrCmdLabel } from "../../common/keyboard/ctrl-or-cmd";
 import { goBack, navigate, replaceCurrentUrl } from "../../common/navigate";
 import type { LocalizeKeys } from "../../common/translations/localize";
@@ -444,7 +450,73 @@ class HUIRoot extends LitElement {
         </ha-dropdown>
       `);
     }
+    if (!this._editMode) {
+      result.push(this._renderSliderPrototypeMenu());
+    }
     return html`${result}`;
+  }
+
+  // ponytail: prototype menu for comparing slider looks, not localized.
+  // Remove with src/data/slider_prototype.ts.
+  private _sliderPrototype = new SliderPrototypeController(this);
+
+  private _renderSliderPrototypeMenu() {
+    const { textures, dragEffect, presetsOnDrag, sway } =
+      this._sliderPrototype.value;
+    const effects: [SliderDragEffect, string][] = [
+      ["none", "Drag: no effect"],
+      ["line", "Drag: ghost line"],
+      ["preview", "Drag: hold bar and preview"],
+    ];
+    return html`
+      <ha-dropdown
+        slot="actionItems"
+        @wa-select=${this._handleSliderPrototypeSelect}
+      >
+        <ha-icon-button
+          slot="trigger"
+          .path=${mdiDotsVertical}
+          label="Slider prototype"
+        ></ha-icon-button>
+        <ha-dropdown-item
+          type="checkbox"
+          value="textures"
+          .checked=${live(textures)}
+        >
+          Cover textures
+        </ha-dropdown-item>
+        <ha-dropdown-item
+          type="checkbox"
+          value="presetsOnDrag"
+          .checked=${live(presetsOnDrag)}
+        >
+          Presets while dragging
+        </ha-dropdown-item>
+        <ha-dropdown-item type="checkbox" value="sway" .checked=${live(sway)}>
+          Curtain sway
+        </ha-dropdown-item>
+        ${effects.map(
+          ([effect, label]) => html`
+            <ha-dropdown-item
+              type="checkbox"
+              .value=${effect}
+              .checked=${live(dragEffect === effect)}
+            >
+              ${label}
+            </ha-dropdown-item>
+          `
+        )}
+      </ha-dropdown>
+    `;
+  }
+
+  private _handleSliderPrototypeSelect(ev: HaDropdownSelectEvent<string>) {
+    const value = ev.detail.item.value;
+    if (value === "textures" || value === "presetsOnDrag" || value === "sway") {
+      setSliderPrototype({ [value]: !this._sliderPrototype.value[value] });
+      return;
+    }
+    setSliderPrototype({ dragEffect: value as SliderDragEffect });
   }
 
   protected render(): TemplateResult {

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import "../../src/components/ha-control-slider";
 import type { HaControlSlider } from "../../src/components/ha-control-slider";
 
@@ -144,5 +144,80 @@ describe("ha-control-slider step bounds", () => {
     el.value = 1;
     await pressKey(el, "ArrowDown");
     expect(values).toEqual([99, 1]);
+  });
+});
+
+describe("ha-control-slider pending change", () => {
+  // Changes apply on release, then the device reports its state through
+  // `value`. Those reports must not overwrite the target the user picked
+  // until the device reaches it or stops reporting.
+  const sendEnd = async (el: HaControlSlider) => {
+    const slider = el.shadowRoot!.querySelector('[role="slider"]')!;
+    const init = { code: "End", bubbles: true, composed: true };
+    slider.dispatchEvent(new KeyboardEvent("keydown", init));
+    slider.dispatchEvent(new KeyboardEvent("keyup", init));
+    await el.updateComplete;
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("keeps the target while the device is on its way", async () => {
+    const el = await mountSlider({ value: 30 });
+    await sendEnd(el);
+    el.value = 60;
+    expect(el.value).toBe(100);
+    // Reaching the target ends the wait, later writes apply again.
+    el.value = 100;
+    el.value = 20;
+    expect(el.value).toBe(20);
+  });
+
+  it("follows the device when it moves away from the target", async () => {
+    const el = await mountSlider({ value: 30 });
+    await sendEnd(el);
+    el.value = 60;
+    // Something else sent it back down, e.g. a close button.
+    el.value = 50;
+    expect(el.value).toBe(50);
+  });
+
+  it("settles on the last reported state when reports stop", async () => {
+    vi.useFakeTimers();
+    const el = await mountSlider({ value: 30 });
+    await sendEnd(el);
+    el.value = 60;
+    vi.advanceTimersByTime(10000);
+    expect(el.value).toBe(60);
+  });
+
+  it("keeps the target when the device never reports", async () => {
+    vi.useFakeTimers();
+    const el = await mountSlider({ value: 30 });
+    await sendEnd(el);
+    vi.advanceTimersByTime(10000);
+    expect(el.value).toBe(100);
+  });
+
+  it("applies writes directly when the device turns off", async () => {
+    const el = await mountSlider({ value: 30 });
+    await sendEnd(el);
+    el.value = undefined;
+    expect(el.value).toBeUndefined();
+  });
+});
+
+describe("ha-control-slider marks", () => {
+  it("sets the value when a mark is tapped", async () => {
+    const el = await mountSlider({ value: 30, marks: [0, 25, 75, 100] });
+    const values: number[] = [];
+    el.addEventListener("value-changed", (ev) => {
+      values.push((ev as CustomEvent).detail.value);
+    });
+    const buttons = el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".mark");
+    buttons[2].click();
+    expect(values).toEqual([75]);
+    expect(el.value).toBe(75);
   });
 });

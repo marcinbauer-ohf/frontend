@@ -1,8 +1,9 @@
 import type { HassEntity } from "home-assistant-js-websocket";
 import type { TemplateResult } from "lit";
-import { html, LitElement } from "lit";
+import { css, html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
+import { ifDefined } from "lit/directives/if-defined";
 import { styleMap } from "lit/directives/style-map";
 import { consume } from "../../common/decorators/consume";
 import { consumeLocalize } from "../../common/decorators/consume-context-entry";
@@ -11,11 +12,16 @@ import type { LocalizeFunc } from "../../common/translations/localize";
 import "../../components/ha-control-button";
 import "../../components/ha-control-switch";
 import "../../components/ha-state-icon";
+import { SliderPrototypeController } from "../../data/slider_prototype";
 import { apiContext } from "../../data/context";
 import { UNAVAILABLE, UNKNOWN } from "../../data/entity/entity";
 import { forwardHaptic } from "../../data/haptics";
 import { stateControlToggleStyle } from "../../resources/state-control-styles";
 import type { HomeAssistantApi } from "../../types";
+import {
+  coverTextureStyles,
+  GROUNDED_DEVICE_CLASSES,
+} from "./ha-state-control-cover-position";
 
 @customElement("ha-state-control-cover-toggle")
 export class HaStateControlCoverToggle extends LitElement {
@@ -26,6 +32,8 @@ export class HaStateControlCoverToggle extends LitElement {
   @state()
   @consumeLocalize()
   private _localize!: LocalizeFunc;
+
+  private _prototype = new SliderPrototypeController(this);
 
   @property({ attribute: false }) public stateObj!: HassEntity;
 
@@ -117,6 +125,16 @@ export class HaStateControlCoverToggle extends LitElement {
     return html`
       <ha-control-switch
         touch-action="none"
+        device-class=${ifDefined(
+          this._prototype.value.textures
+            ? this.stateObj.attributes.device_class
+            : undefined
+        )}
+        class=${classMap({
+          grounded: GROUNDED_DEVICE_CLASSES.has(
+            this.stateObj.attributes.device_class ?? ""
+          ),
+        })}
         vertical
         reversed
         .checked=${isOn}
@@ -146,7 +164,16 @@ export class HaStateControlCoverToggle extends LitElement {
     `;
   }
 
-  static styles = [stateControlToggleStyle];
+  static styles = [
+    stateControlToggleStyle,
+    coverTextureStyles,
+    css`
+      /* Stands on the ground: round at the top, squarer at the bottom. */
+      ha-control-switch.grounded {
+        --control-switch-bottom-border-radius: var(--ha-border-radius-lg);
+      }
+    `,
+  ];
 }
 
 declare global {

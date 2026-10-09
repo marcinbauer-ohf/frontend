@@ -25,6 +25,10 @@ import {
 import { UNAVAILABLE } from "../../../data/entity/entity";
 import { DOMAIN_ATTRIBUTES_UNITS } from "../../../data/entity/entity_attributes";
 import type { FrontendLocaleData } from "../../../data/translation";
+import {
+  coverDaylightColor,
+  getCoverSliderLayout,
+} from "../../../state-control/cover/ha-state-control-cover-position";
 import type {
   HomeAssistant,
   HomeAssistantApi,
@@ -87,6 +91,9 @@ class HuiCoverPositionCardFeature
 
   @state() private _config?: CoverPositionCardFeatureConfig;
 
+  // The position being dragged to, so the daylight follows the drag.
+  @state() private _movingValue?: number;
+
   static getStubConfig(): CoverPositionCardFeatureConfig {
     return {
       type: "cover-position",
@@ -122,10 +129,21 @@ class HuiCoverPositionCardFeature
       ? computeCssColor(this.color)
       : stateColorCss(this._stateObj);
 
+    // Follow the device class like more-info does. Tiles are always
+    // horizontal, so anything that is vertical there keeps the tile layout.
+    const layout = getCoverSliderLayout(this._stateObj);
+    const { mode, inverted } = layout.vertical
+      ? { mode: "start" as const, inverted: !layout.inverted }
+      : layout;
+
     const style = {
       "--feature-color": color,
       // Use open color for inactive state to avoid grey slider that looks disabled
       "--state-cover-inactive-color": openColor,
+      "--control-slider-background": coverDaylightColor(
+        color,
+        this._movingValue ?? value
+      ),
     };
 
     return html`
@@ -135,9 +153,11 @@ class HuiCoverPositionCardFeature
         min="0"
         max="100"
         step="1"
-        inverted
+        .mode=${mode}
+        .inverted=${inverted}
         show-handle
         @value-changed=${this._valueChanged}
+        @slider-moved=${this._sliderMoved}
         .label=${computeAttributeNameDisplay(
           this._localize,
           this._stateObj,
@@ -149,6 +169,10 @@ class HuiCoverPositionCardFeature
         .locale=${this._locale}
       ></ha-control-slider>
     `;
+  }
+
+  private _sliderMoved(ev: HASSDomEvent<HASSDomEvents["slider-moved"]>) {
+    this._movingValue = ev.detail.value;
   }
 
   private _valueChanged(ev: HASSDomEvent<HASSDomEvents["value-changed"]>) {
