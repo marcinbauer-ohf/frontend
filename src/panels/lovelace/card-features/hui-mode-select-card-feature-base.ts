@@ -19,9 +19,11 @@ import type { HomeAssistantApi, HomeAssistantFormatters } from "../../../types";
 import type { LovelaceCardFeature } from "../types";
 import { cardFeatureStyles } from "./common/card-feature-styles";
 import { filterModes } from "./common/filter-modes";
+import { shouldRenderModeIcons } from "./common/mode-select-style";
 import type {
   LovelaceCardFeatureConfig,
   LovelaceCardFeatureContext,
+  LovelaceCardFeaturePosition,
 } from "./types";
 
 type AttributeModeChangeEvent = CustomEvent<{
@@ -46,6 +48,9 @@ export abstract class HuiModeSelectCardFeatureBase<
   implements LovelaceCardFeature
 {
   @property({ attribute: false }) public context?: LovelaceCardFeatureContext;
+
+  @property({ attribute: false })
+  public position?: LovelaceCardFeaturePosition;
 
   @state()
   @consumeEntityState({ entityIdPath: ["context", "entity_id"] })
@@ -143,9 +148,15 @@ export abstract class HuiModeSelectCardFeatureBase<
     const stateObj = this._stateObj;
     const options = this._getOptions();
     const label = this._label;
-    const style = this._config.style ?? this._defaultStyle;
-    const renderIcons = this._allowIconsStyle && style === "icons";
-    const renderButtons = this._allowButtonsStyle && style === "buttons";
+    const renderIcons = shouldRenderModeIcons({
+      allowIcons: this._allowIconsStyle,
+      configuredStyle: this._config.style,
+      defaultStyle: this._defaultStyle,
+      position: this.position,
+    });
+    const renderButtons =
+      this._allowButtonsStyle &&
+      (this._config.style ?? this._defaultStyle) === "buttons";
 
     if (renderIcons || renderButtons) {
       return html`

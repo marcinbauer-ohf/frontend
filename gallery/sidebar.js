@@ -106,6 +106,7 @@ export default [
           "sensor-card",
           "tile-card",
           "area-card",
+          "device-card",
         ],
       },
       {

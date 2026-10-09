@@ -14,6 +14,7 @@ import {
   subscribeHistoryStatesTimeWindow,
 } from "../../data/history";
 import type {
+  StatisticPeriod,
   Statistics,
   StatisticsMetaData,
   StatisticsTypes,
@@ -30,17 +31,56 @@ declare global {
 
 const statTypes: StatisticsTypes = ["state", "min", "mean", "max"];
 
+/** The history panel, scoped to one entity. Shared with hosts that render their
+ * own "show more" affordance instead of this component's header. */
+export const historyShowMoreUrl = (entityId: string): string =>
+  `/history?${createSearchParam({
+    entity_id: entityId,
+    start_date: startOfYesterday().toISOString(),
+    back: "1",
+  })}`;
+
 @customElement("ha-more-info-history")
 export class MoreInfoHistory extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @property({ attribute: false }) public entityId!: string;
 
+  /**
+   * More entities to draw beside `entityId`, as rows of the same timeline, for
+   * reading them against each other.
+   */
+  @property({ attribute: false }) public compareEntityIds?: string[];
+
+  /** Every entity on the chart, the one it is of first. */
+  private get _entityIds(): string[] {
+    return [this.entityId, ...(this.compareEntityIds ?? [])];
+  }
+
+  /**
+   * Drop the heading and the "show more" link. For hosts that frame this
+   * component and provide both themselves.
+   */
+  @property({ type: Boolean, attribute: "hide-header" }) public hideHeader =
+    false;
+
+  /** How far back the chart reaches. */
+  @property({ attribute: "hours-to-show", type: Number }) public hoursToShow =
+    24;
+
+  /** Bucket size, for an entity whose history comes from statistics. */
+  @property({ attribute: false }) public period: StatisticPeriod = "5minute";
+
+  /** Height of one timeline row in px, for a host that wants a taller row. */
+  @property({ attribute: false }) public rowHeight?: number;
+
+  /** Drop the chart's tooltip, for a host that states the hovered point. */
+  @property({ attribute: "hide-tooltip", type: Boolean }) public hideTooltip =
+    false;
+
   @state() private _stateHistory?: HistoryResult;
 
   @state() private _statistics?: Statistics;
-
-  private _showMoreHref = "";
 
   private _statNames?: Record<string, string>;
 
@@ -59,56 +99,72 @@ export class MoreInfoHistory extends LitElement {
 
     return html`${
       isComponentLoaded(this.hass.config, "history")
-        ? html`<div class="header">
-              <div>
-                <h2>
-                  ${this.hass.localize("ui.dialogs.more_info_control.history")}
-                </h2>
-                ${
-                  this._statistics
-                    ? html`<div class="header-secondary">
-                        ${this.hass.localize(
-                          "ui.dialogs.more_info_control.aggregate"
-                        )}
-                      </div>`
-                    : nothing
-                }
-              </div>
-              ${
-                __DEMO__
-                  ? nothing
-                  : html`<a href=${this._showMoreHref}
-                      >${this.hass.localize(
-                        "ui.dialogs.more_info_control.show_more"
-                      )}</a
-                    >`
-              }
-            </div>
-            ${
-              this._error
-                ? html`<ha-alert alert-type="error">
-                    ${this.hass.localize("ui.components.history_charts.error")}:
-                    ${this._error.message || this._error.code}
-                  </ha-alert>`
-                : this._statistics
-                  ? html`<statistics-chart
-                      .isLoadingData=${!this._statistics}
-                      .statisticsData=${this._statistics}
-                      .metadata=${this._metadata}
-                      .statTypes=${statTypes}
-                      .names=${this._statNames}
-                      hide-legend
-                      .clickForMoreInfo=${false}
-                    ></statistics-chart>`
-                  : html`<state-history-charts
-                      up-to-now
-                      .hass=${this.hass}
-                      .historyData=${this._stateHistory}
-                      .isLoadingData=${!this._stateHistory}
-                      .showNames=${false}
-                      .clickForMoreInfo=${false}
-                    ></state-history-charts>`
-            }`
+        ? html`${
+            this.hideHeader
+              ? // The aggregation note is about the data, not the heading, so it
+                // survives a hidden header.
+                this._statistics
+                ? html`<div class="header-secondary standalone">
+                    ${this.hass.localize(
+                      "ui.dialogs.more_info_control.aggregate"
+                    )}
+                  </div>`
+                : nothing
+              : html`<div class="header">
+                  <div>
+                    <h2>
+                      ${this.hass.localize(
+                        "ui.dialogs.more_info_control.history"
+                      )}
+                    </h2>
+                    ${
+                      this._statistics
+                        ? html`<div class="header-secondary">
+                            ${this.hass.localize(
+                              "ui.dialogs.more_info_control.aggregate"
+                            )}
+                          </div>`
+                        : nothing
+                    }
+                  </div>
+                  ${
+                    __DEMO__
+                      ? nothing
+                      : html`<a href=${historyShowMoreUrl(this.entityId)}
+                          >${this.hass.localize(
+                            "ui.dialogs.more_info_control.show_more"
+                          )}</a
+                        >`
+                  }
+                </div>`
+          }
+          ${
+            this._error
+              ? html`<ha-alert alert-type="error">
+                  ${this.hass.localize("ui.components.history_charts.error")}:
+                  ${this._error.message || this._error.code}
+                </ha-alert>`
+              : this._statistics
+                ? html`<statistics-chart
+                    .isLoadingData=${!this._statistics}
+                    .statisticsData=${this._statistics}
+                    .metadata=${this._metadata}
+                    .statTypes=${statTypes}
+                    .names=${this._statNames}
+                    hide-legend
+                    .clickForMoreInfo=${false}
+                  ></statistics-chart>`
+                : html`<state-history-charts
+                    up-to-now
+                    .hass=${this.hass}
+                    .historyData=${this._stateHistory}
+                    .isLoadingData=${!this._stateHistory}
+                    .showNames=${!!this.compareEntityIds?.length}
+                    .clickForMoreInfo=${false}
+                    .rowHeight=${this.rowHeight}
+                    ?hide-tooltip=${this.hideTooltip}
+                  ></state-history-charts>`
+          }`
         : ""
     }`;
   }
@@ -116,21 +172,18 @@ export class MoreInfoHistory extends LitElement {
   protected willUpdate(changedProps: PropertyValues<this>): void {
     super.willUpdate(changedProps);
 
-    if (changedProps.has("entityId")) {
+    if (
+      changedProps.has("entityId") ||
+      changedProps.has("compareEntityIds") ||
+      changedProps.has("hoursToShow") ||
+      changedProps.has("period")
+    ) {
       this._stateHistory = undefined;
       this._statistics = undefined;
 
       if (!this.entityId) {
         return;
       }
-
-      const params = {
-        entity_id: this.entityId,
-        start_date: startOfYesterday().toISOString(),
-        back: "1",
-      };
-
-      this._showMoreHref = `/history?${createSearchParam(params)}`;
 
       this._getStateHistory();
     } else if (
@@ -209,10 +262,10 @@ export class MoreInfoHistory extends LitElement {
     const _metadata = this._getStatisticsMetaData([this.entityId]);
     const _statistics = fetchStatistics(
       this.hass!.callWS,
-      subHours(new Date(), 24),
+      subHours(new Date(), this.hoursToShow),
       undefined,
       [this.entityId],
-      "5minute",
+      this.period,
       undefined,
       statTypes
     );
@@ -229,6 +282,7 @@ export class MoreInfoHistory extends LitElement {
   private async _getStateHistory(): Promise<void> {
     if (
       isComponentLoaded(this.hass.config, "recorder") &&
+      !this.compareEntityIds?.length &&
       computeDomain(this.entityId) === "sensor"
     ) {
       const stateObj = this.hass.states[this.entityId];
@@ -262,12 +316,12 @@ export class MoreInfoHistory extends LitElement {
         this._stateHistory = computeHistory(
           this.hass!,
           combinedHistory,
-          [this.entityId],
+          this._entityIds,
           this.hass!.localize
         );
       },
-      24,
-      [this.entityId]
+      this.hoursToShow,
+      this._entityIds
     ).catch((err) => {
       this._subscribed = undefined;
       this._error = err;
@@ -295,6 +349,10 @@ export class MoreInfoHistory extends LitElement {
         font-size: var(--ha-font-size-s);
         color: var(--secondary-text-color);
       }
+      .header-secondary.standalone {
+        margin-bottom: var(--ha-space-2);
+        padding-inline: var(--ha-space-6);
+      }
       h2 {
         margin: 0;
       }
@@ -302,7 +360,10 @@ export class MoreInfoHistory extends LitElement {
       state-history-charts,
       statistics-chart {
         display: block;
-        padding-inline: var(--ha-space-6);
+        padding-inline: var(
+          --more-info-history-padding-inline,
+          var(--ha-space-6)
+        );
       }
     `,
   ];

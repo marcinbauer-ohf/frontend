@@ -375,6 +375,7 @@ export class HuiTileCard extends LitElement implements LovelaceCard {
                     .context=${this._featureContext}
                     .color=${this._config.color}
                     .features=${features.inline}
+                    .position=${"inline"}
                   ></hui-card-features>
                 `
               : nothing
@@ -389,6 +390,7 @@ export class HuiTileCard extends LitElement implements LovelaceCard {
                     .context=${this._featureContext}
                     .color=${this._config.color}
                     .features=${features.below}
+                    .position=${"bottom"}
                   ></hui-card-features>
                 `
               : nothing

@@ -108,9 +108,12 @@ export class GridSection extends LitElement implements LovelaceSectionElement {
 
               const { rows, columns } = computeCardGridSize(gridOptions);
 
-              const cardPath: LovelacePath | undefined = editMode
-                ? [...this.path!, "cards", idx]
+              const cardPath: LovelacePath | undefined = this.path
+                ? [...this.path, "cards", idx]
                 : undefined;
+              // Not only for editing: a card that offers a way into its own
+              // editor needs to know where it lives whatever mode we are in.
+              card.path = cardPath;
               return html`
                 <div
                   style=${styleMap({
@@ -205,7 +208,7 @@ export class GridSection extends LitElement implements LovelaceSectionElement {
   private _addCard() {
     fireEvent(this, "ll-create-card", {
       path: [...this.path!, "cards"],
-      suggested: ["tile", "heading"],
+      suggested: ["tile", "device", "heading"],
     });
   }
 

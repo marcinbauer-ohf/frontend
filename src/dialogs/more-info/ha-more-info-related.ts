@@ -4,10 +4,13 @@ import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { consume } from "../../common/decorators/consume";
+import { fireEvent } from "../../common/dom/fire_event";
 import { computeAreaName } from "../../common/entity/compute_area_name";
 import { computeDeviceNameDisplay } from "../../common/entity/compute_device_name";
 import { computeDomain } from "../../common/entity/compute_domain";
+import { computeEntityName } from "../../common/entity/compute_entity_name";
 import { computeFloorName } from "../../common/entity/compute_floor_name";
+import { computeStateName } from "../../common/entity/compute_state_name";
 import { getEntityContext } from "../../common/entity/context/get_entity_context";
 import type { LocalizeKeys } from "../../common/translations/localize";
 import "../../components/ha-floor-icon";
@@ -15,6 +18,7 @@ import "../../components/ha-icon";
 import "../../components/ha-icon-next";
 import "../../components/ha-label";
 import "../../components/ha-related-items";
+import "../../components/ha-state-icon";
 import "../../components/ha-svg-icon";
 import "../../components/item/ha-list-item-button";
 import "../../components/item/ha-list-item-value";
@@ -35,8 +39,17 @@ interface ContextEntry {
   translationKey: LocalizeKeys;
   value: string;
   displayValue?: TemplateResult;
+  /** Navigates out of the dialog. */
   href?: string;
+  /** Switches to another view inside the dialog. */
+  action?: () => void;
   icon?: TemplateResult;
+  /**
+   * Draws the row like the logbook detail subject row: icon at the start, the
+   * label as the headline and the value below it. Set on the rows that name a
+   * thing (entity, device, area, floor) rather than carry a plain value.
+   */
+  subject?: boolean;
 }
 
 const CONTEXT_SECTIONS: (keyof RelatedResult)[] = [
@@ -111,14 +124,37 @@ class HaMoreInfoRelated extends LitElement {
         entry: this._labels?.find((label) => label.label_id === labelId),
       })) ?? [];
 
-    const contextEntries: ContextEntry[] = [];
+    const contextEntries: ContextEntry[] = [
+      {
+        translationKey: "ui.dialogs.more_info_control.entity",
+        value:
+          computeEntityName(
+            this._stateObj,
+            this.hass.entities,
+            this.hass.devices
+          ) || computeStateName(this._stateObj),
+        action: this._goToDetails,
+        icon: html`<ha-state-icon .stateObj=${this._stateObj}></ha-state-icon>`,
+        subject: true,
+      },
+    ];
 
-    if (floor && floorName) {
+    if (device && deviceName) {
       contextEntries.push({
-        translationKey: "ui.dialogs.more_info_control.floor",
-        value: floorName,
-        href: "/config/areas/dashboard",
-        icon: html`<ha-floor-icon slot="end" .floor=${floor}></ha-floor-icon>`,
+        translationKey: "ui.components.related-items.device",
+        value: deviceName,
+        href: `/config/devices/device/${device.id}`,
+        icon: html`<ha-svg-icon .path=${mdiDevices}></ha-svg-icon>`,
+        subject: true,
+      });
+    }
+    if (parentDevice && parentDeviceName) {
+      contextEntries.push({
+        translationKey: "ui.dialogs.more_info_control.parent_device",
+        value: parentDeviceName,
+        href: `/config/devices/device/${parentDevice.id}`,
+        icon: html`<ha-svg-icon .path=${mdiDevices}></ha-svg-icon>`,
+        subject: true,
       });
     }
     if (area && areaName) {
@@ -127,24 +163,18 @@ class HaMoreInfoRelated extends LitElement {
         value: areaName,
         href: `/config/areas/area/${area.area_id}`,
         icon: area.icon
-          ? html`<ha-icon slot="end" .icon=${area.icon}></ha-icon>`
-          : html`<ha-svg-icon slot="end" .path=${mdiTextureBox}></ha-svg-icon>`,
+          ? html`<ha-icon .icon=${area.icon}></ha-icon>`
+          : html`<ha-svg-icon .path=${mdiTextureBox}></ha-svg-icon>`,
+        subject: true,
       });
     }
-    if (parentDevice && parentDeviceName) {
+    if (floor && floorName) {
       contextEntries.push({
-        translationKey: "ui.dialogs.more_info_control.parent_device",
-        value: parentDeviceName,
-        href: `/config/devices/device/${parentDevice.id}`,
-        icon: html`<ha-svg-icon slot="end" .path=${mdiDevices}></ha-svg-icon>`,
-      });
-    }
-    if (device && deviceName) {
-      contextEntries.push({
-        translationKey: "ui.components.related-items.device",
-        value: deviceName,
-        href: `/config/devices/device/${device.id}`,
-        icon: html`<ha-svg-icon slot="end" .path=${mdiDevices}></ha-svg-icon>`,
+        translationKey: "ui.dialogs.more_info_control.floor",
+        value: floorName,
+        href: "/config/areas/dashboard",
+        icon: html`<ha-floor-icon .floor=${floor}></ha-floor-icon>`,
+        subject: true,
       });
     }
     if (this.entry?.platform && integrationName) {
@@ -155,7 +185,6 @@ class HaMoreInfoRelated extends LitElement {
           ? `/config/integrations/integration/${this.entry.platform}#config_entry=${this.entry.config_entry_id}`
           : undefined,
         icon: html`<img
-          slot="end"
           alt=""
           crossorigin="anonymous"
           referrerpolicy="no-referrer"
@@ -168,6 +197,7 @@ class HaMoreInfoRelated extends LitElement {
             this.hass.auth.data.hassUrl
           )}
         />`,
+        subject: true,
       });
     }
     if (labels.length) {
@@ -197,19 +227,9 @@ class HaMoreInfoRelated extends LitElement {
 
     return html`
       <div class="content">
-        ${
-          contextEntries.length
-            ? html`
-                <ha-grouped-list
-                  .header=${this.hass.localize(
-                    "ui.dialogs.more_info_control.context"
-                  )}
-                >
-                  ${this._renderEntries(contextEntries)}
-                </ha-grouped-list>
-              `
-            : nothing
-        }
+        <ha-grouped-list>
+          ${this._renderEntries(contextEntries)}
+        </ha-grouped-list>
         <ha-related-items
           .hass=${this.hass}
           .itemId=${this.params.entityId}
@@ -220,11 +240,18 @@ class HaMoreInfoRelated extends LitElement {
     `;
   }
 
+  private _goToDetails = () => {
+    fireEvent(this, "hass-more-info", {
+      entityId: this.params!.entityId,
+      view: "details",
+    });
+  };
+
   private _renderEntries(entries: ContextEntry[]) {
     return entries.map((entry) => {
       const label = this.hass.localize(entry.translationKey);
 
-      if (!entry.href) {
+      if (!entry.href && !entry.action) {
         return html`
           <ha-list-item-value .label=${label}
             >${entry.displayValue ?? entry.value}</ha-list-item-value
@@ -232,8 +259,26 @@ class HaMoreInfoRelated extends LitElement {
         `;
       }
 
+      if (entry.subject) {
+        return html`
+          <ha-list-item-button
+            class="subject"
+            .href=${entry.href}
+            @click=${entry.action ?? nothing}
+            .headline=${label}
+            .supportingText=${entry.value}
+          >
+            <span class="subject-icon" slot="start">${entry.icon}</span>
+            <ha-icon-next slot="end"></ha-icon-next>
+          </ha-list-item-button>
+        `;
+      }
+
       return html`
-        <ha-list-item-button .href=${entry.href}>
+        <ha-list-item-button
+          .href=${entry.href}
+          @click=${entry.action ?? nothing}
+        >
           <div class="link-row" slot="content">
             <div class="label">${label}</div>
             <div class="value">${entry.value}</div>
@@ -272,10 +317,44 @@ class HaMoreInfoRelated extends LitElement {
       gap: var(--ha-space-2);
     }
 
+    /* Matches the logbook activity detail subject row. */
+    ha-list-item-button.subject {
+      --ha-row-item-min-height: 56px;
+      --mdc-icon-size: 24px;
+    }
+
+    /* The two lines trade places: the type reads as the quiet label on top,
+       the name carries the row below it. */
+    ha-list-item-button.subject::part(headline) {
+      color: var(--secondary-text-color);
+      font-size: var(--ha-font-size-s);
+    }
+
+    ha-list-item-button.subject::part(supporting-text) {
+      color: var(--primary-text-color);
+      font-size: inherit;
+      font-weight: var(--ha-font-weight-medium);
+    }
+
+    .subject-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      color: var(--secondary-text-color);
+      --state-icon-color: var(--secondary-text-color);
+    }
+
     ha-list-item-button img {
       width: 20px;
       height: 20px;
       object-fit: contain;
+    }
+
+    /* the brand logo matches the glyphs the other subject rows draw */
+    ha-list-item-button.subject img {
+      width: 24px;
+      height: 24px;
     }
 
     .link-row {

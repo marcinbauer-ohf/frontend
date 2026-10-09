@@ -1,5 +1,4 @@
 import { startOfYesterday } from "date-fns";
-import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import memoizeOne from "memoize-one";
@@ -9,15 +8,34 @@ import "../../panels/logbook/ha-logbook";
 import { haStyle } from "../../resources/styles";
 import type { HomeAssistant } from "../../types";
 
+/** The logbook panel, scoped to one entity. Shared with hosts that render their
+ * own "show more" affordance instead of this component's header. */
+export const logbookShowMoreUrl = (entityId: string): string =>
+  `/logbook?${createSearchParam({
+    entity_id: entityId,
+    start_date: startOfYesterday().toISOString(),
+    back: "1",
+  })}`;
+
 @customElement("ha-more-info-logbook")
 export class MoreInfoLogbook extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @property({ attribute: false }) public entityId!: string;
 
-  private _showMoreHref = "";
+  /**
+   * Drop the heading and the "show more" link. For hosts that frame this
+   * component and provide both themselves.
+   */
+  @property({ type: Boolean, attribute: "hide-header" }) public hideHeader =
+    false;
 
-  private _time = { recent: 86400 };
+  /** How far back the list reaches. */
+  @property({ attribute: "hours-to-show", type: Number }) public hoursToShow =
+    24;
+
+  /** One object per range, so the list is not re-subscribed on every render. */
+  private _timeFor = memoizeOne((hours: number) => ({ recent: hours * 3600 }));
 
   private _entityIdAsList = memoizeOne((entityId: string) => [entityId]);
 
@@ -32,15 +50,23 @@ export class MoreInfoLogbook extends LitElement {
     }
 
     return html`
-      <div class="header">
-        <h2>${this.hass.localize("ui.dialogs.more_info_control.logbook")}</h2>
-        <a href=${this._showMoreHref}
-          >${this.hass.localize("ui.dialogs.more_info_control.show_more")}</a
-        >
-      </div>
+      ${
+        this.hideHeader
+          ? nothing
+          : html`<div class="header">
+              <h2>
+                ${this.hass.localize("ui.dialogs.more_info_control.logbook")}
+              </h2>
+              <a href=${logbookShowMoreUrl(this.entityId)}
+                >${this.hass.localize(
+                  "ui.dialogs.more_info_control.show_more"
+                )}</a
+              >
+            </div>`
+      }
       <ha-logbook
         .hass=${this.hass}
-        .time=${this._time}
+        .time=${this._timeFor(this.hoursToShow)}
         .entityIds=${this._entityIdAsList(this.entityId)}
         name-detail="none"
         narrow
@@ -50,27 +76,16 @@ export class MoreInfoLogbook extends LitElement {
     `;
   }
 
-  protected willUpdate(changedProps: PropertyValues<this>): void {
-    super.willUpdate(changedProps);
-
-    if (changedProps.has("entityId") && this.entityId) {
-      const params = {
-        entity_id: this.entityId,
-        start_date: startOfYesterday().toISOString(),
-        back: "1",
-      };
-
-      this._showMoreHref = `/logbook?${createSearchParam(params)}`;
-    }
-  }
-
   static get styles() {
     return [
       haStyle,
       css`
         ha-logbook {
-          --logbook-max-height: 250px;
-          --logbook-horizontal-padding: var(--ha-space-6);
+          --logbook-max-height: var(--more-info-logbook-max-height, 250px);
+          --logbook-horizontal-padding: var(
+            --more-info-logbook-padding-inline,
+            var(--ha-space-6)
+          );
         }
         @media all and (max-width: 450px), all and (max-height: 500px) {
           ha-logbook {

@@ -170,7 +170,7 @@ export class HaControlSelectMenu extends LitElement {
       .select-anchor {
         border: none;
         text-align: left;
-        color: var(--primary-text-color);
+        color: var(--control-select-menu-text-color);
         height: var(--control-select-menu-height);
         padding: var(--control-select-menu-padding);
         overflow: hidden;

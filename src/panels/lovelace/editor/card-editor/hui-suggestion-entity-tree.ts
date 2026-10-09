@@ -25,6 +25,7 @@ import "../../../../components/entity/state-badge";
 import "../../../../components/ha-combo-box-item";
 import "../../../../components/ha-domain-icon";
 import "../../../../components/ha-floor-icon";
+import "../../../../components/ha-icon-button";
 import "../../../../components/ha-icon";
 import "../../../../components/ha-section-title";
 import "../../../../components/ha-svg-icon";
@@ -82,6 +83,8 @@ export class HuiSuggestionEntityTree extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @property({ attribute: false }) public selectedEntityId?: string;
+
+  @property({ attribute: false }) public selectedDeviceId?: string;
 
   @state() private _filter = "";
 
@@ -379,16 +382,17 @@ export class HuiSuggestionEntityTree extends LitElement {
     `;
   };
 
+  private _chevronPath(expanded: boolean): string {
+    if (expanded) {
+      return mdiChevronDown;
+    }
+    return mainWindow.document.dir === "rtl" ? mdiChevronLeft : mdiChevronRight;
+  }
+
   private _renderChevron(expanded: boolean): TemplateResult {
     return html`<ha-svg-icon
       class="chevron"
-      .path=${
-        expanded
-          ? mdiChevronDown
-          : mainWindow.document.dir === "rtl"
-            ? mdiChevronLeft
-            : mdiChevronRight
-      }
+      .path=${this._chevronPath(expanded)}
     ></ha-svg-icon>`;
   }
 
@@ -478,18 +482,30 @@ export class HuiSuggestionEntityTree extends LitElement {
     const key = deviceKey(parentKey, device.id);
     const expanded = this._isExpanded(key);
     const domain = this._deviceDomain(device.id);
+    const selected = this.selectedDeviceId === device.id;
     return html`
       <ha-list-item-button
         aria-expanded=${expanded}
-        data-node-key=${key}
-        @click=${this._toggleNode}
+        aria-current=${selected ? "true" : "false"}
+        data-device-id=${device.id}
+        @click=${this._pickDevice}
       >
         <ha-combo-box-item
           slot="content"
-          class="branch ${nested ? "depth-device-nested" : "depth-device"} device-item"
+          class="branch ${nested ? "depth-device-nested" : "depth-device"} device-item ${selected ? "selected" : ""}"
         >
           <div slot="start" class="leading">
-            ${this._renderChevron(expanded)}
+            <ha-icon-button
+              class="expand"
+              .path=${this._chevronPath(expanded)}
+              .label=${this.hass.localize(
+                expanded
+                  ? "ui.panel.lovelace.editor.cardpicker.collapse"
+                  : "ui.panel.lovelace.editor.cardpicker.expand"
+              )}
+              data-node-key=${key}
+              @click=${this._toggleFromChevron}
+            ></ha-icon-button>
             ${
               domain
                 ? html`<ha-domain-icon
@@ -657,6 +673,22 @@ export class HuiSuggestionEntityTree extends LitElement {
       this._expanded = { ...this._expanded, [key]: true };
     }
   }
+
+  /**
+   * A device is a choice of its own, so its row picks the device and leaves
+   * opening it to the chevron beside it.
+   */
+  private _pickDevice = (ev: Event) => {
+    const deviceId = (ev.currentTarget as HTMLElement).dataset.deviceId;
+    if (deviceId) {
+      fireEvent(this, "device-picked", { deviceId });
+    }
+  };
+
+  private _toggleFromChevron = (ev: Event) => {
+    ev.stopPropagation();
+    this._toggleNode(ev);
+  };
 
   private _pickEntity = (ev: Event) => {
     const target = ev.currentTarget as HTMLElement;
@@ -835,6 +867,12 @@ export class HuiSuggestionEntityTree extends LitElement {
           color: var(--secondary-text-color);
           flex: 0 0 24px;
         }
+        .expand {
+          flex: 0 0 24px;
+          --ha-icon-button-size: 24px;
+          --mdc-icon-size: 24px;
+          color: var(--secondary-text-color);
+        }
         .chevron-spacer {
           width: 24px;
           flex: 0 0 24px;
@@ -844,7 +882,8 @@ export class HuiSuggestionEntityTree extends LitElement {
             --ha-font-weight-medium
           );
         }
-        .entity-item.selected {
+        .entity-item.selected,
+        .device-item.selected {
           background-color: var(
             --ha-color-fill-primary-quiet-resting,
             rgba(var(--rgb-primary-color, 33, 150, 243), 0.12)
@@ -892,5 +931,6 @@ declare global {
   }
   interface HASSDomEvents {
     "entity-picked": { entityId: string };
+    "device-picked": { deviceId: string };
   }
 }

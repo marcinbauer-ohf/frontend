@@ -706,6 +706,34 @@ export interface TileCardConfig extends LovelaceCardConfig {
   time_format?: TimestampRenderingFormat;
 }
 
+export interface DeviceCardConfig extends LovelaceCardConfig {
+  /** Device id. Entities are resolved from the registry and split into a
+   * primary block + secondary rows. Optional when `entity` is given. */
+  device?: string;
+  /** Explicit primary entity. Overrides the auto-picked device primary. */
+  entity?: string;
+  /**
+   * Which card feature the primary entity's control is. One of the tile card's
+   * feature types; the entity's domain has more than one worth showing (a cover
+   * can be buttons, a slider or its favourite positions). Defaults to the most
+   * capable one the entity supports.
+   */
+  feature?: string;
+  /** Explicit secondary rows. Overrides the auto-collected device entities. */
+  entities?: string[];
+  /** Device entities kept off this card only. Still active in Home Assistant. */
+  hidden_entities?: string[];
+  name?: string;
+  /** Show the device area as an eyebrow above the name. Default true. */
+  show_area?: boolean;
+  /** Show the inline history sparkline for numeric primaries. Default true. */
+  show_graph?: boolean;
+  hours_to_show?: number;
+  tap_action?: ActionConfig;
+  hold_action?: ActionConfig;
+  double_tap_action?: ActionConfig;
+}
+
 export interface HeadingCardConfig extends LovelaceCardConfig {
   heading_style?: "title" | "subtitle";
   heading?: string;

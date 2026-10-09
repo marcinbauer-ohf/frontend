@@ -1,3 +1,4 @@
+import { ResizeController } from "@lit-labs/observers/resize-controller";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -14,16 +15,31 @@ import type { HomeAssistant } from "../../types";
 import { DEFAULT_CHART_WIDTH, MIN_TIME_BETWEEN_UPDATES } from "./ha-chart-base";
 import { itemTooltipPosition } from "./chart-tooltip-position";
 import "./ha-chart-tooltip-marker";
+import { computeCssValue } from "../../resources/css-variables";
+import type { TimelineBand } from "./state-history-chart-timeline-data";
+import {
+  BUCKET_WIDTH,
+  generateStateHistoryChartTimelineData,
+} from "./state-history-chart-timeline-data";
 import type { HaECOption, HaECSeries } from "../../resources/echarts/echarts";
 import echarts from "../../resources/echarts/echarts";
 import { measureTextWidth } from "../../util/text";
 import { fireEvent, type HASSDomEvent } from "../../common/dom/fire_event";
-import { generateStateHistoryChartTimelineData } from "./state-history-chart-timeline-data";
 
 const ROW_HEIGHT = 30;
 // Taller rows when the name is drawn under the bar instead of in a column.
 const ROW_HEIGHT_INSIDE_LABELS = 64;
 const GRID_BOTTOM = 30;
+const BAR_HEIGHT = 20;
+/**
+ * The narrowest a band can be drawn and still be something a pointer can land
+ * on. Below this the row says nothing you can read or hover, which is what the
+ * aggregated view is for.
+ */
+const MIN_SEGMENT_WIDTH = 6;
+
+/** Of a row the host has made tall, how much of it the bar takes. */
+const FILLED_ROW = 0.8;
 
 @customElement("state-history-chart-timeline")
 export class StateHistoryChartTimeline extends LitElement {
@@ -63,11 +79,38 @@ export class StateHistoryChartTimeline extends LitElement {
   @property({ attribute: "hide-reset-button", type: Boolean })
   public hideResetButton?: boolean;
 
+  /**
+   * Height of one row in px. A host that gives the row a block of its own means
+   * the bar to fill it, rather than to sit in the middle of it as a band.
+   */
+  @property({ attribute: false }) public rowHeight?: number;
+
+  /**
+   * Drop the tooltip. For a host that states the hovered band itself, where a
+   * tooltip would say the same thing twice.
+   */
+  @property({ attribute: "hide-tooltip", type: Boolean }) public hideTooltip =
+    false;
+
   @state() private _chartData: CustomSeriesOption[] = [];
 
   @state() private _chartOptions?: HaECOption;
 
   @state() private _yWidth = 0;
+
+  private _resize = new ResizeController(this, {
+    callback: (entries) => entries[0]?.contentRect.width,
+  });
+
+  /** Columns the aggregated view has room for, at the measured width. */
+  private _buckets = 0;
+
+  /**
+   * Each row's runs of state, before the aggregated view pools any of them.
+   * What a row was at a given moment is looked up here rather than off the
+   * drawn rectangles, which for a busy row stand for several states at once.
+   */
+  private _bands = new Map<string, TimelineBand[]>();
 
   private _chartTime: Date = new Date();
 
@@ -77,14 +120,17 @@ export class StateHistoryChartTimeline extends LitElement {
         .options=${this._chartOptions}
         .height=${`${
           this.data.length *
-            (this.insideLabels && (this.chunked || this.showNames)
-              ? ROW_HEIGHT_INSIDE_LABELS
-              : ROW_HEIGHT) +
+            (this.rowHeight ??
+              (this.insideLabels && (this.chunked || this.showNames)
+                ? ROW_HEIGHT_INSIDE_LABELS
+                : ROW_HEIGHT)) +
           GRID_BOTTOM
         }px`}
         .data=${this._chartData as HaECSeries}
         small-controls
         @chart-click=${this._handleChartClick}
+        @chart-mouseover=${this._handleChartHover}
+        @chart-mouseout=${this._handleChartOut}
         @chart-zoom=${this._handleDataZoom}
         .hideResetButton=${this.hideResetButton}
       ></ha-chart-base>
@@ -95,14 +141,20 @@ export class StateHistoryChartTimeline extends LitElement {
     const categoryIndex = api.value(0);
     const start = api.coord([api.value(1), categoryIndex]);
     const end = api.coord([api.value(2), categoryIndex]);
-    const height = 20;
+    const yStart = api.value(6) as number;
+    const yEnd = api.value(7) as number;
     const coordSys = params.coordSys as any;
+    // A row with a block of its own is filled; the default row keeps the band
+    // it has always drawn.
+    const barHeight = this.rowHeight
+      ? (coordSys.height / Math.max(1, this.data.length)) * FILLED_ROW
+      : BAR_HEIGHT;
     const rectShape = echarts.graphic.clipRectByRect(
       {
         x: start[0],
-        y: start[1] - height / 2,
+        y: start[1] - barHeight / 2 + yStart * barHeight,
         width: end[0] - start[0],
-        height: height,
+        height: (yEnd - yStart) * barHeight,
       },
       {
         x: coordSys.x,
@@ -120,6 +172,11 @@ export class StateHistoryChartTimeline extends LitElement {
         fill: api.value(4) as string,
       },
     };
+    if (yEnd - yStart < 1) {
+      // A stacked slice is a proportion of a column, not a span with room for
+      // its own name.
+      return rect;
+    }
     const text = (api.value(3) as string).replaceAll("\n", " ");
     const textWidth = measureTextWidth(text, 12);
     const LABEL_PADDING = 4;
@@ -145,11 +202,36 @@ export class StateHistoryChartTimeline extends LitElement {
     return rect;
   };
 
+  /**
+   * What a row was at a moment. An aggregated row is looked up in its bands,
+   * since its drawn rectangles stand for several states at once.
+   */
+  private _stateAt(
+    entityId: string,
+    at: number
+  ): Pick<TimelineBand, "state" | "color"> | undefined {
+    const bands = this._bands.get(entityId);
+    if (bands) {
+      return bands.find((band) => at >= band.start && at < band.end);
+    }
+    const point = (
+      this._chartData.find((series) => series.id === entityId)?.data as
+        { value: unknown[] }[] | undefined
+    )?.find(
+      (item) => at >= Number(item.value[1]) && at < Number(item.value[2])
+    );
+    return point
+      ? { state: String(point.value[3]), color: String(point.value[4]) }
+      : undefined;
+  }
+
   private _renderTooltip = (params: TooltipPositionCallbackParams) => {
     const { value, name, seriesName, color } = Array.isArray(params)
       ? params[0]
       : params;
-    const durationInMs = value![2] - value![1];
+    // An aggregated rectangle is drawn across its whole column but stands for
+    // only the part of it its state held.
+    const durationInMs = (value![8] as number) ?? value![2] - value![1];
     const formattedDuration = `${this.hass.localize(
       "ui.components.history_charts.duration"
     )}: ${millisecondsToDuration(durationInMs)}`;
@@ -158,15 +240,42 @@ export class StateHistoryChartTimeline extends LitElement {
       this.hass.language,
       this.hass.translationMetadata.translations
     );
-    return html`${
-        seriesName
-          ? html`<h4 style="text-align: center; margin: 0;">${seriesName}</h4>`
-          : nothing
-      }<ha-chart-tooltip-marker
-        .color=${String(color ?? "")}
+    // Rows are read against each other, so a band answers for every row at the
+    // moment it covers, not only for the one under the pointer. Taken at the
+    // middle of the band: its edges are exactly where the other rows are most
+    // likely to be changing too.
+    const at = (Number(value![1]) + Number(value![2])) / 2;
+    const others = this.data
+      .filter((stateInfo) => stateInfo.entity_id !== value![0])
+      .map((stateInfo) => {
+        const segment = this._stateAt(stateInfo.entity_id, at);
+        return segment
+          ? {
+              name:
+                this.names?.[stateInfo.entity_id] ||
+                stateInfo.name ||
+                stateInfo.entity_id,
+              segment,
+            }
+          : undefined;
+      })
+      .filter((row) => row !== undefined);
+
+    const row = (label: string, dotColor: string, reading: string) => html`
+      <ha-chart-tooltip-marker
+        .color=${dotColor}
         .rtl=${rtl}
       ></ha-chart-tooltip-marker
-      >${name}<br />${formatDateTimeWithSeconds(
+      >${others.length ? html`${label}: ` : nothing}${reading}<br />
+    `;
+
+    return html`${
+        seriesName && !others.length
+          ? html`<h4 style="text-align: center; margin: 0;">${seriesName}</h4>`
+          : nothing
+      }${row(seriesName ?? "", String(color ?? ""), String(name ?? ""))}${others.map(
+        (other) => row(other.name, other.segment.color, other.segment.state)
+      )}${formatDateTimeWithSeconds(
         new Date(value![1]),
         this.hass.locale,
         this.hass.config
@@ -178,11 +287,22 @@ export class StateHistoryChartTimeline extends LitElement {
   };
 
   public willUpdate(changedProps: PropertyValues) {
+    const buckets = Math.max(
+      1,
+      Math.round((this._resize.value ?? this.clientWidth) / BUCKET_WIDTH)
+    );
+    // Compared as columns rather than as pixels, so a resize only redraws when
+    // it actually changes how the row is divided.
+    const bucketsChanged =
+      this.rowHeight !== undefined && buckets !== this._buckets;
+    this._buckets = buckets;
+
     if (
       this.isConnected &&
       (changedProps.has("startTime") ||
         changedProps.has("endTime") ||
         changedProps.has("data") ||
+        bucketsChanged ||
         this._chartTime <
           new Date(this.endTime.getTime() - MIN_TIME_BETWEEN_UPDATES))
     ) {
@@ -290,6 +410,7 @@ export class StateHistoryChartTimeline extends LitElement {
         right: rtl ? labelWidth : 1,
       },
       tooltip: {
+        show: !this.hideTooltip,
         renderMode: "html",
         position: itemTooltipPosition,
         confine: true,
@@ -313,6 +434,33 @@ export class StateHistoryChartTimeline extends LitElement {
 
   private _generateData() {
     this._chartTime = new Date();
+    const computedStyles = getComputedStyle(this);
+    const width = this._resize.value ?? this.clientWidth;
+    // Only a host that gives each row a block of its own reads a busy row as
+    // proportions; every other timeline keeps the down-sampled bands.
+    const aggregate = this.rowHeight
+      ? {
+          buckets: this._buckets,
+          // What a millisecond is worth on screen, which is what decides
+          // whether a band has room to be drawn at all.
+          minSegmentMs:
+            (MIN_SEGMENT_WIDTH *
+              Math.max(1, this.endTime.getTime() - this.startTime.getTime())) /
+            Math.max(1, width),
+          otherState: {
+            state: this.hass.localize(
+              "ui.components.history_charts.other_states"
+            ),
+            color:
+              computeCssValue("--disabled-color", computedStyles) || "#bdbdbd",
+            // Never labelled: a pooled state is only ever drawn as a slice.
+            textColor: "#fff",
+            start: 0,
+            end: 0,
+          },
+        }
+      : undefined;
+    this._bands.clear();
     this._chartData = generateStateHistoryChartTimelineData({
       states: this.hass.states,
       data: this.data,
@@ -320,13 +468,57 @@ export class StateHistoryChartTimeline extends LitElement {
       endTime: this.endTime,
       names: this.names,
       showNames: this.showNames,
-      computedStyles: getComputedStyle(this),
+      computedStyles,
       renderItem: this._renderItem,
       // 0 while inside a hidden container, e.g. a section with a visibility condition
       chartWidth:
         (this.clientWidth || DEFAULT_CHART_WIDTH) * window.devicePixelRatio,
+      aggregate,
+      bands: aggregate ? this._bands : undefined,
     });
   }
+
+  /**
+   * What the pointer is on, for a host that states the hovered span itself —
+   * the same reading a line's hovered point gives, so a timeline and a line
+   * answer "what was it then" in the same place.
+   */
+  private _handleChartHover = (
+    ev: HASSDomEvent<HASSDomEvents["chart-mouseover"]>
+  ) => {
+    const value = ev.detail.value as unknown[] | undefined;
+    if (!Array.isArray(value)) {
+      return;
+    }
+    const start = Number(value[1]);
+    const data = (this._chartData[ev.detail.seriesIndex ?? 0]?.data ?? []) as {
+      value: unknown[];
+    }[];
+    // Every state of the column under the pointer, not only the slice it is
+    // exactly on: an aggregated column is one span of time divided between
+    // states, and that division is what there is to read.
+    const column = data.filter((item) => Number(item.value[1]) === start);
+    fireEvent(
+      this,
+      "graph-point-hovered",
+      (column.length ? column.map((item) => item.value) : [value]).map(
+        (band) => ({
+          entityId: String(band[0]),
+          // The band's own label, already localized, the span it covers, how
+          // much of that span it actually held, and the colour it is drawn in.
+          value: String(band[3]),
+          timestamp: Number(band[1]),
+          endTimestamp: Number(band[2]),
+          duration: Number(band[8]),
+          color: String(band[4]),
+        })
+      )
+    );
+  };
+
+  private _handleChartOut = () => {
+    fireEvent(this, "graph-point-hovered", undefined);
+  };
 
   private _handleChartClick(
     e: HASSDomEvent<HASSDomEvents["chart-click"]>

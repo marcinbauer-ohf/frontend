@@ -416,6 +416,11 @@ export class HuiDialogEditCard
     }
     this._saving = true;
     try {
+      // Let the visual editor apply anything it staged outside the card config
+      // (e.g. entity registry writes) so cancelling the dialog discards it.
+      // ponytail: only wired here, the dialog device cards are edited from.
+      // Other card-editor hosts need the same call if they grow a staging editor.
+      await this._cardEditorEl?.commit();
       await this._params!.saveCardConfig(this._cardConfig!);
       this._saving = false;
       this._markDirtyStateClean();
