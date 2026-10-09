@@ -1,6 +1,11 @@
+import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
-import { customElement, property } from "lit/decorators";
+import { customElement, property, state } from "lit/decorators";
+import { computeDomain } from "../../../common/entity/compute_domain";
+import { computeObjectId } from "../../../common/entity/compute_object_id";
 import type { LocalizeKeys } from "../../../common/translations/localize";
+import type { IntegrationManifest } from "../../../data/integration";
+import { fetchIntegrationManifest } from "../../../data/integration";
 import type { HomeAssistant } from "../../../types";
 import { documentationUrl } from "../../../util/documentation-url";
 
@@ -48,8 +53,8 @@ const docsPath = (kind: ElementKind, type: string) => {
 };
 
 /**
- * What a built-in trigger, condition or action does, with a link to its
- * docs — the same footer the integration-provided ones render themselves.
+ * What a trigger, condition or action does, with a link to its docs. The
+ * sidebar renders it last, below the element's fields and its note.
  */
 @customElement("ha-automation-element-description")
 export class HaAutomationElementDescription extends LitElement {
@@ -57,27 +62,78 @@ export class HaAutomationElementDescription extends LitElement {
 
   @property() public kind: ElementKind = "trigger";
 
+  /** The built-in type, or for an integration's element its full id. */
   @property() public type?: string;
+
+  /** Provided by an integration: an action, or a "domain.name" element. */
+  @property({ type: Boolean }) public platform = false;
+
+  @state() private _manifest?: IntegrationManifest;
+
+  protected willUpdate(changedProps: PropertyValues<this>) {
+    if (
+      (changedProps.has("type") || changedProps.has("platform")) &&
+      this.platform &&
+      this.type
+    ) {
+      this._fetchManifest(computeDomain(this.type));
+    }
+  }
+
+  private async _fetchManifest(domain: string) {
+    this._manifest = undefined;
+    try {
+      this._manifest = await fetchIntegrationManifest(this.hass, domain);
+    } catch (_err: any) {
+      // No link then, the description still stands.
+    }
+  }
+
+  private _platformDescription(type: string) {
+    const domain = computeDomain(type);
+    const name = computeObjectId(type);
+    if (this.kind === "action") {
+      const service = this.hass.services[domain]?.[name];
+      return (
+        this.hass.localize(
+          `component.${domain}.services.${name}.description`,
+          service?.description_placeholders
+        ) || service?.description
+      );
+    }
+    return this.hass.localize(
+      `component.${domain}.${this.kind}s.${name}.description`
+    );
+  }
 
   protected render() {
     if (!this.type) {
       return nothing;
     }
-    const description = this.hass.localize(
-      `ui.panel.config.automation.editor.${this.kind}s.type.${this.type}.description.picker` as LocalizeKeys
-    );
-    if (!description) {
+    const description = this.platform
+      ? this._platformDescription(this.type)
+      : this.hass.localize(
+          `ui.panel.config.automation.editor.${this.kind}s.type.${this.type}.description.picker` as LocalizeKeys
+        );
+    const link = !this.platform
+      ? documentationUrl(this.hass, docsPath(this.kind, this.type))
+      : this._manifest?.is_built_in
+        ? documentationUrl(this.hass, `/${this.kind}s/${this.type}`)
+        : this._manifest?.documentation;
+    // A built-in element's docs link alone says nothing about it.
+    if (!description && (!this.platform || !link)) {
       return nothing;
     }
     return html`
       <p>
         ${description}
-        <a
-          href=${documentationUrl(this.hass, docsPath(this.kind, this.type))}
-          target="_blank"
-          rel="noreferrer"
-          >${this.hass.localize("ui.panel.config.common.learn_more")}</a
-        >
+        ${
+          link
+            ? html`<a href=${link} target="_blank" rel="noreferrer"
+                >${this.hass.localize("ui.panel.config.common.learn_more")}</a
+              >`
+            : nothing
+        }
       </p>
     `;
   }
@@ -96,10 +152,6 @@ export class HaAutomationElementDescription extends LitElement {
     a {
       color: var(--primary-color);
       white-space: nowrap;
-    }
-    /* Leaves the app: the link says so before it is clicked. */
-    a::after {
-      content: " ↗";
     }
   `;
 }

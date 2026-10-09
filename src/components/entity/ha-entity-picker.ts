@@ -6,6 +6,7 @@ import { customElement, property, query, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { consume } from "../../common/decorators/consume";
 import { fireEvent } from "../../common/dom/fire_event";
+import { copyToClipboard } from "../../common/util/copy-clipboard";
 import { computeEntityPickerDisplay } from "../../common/entity/compute_entity_name_display";
 import { isValidEntityId } from "../../common/entity/valid_entity_id";
 import type { RelatedIdSets } from "../../common/search/related-context";
@@ -31,18 +32,18 @@ import {
   isHelperDomain,
   type HelperDomain,
 } from "../../panels/config/helpers/const";
+import { showMoreInfoDialog } from "../../dialogs/more-info/show-ha-more-info-dialog";
 import { showHelperDetailDialog } from "../../panels/config/helpers/show-dialog-helper-detail";
+import { showToast } from "../../util/toast";
 import type { HomeAssistant } from "../../types";
 import "../ha-combo-box-item";
 import "../ha-generic-picker";
 import "../ha-icon";
-import type { HaGenericPicker } from "../ha-generic-picker";
+import type { HaGenericPicker, PickerFooterAction } from "../ha-generic-picker";
 import type { PickerComboBoxSearchFn } from "../ha-picker-combo-box";
 import type { PickerValueRenderer } from "../ha-picker-field";
 import "../ha-svg-icon";
 import "./state-badge";
-
-const CREATE_ID = "___create-new-entity___";
 
 @customElement("ha-entity-picker")
 export class HaEntityPicker extends LitElement {
@@ -87,6 +88,9 @@ export class HaEntityPicker extends LitElement {
   public searchLabel?: string;
 
   @property({ attribute: false }) public createDomains?: string[];
+
+  /** Extra actions for the footer of the open picker. */
+  @property({ attribute: false }) public footerActions?: PickerFooterAction[];
 
   /**
    * Show entities from specific domains.
@@ -320,34 +324,47 @@ export class HaEntityPicker extends LitElement {
     `;
   };
 
-  private _getAdditionalItems = () =>
-    this._getCreateItems(this._i18n.localize, this.createDomains);
-
-  private _getCreateItems = memoizeOne(
-    (localize: LocalizeFunc, createDomains: this["createDomains"]) => {
-      if (!createDomains?.length) {
-        return [];
+  private _footerActions = memoizeOne(
+    (
+      localize: LocalizeFunc,
+      createDomains: this["createDomains"],
+      entityId: string | undefined,
+      extraActions: PickerFooterAction[] | undefined
+    ): PickerFooterAction[] => {
+      if (createDomains?.length) {
+        this._i18n.loadFragmentTranslation("config");
       }
-      this._i18n.loadFragmentTranslation("config");
-      return createDomains.map((domain) => {
-        const primary = localize(
-          "ui.components.entity.entity-picker.create_helper",
-          {
+      return [
+        ...(createDomains ?? []).map((domain) => ({
+          id: `create-${domain}`,
+          label: localize("ui.components.entity.entity-picker.create_helper", {
             domain: isHelperDomain(domain)
               ? localize(
                   `ui.panel.config.helpers.types.${domain as HelperDomain}`
                 ) || domain
               : domainToName(localize, domain),
-          }
-        );
-
-        return {
-          id: CREATE_ID + domain,
-          primary: primary,
-          secondary: localize("ui.components.entity.entity-picker.new_entity"),
-          icon_path: mdiPlus,
-        } satisfies EntityComboBoxItem;
-      });
+          }),
+          icon: mdiPlus,
+          run: () => this._createHelper(domain),
+        })),
+        ...(entityId
+          ? [
+              {
+                id: "more-info",
+                label: localize("ui.components.entity.entity-picker.view_more"),
+                run: () => showMoreInfoDialog(this, { entityId }),
+              },
+              {
+                id: "copy",
+                label: localize(
+                  "ui.components.entity.entity-picker.copy_entity_id"
+                ),
+                run: () => this._copyEntityId(entityId),
+              },
+            ]
+          : []),
+        ...(extraActions ?? []),
+      ];
     }
   );
 
@@ -456,7 +473,14 @@ export class HaEntityPicker extends LitElement {
         .notFoundLabel=${this._notFoundLabel}
         .rowRenderer=${this._rowRenderer}
         .getItems=${this._getItems}
-        .getAdditionalItems=${this._getAdditionalItems}
+        .footerActions=${this._footerActions(
+          this._i18n.localize,
+          this.createDomains,
+          !this.addButton && this.value && this._states[this.value]
+            ? this.value
+            : undefined,
+          this.footerActions
+        )}
         .hideClearIcon=${this.hideClearIcon || this._shouldHideClearIcon()}
         .searchFn=${this._searchFn}
         .valueRenderer=${this._valueRenderer}
@@ -515,29 +539,33 @@ export class HaEntityPicker extends LitElement {
       return;
     }
 
-    if (value.startsWith(CREATE_ID)) {
-      const domain = value.substring(CREATE_ID.length);
-
-      showHelperDetailDialog(this, {
-        domain,
-        dialogClosedCallback: (item) => {
-          if (item.entityId) {
-            if (this._states[item.entityId]) {
-              this._setValue(item.entityId);
-            } else {
-              this._pendingEntityId = item.entityId;
-            }
-          }
-        },
-      });
-      return;
-    }
-
     if (!isValidEntityId(value) && !this._findExtraOption(value)) {
       return;
     }
 
     this._setValue(value);
+  }
+
+  private _createHelper(domain: string) {
+    showHelperDetailDialog(this, {
+      domain,
+      dialogClosedCallback: (item) => {
+        if (item.entityId) {
+          if (this._states[item.entityId]) {
+            this._setValue(item.entityId);
+          } else {
+            this._pendingEntityId = item.entityId;
+          }
+        }
+      },
+    });
+  }
+
+  private async _copyEntityId(entityId: string) {
+    await copyToClipboard(entityId);
+    showToast(this, {
+      message: this._i18n.localize("ui.common.copied_clipboard"),
+    });
   }
 
   private _setValue(value: string | undefined) {

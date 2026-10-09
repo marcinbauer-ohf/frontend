@@ -59,6 +59,10 @@ export class HaPlatformCondition extends LitElement {
 
   @property({ type: Boolean }) public disabled = false;
 
+  /** The sidebar shows the description itself, below the note. */
+  @property({ type: Boolean, attribute: "hide-description" })
+  public hideDescription = false;
+
   @state() private _checkedKeys = new Set();
 
   @state() private _manifest?: IntegrationManifest;
@@ -224,7 +228,7 @@ export class HaPlatformCondition extends LitElement {
             )
       }
       ${
-        description || documentationLink
+        !this.hideDescription && (description || documentationLink)
           ? html`<div class="description">
               <p>
                 ${description}
@@ -252,7 +256,7 @@ export class HaPlatformCondition extends LitElement {
     domain: string
   ) {
     const kind = isTargetEmpty(this.condition?.target)
-      ? resolveTargetKind(this.hass, filter, domain)
+      ? resolveTargetKind(filter, domain)
       : undefined;
 
     return html`
@@ -727,10 +731,6 @@ export class HaPlatformCondition extends LitElement {
     .description a {
       color: var(--primary-color);
       white-space: nowrap;
-    }
-    /* Leaves the app: the link says so before it is clicked. */
-    .description a::after {
-      content: " ↗";
     }
     .clickable {
       cursor: pointer;

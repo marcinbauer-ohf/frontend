@@ -10,10 +10,7 @@ import memoizeOne from "memoize-one";
 import { consume } from "../../../common/decorators/consume";
 import { ensureArray } from "../../../common/array/ensure-array";
 import { storage } from "../../../common/decorators/storage";
-import type {
-  HASSDomEvent,
-  HASSDomTargetEvent,
-} from "../../../common/dom/fire_event";
+import type { HASSDomTargetEvent } from "../../../common/dom/fire_event";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { mainWindow } from "../../../common/dom/get_main_window";
 import { computeAreaName } from "../../../common/entity/compute_area_name";
@@ -126,7 +123,6 @@ import { showToast } from "../../../util/toast";
 import "./add-automation-element/ha-automation-add-element-paste";
 import "./add-automation-element/ha-automation-add-from-target";
 import "./add-automation-element/ha-automation-add-items";
-import type { ElementSort } from "./add-automation-element/element-group";
 import {
   compareElements,
   findElementGroupKey,
@@ -271,10 +267,6 @@ class DialogAddAutomationElement
   @state() private _loadItemsError = false;
 
   @state() private _openedFromQuery = false;
-
-  @state()
-  @storage({ key: "automation-element-sort", state: true, subscribe: false })
-  private _sort: ElementSort = "common";
 
   @state()
   @storage({ key: "automation-recent-targets", state: true, subscribe: false })
@@ -790,17 +782,11 @@ class DialogAddAutomationElement
                     "ha-scrollbar": true,
                   })}
                 >
-                  <ha-automation-add-element-paste
-                    .automationElementType=${automationElementType}
-                    .clipboardItem=${this._params!.clipboardItem}
-                    @paste-element=${this._paste}
-                    divider
-                  ></ha-automation-add-element-paste>
                   ${
                     recentElements.length
                       ? html`<ha-section-title>
                             ${this.hass.localize(
-                              "ui.panel.config.automation.editor.recent"
+                              "ui.panel.config.automation.editor.recently_used"
                             )}
                             <ha-button
                               class="clear-recent"
@@ -853,6 +839,11 @@ class DialogAddAutomationElement
                       )}
                     `
                   )}
+                  <ha-automation-add-element-paste
+                    .automationElementType=${automationElementType}
+                    .clipboardItem=${this._params!.clipboardItem}
+                    @paste-element=${this._paste}
+                  ></ha-automation-add-element-paste>
                 </ha-list-base> `
         }
         ${
@@ -861,7 +852,6 @@ class DialogAddAutomationElement
                 <ha-automation-add-items
                   .hass=${this.hass}
                   .items=${this._getItems()}
-                  .sort=${this._sortable ? this._sort : undefined}
                   .loading=${
                     this._tab === "targets" &&
                     !this._selectedGroup &&
@@ -870,13 +860,12 @@ class DialogAddAutomationElement
                     !this._loadItemsError
                   }
                   .heading=${
-                    this._sortable
+                    this._showItemsHeading
                       ? this.hass.localize(
                           `ui.panel.config.automation.editor.${automationElementType}s.name`
                         )
                       : undefined
                   }
-                  @element-sort-changed=${this._sortChanged}
                   .scrollable=${!this._narrow}
                   .error=${
                     this._tab === "targets" && this._loadItemsError
@@ -1116,10 +1105,10 @@ class DialogAddAutomationElement
   // #region data
 
   /**
-   * The order is the user's to pick in the "by type" and target lists; search
-   * results and blocks have an order of their own.
+   * The "by type" and target lists are headed by the element type; search
+   * results and blocks are not.
    */
-  private get _sortable() {
+  private get _showItemsHeading() {
     return (
       !this._filter &&
       this._tab !== "blocks" &&
@@ -1174,32 +1163,20 @@ class DialogAddAutomationElement
             this._tab === "targets" &&
             this._selectedTarget &&
             this._targetItems
-          ? this._sortTargetItems(
-              this._targetItems,
-              this._sort,
-              this.hass.locale.language
-            )
+          ? this._sortTargetItems(this._targetItems, this.hass.locale.language)
           : undefined;
 
   /**
    * The target list arrives grouped by domain and alphabetical within each;
-   * the order control reaches into every group the way it orders the "by
-   * type" list, and by name it lines the groups up too.
+   * every group puts its common elements first, like the "by type" list.
    */
   private _sortTargetItems = memoizeOne(
-    (
-      sections: AddAutomationElementSection[],
-      sort: ElementSort,
-      language: string
-    ) => {
-      const compare = compareElements(sort, language);
-      const sorted = sections.map((section) => ({
+    (sections: AddAutomationElementSection[], language: string) => {
+      const compare = compareElements(language);
+      return sections.map((section) => ({
         ...section,
         items: [...section.items].sort(compare),
       }));
-      return sort === "name"
-        ? sorted.sort((a, b) => stringCompare(a.title, b.title, language))
-        : sorted;
     }
   );
 
@@ -1214,8 +1191,7 @@ class DialogAddAutomationElement
       this._triggerDescriptions,
       this._conditionDescriptions,
       this._manifests,
-      this._systemDomains?.byEntityDomain,
-      this._sort
+      this._systemDomains?.byEntityDomain
     );
 
     // One list, no heading of its own: the column names it above the ground
@@ -1532,8 +1508,7 @@ class DialogAddAutomationElement
       triggerDescriptions: TriggerDescriptions,
       conditionDescriptions: ConditionDescriptions,
       manifests?: DomainManifestLookup,
-      systemDomainsByEntityDomain?: Map<string, Set<string>>,
-      sort: ElementSort = "common"
+      systemDomainsByEntityDomain?: Map<string, Set<string>>
     ): AddAutomationElementListItem[] => {
       if (type === "trigger" && isDynamic(group)) {
         return this._triggers(
@@ -1589,7 +1564,7 @@ class DialogAddAutomationElement
         }
       }
 
-      return result.sort(compareElements(sort, this.hass.locale.language));
+      return result.sort(compareElements(this.hass.locale.language));
     }
   );
 
@@ -2198,10 +2173,6 @@ class DialogAddAutomationElement
     this.closeDialog();
   };
 
-  private _sortChanged = (ev: HASSDomEvent<{ sort: ElementSort }>) => {
-    this._sort = ev.detail.sort;
-  };
-
   private _groupSelected(ev) {
     const group = ev.currentTarget;
     if (this._selectedGroup === group.value) {
@@ -2722,6 +2693,9 @@ class DialogAddAutomationElement
           border: 1px solid var(--ha-color-border-neutral-quiet);
           margin: var(--ha-space-3);
           overflow: auto;
+          /* No rubber band: the paste bar is pinned to the bottom and would
+             bounce away from it on macOS. */
+          overscroll-behavior: none;
           flex: 0 0 360px;
           margin-inline-end: var(--ha-space-2);
         }
@@ -2735,6 +2709,15 @@ class DialogAddAutomationElement
 
         ha-automation-add-from-target.hidden {
           display: none;
+        }
+
+        /* Fill the column so the paste bar can sit at its bottom edge, and
+           clip instead of hide: hidden makes this its own scroll container,
+           which pins the bar to the list's end rather than the column's. */
+        .groups::part(base) {
+          box-sizing: border-box;
+          min-height: 100%;
+          overflow-x: clip;
         }
 
         .groups {
@@ -2845,6 +2828,12 @@ class DialogAddAutomationElement
 
         .groups {
           padding-bottom: max(var(--safe-area-inset-bottom), var(--ha-space-3));
+        }
+        /* A sticky bar stops at the scroller's padding, which would leave a
+           strip of list showing under it. The bar clears the home indicator
+           itself instead. */
+        .groups:has(> ha-automation-add-element-paste[clipboard-item]) {
+          padding-bottom: 0;
         }
 
         ha-icon-next {

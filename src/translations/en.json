@@ -803,6 +803,8 @@
           "new_entity": "Creates a new entity",
           "placeholder": "Select an entity",
           "create_helper": "Create a new {domain, select, \n undefined {} \n other {{domain} }\n }helper",
+          "view_more": "View more",
+          "copy_entity_id": "Copy entity ID",
           "unknown": "Unknown entity selected"
         },
         "entity-name-picker": {
@@ -1024,8 +1026,8 @@
         "clear": "Clear",
         "show_areas": "Show areas",
         "area": "Area",
-        "add_new_suggestion": "Add new area ''{name}''",
         "add_new": "Add new area…",
+        "manage": "Manage areas and floors",
         "no_areas": "No areas available",
         "no_match": "No areas found for {term}",
         "failed_create_area": "Failed to create area.",
@@ -1035,8 +1037,8 @@
         "clear": "Clear",
         "show_floors": "Show floors",
         "floor": "Floor",
-        "add_new_suggestion": "Add new floor ''{name}''",
         "add_new": "Add new floor…",
+        "copy_id": "Copy floor ID",
         "no_floors": "No floors available",
         "no_match": "No floors found for {term}",
         "failed_create_floor": "Failed to create floor.",
@@ -3017,7 +3019,9 @@
           "gen_data_header": "Data generation tasks",
           "gen_data_description": "Suggest automation names.",
           "gen_image_header": "Image generation tasks",
-          "gen_image_description": "Generate images."
+          "gen_image_description": "Generate images.",
+          "add_integration": "Add AI integration",
+          "manage_integrations": "Manage integrations"
         },
         "mcp": {
           "header": "Model Context Protocol",
@@ -5421,11 +5425,7 @@
             "home": "Home",
             "unassigned": "Unassigned",
             "time_sun": "Time and sun",
-            "recent": "Recent",
-            "sort": {
-              "common": "Common first",
-              "name": "Name (A-Z)"
-            },
+            "recently_used": "Recently used",
             "blocks": "Blocks",
             "tabs": {
               "target": "By target",
@@ -5449,7 +5449,7 @@
               "device": "{count} more devices..."
             },
             "load_target_items_failed": "Failed to load target items for",
-            "target_empty": "Choose {domain} targets",
+            "target_empty": "No targets selected",
             "other_areas": "Other areas",
             "services": "Services",
             "helpers": "Helpers",
@@ -5492,6 +5492,7 @@
               "cut": "Cut",
               "copy": "Copy",
               "paste": "Paste",
+              "paste_element": "Paste trigger",
               "change_alias": "Rename trigger",
               "alias": "Trigger name",
               "delete": "[%key:ui::common::delete%]",
@@ -5806,6 +5807,7 @@
               "cut": "[%key:ui::panel::config::automation::editor::triggers::cut%]",
               "copy": "[%key:ui::panel::config::automation::editor::triggers::copy%]",
               "paste": "[%key:ui::panel::config::automation::editor::triggers::paste%]",
+              "paste_element": "Paste condition",
               "change_alias": "Rename condition",
               "alias": "Condition name",
               "delete": "[%key:ui::common::delete%]",
@@ -5996,6 +5998,7 @@
               "cut": "[%key:ui::panel::config::automation::editor::triggers::cut%]",
               "copy": "[%key:ui::panel::config::automation::editor::triggers::copy%]",
               "paste": "[%key:ui::panel::config::automation::editor::triggers::paste%]",
+              "paste_element": "Paste action",
               "change_alias": "Rename action",
               "alias": "Action name",
               "enable": "Enable",

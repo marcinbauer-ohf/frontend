@@ -34,6 +34,16 @@ import type {
 import "./ha-picker-field";
 import "./ha-svg-icon";
 
+/** A contextual action shown in the footer of the open picker. */
+export interface PickerFooterAction {
+  id: string;
+  label: string;
+  /** Icon path, shown before the label. */
+  icon?: string;
+  /** Runs once the picker has closed, with the text typed in its search. */
+  run: (search: string) => void;
+}
+
 @customElement("ha-generic-picker")
 export class HaGenericPicker extends PickerMixin(LitElement) {
   @property({ type: Boolean, attribute: "allow-custom-value" })
@@ -105,6 +115,8 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
   @property({ attribute: "selected-section" }) public selectedSection?: string;
 
   @property({ attribute: false }) public popoverAnchor?: Element | null;
+
+  @property({ attribute: false }) public footerActions?: PickerFooterAction[];
 
   @property({ type: Boolean, attribute: "use-top-label" })
   public useTopLabel = false;
@@ -241,7 +253,7 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
                     aria-modal="true"
                     aria-label=${this.label || "Select option"}
                   >
-                    ${this._renderComboBox(true)}
+                    ${this._renderComboBox(true)} ${this._renderFooter()}
                   </ha-bottom-sheet>
                 `
               : html`
@@ -265,7 +277,7 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
                     aria-modal="true"
                     aria-label=${this.label || "Select option"}
                   >
-                    ${this._renderComboBox()}
+                    ${this._renderComboBox()} ${this._renderFooter()}
                   </wa-popover>
                 `
             : nothing
@@ -302,6 +314,49 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
         .noSort=${this.noSort}
       ></ha-picker-combo-box>
     `;
+  }
+
+  private _renderFooter() {
+    if (!this.footerActions?.length) {
+      return nothing;
+    }
+    return html`<div class="footer">
+      ${this.footerActions.map(
+        (action) =>
+          html`<ha-button
+            appearance="filled"
+            variant="neutral"
+            size="s"
+            .action=${action}
+            @click=${this._footerActionClicked}
+          >
+            ${
+              action.icon
+                ? html`<ha-svg-icon
+                    slot="start"
+                    .path=${action.icon}
+                  ></ha-svg-icon>`
+                : nothing
+            }
+            ${action.label}
+          </ha-button>`
+      )}
+    </div>`;
+  }
+
+  // Run after the picker closes, so a dialog it opens doesn't fight the
+  // popover's focus trap.
+  private _pendingAction?: () => void;
+
+  private _footerActionClicked(ev: Event) {
+    const action = (
+      ev.currentTarget as HTMLElement & {
+        action: PickerFooterAction;
+      }
+    ).action;
+    const search = this._comboBox?.search ?? "";
+    this._pendingAction = () => action.run(search);
+    this._pickerWrapperOpen = false;
   }
 
   private _setUnknownValue = () => {
@@ -390,6 +445,8 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
     this._selectedValue = undefined;
     this._unsubscribeTinyKeys?.();
     fireEvent(this, "picker-closed");
+    this._pendingAction?.();
+    this._pendingAction = undefined;
   }
 
   private _valueChanged(ev: CustomEvent) {
@@ -528,6 +585,19 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
           --ha-bottom-sheet-border-radius: var(--ha-border-radius-2xl);
           --ha-bottom-sheet-content-padding: 0 var(--safe-area-inset-right)
             var(--safe-area-inset-bottom) var(--safe-area-inset-left);
+        }
+
+        .footer {
+          display: flex;
+          flex-shrink: 0;
+          gap: var(--ha-space-2);
+          padding: var(--ha-space-3);
+          overflow-x: auto;
+          background-color: var(--ha-color-surface-low);
+        }
+
+        .footer ha-button {
+          flex-shrink: 0;
         }
 
         ha-picker-field.opened {

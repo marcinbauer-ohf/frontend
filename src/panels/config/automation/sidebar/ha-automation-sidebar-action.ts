@@ -40,6 +40,7 @@ import type { HomeAssistant } from "../../../../types";
 import { isMac } from "../../../../util/is_mac";
 import type HaAutomationConditionEditor from "../action/ha-automation-action-editor";
 import { getRepeatType } from "../action/types/ha-automation-action-repeat";
+import "../ha-automation-element-description";
 import "../ha-automation-note";
 import { overflowStyles, sidebarEditorStyles } from "../styles";
 import "./ha-automation-sidebar-card";
@@ -387,6 +388,20 @@ export default class HaAutomationSidebarAction extends LitElement {
               @edit-note=${this.config.editNote}
               .note=${this.config.config.action.note}
             ></ha-automation-note>`
+          : nothing
+      }
+      ${
+        !description && !this.yamlMode && this.config.uiSupported
+          ? html`<ha-automation-element-description
+              .hass=${this.hass}
+              kind="action"
+              .type=${
+                actionType === "service"
+                  ? (actionConfig as ServiceAction).action
+                  : actionType
+              }
+              .platform=${actionType === "service"}
+            ></ha-automation-element-description>`
           : nothing
       }
     </ha-automation-sidebar-card>`;

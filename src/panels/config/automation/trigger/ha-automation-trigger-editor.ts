@@ -5,7 +5,6 @@ import { classMap } from "lit/directives/class-map";
 import { dynamicElement } from "../../../../common/dom/dynamic-element-directive";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import "../../../../components/ha-yaml-editor";
-import "../ha-automation-element-description";
 import type { HaYamlEditor } from "../../../../components/ha-yaml-editor";
 import type { Trigger } from "../../../../data/automation";
 import {
@@ -84,6 +83,7 @@ export default class HaAutomationTriggerEditor extends LitElement {
                           .trigger=${this.trigger}
                           .description=${this.description}
                           .disabled=${this.disabled}
+                          .hideDescription=${this.inSidebar}
                         ></ha-automation-trigger-platform>`
                       : dynamicElement(`ha-automation-trigger-${type}`, {
                           hass: this.hass,
@@ -92,16 +92,6 @@ export default class HaAutomationTriggerEditor extends LitElement {
                         })
                   }
                 </div>
-                ${
-                  // Integration-provided triggers render their own footer.
-                  this.inSidebar && !this.description
-                    ? html`<ha-automation-element-description
-                        .hass=${this.hass}
-                        kind="trigger"
-                        .type=${type}
-                      ></ha-automation-element-description>`
-                    : nothing
-                }
               `
         }
       </div>

@@ -32,6 +32,7 @@ import {
 } from "../../../../data/trigger";
 import type { HomeAssistant } from "../../../../types";
 import { isMac } from "../../../../util/is_mac";
+import "../ha-automation-element-description";
 import "../ha-automation-note";
 import { overflowStyles, sidebarEditorStyles } from "../styles";
 import "../trigger/ha-automation-trigger-editor";
@@ -314,6 +315,16 @@ export default class HaAutomationSidebarTrigger extends LitElement {
                 @edit-note=${this.config.editNote}
                 .note=${this.config.config.note}
               ></ha-automation-note>`
+            : nothing
+        }
+        ${
+          !this.yamlMode && this.config.uiSupported
+            ? html`<ha-automation-element-description
+                .hass=${this.hass}
+                kind="trigger"
+                .type=${type}
+                .platform=${!!this.config.description}
+              ></ha-automation-element-description>`
             : nothing
         }
       </ha-automation-sidebar-card>

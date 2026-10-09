@@ -23,6 +23,9 @@ export class HaServiceAction extends LitElement implements ActionElement {
 
   @property({ type: Boolean }) public narrow = false;
 
+  @property({ type: Boolean, attribute: "in-sidebar" }) public inSidebar =
+    false;
+
   @state() private _action?: ServiceAction;
 
   @state() private _responseChecked = false;
@@ -86,6 +89,7 @@ export class HaServiceAction extends LitElement implements ActionElement {
         .value=${this._action}
         .disabled=${this.disabled}
         .hidePicker=${!!this._action.metadata}
+        .hideDescription=${this.inSidebar}
         @value-changed=${this._actionChanged}
       ></ha-service-control>
       ${

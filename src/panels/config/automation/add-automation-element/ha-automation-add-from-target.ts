@@ -213,12 +213,6 @@ export default class HaAutomationAddFromTarget extends LitElement {
         this.narrow && this.value
           ? this._renderNarrow(this._entries, this.value)
           : html`
-              <ha-list-base>
-                <ha-automation-add-element-paste
-                  .automationElementType=${this.automationElementType}
-                  .clipboardItem=${this.clipboardItem}
-                ></ha-automation-add-element-paste>
-              </ha-list-base>
               ${this._renderRecentTargets(this.narrow, this.recentTargets, this.value)}
               ${this._renderFloors(this.narrow, this._entries, this.value)}
               ${this._renderTimeLocation(
@@ -235,6 +229,10 @@ export default class HaAutomationAddFromTarget extends LitElement {
                 this._labelRegistry,
                 this.value
               )}
+              <ha-automation-add-element-paste
+                .automationElementType=${this.automationElementType}
+                .clipboardItem=${this.clipboardItem}
+              ></ha-automation-add-element-paste>
             `
       }
       ${
@@ -351,7 +349,7 @@ export default class HaAutomationAddFromTarget extends LitElement {
     const selected = this._getSelectedTargetId(value);
 
     return html`<ha-section-title>
-        ${this._i18n.localize("ui.panel.config.automation.editor.recent")}
+        ${this._i18n.localize("ui.panel.config.automation.editor.recently_used")}
         <ha-button
           class="clear-recent"
           appearance="plain"

@@ -8,7 +8,6 @@ import {
   pickRowConfig,
 } from "../../../../data/automation";
 import "../../../../components/ha-yaml-editor";
-import "../ha-automation-element-description";
 import type { HaYamlEditor } from "../../../../components/ha-yaml-editor";
 import {
   COLLAPSIBLE_ACTION_ELEMENTS,
@@ -93,16 +92,6 @@ export default class HaAutomationActionEditor extends LitElement {
                     inSidebar: this.inSidebar,
                   })}
                 </div>
-                ${
-                  // The service control renders its own footer.
-                  this.inSidebar && type !== "service"
-                    ? html`<ha-automation-element-description
-                        .hass=${this.hass}
-                        kind="action"
-                        .type=${type}
-                      ></ha-automation-element-description>`
-                    : nothing
-                }
               `
         }
       </div>

@@ -1072,10 +1072,6 @@ export class HaServiceControl extends LitElement {
       color: var(--primary-color);
       white-space: nowrap;
     }
-    /* Leaves the app: the link says so before it is clicked. */
-    .description a::after {
-      content: " ↗";
-    }
     ha-expansion-panel {
       --ha-card-border-radius: var(--ha-border-radius-square);
       --expansion-panel-summary-padding: 0 var(--ha-space-4);

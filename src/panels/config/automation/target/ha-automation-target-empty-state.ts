@@ -2,8 +2,6 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import type { HassServiceTarget } from "home-assistant-js-websocket";
 import "../../../../components/ha-domain-icon";
-import type { LocalizeKeys } from "../../../../common/translations/localize";
-import { domainToName } from "../../../../data/integration";
 import type { TargetSelector } from "../../../../data/selector";
 import type { HomeAssistant } from "../../../../types";
 
@@ -20,13 +18,10 @@ const first = <T>(value: T | readonly T[] | undefined): T | undefined =>
 export interface TargetKind {
   domain: string;
   deviceClass?: string;
-  /** "Blind" when the filter names a device class, else "Cover". */
-  name: string;
 }
 
-/** The kind of thing a target filter asks for, named for a person. */
+/** The kind of thing a target filter asks for, shown as its icon. */
 export const resolveTargetKind = (
-  hass: HomeAssistant,
   filter: TargetSelector["target"] | undefined,
   fallbackDomain?: string
 ): TargetKind | undefined => {
@@ -35,20 +30,13 @@ export const resolveTargetKind = (
   if (!domain) {
     return undefined;
   }
-  const deviceClass = first(entityFilter?.device_class);
-  const name =
-    (deviceClass &&
-      hass.localize(
-        `ui.dialogs.entity_registry.editor.device_classes.${domain}.${deviceClass}` as LocalizeKeys
-      )) ||
-    domainToName(hass.localize, domain);
-  return { domain, deviceClass, name };
+  return { domain, deviceClass: first(entityFilter?.device_class) };
 };
 
 /**
- * The target picker's blank slate in the editor. "Add target" alone says
- * nothing about what to add; this names the kind of thing the element is
- * waiting for, with its icon.
+ * The target picker's blank slate in the editor. The icon hints at the kind
+ * of thing the element works on; the copy stays generic because areas,
+ * floors, devices and labels are valid picks too.
  */
 @customElement("ha-automation-target-empty-state")
 export class HaAutomationTargetEmptyState extends LitElement {
@@ -60,7 +48,7 @@ export class HaAutomationTargetEmptyState extends LitElement {
     if (!this.kind) {
       return nothing;
     }
-    const { domain, deviceClass, name } = this.kind;
+    const { domain, deviceClass } = this.kind;
 
     return html`
       <ha-domain-icon
@@ -68,9 +56,7 @@ export class HaAutomationTargetEmptyState extends LitElement {
         .deviceClass=${deviceClass}
       ></ha-domain-icon>
       <span>
-        ${this.hass.localize("ui.panel.config.automation.editor.target_empty", {
-          domain: name,
-        })}
+        ${this.hass.localize("ui.panel.config.automation.editor.target_empty")}
       </span>
     `;
   }

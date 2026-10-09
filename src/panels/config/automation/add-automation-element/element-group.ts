@@ -78,9 +78,6 @@ const LEADING_ELEMENTS = [
   "set_cover_position",
 ];
 
-/** How the second column orders a category's elements. */
-export type ElementSort = "common" | "name";
-
 /**
  * Matched on the whole element ("sun.sunset") or on the operation alone
  * ("light.turn_on" by "turn_on"), so one entry covers every domain that
@@ -101,11 +98,9 @@ const leadingRank = (key: string): number => {
   return operation === -1 ? LEADING_ELEMENTS.length : operation;
 };
 
+/** Common elements first, then by name. */
 export const compareElements =
-  (sort: ElementSort, language: string) =>
+  (language: string) =>
   (a: { key: string; name: string }, b: { key: string; name: string }) =>
-    // Anything but "name" takes the common ordering, so a sort persisted
-    // under an older name lands on the default instead of silently
-    // alphabetizing.
-    (sort === "name" ? 0 : leadingRank(a.key) - leadingRank(b.key)) ||
+    leadingRank(a.key) - leadingRank(b.key) ||
     stringCompare(a.name, b.name, language);

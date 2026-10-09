@@ -34,6 +34,7 @@ import type { HomeAssistant } from "../../../../types";
 import { isMac } from "../../../../util/is_mac";
 import "../condition/ha-automation-condition-editor";
 import type HaAutomationConditionEditor from "../condition/ha-automation-condition-editor";
+import "../ha-automation-element-description";
 import "../ha-automation-note";
 import { overflowStyles, sidebarEditorStyles } from "../styles";
 import "./ha-automation-sidebar-card";
@@ -335,6 +336,16 @@ export default class HaAutomationSidebarCondition extends LitElement {
               @edit-note=${this.config.editNote}
               .note=${this.config.config.note}
             ></ha-automation-note>`
+          : nothing
+      }
+      ${
+        !description && !this.yamlMode && this.config.uiSupported
+          ? html`<ha-automation-element-description
+              .hass=${this.hass}
+              kind="condition"
+              .type=${type}
+              .platform=${!!this.config.description}
+            ></ha-automation-element-description>`
           : nothing
       }
       <div class="testing-wrapper">

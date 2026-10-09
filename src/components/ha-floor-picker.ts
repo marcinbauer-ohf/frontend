@@ -6,6 +6,7 @@ import type { TemplateResult, PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../common/dom/fire_event";
+import { copyToClipboard } from "../common/util/copy-clipboard";
 import { computeDomain } from "../common/entity/compute_domain";
 import { computeFloorName } from "../common/entity/compute_floor_name";
 import { updateAreaRegistryEntry } from "../data/area/area_registry";
@@ -22,18 +23,17 @@ import {
 } from "../data/floor_registry";
 import { showAlertDialog } from "../dialogs/generic/show-dialog-box";
 import { showFloorRegistryDetailDialog } from "../panels/config/areas/show-dialog-floor-registry-detail";
+import { showToast } from "../util/toast";
 import type { HomeAssistant, ValueChangedEvent } from "../types";
 import type { HaDevicePickerDeviceFilterFunc } from "./device/ha-device-picker";
 import "./ha-combo-box-item";
 import "./ha-floor-icon";
 import "./ha-generic-picker";
-import type { HaGenericPicker } from "./ha-generic-picker";
+import type { HaGenericPicker, PickerFooterAction } from "./ha-generic-picker";
 import "./ha-icon-button";
 import type { PickerComboBoxItem } from "./ha-picker-combo-box";
 import type { PickerValueRenderer } from "./ha-picker-field";
 import "./ha-svg-icon";
-
-const ADD_NEW_ID = "___ADD_NEW___";
 
 const SEARCH_KEYS = [
   { name: "search_labels.floorName", weight: 10 },
@@ -361,38 +361,33 @@ export class HaFloorPicker extends LitElement {
         .filter(Boolean) as string[]
   );
 
-  private _getAdditionalItems = (
-    searchString?: string
-  ): PickerComboBoxItem[] => {
-    if (this.noAdd) {
-      return [];
-    }
-
-    const allFloors = this._allFloorNames(this.hass.floors);
-
-    if (searchString && !allFloors.includes(searchString.toLowerCase())) {
-      return [
-        {
-          id: ADD_NEW_ID + searchString,
-          primary: this.hass.localize(
-            "ui.components.floor-picker.add_new_suggestion",
+  private _footerActions = memoizeOne(
+    (
+      noAdd: boolean,
+      value: string | undefined,
+      localize: HomeAssistant["localize"]
+    ): PickerFooterAction[] => [
+      ...(noAdd
+        ? []
+        : [
             {
-              name: searchString,
-            }
-          ),
-          icon_path: mdiPlus,
-        },
-      ];
-    }
-
-    return [
-      {
-        id: ADD_NEW_ID,
-        primary: this.hass.localize("ui.components.floor-picker.add_new"),
-        icon_path: mdiPlus,
-      },
-    ];
-  };
+              id: "add",
+              label: localize("ui.components.floor-picker.add_new"),
+              icon: mdiPlus,
+              run: this._addFloor,
+            },
+          ]),
+      ...(value
+        ? [
+            {
+              id: "copy",
+              label: localize("ui.components.floor-picker.copy_id"),
+              run: this._copyId,
+            },
+          ]
+        : []),
+    ]
+  );
 
   protected render(): TemplateResult {
     const placeholder =
@@ -415,7 +410,11 @@ export class HaFloorPicker extends LitElement {
         )}
         .value=${this.value}
         .getItems=${this._getItems}
-        .getAdditionalItems=${this._getAdditionalItems}
+        .footerActions=${this._footerActions(
+          this.noAdd,
+          this.value,
+          this.hass.localize
+        )}
         .valueRenderer=${valueRenderer}
         .rowRenderer=${this._rowRenderer}
         .searchKeys=${SEARCH_KEYS}
@@ -437,41 +436,51 @@ export class HaFloorPicker extends LitElement {
       return;
     }
 
-    if (value.startsWith(ADD_NEW_ID)) {
-      this.hass.loadFragmentTranslation("config");
-
-      const suggestedName = value.substring(ADD_NEW_ID.length);
-
-      showFloorRegistryDetailDialog(this, {
-        suggestedName: suggestedName,
-        createEntry: async (values, addedAreas) => {
-          try {
-            const floor = await createFloorRegistryEntry(this.hass, values);
-            addedAreas.forEach((areaId) => {
-              updateAreaRegistryEntry(this.hass, areaId, {
-                floor_id: floor.floor_id,
-              });
-            });
-            if (this.hass.floors[floor.floor_id]) {
-              this._setValue(floor.floor_id);
-            } else {
-              this._pendingFloorId = floor.floor_id;
-            }
-          } catch (err: any) {
-            showAlertDialog(this, {
-              title: this.hass.localize(
-                "ui.components.floor-picker.failed_create_floor"
-              ),
-              text: err.message,
-            });
-          }
-        },
-      });
-      return;
-    }
-
     this._setValue(value);
   }
+
+  private _addFloor = (search: string) => {
+    this.hass.loadFragmentTranslation("config");
+
+    const suggestedName = this._allFloorNames(this.hass.floors).includes(
+      search.toLowerCase()
+    )
+      ? undefined
+      : search || undefined;
+
+    showFloorRegistryDetailDialog(this, {
+      suggestedName,
+      createEntry: async (values, addedAreas) => {
+        try {
+          const floor = await createFloorRegistryEntry(this.hass, values);
+          addedAreas.forEach((areaId) => {
+            updateAreaRegistryEntry(this.hass, areaId, {
+              floor_id: floor.floor_id,
+            });
+          });
+          if (this.hass.floors[floor.floor_id]) {
+            this._setValue(floor.floor_id);
+          } else {
+            this._pendingFloorId = floor.floor_id;
+          }
+        } catch (err: any) {
+          showAlertDialog(this, {
+            title: this.hass.localize(
+              "ui.components.floor-picker.failed_create_floor"
+            ),
+            text: err.message,
+          });
+        }
+      },
+    });
+  };
+
+  private _copyId = async () => {
+    await copyToClipboard(this.value);
+    showToast(this, {
+      message: this.hass.localize("ui.common.copied_clipboard"),
+    });
+  };
 
   private _setValue(value?: string) {
     this.value = value;

@@ -47,10 +47,8 @@ describe("findElementGroupKey", () => {
 describe("compareElements", () => {
   const item = (key: string, name: string) => ({ key, name });
 
-  const sorted = (
-    sort: "common" | "name",
-    items: { key: string; name: string }[]
-  ) => [...items].sort(compareElements(sort, "en")).map((i) => i.name);
+  const sorted = (items: { key: string; name: string }[]) =>
+    [...items].sort(compareElements("en")).map((i) => i.name);
 
   const lightActions = [
     item(`${DYNAMIC_PREFIX}light.toggle`, "Toggle"),
@@ -59,17 +57,8 @@ describe("compareElements", () => {
   ];
 
   it("leads with the primary operation of a domain", () => {
-    // The complaint: A-Z buries the one you reach for.
-    expect(sorted("name", lightActions)).toEqual([
-      "Toggle",
-      "Turn off",
-      "Turn on",
-    ]);
-    expect(sorted("common", lightActions)).toEqual([
-      "Turn on",
-      "Turn off",
-      "Toggle",
-    ]);
+    // A-Z would bury the one you reach for.
+    expect(sorted(lightActions)).toEqual(["Turn on", "Turn off", "Toggle"]);
   });
 
   it("matches a whole element, not only an operation", () => {
@@ -77,8 +66,7 @@ describe("compareElements", () => {
       item(`${DYNAMIC_PREFIX}sun.sunrise`, "Sunrise"),
       item(`${DYNAMIC_PREFIX}sun.sunset`, "Sunset"),
     ];
-    expect(sorted("common", sun)).toEqual(["Sunset", "Sunrise"]);
-    expect(sorted("name", sun)).toEqual(["Sunrise", "Sunset"]);
+    expect(sorted(sun)).toEqual(["Sunset", "Sunrise"]);
   });
 
   it("keeps everything uncurated alphabetical, behind the leaders", () => {
@@ -87,10 +75,6 @@ describe("compareElements", () => {
       item(`${DYNAMIC_PREFIX}light.turn_on`, "Turn on"),
       item(`${DYNAMIC_PREFIX}light.blink`, "Blink"),
     ];
-    expect(sorted("common", mixed)).toEqual([
-      "Turn on",
-      "Apply effect",
-      "Blink",
-    ]);
+    expect(sorted(mixed)).toEqual(["Turn on", "Apply effect", "Blink"]);
   });
 });

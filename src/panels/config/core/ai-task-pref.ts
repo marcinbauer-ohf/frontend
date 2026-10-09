@@ -1,15 +1,18 @@
-import { mdiHelpCircleOutline, mdiStarFourPoints } from "@mdi/js";
+import { mdiHelpCircleOutline, mdiPlus, mdiStarFourPoints } from "@mdi/js";
 import type { HassEntity } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators";
+import memoizeOne from "memoize-one";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import { computeDomain } from "../../../common/entity/compute_domain";
+import { navigate } from "../../../common/navigate";
 import { supportsFeature } from "../../../common/entity/supports-feature";
 import type { HaProgressButton } from "../../../components/buttons/ha-progress-button";
 import "../../../components/entity/ha-entity-picker";
 import type { HaEntityPicker } from "../../../components/entity/ha-entity-picker";
 import "../../../components/ha-card";
+import type { PickerFooterAction } from "../../../components/ha-generic-picker";
 import "../../../components/ha-settings-row";
 import {
   AITaskEntityFeature,
@@ -20,6 +23,7 @@ import {
 import type { HomeAssistant, ValueChangedEvent } from "../../../types";
 import { brandsUrl } from "../../../util/brands-url";
 import { documentationUrl } from "../../../util/documentation-url";
+import { showAddIntegrationDialog } from "../integrations/show-add-integration-dialog";
 
 const filterGenData = (entity: HassEntity) =>
   computeDomain(entity.entity_id) === "ai_task" &&
@@ -50,7 +54,24 @@ export class AITaskPref extends LitElement {
     });
   }
 
+  private _footerActions = memoizeOne(
+    (localize: HomeAssistant["localize"]): PickerFooterAction[] => [
+      {
+        id: "add-integration",
+        label: localize("ui.panel.config.ai_task.add_integration"),
+        icon: mdiPlus,
+        run: () => showAddIntegrationDialog(this),
+      },
+      {
+        id: "manage-integrations",
+        label: localize("ui.panel.config.ai_task.manage_integrations"),
+        run: () => navigate("/config/integrations/dashboard"),
+      },
+    ]
+  );
+
   protected render() {
+    const footerActions = this._footerActions(this.hass.localize);
     return html`
       <ha-card outlined>
         <h1 class="card-header">
@@ -107,6 +128,7 @@ export class AITaskPref extends LitElement {
                 this._gen_data_entity_id || this._prefs?.gen_data_entity_id
               }
               .entityFilter=${filterGenData}
+              .footerActions=${footerActions}
               @value-changed=${this._handlePrefChange}
             ></ha-entity-picker>
           </ha-settings-row>
@@ -129,6 +151,7 @@ export class AITaskPref extends LitElement {
                 this._gen_image_entity_id || this._prefs?.gen_image_entity_id
               }
               .entityFilter=${filterGenImage}
+              .footerActions=${footerActions}
               @value-changed=${this._handlePrefChange}
             ></ha-entity-picker>
           </ha-settings-row>
