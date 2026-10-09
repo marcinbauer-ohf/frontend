@@ -91,6 +91,7 @@ import {
   showConfirmationDialog,
 } from "../../../dialogs/generic/show-dialog-box";
 import { showMoreInfoDialog } from "../../../dialogs/more-info/show-ha-more-info-dialog";
+import { resolveDeviceCardEntities } from "../../lovelace/cards/device/device-card-entities";
 import "../../../layouts/hass-tabs-subpage-data-table";
 import type { HaTabsSubpageDataTable } from "../../../layouts/hass-tabs-subpage-data-table";
 import { haStyle } from "../../../resources/styles";
@@ -1327,13 +1328,17 @@ export class HaConfigDeviceDashboard extends LitElement {
 
   private _handleRowClicked(ev: HASSDomEvent<RowClickedEvent>) {
     const id = ev.detail.id;
-    // Entity ids always contain a dot, device ids never do
+    // Entity ids always contain a dot, device ids never do. An entity of a
+    // device opens in the device's more info, with the entity featured.
     if (id.includes(".")) {
-      showMoreInfoDialog(this, { entityId: id });
+      showMoreInfoDialog(this, {
+        entityId: id,
+        deviceId: this.hass.entities[id]?.device_id ?? null,
+      });
       return;
     }
-    this._ignoreLocationChange = true;
     if (id.startsWith("config_entry:")) {
+      this._ignoreLocationChange = true;
       const entryId = id.substring("config_entry:".length);
       const domain = this.entries?.find(
         (entry) => entry.entry_id === entryId
@@ -1343,7 +1348,16 @@ export class HaConfigDeviceDashboard extends LitElement {
       );
       return;
     }
-    navigate(`/config/devices/device/${id}`);
+    // The device more info needs an entity to lead with; a device without
+    // one keeps its page
+    if (
+      !resolveDeviceCardEntities(this.hass, { type: "device", device: id }).hero
+    ) {
+      this._ignoreLocationChange = true;
+      navigate(`/config/devices/device/${id}`);
+      return;
+    }
+    showMoreInfoDialog(this, { entityId: null, deviceId: id });
   }
 
   private _handleSearchChange(ev: CustomEvent) {
