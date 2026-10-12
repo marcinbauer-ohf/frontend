@@ -244,6 +244,14 @@ export class HuiViewFooter extends LitElement {
       z-index: 4;
     }
 
+    /* Matches the floating bars of other pages: 40px above the bottom edge on
+       a larger screen, with the wrapper's padding. */
+    @media (min-width: 601px) {
+      :host([sticky]) {
+        bottom: calc(var(--ha-space-10) - var(--ha-space-2));
+      }
+    }
+
     .wrapper {
       padding: var(--ha-space-2) 0;
       padding-bottom: calc(

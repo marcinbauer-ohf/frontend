@@ -227,7 +227,10 @@ export const manualEditorStyles = css`
 
   .content {
     padding-top: var(--ha-space-3);
-    padding-bottom: max(var(--safe-area-inset-bottom), 32px);
+    padding-bottom: calc(
+      max(var(--safe-area-inset-bottom), 32px) +
+        var(--ha-floating-bar-height, 0px)
+    );
     transition: padding-bottom 180ms ease-in-out;
   }
 

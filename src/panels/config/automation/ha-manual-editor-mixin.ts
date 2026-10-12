@@ -2,7 +2,7 @@ import { mdiContentSave } from "@mdi/js";
 import {
   html,
   type LitElement,
-  type nothing,
+  nothing,
   type PropertyValues,
   type TemplateResult,
 } from "lit";
@@ -51,6 +51,10 @@ export const ManualEditorMixin = <TConfig>(
     @property({ type: Boolean }) public disabled = false;
 
     @property({ type: Boolean }) public saving = false;
+
+    /** For a page that offers saving itself, such as in its floating bar. */
+    @property({ type: Boolean, attribute: "hide-save-button" })
+    public hideSaveButton = false;
 
     @property({ attribute: false }) public config!: TConfig;
 
@@ -125,18 +129,25 @@ export const ManualEditorMixin = <TConfig>(
               <slot name="alerts"></slot>
               ${this.renderContent()}
             </div>
-            <div class="fab-positioner">
-              <ha-button
-                slot="fab"
-                size="l"
-                class=${this.dirty ? "dirty" : ""}
-                .disabled=${this.saving}
-                @click=${this.saveConfig}
-              >
-                <ha-svg-icon slot="start" .path=${mdiContentSave}></ha-svg-icon>
-                ${this.hass.localize("ui.common.save")}
-              </ha-button>
-            </div>
+            ${
+              this.hideSaveButton
+                ? nothing
+                : html`<div class="fab-positioner">
+                    <ha-button
+                      slot="fab"
+                      size="l"
+                      class=${this.dirty ? "dirty" : ""}
+                      .disabled=${this.saving}
+                      @click=${this.saveConfig}
+                    >
+                      <ha-svg-icon
+                        slot="start"
+                        .path=${mdiContentSave}
+                      ></ha-svg-icon>
+                      ${this.hass.localize("ui.common.save")}
+                    </ha-button>
+                  </div>`
+            }
           </div>
           <div class="sidebar-positioner">
             <ha-automation-sidebar

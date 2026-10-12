@@ -225,6 +225,9 @@ export class HassTabsSubpage extends LitElement {
           ${this.hasFab ? html`<div class="fab-bottom-space"></div>` : nothing}
         </div>
       </div>
+      <div id="floating-bar">
+        <slot name="floating-bar"></slot>
+      </div>
       <div id="fab">
         <slot name="fab"></slot>
       </div>
@@ -285,6 +288,7 @@ export class HassTabsSubpage extends LitElement {
       css`
         :host {
           display: block;
+          position: relative;
           height: 100%;
           background-color: var(--primary-background-color);
         }
@@ -423,6 +427,33 @@ export class HassTabsSubpage extends LitElement {
           height: calc(80px + var(--safe-area-inset-bottom, 0px));
         }
 
+        /* Centres an ha-floating-bar over the bottom of the content, above the
+           tab bar on a phone. The page leaves room below its content. */
+        #floating-bar {
+          position: absolute;
+          inset-inline: calc(
+              var(--ha-space-4) + var(--safe-area-inset-left, 0px)
+            )
+            calc(var(--ha-space-4) + var(--safe-area-inset-right, 0px));
+          bottom: calc(var(--ha-space-10) + var(--safe-area-inset-bottom, 0px));
+          display: flex;
+          justify-content: center;
+          pointer-events: none;
+          z-index: 1;
+        }
+        :host([narrow]) #floating-bar {
+          inset-inline: var(--ha-space-2);
+          bottom: calc(var(--ha-space-2) + var(--safe-area-inset-bottom, 0px));
+        }
+        :host([narrow][show-tabs]) #floating-bar {
+          bottom: calc(
+            var(--header-height, 0px) + var(--ha-space-2) +
+              var(--safe-area-inset-bottom, 0px)
+          );
+        }
+        ::slotted([slot="floating-bar"]) {
+          flex: 1;
+        }
         #fab {
           position: fixed;
           right: calc(16px + var(--safe-area-inset-right, 0px));

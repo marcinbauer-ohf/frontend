@@ -30,8 +30,10 @@ import "../../../components/ha-button";
 import "../../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
+import "../../../components/ha-floating-bar";
 import "../../../components/ha-floor-icon";
 import "../../../components/ha-icon-button";
+import "../../../components/input/ha-input-search";
 import "../../../components/ha-sortable";
 import type { HaSortableOptions } from "../../../components/ha-sortable";
 import "../../../components/ha-svg-icon";
@@ -85,6 +87,39 @@ export class HaConfigAreasDashboard extends LitElement {
   @property({ attribute: false }) public route!: Route;
 
   @state() private _hierarchy?: AreasFloorHierarchy;
+
+  @state() private _filter = "";
+
+  // Areas whose name matches the search, and every area of a floor whose name
+  // does. A floor without any shown area is left out.
+  private _filterHierarchy = memoizeOne(
+    (
+      hierarchy: AreasFloorHierarchy,
+      filter: string,
+      floors: HomeAssistant["floors"],
+      areas: HomeAssistant["areas"]
+    ): AreasFloorHierarchy => {
+      const query = filter.trim().toLowerCase();
+      if (!query) {
+        return hierarchy;
+      }
+      const matches = (name?: string) =>
+        !!name && name.toLowerCase().includes(query);
+      const matchingAreas = (ids: string[]) =>
+        ids.filter((id) => matches(areas[id]?.name));
+      return {
+        floors: hierarchy.floors
+          .map((floor) => ({
+            id: floor.id,
+            areas: matches(floors[floor.id]?.name)
+              ? floor.areas
+              : matchingAreas(floor.areas),
+          }))
+          .filter((floor) => floor.areas.length),
+        areas: matchingAreas(hierarchy.areas),
+      };
+    }
+  );
 
   private _blockHierarchyUpdate = false;
 
@@ -161,6 +196,14 @@ export class HaConfigAreasDashboard extends LitElement {
       this.hass.devices,
       this.hass.entities
     );
+    const hierarchy = this._filterHierarchy(
+      this._hierarchy,
+      this._filter,
+      this.hass.floors,
+      this.hass.areas
+    );
+    // Dragging works on the full list, so it pauses while searching.
+    const filtering = !!this._filter.trim();
 
     return html`
       <hass-tabs-subpage
@@ -169,7 +212,6 @@ export class HaConfigAreasDashboard extends LitElement {
         back-path="/config"
         .tabs=${configSections.areas}
         .route=${this.route}
-        has-fab
       >
         <ha-icon-button
           slot="toolbar-icon"
@@ -179,7 +221,7 @@ export class HaConfigAreasDashboard extends LitElement {
         ></ha-icon-button>
         <div class="container">
           <div class="floors">
-            ${this._hierarchy.floors.map(({ areas, id }) => {
+            ${hierarchy.floors.map(({ areas, id }) => {
               const floor = this.hass.floors[id];
               if (!floor) {
                 return nothing;
@@ -239,6 +281,7 @@ export class HaConfigAreasDashboard extends LitElement {
                     @item-moved=${this._areaMoved}
                     group="areas"
                     .options=${SORT_OPTIONS}
+                    .disabled=${filtering}
                     .floor=${floor.floor_id}
                   >
                     <div class="areas">
@@ -258,7 +301,7 @@ export class HaConfigAreasDashboard extends LitElement {
           </div>
 
           ${
-            this._hierarchy.areas.length
+            hierarchy.areas.length
               ? html`
                   <div class="floor">
                     <div class="header">
@@ -297,10 +340,11 @@ export class HaConfigAreasDashboard extends LitElement {
                       @item-moved=${this._areaMoved}
                       group="areas"
                       .options=${SORT_OPTIONS}
+                      .disabled=${filtering}
                       .floor=${UNASSIGNED_FLOOR}
                     >
                       <div class="areas">
-                        ${this._hierarchy.areas.map((areaId) => {
+                        ${hierarchy.areas.map((areaId) => {
                           const area = this.hass.areas[areaId];
                           if (!area) {
                             return nothing;
@@ -315,20 +359,39 @@ export class HaConfigAreasDashboard extends LitElement {
               : nothing
           }
         </div>
-        <ha-dropdown slot="fab" @wa-select=${this._handleCreateAction}>
-          <ha-button slot="trigger" id="fab" size="l">
-            <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
-            ${this.hass.localize("ui.common.add")}
-          </ha-button>
-          <ha-dropdown-item value="create_floor">
-            <ha-svg-icon .path=${mdiFloorPlan} slot="icon"></ha-svg-icon>
-            ${this.hass.localize("ui.panel.config.areas.picker.create_floor")}
-          </ha-dropdown-item>
-          <ha-dropdown-item value="create_area">
-            <ha-svg-icon .path=${mdiSofa} slot="icon"></ha-svg-icon>
-            ${this.hass.localize("ui.panel.config.areas.picker.create_area")}
-          </ha-dropdown-item>
-        </ha-dropdown>
+        <ha-floating-bar slot="floating-bar">
+          <div class="bar-row">
+            <ha-input-search
+              appearance="outlined"
+              .value=${this._filter}
+              .placeholder=${this.hass.localize("ui.common.search")}
+              @input=${this._handleSearch}
+            ></ha-input-search>
+            <ha-icon-button
+              .path=${mdiSort}
+              .label=${this.hass.localize("ui.panel.config.areas.picker.reorder")}
+              title=${this.hass.localize("ui.panel.config.areas.picker.reorder")}
+              @click=${this._showReorderDialog}
+            ></ha-icon-button>
+            <ha-dropdown
+              placement="top-end"
+              @wa-select=${this._handleCreateAction}
+            >
+              <ha-button slot="trigger" size="l">
+                <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
+                ${this.hass.localize("ui.common.add")}
+              </ha-button>
+              <ha-dropdown-item value="create_floor">
+                <ha-svg-icon .path=${mdiFloorPlan} slot="icon"></ha-svg-icon>
+                ${this.hass.localize("ui.panel.config.areas.picker.create_floor")}
+              </ha-dropdown-item>
+              <ha-dropdown-item value="create_area">
+                <ha-svg-icon .path=${mdiSofa} slot="icon"></ha-svg-icon>
+                ${this.hass.localize("ui.panel.config.areas.picker.create_area")}
+              </ha-dropdown-item>
+            </ha-dropdown>
+          </div>
+        </ha-floating-bar>
       </hass-tabs-subpage>
     `;
   }
@@ -394,6 +457,10 @@ export class HaConfigAreasDashboard extends LitElement {
   protected firstUpdated(changedProps: PropertyValues<this>) {
     super.firstUpdated(changedProps);
     loadAreaRegistryDetailDialog();
+  }
+
+  private _handleSearch(ev: InputEvent) {
+    this._filter = (ev.target as HTMLInputElement).value;
   }
 
   private _openAreaDetails(ev) {
@@ -649,9 +716,25 @@ export class HaConfigAreasDashboard extends LitElement {
   }
 
   static styles = css`
+    /* As wide as the History charts, centred on a large screen. */
     .container {
+      max-width: 2000px;
       padding: 8px 16px 16px;
-      margin: 0 auto 64px auto;
+      /* Room to scroll the last areas out from under the floating bar. */
+      margin: 0 auto 120px auto;
+    }
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: var(--ha-space-2);
+    }
+    .bar-row ha-input-search {
+      flex: 1;
+      min-width: 0;
+    }
+    .bar-row ha-icon-button {
+      flex-shrink: 0;
+      color: var(--secondary-text-color);
     }
     .header {
       display: flex;
@@ -676,7 +759,6 @@ export class HaConfigAreasDashboard extends LitElement {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
       grid-gap: 16px 16px;
-      max-width: 2000px;
       margin-bottom: 16px;
     }
     .areas > * {

@@ -64,6 +64,9 @@ class HassSubpage extends LitElement {
       >
         <slot></slot>
       </div>
+      <div id="floating-bar">
+        <slot name="floating-bar"></slot>
+      </div>
       <div id="fab">
         <slot name="fab"></slot>
       </div>
@@ -179,6 +182,27 @@ class HassSubpage extends LitElement {
           margin-left: var(--safe-area-inset-left);
         }
 
+        /* Centres an ha-floating-bar over the bottom of the content. The page
+           leaves room below its content to scroll out from under it. */
+        #floating-bar {
+          position: absolute;
+          inset-inline: calc(
+              var(--ha-space-4) + var(--safe-area-inset-left, 0px)
+            )
+            calc(var(--ha-space-4) + var(--safe-area-inset-right, 0px));
+          bottom: calc(var(--ha-space-10) + var(--safe-area-inset-bottom, 0px));
+          display: flex;
+          justify-content: center;
+          pointer-events: none;
+          z-index: 1;
+        }
+        :host([narrow]) #floating-bar {
+          inset-inline: var(--ha-space-2);
+          bottom: calc(var(--ha-space-2) + var(--safe-area-inset-bottom, 0px));
+        }
+        ::slotted([slot="floating-bar"]) {
+          flex: 1;
+        }
         #fab {
           position: absolute;
           right: calc(16px + var(--safe-area-inset-right, 0px));

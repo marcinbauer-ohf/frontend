@@ -1,15 +1,18 @@
 import "@home-assistant/webawesome/dist/components/divider/divider";
 import {
+  mdiCodeBraces,
   mdiCog,
   mdiContentSave,
   mdiDebugStepOver,
   mdiDelete,
   mdiDotsVertical,
   mdiFileEdit,
+  mdiFormatListBulleted,
+  mdiGraphOutline,
   mdiInformationOutline,
+  mdiPencil,
   mdiPlay,
   mdiPlayCircleOutline,
-  mdiPlaylistEdit,
   mdiPlusCircleMultipleOutline,
   mdiRedo,
   mdiRenameBox,
@@ -22,13 +25,16 @@ import {
 import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
-import { customElement, property, query } from "lit/decorators";
+import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { UndoRedoController } from "../../../common/controllers/undo-redo-controller";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { goBack, navigate } from "../../../common/navigate";
 import { promiseTimeout } from "../../../common/util/promise-timeout";
 import "../../../components/ha-button";
+import "../../../components/ha-button-toggle-group";
+import "../../../components/ha-floating-bar";
+import "../../../components/ha-tooltip";
 import "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
 import "../../../components/ha-icon";
@@ -128,6 +134,9 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
 
   @query("ha-yaml-editor") private _yamlEditor?: HaYamlEditor;
 
+  // Placeholder for the node view: a blank canvas in place of the editor.
+  @state() private _nodeView = false;
+
   private _configSubscriptions: Record<
     string,
     (config?: AutomationConfig) => void
@@ -218,7 +227,6 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
       : undefined;
 
     const useBlueprint = "use_blueprint" in this.config;
-    const shortcutIcon = renderCtrlOrCmd(this.hass.localize);
 
     return html`
       <hass-subpage
@@ -231,70 +239,6 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
           this.hass.localize("ui.panel.config.automation.editor.default_name")
         }
       >
-        ${
-          this.mode === "gui" && !this.narrow
-            ? html`<ha-icon-button
-                  slot="toolbar-icon"
-                  .label=${this.hass.localize("ui.common.undo")}
-                  .path=${mdiUndo}
-                  @click=${this._undo}
-                  .disabled=${!this._undoRedoController.canUndo}
-                  id="button-undo"
-                >
-                </ha-icon-button>
-                <ha-tooltip placement="bottom" for="button-undo">
-                  ${this.hass.localize("ui.common.undo")}
-                  <span class="shortcut"
-                    >(
-                    <span>${shortcutIcon}</span>
-                    <span>+</span>
-                    <span>Z</span>)
-                  </span>
-                </ha-tooltip>
-                <ha-icon-button
-                  slot="toolbar-icon"
-                  .label=${this.hass.localize("ui.common.redo")}
-                  .path=${mdiRedo}
-                  @click=${this._redo}
-                  .disabled=${!this._undoRedoController.canRedo}
-                  id="button-redo"
-                >
-                </ha-icon-button>
-                <ha-tooltip placement="bottom" for="button-redo">
-                  ${this.hass.localize("ui.common.redo")}
-                  <span class="shortcut">
-                    (
-                    ${
-                      isMac
-                        ? html`<span>${shortcutIcon}</span>
-                            <span>+</span>
-                            <span>Shift</span>
-                            <span>+</span>
-                            <span>Z</span>`
-                        : html`<span>${shortcutIcon}</span>
-                            <span>+</span>
-                            <span>Y</span>`
-                    })
-                  </span>
-                </ha-tooltip>`
-            : nothing
-        }
-        ${
-          this.config?.id && !this.narrow
-            ? html`
-                <ha-button
-                  appearance="plain"
-                  size="s"
-                  @click=${this._showTrace}
-                  slot="toolbar-icon"
-                >
-                  ${this.hass.localize(
-                    "ui.panel.config.automation.editor.show_trace"
-                  )}
-                </ha-button>
-              `
-            : ""
-        }
         <ha-dropdown
           slot="toolbar-icon"
           @wa-select=${this._handleDropdownSelect}
@@ -304,25 +248,6 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
             .label=${this.hass.localize("ui.common.menu")}
             .path=${mdiDotsVertical}
           ></ha-icon-button>
-
-          ${
-            this.mode === "gui" && this.narrow
-              ? html`<ha-dropdown-item
-                    value="undo"
-                    .disabled=${!this._undoRedoController.canUndo}
-                  >
-                    ${this.hass.localize("ui.common.undo")}
-                    <ha-svg-icon slot="icon" .path=${mdiUndo}></ha-svg-icon>
-                  </ha-dropdown-item>
-                  <ha-dropdown-item
-                    value="redo"
-                    .disabled=${!this._undoRedoController.canRedo}
-                  >
-                    ${this.hass.localize("ui.common.redo")}
-                    <ha-svg-icon slot="icon" .path=${mdiRedo}></ha-svg-icon>
-                  </ha-dropdown-item>`
-              : nothing
-          }
 
           <ha-dropdown-item .disabled=${!stateObj} value="info">
             ${this.hass.localize("ui.panel.config.automation.editor.show_info")}
@@ -345,25 +270,6 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
             )}
             <ha-svg-icon slot="icon" .path=${mdiTag}></ha-svg-icon>
           </ha-dropdown-item>
-
-          <ha-dropdown-item .disabled=${!stateObj} value="run">
-            ${this.hass.localize("ui.panel.config.automation.editor.run")}
-            <ha-svg-icon slot="icon" .path=${mdiPlay}></ha-svg-icon>
-          </ha-dropdown-item>
-
-          ${
-            stateObj && this.narrow
-              ? html`<ha-dropdown-item value="trace">
-                  ${this.hass.localize(
-                    "ui.panel.config.automation.editor.show_trace"
-                  )}
-                  <ha-svg-icon
-                    slot="icon"
-                    .path=${mdiTransitConnection}
-                  ></ha-svg-icon>
-                </ha-dropdown-item>`
-              : nothing
-          }
 
           <ha-dropdown-item
             value="rename"
@@ -426,13 +332,6 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
               : nothing
           }
 
-          <ha-dropdown-item value="toggle_yaml_mode">
-            ${this.hass.localize(
-              `ui.panel.config.automation.editor.edit_${this.mode === "gui" ? "yaml" : "ui"}`
-            )}
-            <ha-svg-icon slot="icon" .path=${mdiPlaylistEdit}></ha-svg-icon>
-          </ha-dropdown-item>
-
           <wa-divider></wa-divider>
 
           <ha-dropdown-item .disabled=${!stateObj} value="disable">
@@ -467,7 +366,10 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
             </ha-svg-icon>
           </ha-dropdown-item>
         </ha-dropdown>
+        ${this._renderFloatingBar(!!stateObj)}
+        ${this._nodeView ? html`<div class="node-canvas"></div>` : nothing}
         <div
+          ?hidden=${this._nodeView}
           class=${this.mode === "yaml" ? "yaml-mode" : ""}
           @subscribe-automation-config=${this._subscribeAutomationConfig}
         >
@@ -479,6 +381,7 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
                       useBlueprint
                         ? html`
                             <blueprint-automation-editor
+                              hide-save-button
                               .hass=${this.hass}
                               .narrow=${this.narrow}
                               .isWide=${this.isWide}
@@ -503,6 +406,7 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
                           `
                         : html`
                             <manual-automation-editor
+                              hide-save-button
                               .hass=${this.hass}
                               .narrow=${this.narrow}
                               .isWide=${this.isWide}
@@ -643,20 +547,7 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
                       @value-changed=${this._yamlChanged}
                       @editor-save=${this._handleSaveAutomation}
                       disable-fullscreen
-                    ></ha-yaml-editor>
-                    <ha-button
-                      slot="fab"
-                      size="l"
-                      class=${this.isDirtyState ? "dirty" : ""}
-                      .disabled=${this.saving}
-                      @click=${this._handleSaveAutomation}
-                    >
-                      <ha-svg-icon
-                        slot="start"
-                        .path=${mdiContentSave}
-                      ></ha-svg-icon>
-                      ${this.hass.localize("ui.common.save")}
-                    </ha-button>`
+                    ></ha-yaml-editor> `
                 : nothing
           }
         </div>
@@ -844,6 +735,143 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
       scope: "automation",
       entityReg: this.registryEntry,
     });
+  }
+
+  // A draft of the editor's floating controls: undo and redo, the view
+  // (list, YAML or the coming node view), editing or traces, running the
+  // actions, and saving, which the editors leave to this bar.
+  private _renderFloatingBar(canRun: boolean) {
+    const localize = this.hass.localize;
+    const shortcutIcon = renderCtrlOrCmd(localize);
+    const listView = this.mode === "gui" && !this._nodeView;
+    const view = this._nodeView
+      ? "nodes"
+      : this.mode === "yaml"
+        ? "yaml"
+        : "list";
+    return html`<ha-floating-bar slot="floating-bar">
+      <div class="floating-bar-row ${this.narrow ? "narrow" : ""}">
+        <div class="tools">
+          <ha-icon-button
+            .label=${localize("ui.common.undo")}
+            .path=${mdiUndo}
+            @click=${this._undo}
+            .disabled=${!listView || !this._undoRedoController.canUndo}
+            id="button-undo"
+          ></ha-icon-button>
+          <ha-tooltip placement="top" for="button-undo">
+            ${localize("ui.common.undo")}
+            <span class="shortcut">
+              (<span>${shortcutIcon}</span>
+              <span>+</span>
+              <span>Z</span>)
+            </span>
+          </ha-tooltip>
+          <ha-icon-button
+            .label=${localize("ui.common.redo")}
+            .path=${mdiRedo}
+            @click=${this._redo}
+            .disabled=${!listView || !this._undoRedoController.canRedo}
+            id="button-redo"
+          ></ha-icon-button>
+          <ha-tooltip placement="top" for="button-redo">
+            ${localize("ui.common.redo")}
+            <span class="shortcut">
+              (${
+                isMac
+                  ? html`<span>${shortcutIcon}</span>
+                      <span>+</span>
+                      <span>Shift</span>
+                      <span>+</span>
+                      <span>Z</span>`
+                  : html`<span>${shortcutIcon}</span>
+                      <span>+</span>
+                      <span>Y</span>`
+              })
+            </span>
+          </ha-tooltip>
+          <ha-button-toggle-group
+            ?full-width=${this.narrow}
+            size="s"
+            variant="neutral"
+            .buttons=${[
+              {
+                value: "list",
+                label: localize("ui.panel.config.automation.editor.view_list"),
+                iconPath: mdiFormatListBulleted,
+              },
+              {
+                value: "yaml",
+                label: localize("ui.panel.config.automation.editor.view_yaml"),
+                iconPath: mdiCodeBraces,
+              },
+              {
+                value: "nodes",
+                label: localize("ui.panel.config.automation.editor.view_nodes"),
+                iconPath: mdiGraphOutline,
+              },
+            ]}
+            .active=${view}
+            @value-changed=${this._viewChanged}
+          ></ha-button-toggle-group>
+          <ha-button-toggle-group
+            ?full-width=${this.narrow}
+            size="s"
+            variant="neutral"
+            .disabled=${!this.config?.id}
+            .buttons=${[
+              {
+                value: "edit",
+                label: localize("ui.common.edit"),
+                iconPath: mdiPencil,
+              },
+              {
+                value: "traces",
+                label: localize("ui.panel.config.automation.editor.show_trace"),
+                iconPath: mdiTransitConnection,
+              },
+            ]}
+            active="edit"
+            @value-changed=${this._editTracesChanged}
+          ></ha-button-toggle-group>
+        </div>
+        <div class="actions">
+          <ha-button
+            appearance="filled"
+            size="l"
+            .disabled=${!canRun}
+            @click=${this._runActions}
+          >
+            <ha-svg-icon slot="start" .path=${mdiPlay}></ha-svg-icon>
+            ${localize("ui.panel.config.automation.editor.run")}
+          </ha-button>
+          <ha-button
+            size="l"
+            .disabled=${!this.isDirtyState || this.saving}
+            @click=${this._handleSaveAutomation}
+          >
+            <ha-svg-icon slot="start" .path=${mdiContentSave}></ha-svg-icon>
+            ${localize("ui.common.save")}
+          </ha-button>
+        </div>
+      </div>
+    </ha-floating-bar>`;
+  }
+
+  private _viewChanged(ev: CustomEvent<{ value: string }>) {
+    const view = ev.detail.value;
+    this._nodeView = view === "nodes";
+    if (view === "list" && this.mode === "yaml") {
+      this.switchUiMode();
+    } else if (view === "yaml" && this.mode === "gui") {
+      this.switchYamlMode();
+    }
+  }
+
+  private _editTracesChanged(ev: CustomEvent<{ value: string }>) {
+    if (ev.detail.value === "traces") {
+      this._showTrace();
+    }
   }
 
   private async _showTrace() {
@@ -1236,12 +1264,6 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
     }
 
     switch (action) {
-      case "undo":
-        this._undo();
-        break;
-      case "redo":
-        this._redo();
-        break;
       case "info":
         this._showInfo();
         break;
@@ -1250,9 +1272,6 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
         break;
       case "category":
         this._editCategory();
-        break;
-      case "run":
-        this._runActions();
         break;
       case "rename":
         this._promptAutomationAlias();
@@ -1266,21 +1285,11 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
       case "take_control":
         this._takeControl();
         break;
-      case "toggle_yaml_mode":
-        if (this.mode === "gui") {
-          this.switchYamlMode();
-          break;
-        }
-        this.switchUiMode();
-        break;
       case "disable":
         this._toggle();
         break;
       case "delete":
         this._deleteConfirm();
-        break;
-      case "trace":
-        this._showTrace();
         break;
     }
   }
@@ -1290,6 +1299,63 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
       haStyle,
       automationScriptEditorStyles,
       css`
+        :host {
+          /* Room the floating bar takes over the bottom of the page, which
+             the editors leave free and lift their save button above. */
+          --ha-floating-bar-height: 120px;
+          /* The large Run and Save buttons sit in the bar's corner. */
+          --ha-floating-bar-control-radius: 24px;
+        }
+
+        .yaml-mode {
+          padding-bottom: var(--ha-floating-bar-height);
+        }
+
+        .floating-bar-row,
+        .tools,
+        .actions {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+        }
+
+        .actions {
+          margin-inline-start: auto;
+        }
+
+        .tools ha-icon-button {
+          flex-shrink: 0;
+          color: var(--secondary-text-color);
+        }
+
+        /* A phone stacks the tools over the actions, and both rows fill the
+           bar's width. */
+        .floating-bar-row.narrow {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .narrow .actions {
+          margin-inline-start: 0;
+        }
+
+        .narrow ha-button-toggle-group,
+        .narrow .actions ha-button {
+          flex: 1;
+        }
+
+        /* Placeholder for the node view. */
+        .node-canvas {
+          position: absolute;
+          inset: 0;
+          background-color: var(--primary-background-color);
+          background-image: radial-gradient(
+            var(--divider-color) 1px,
+            transparent 1px
+          );
+          background-size: var(--ha-space-4) var(--ha-space-4);
+        }
+
         manual-automation-editor,
         blueprint-automation-editor {
           margin: 0 auto;

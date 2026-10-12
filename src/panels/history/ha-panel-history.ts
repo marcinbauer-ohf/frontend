@@ -1,11 +1,8 @@
 import {
   mdiChartBoxOutline,
-  mdiChevronLeft,
-  mdiChevronRight,
   mdiDotsVertical,
   mdiDownload,
   mdiFilterVariantRemove,
-  mdiHomeClock,
   mdiImagePlus,
   mdiRestart,
   mdiTuneVariant,
@@ -18,15 +15,10 @@ import type {
 import type { PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
-import { classMap } from "lit/directives/class-map";
 import memoizeOne from "memoize-one";
 import { ensureArray } from "../../common/array/ensure-array";
-import { shiftDateRange } from "../../common/datetime/calc_date";
-import { formatDateVeryShort } from "../../common/datetime/format_date";
-import { formatTime } from "../../common/datetime/format_time";
 import { storage } from "../../common/decorators/storage";
 import type { HASSDomEvent } from "../../common/dom/fire_event";
-import { mainWindow } from "../../common/dom/get_main_window";
 import { computeDomain } from "../../common/entity/compute_domain";
 import { navigate } from "../../common/navigate";
 import { constructUrlCurrentPath } from "../../common/url/construct-url";
@@ -45,8 +37,7 @@ import { MIN_TIME_BETWEEN_UPDATES } from "../../components/chart/ha-chart-base";
 import "../../components/chart/ha-chart-zoom-slider";
 import "../../components/chart/state-history-charts";
 import type { StateHistoryCharts } from "../../components/chart/state-history-charts";
-import "../../components/date-picker/ha-date-range-picker";
-import type { HaDateRangePicker } from "../../components/date-picker/ha-date-range-picker";
+import "../../components/date-picker/ha-date-range-period";
 import "../../components/ha-button";
 import "../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
@@ -54,8 +45,8 @@ import "../../components/ha-dropdown-item";
 import "../../components/ha-empty-state";
 import "../../components/ha-filter-pane";
 import "../../components/ha-filter-pane-chip";
+import "../../components/ha-floating-bar";
 import "../../components/ha-icon-button";
-import "../../components/ha-ripple";
 import type { SourceFilters } from "../../components/ha-sources-picker";
 import {
   applySourceFilters,
@@ -134,8 +125,6 @@ class HaPanelHistory extends LitElement {
 
   @state()
   private _showBack?: boolean;
-
-  @query("ha-date-range-picker") private _datePicker?: HaDateRangePicker;
 
   @query("state-history-charts")
   private _stateHistoryCharts?: StateHistoryCharts;
@@ -220,7 +209,15 @@ class HaPanelHistory extends LitElement {
             ></ha-icon-button>`
           : nothing
       }`;
-    const date = this._renderDateRange();
+    const date = html`<ha-date-range-period
+      .startDate=${this._startDate}
+      .endDate=${this._endDate}
+      .visibleRange=${this._getVisibleRange()}
+      .disabled=${this._isLoading}
+      .loading=${this._isLoading}
+      .narrow=${this.narrow}
+      @value-changed=${this._dateRangeChanged}
+    ></ha-date-range-period>`;
     const reset = hasCharts
       ? html`<ha-icon-button
           .label=${resetLabel}
@@ -297,7 +294,7 @@ class HaPanelHistory extends LitElement {
                     `
             }
           </div>
-          <div class="controls">${controls}</div>
+          <ha-floating-bar class="controls">${controls}</ha-floating-bar>
         </div>
         ${
           this._showSources
@@ -328,125 +325,6 @@ class HaPanelHistory extends LitElement {
         }
       </ha-top-app-bar-fixed>
     `;
-  }
-
-  // Laid out like the energy dashboard's period selector: the picker's
-  // calendar button, the range as a title that also opens the picker, and
-  // buttons to jump to now and step back and forth.
-  private _renderDateRange() {
-    const [start, end] = this._getVisibleRange() ?? [
-      this._startDate,
-      this._endDate,
-    ];
-    const { locale, config } = this.hass;
-    const title =
-      start.toDateString() === end.toDateString()
-        ? formatDateVeryShort(start, locale, config)
-        : `${formatDateVeryShort(start, locale, config)}–${formatDateVeryShort(end, locale, config)}`;
-    const rtl = mainWindow.document.dir === "rtl";
-    const nowLabel = this.hass.localize("ui.panel.history.now");
-    return html`<div class="date-range">
-      <ha-date-range-picker
-        minimal
-        backdrop
-        time-picker
-        extended-presets
-        popover-placement="top-start"
-        .disabled=${this._isLoading}
-        .startDate=${this._startDate}
-        .endDate=${this._endDate}
-        @value-changed=${this._dateRangeChanged}
-      ></ha-date-range-picker>
-      <div
-        class="date-range-label"
-        role="button"
-        tabindex="0"
-        @click=${this._openDatePicker}
-        @keydown=${this._handleDateLabelKeydown}
-      >
-        <ha-ripple></ha-ripple>
-        <div class="date-range-title">${title}</div>
-        <div class="date-range-subtitle">
-          ${formatTime(start, locale, config)} –
-          ${formatTime(end, locale, config)}
-        </div>
-        <ha-spinner
-          class=${classMap({ loading: true, "is-loading": this._isLoading })}
-          size="small"
-        ></ha-spinner>
-      </div>
-      ${
-        this.narrow
-          ? html`<ha-icon-button
-              .path=${mdiHomeClock}
-              .label=${nowLabel}
-              .disabled=${this._isLoading}
-              @click=${this._pickNow}
-            ></ha-icon-button>`
-          : html`<ha-button
-              appearance="filled"
-              size="s"
-              .disabled=${this._isLoading}
-              @click=${this._pickNow}
-            >
-              ${nowLabel}
-            </ha-button>`
-      }
-      <ha-icon-button
-        .path=${rtl ? mdiChevronRight : mdiChevronLeft}
-        .label=${this.hass.localize("ui.common.previous")}
-        .disabled=${this._isLoading}
-        @click=${this._pickPrevious}
-      ></ha-icon-button>
-      <ha-icon-button
-        .path=${rtl ? mdiChevronLeft : mdiChevronRight}
-        .label=${this.hass.localize("ui.common.next")}
-        .disabled=${this._isLoading}
-        @click=${this._pickNext}
-      ></ha-icon-button>
-    </div>`;
-  }
-
-  private _openDatePicker() {
-    this._datePicker?.open();
-  }
-
-  private _handleDateLabelKeydown(ev: KeyboardEvent) {
-    if (ev.key === "Enter" || ev.key === " ") {
-      ev.preventDefault();
-      this._openDatePicker();
-    }
-  }
-
-  private _pickPrevious() {
-    this._shiftDateRange(false);
-  }
-
-  private _pickNext() {
-    this._shiftDateRange(true);
-  }
-
-  private _shiftDateRange(forward: boolean) {
-    const { start, end } = shiftDateRange(
-      this._startDate,
-      this._endDate,
-      forward,
-      this.hass.locale,
-      this.hass.config
-    );
-    this._startDate = start;
-    this._endDate = end;
-    this._updatePath();
-  }
-
-  // Keeps the range's length and moves it to end at the next full hour.
-  private _pickNow() {
-    const length = this._endDate.getTime() - this._startDate.getTime();
-    const end = new Date();
-    end.setHours(end.getHours() + 1, 0, 0, 0);
-    this._startDate = new Date(end.getTime() - length);
-    this._endDate = end;
-    this._updatePath();
   }
 
   // The time span the zoomed charts show, for the date range to display. The
@@ -964,20 +842,12 @@ class HaPanelHistory extends LitElement {
         }
 
         /* All the page's controls, floating over the bottom of the results,
-           which leave room for them. Styled like a dashboard view footer. */
+           which leave room for them. */
         .controls {
           position: absolute;
           inset-inline: var(--ha-space-4);
-          bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom, 0px));
-          max-width: 720px;
+          bottom: calc(var(--ha-space-10) + var(--safe-area-inset-bottom, 0px));
           margin-inline: auto;
-          display: flex;
-          flex-direction: column;
-          gap: var(--ha-space-1);
-          padding: var(--ha-space-2);
-          border-radius: var(--ha-border-radius-xl);
-          background-color: var(--card-background-color);
-          box-shadow: var(--ha-box-shadow-l);
         }
 
         :host([narrow]) .controls {
@@ -1019,72 +889,8 @@ class HaPanelHistory extends LitElement {
           min-width: 0;
         }
 
-        /* Matches the energy dashboard's period selector. */
-        .date-range {
-          display: flex;
-          align-items: center;
+        .controls-row ha-date-range-period {
           flex: 1;
-          min-width: 0;
-        }
-
-        .date-range-label {
-          position: relative;
-          flex: 1;
-          min-width: 0;
-          min-height: var(--ha-space-10);
-          padding: 2px var(--ha-space-2) 2px 0;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          cursor: pointer;
-          border-radius: var(--ha-border-radius-lg);
-        }
-
-        .date-range-title {
-          font-size: var(--ha-font-size-xl);
-          line-height: var(--ha-line-height-condensed);
-          font-weight: var(--ha-font-weight-medium);
-          color: var(--primary-text-color);
-        }
-
-        .date-range-subtitle {
-          font-size: var(--ha-font-size-m);
-          line-height: var(--ha-line-height-condensed);
-          color: var(--secondary-text-color);
-        }
-
-        :host([narrow]) .date-range-title {
-          font-size: var(--ha-font-size-m);
-        }
-
-        :host([narrow]) .date-range-subtitle {
-          font-size: var(--ha-font-size-s);
-        }
-
-        .date-range-label .loading {
-          position: absolute;
-          inset-inline-end: var(--ha-space-2);
-          top: 50%;
-          transform: translateY(-50%);
-          opacity: 0;
-          transition: opacity var(--ha-animation-duration-normal) ease-in-out;
-        }
-
-        .date-range-label .loading.is-loading {
-          opacity: 1;
-        }
-
-        .date-range ha-button {
-          flex-shrink: 0;
-          margin-inline-start: var(--ha-space-2);
-          --ha-button-theme-color: currentColor;
-        }
-
-        .date-range ha-ripple {
-          border-radius: var(--ha-border-radius-lg);
         }
 
         .results {
@@ -1099,7 +905,7 @@ class HaPanelHistory extends LitElement {
              its default column count), keeping the scrollbar at the edge. */
           padding-inline: max(var(--ha-space-4), (100% - 2000px) / 2);
           /* Room to scroll the last chart out from under the controls. */
-          padding-bottom: 176px;
+          padding-bottom: 200px;
         }
 
         /* Narrow screens: keep the vertical rhythm but give the charts the

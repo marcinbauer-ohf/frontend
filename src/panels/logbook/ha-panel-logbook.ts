@@ -2,6 +2,7 @@ import {
   mdiDotsVertical,
   mdiDownload,
   mdiFilterRemove,
+  mdiFilterVariantRemove,
   mdiRefresh,
   mdiTextBoxOutline,
   mdiTuneVariant,
@@ -9,7 +10,7 @@ import {
 import type { HassServiceTarget } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
-import { customElement, property, query, state } from "lit/decorators";
+import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { fromUnixTime } from "date-fns";
 import { ensureArray } from "../../common/array/ensure-array";
@@ -29,15 +30,16 @@ import {
 } from "../../common/url/search-params";
 import { deepEqual } from "../../common/util/deep-equal";
 import { shallowEqual } from "../../common/util/shallow-equal";
-import "../../components/date-picker/ha-date-range-nav";
+import "../../components/date-picker/ha-date-range-period";
 import "../../components/ha-button";
+import "../../components/ha-card";
 import "../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
 import "../../components/ha-dropdown-item";
 import "../../components/ha-empty-state";
 import "../../components/ha-filter-pane-chip";
 import "../../components/ha-filter-pane";
-import type { HaFilterPane } from "../../components/ha-filter-pane";
+import "../../components/ha-floating-bar";
 import "../../components/ha-icon-button";
 import {
   applySourceFilters,
@@ -82,8 +84,6 @@ export class HaPanelLogbook extends LitElement {
 
   @state() private _showSources?: boolean;
 
-  @query("ha-filter-pane") private _filterPane?: HaFilterPane;
-
   @state() private _entitySources?: EntitySources;
 
   @state() private _targetPickerValue: HassServiceTarget = {};
@@ -127,131 +127,129 @@ export class HaPanelLogbook extends LitElement {
       >
         <div slot="title">${this.hass.localize("panel.logbook")}</div>
 
-        <ha-dropdown slot="actionItems" @wa-select=${this._handleMenuAction}>
-          <ha-icon-button
-            slot="trigger"
-            .label=${this.hass.localize("ui.common.menu")}
-            .path=${mdiDotsVertical}
-          ></ha-icon-button>
-
-          <ha-dropdown-item value="refresh">
-            ${this.hass.localize("ui.common.refresh")}
-            <ha-svg-icon slot="icon" .path=${mdiRefresh}></ha-svg-icon>
-          </ha-dropdown-item>
-
-          <ha-dropdown-item value="download">
-            ${this.hass.localize("ui.panel.logbook.download_data")}
-            <ha-svg-icon slot="icon" .path=${mdiDownload}></ha-svg-icon>
-          </ha-dropdown-item>
-
-          <ha-dropdown-item value="reset" .disabled=${this._isDefaultState()}>
-            ${this.hass.localize("ui.common.reset")}
-            <ha-svg-icon slot="icon" .path=${mdiFilterRemove}></ha-svg-icon>
-          </ha-dropdown-item>
-        </ha-dropdown>
-
         <div class="content">
-          <div class="main">
-            ${
-              this._sourcesShown()
-                ? html`<ha-filter-pane
-                    .narrow=${this.narrow}
-                    .label=${sourcesLabel}
-                    .path=${mdiTuneVariant}
-                    .count=${sourceCount}
-                    .resultCount=${entityIds?.length}
-                    @close-filter-pane=${this._closeSources}
-                    @clear-filter=${this._clearSources}
-                  >
-                    <ha-sources-picker
-                      .hass=${this.hass}
-                      .value=${this._targetPickerValue}
-                      .filters=${this._filters}
-                      .entitySources=${this._entitySources}
-                      .entityFilter=${this._filterFunc}
-                      .description=${this.hass.localize(
-                        "ui.panel.logbook.no_targets"
+          <ha-card class="list">
+            <ha-logbook
+              .hass=${this.hass}
+              .time=${this._time}
+              .entityIds=${entityIds}
+              .narrow=${this.narrow}
+              show-cause
+              virtualize
+            >
+              ${
+                sourceCount > 0
+                  ? html`<ha-empty-state
+                      slot="empty"
+                      .icon=${mdiTextBoxOutline}
+                      .heading=${this.hass.localize(
+                        "ui.panel.logbook.no_results_title"
                       )}
-                      @value-changed=${this._targetsChanged}
-                      @source-filters-changed=${this._filtersChanged}
-                    ></ha-sources-picker>
-                  </ha-filter-pane>`
-                : nothing
-            }
-            <div class="content-column">
-              <div class="toolbar">
-                ${
-                  this._sourcesShown() && !this.narrow
-                    ? nothing
-                    : html`<ha-filter-pane-chip
-                        .label=${sourcesLabel}
-                        .path=${mdiTuneVariant}
-                        .count=${filterCount}
-                        .active=${sourceCount > 0}
-                        @click=${this._toggleSources}
-                      ></ha-filter-pane-chip>`
-                }
-                <ha-date-range-nav
-                  .startDate=${this._time.range[0]}
-                  .endDate=${this._time.range[1]}
-                  @value-changed=${this._dateRangeChanged}
-                  extended-presets
-                  time-picker
-                ></ha-date-range-nav>
-              </div>
-
-              <ha-logbook
-                .hass=${this.hass}
-                .time=${this._time}
-                .entityIds=${entityIds}
+                      .description=${this.hass.localize(
+                        "ui.panel.logbook.no_results"
+                      )}
+                    >
+                      <ha-button appearance="plain" @click=${this._openSources}>
+                        ${this.hass.localize("ui.panel.logbook.change_sources")}
+                      </ha-button>
+                    </ha-empty-state>`
+                  : nothing
+              }
+            </ha-logbook>
+          </ha-card>
+          <ha-floating-bar class="controls">
+            <div class="controls-row">
+              <ha-date-range-period
+                .startDate=${this._time.range[0]}
+                .endDate=${this._time.range[1]}
                 .narrow=${this.narrow}
-                show-cause
-                virtualize
+                @value-changed=${this._dateRangeChanged}
+              ></ha-date-range-period>
+              <ha-dropdown
+                placement="top-end"
+                @wa-select=${this._handleMenuAction}
               >
-                ${
-                  sourceCount > 0
-                    ? html`<ha-empty-state
-                        slot="empty"
-                        .icon=${mdiTextBoxOutline}
-                        .heading=${this.hass.localize(
-                          "ui.panel.logbook.no_results_title"
-                        )}
-                        .description=${this.hass.localize(
-                          "ui.panel.logbook.no_results"
-                        )}
-                      >
-                        <ha-button
-                          appearance="plain"
-                          @click=${this._openSources}
-                        >
-                          ${this.hass.localize(
-                            "ui.panel.logbook.change_sources"
-                          )}
-                        </ha-button>
-                      </ha-empty-state>`
-                    : nothing
-                }
-              </ha-logbook>
+                <ha-icon-button
+                  slot="trigger"
+                  .label=${this.hass.localize("ui.common.menu")}
+                  .path=${mdiDotsVertical}
+                ></ha-icon-button>
+                <ha-dropdown-item value="refresh">
+                  ${this.hass.localize("ui.common.refresh")}
+                  <ha-svg-icon slot="icon" .path=${mdiRefresh}></ha-svg-icon>
+                </ha-dropdown-item>
+                <ha-dropdown-item value="download">
+                  ${this.hass.localize("ui.panel.logbook.download_data")}
+                  <ha-svg-icon slot="icon" .path=${mdiDownload}></ha-svg-icon>
+                </ha-dropdown-item>
+                <ha-dropdown-item
+                  value="reset"
+                  .disabled=${this._isDefaultState()}
+                >
+                  ${this.hass.localize("ui.common.reset")}
+                  <ha-svg-icon
+                    slot="icon"
+                    .path=${mdiFilterRemove}
+                  ></ha-svg-icon>
+                </ha-dropdown-item>
+              </ha-dropdown>
             </div>
-          </div>
+            <div class="controls-row">
+              <ha-filter-pane-chip
+                .label=${sourcesLabel}
+                .path=${mdiTuneVariant}
+                .count=${filterCount}
+                .active=${sourceCount > 0}
+                @click=${this._openSources}
+              ></ha-filter-pane-chip>
+              ${
+                sourceCount
+                  ? html`<ha-icon-button
+                      .path=${mdiFilterVariantRemove}
+                      .label=${this.hass.localize(
+                        "ui.components.subpage-data-table.clear_filter"
+                      )}
+                      title=${this.hass.localize(
+                        "ui.components.subpage-data-table.clear_filter"
+                      )}
+                      @click=${this._clearSources}
+                    ></ha-icon-button>`
+                  : nothing
+              }
+            </div>
+          </ha-floating-bar>
         </div>
+        ${
+          this._showSources
+            ? html`<ha-filter-pane
+                narrow
+                .label=${sourcesLabel}
+                .path=${mdiTuneVariant}
+                .count=${sourceCount}
+                .resultCount=${entityIds?.length}
+                @close-filter-pane=${this._closeSources}
+                @clear-filter=${this._clearSources}
+              >
+                <ha-sources-picker
+                  .hass=${this.hass}
+                  .value=${this._targetPickerValue}
+                  .filters=${this._filters}
+                  .entitySources=${this._entitySources}
+                  .entityFilter=${this._filterFunc}
+                  .description=${this.hass.localize(
+                    "ui.panel.logbook.no_targets"
+                  )}
+                  @value-changed=${this._targetsChanged}
+                  @source-filters-changed=${this._filtersChanged}
+                ></ha-sources-picker>
+              </ha-filter-pane>`
+            : nothing
+        }
       </ha-top-app-bar-fixed>
     `;
   }
 
-  private _sourcesShown(): boolean {
-    return this._showSources ?? !this.narrow;
-  }
-
-  private _toggleSources() {
-    this._showSources = !this._sourcesShown();
-  }
-
   private _openSources() {
-    if (this._sourcesShown()) {
-      this._filterPane?.highlight();
-      return;
-    }
     this._showSources = true;
   }
 
@@ -596,6 +594,7 @@ export class HaPanelLogbook extends LitElement {
         }
 
         .content {
+          position: relative;
           display: flex;
           flex-direction: column;
           height: calc(
@@ -606,52 +605,67 @@ export class HaPanelLogbook extends LitElement {
           );
           box-sizing: border-box;
           overflow: hidden;
+          /* The list ends above the controls rather than under them. */
+          padding-bottom: 160px;
         }
 
-        .main {
+        /* A column as wide as the config pages' content, so the entries stay
+           readable on a large screen. */
+        .list {
+          flex: 1;
+          min-height: 0;
+          width: 100%;
+          max-width: 1040px;
+          margin: var(--ha-space-4) auto 0;
           display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+
+        /* A phone shows the entries edge to edge. */
+        :host([narrow]) .list {
+          margin-top: 0;
+          border: none;
+          border-radius: 0;
+          box-shadow: none;
+          background: none;
+        }
+
+        ha-logbook {
           flex: 1;
           min-height: 0;
         }
 
-        .content-column {
+        .controls {
+          position: absolute;
+          inset-inline: var(--ha-space-4);
+          bottom: calc(var(--ha-space-10) + var(--safe-area-inset-bottom, 0px));
+          margin-inline: auto;
+        }
+
+        :host([narrow]) .controls {
+          inset-inline: var(--ha-space-2);
+          bottom: calc(var(--ha-space-2) + var(--safe-area-inset-bottom, 0px));
+        }
+
+        .controls-row {
           display: flex;
-          flex-direction: column;
+          align-items: center;
+          gap: var(--ha-space-1);
+          min-width: 0;
+        }
+
+        .controls-row ha-date-range-period,
+        .controls-row ha-filter-pane-chip {
           flex: 1;
           min-width: 0;
         }
 
-        .toolbar {
-          display: flex;
-          align-items: center;
-          gap: var(--ha-space-4);
-          box-sizing: border-box;
-          height: 56px;
+        .controls-row ha-icon-button {
           flex-shrink: 0;
-          padding: 0 16px;
-          background: var(--primary-background-color);
-          border-bottom: 1px solid var(--divider-color);
-          direction: var(--direction);
-          overflow-x: auto;
-          scrollbar-width: none;
-        }
-
-        .toolbar::-webkit-scrollbar {
-          display: none;
-        }
-
-        .toolbar > * {
-          flex-shrink: 0;
-        }
-
-        /* As wide as the widest page content (a dashboard at its default
-           column count), so a large screen keeps it readable. */
-        ha-logbook {
-          flex: 1;
-          min-height: 0;
-          width: 100%;
-          max-width: 2000px;
-          margin-inline: auto;
+          --ha-icon-button-size: 40px;
+          --mdc-icon-size: 24px;
+          color: var(--secondary-text-color);
         }
       `,
     ];

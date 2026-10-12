@@ -1145,6 +1145,7 @@
         "end_date": "End date",
         "select": "Select",
         "select_date_range": "Select time period",
+        "now": "[%key:ui::panel::lovelace::components::energy_period_selector::now%]",
         "time_from": "Time from",
         "time_to": "Time to",
         "ranges": {
@@ -5333,6 +5334,9 @@
             "run": "Run actions",
             "rename": "[%key:ui::panel::config::automation::editor::triggers::rename%]",
             "show_trace": "Traces",
+            "view_list": "List",
+            "view_yaml": "YAML",
+            "view_nodes": "Nodes",
             "show_info": "More info",
             "default_name": "New automation",
             "missing_name": "Cannot save automation without a name",
@@ -6265,6 +6269,10 @@
             "no_traces_found": "No traces found",
             "trace_no_longer_available": "Chosen trace is no longer available",
             "enter_downloaded_trace": "Enter downloaded trace",
+            "run_history": "Run history",
+            "latest": "Latest",
+            "import_trace": "Import trace",
+            "load_stored_trace": "Load stored trace",
             "graph": {
               "node_label": "{description}, {state}",
               "state": {
@@ -12261,7 +12269,6 @@
         "download_data_error": "Unable to download data",
         "add_card": "Add current view as card",
         "add_card_error": "Unable to add card",
-        "now": "[%key:ui::panel::lovelace::components::energy_period_selector::now%]",
         "error_no_data": "You need to select some data sources first."
       },
       "marketplace": {
