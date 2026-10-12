@@ -79,6 +79,17 @@ try {
 } catch (_err) {
   // Already registered.
 }
+// Registered so the slats turn smoothly as the tilt changes.
+try {
+  CSS.registerProperty({
+    name: "--cover-tilt",
+    syntax: "<number>",
+    inherits: true,
+    initialValue: "0",
+  });
+} catch (_err) {
+  // Already registered.
+}
 
 // Gates and doors stand on the ground, so their controls get a squarer bottom.
 export const GROUNDED_DEVICE_CLASSES = new Set(["gate", "door"]);
@@ -238,6 +249,9 @@ export class HaStateControlCoverPosition extends LitElement {
 
   @property({ attribute: false }) public stateObj!: CoverEntity;
 
+  /** A tilt just picked, shown on the slats until the device reports. */
+  @property({ attribute: false }) public tiltPreview?: number;
+
   /** Favorite positions, marked next to the slider while dragging. */
   @property({ attribute: false }) public favoritePositions?: number[];
 
@@ -326,6 +340,8 @@ export class HaStateControlCoverPosition extends LitElement {
     const openColor = stateColorCss(this.stateObj, "open");
     const color = stateColorCss(this.stateObj);
     const layout = getCoverSliderLayout(this.stateObj);
+    const tilt =
+      this.tiltPreview ?? this.stateObj.attributes.current_tilt_position;
     const moving = !this._prototype.value.sway
       ? undefined
       : this.stateObj.state === "opening" || this.stateObj.state === "closing"
@@ -381,10 +397,7 @@ export class HaStateControlCoverPosition extends LitElement {
               : moving === "opening"
                 ? `-${COVER_SWAY}`
                 : "0deg",
-          "--cover-tilt":
-            this.stateObj.attributes.current_tilt_position != null
-              ? this.stateObj.attributes.current_tilt_position / 100
-              : undefined,
+          "--cover-tilt": tilt != null ? tilt / 100 : undefined,
         })}
         .disabled=${this.stateObj.state === UNAVAILABLE}
         .unit=${DOMAIN_ATTRIBUTES_UNITS.cover.current_position}
@@ -436,7 +449,9 @@ export class HaStateControlCoverPosition extends LitElement {
           white
         );
         --control-slider-handle-surface-size: 8px;
-        transition: --cover-sway 600ms ease-in-out;
+        transition:
+          --cover-sway 600ms ease-in-out,
+          --cover-tilt 300ms ease-out;
         /* The panels swing half as far as their folds lean, the other way
            round, as a skew leans lines opposite to a gradient angle. */
         --control-slider-bar-skew: calc(-0.5 * var(--cover-sway));
