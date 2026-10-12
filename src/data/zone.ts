@@ -1,6 +1,9 @@
 import { navigate } from "../common/navigate";
 import type { HomeAssistant } from "../types";
 
+// ponytail: placeholder until core sets the containment threshold (core#178665)
+export const ZONE_CONTAINMENT_MIN_RADIUS = 100;
+
 export interface Zone {
   id: string;
   name: string;

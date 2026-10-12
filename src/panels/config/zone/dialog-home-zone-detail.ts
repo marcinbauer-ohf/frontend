@@ -1,16 +1,20 @@
 import type { CSSResultGroup } from "lit";
-import { html, LitElement, nothing } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../../../common/dom/fire_event";
 import "../../../components/ha-dialog-footer";
 import "../../../components/ha-dialog";
 import "../../../components/ha-form/ha-form";
+import "../../../components/ha-alert";
 import "../../../components/ha-button";
 import type { HomeZoneMutableParams } from "../../../data/zone";
+import { ZONE_CONTAINMENT_MIN_RADIUS } from "../../../data/zone";
 import { DirtyStateProviderMixin } from "../../../mixins/dirty-state-provider-mixin";
+import { mockContainmentEnabled } from "../../../data/zone_containment_mock";
 import { haStyleDialog } from "../../../resources/styles";
 import type { HomeAssistant } from "../../../types";
+import { documentationUrl } from "../../../util/documentation-url";
 import type { HomeZoneDetailDialogParams } from "./show-dialog-home-zone-detail";
 import {
   HOME_ZONE_ENTITY_ID,
@@ -98,6 +102,32 @@ class DialogHomeZoneDetail extends DirtyStateProviderMixin<HomeZoneMutableParams
           .computeLabel=${this._computeLabel}
           @value-changed=${this._valueChanged}
         ></ha-form>
+        ${
+          mockContainmentEnabled() &&
+          this._data.radius !== undefined &&
+          this._data.radius < ZONE_CONTAINMENT_MIN_RADIUS
+            ? html`<ha-alert alert-type="info">
+                ${this.hass.localize(
+                  "ui.panel.config.zone.detail.small_radius_info",
+                  { radius: ZONE_CONTAINMENT_MIN_RADIUS }
+                )}
+                <ha-button
+                  slot="action"
+                  size="s"
+                  appearance="filled"
+                  href=${documentationUrl(this.hass, "/integrations/zone/")}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span class="no-wrap"
+                    >${this.hass.localize(
+                      "ui.panel.config.zone.detail.small_radius_learn_more"
+                    )}</span
+                  >
+                </ha-button>
+              </ha-alert>`
+            : nothing
+        }
         <ha-dialog-footer slot="footer">
           <ha-button
             slot="secondaryAction"
@@ -153,7 +183,18 @@ class DialogHomeZoneDetail extends DirtyStateProviderMixin<HomeZoneMutableParams
   }
 
   static get styles(): CSSResultGroup {
-    return [haStyleDialog];
+    return [
+      haStyleDialog,
+      css`
+        ha-alert {
+          display: block;
+          margin-top: var(--ha-space-4);
+        }
+        .no-wrap {
+          white-space: nowrap;
+        }
+      `,
+    ];
   }
 }
 

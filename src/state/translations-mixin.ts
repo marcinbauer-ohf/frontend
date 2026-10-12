@@ -24,6 +24,7 @@ import {
   subscribeTranslationPreferences,
 } from "../data/translation";
 import { translationMetadata } from "../resources/translations-metadata";
+import { MOCK_CONTAINMENT_STRINGS } from "../data/zone_containment_mock";
 import type { Constructor, HomeAssistant, Resources } from "../types";
 import {
   getLocalLanguage,
@@ -470,6 +471,8 @@ export default <T extends Constructor<HassBaseEl>>(superClass: T) =>
         [language]: {
           ...this.__resources[language],
           ...data,
+          // MOCKUP: zone containment strings until core provides them
+          ...MOCK_CONTAINMENT_STRINGS,
         },
       };
 

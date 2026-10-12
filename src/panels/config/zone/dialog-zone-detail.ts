@@ -8,13 +8,19 @@ import { addDistanceToCoord } from "../../../common/location/add_distance_to_coo
 import "../../../components/ha-dialog-footer";
 import "../../../components/ha-dialog";
 import "../../../components/ha-form/ha-form";
+import "../../../components/ha-alert";
 import "../../../components/ha-button";
 import type { SchemaUnion } from "../../../components/ha-form/types";
 import type { Zone, ZoneMutableParams } from "../../../data/zone";
-import { getZoneEditorInitData } from "../../../data/zone";
+import {
+  getZoneEditorInitData,
+  ZONE_CONTAINMENT_MIN_RADIUS,
+} from "../../../data/zone";
 import { DirtyStateProviderMixin } from "../../../mixins/dirty-state-provider-mixin";
+import { mockContainmentEnabled } from "../../../data/zone_containment_mock";
 import { haStyleDialog } from "../../../resources/styles";
 import type { HomeAssistant } from "../../../types";
+import { documentationUrl } from "../../../util/documentation-url";
 import type { ZoneDetailDialogParams } from "./show-dialog-zone-detail";
 import {
   nextZoneColor,
@@ -142,6 +148,32 @@ class DialogZoneDetail extends DirtyStateProviderMixin<ZoneMutableParams>()(
           class=${this._data.passive ? "passive" : ""}
           @value-changed=${this._valueChanged}
         ></ha-form>
+        ${
+          mockContainmentEnabled() &&
+          this._data.radius !== undefined &&
+          this._data.radius < ZONE_CONTAINMENT_MIN_RADIUS
+            ? html`<ha-alert alert-type="info">
+                ${this.hass.localize(
+                  "ui.panel.config.zone.detail.small_radius_info",
+                  { radius: ZONE_CONTAINMENT_MIN_RADIUS }
+                )}
+                <ha-button
+                  slot="action"
+                  size="s"
+                  appearance="filled"
+                  href=${documentationUrl(this.hass, "/integrations/zone/")}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span class="no-wrap"
+                    >${this.hass.localize(
+                      "ui.panel.config.zone.detail.small_radius_learn_more"
+                    )}</span
+                  >
+                </ha-button>
+              </ha-alert>`
+            : nothing
+        }
         <ha-dialog-footer slot="footer">
           ${
             this._params.entry
@@ -277,6 +309,13 @@ class DialogZoneDetail extends DirtyStateProviderMixin<ZoneMutableParams>()(
     return [
       haStyleDialog,
       css`
+        ha-alert {
+          display: block;
+          margin-top: var(--ha-space-4);
+        }
+        .no-wrap {
+          white-space: nowrap;
+        }
         ha-form.passive {
           --zone-radius-color: var(--secondary-text-color);
         }

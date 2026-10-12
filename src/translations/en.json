@@ -7374,6 +7374,7 @@
           "create_zone": "Create zone",
           "confirm_delete": "Are you sure you want to delete this zone?",
           "can_not_edit": "Unable to edit zone",
+          "list_radius": "{radius} m radius",
           "configured_in_yaml": "Zones configured via configuration.yaml cannot be edited via the UI.",
           "detail": {
             "new_zone": "New zone",
@@ -7389,7 +7390,12 @@
             "required_error_msg": "This field is required",
             "delete": "Delete",
             "create": "Create",
-            "update": "Update"
+            "update": "Update",
+            "small_radius_info": "Devices with low location accuracy may not be detected in zones smaller than {radius} m.",
+            "small_radius_learn_more": "Learn more"
+          },
+          "containment": {
+            "enable_affected": "{count, plural,\n  one {This zone is}\n  other {These zones are}\n} smaller than {radius} m:"
           },
           "core_location_dialog": "Home Assistant location"
         },

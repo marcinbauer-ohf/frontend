@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import { relativeTime } from "../../../common/datetime/relative_time";
 import { fireEvent } from "../../../common/dom/fire_event";
+import "../../../components/ha-alert";
 import "../../../components/ha-button";
 import "../../../components/ha-dialog";
 import "../../../components/ha-dialog-footer";
@@ -12,6 +13,11 @@ import "../../../components/item/ha-row-item";
 import type { BackupConfig } from "../../../data/backup";
 import { fetchBackupConfig } from "../../../data/backup";
 import { getSupervisorUpdateConfig } from "../../../data/supervisor/update";
+import { ZONE_CONTAINMENT_MIN_RADIUS } from "../../../data/zone";
+import {
+  MOCK_CONTAINMENT_ID,
+  smallZones,
+} from "../../../data/zone_containment_mock";
 import type { HassDialog } from "../../../dialogs/make-dialog-manager";
 import type { HomeAssistant } from "../../../types";
 import type { LabsPreviewFeatureEnableDialogParams } from "./show-dialog-labs-preview-feature-enable";
@@ -154,6 +160,7 @@ export class DialogLabsPreviewFeatureEnable
             ) || this.hass.localize("ui.panel.config.labs.enable_confirmation")
           }
         </p>
+        ${this._renderSmallZones()}
         ${
           createBackupTexts
             ? html`
@@ -198,7 +205,42 @@ export class DialogLabsPreviewFeatureEnable
     `;
   }
 
+  // MOCKUP: list the zones the containment rule would rarely enter
+  private _renderSmallZones() {
+    if (this._params?.previewFeatureId !== MOCK_CONTAINMENT_ID) {
+      return nothing;
+    }
+    const zones = smallZones(this.hass.states);
+    if (!zones.length) {
+      return nothing;
+    }
+    return html`
+      <ha-alert alert-type="warning">
+        ${this.hass.localize(
+          "ui.panel.config.zone.containment.enable_affected",
+          {
+            count: zones.length,
+            radius: ZONE_CONTAINMENT_MIN_RADIUS,
+          }
+        )}
+        <ul>
+          ${zones.map((zone) => html`<li>${zone.name} (${zone.radius} m)</li>`)}
+        </ul>
+      </ha-alert>
+    `;
+  }
+
   static readonly styles = css`
+    ha-alert {
+      display: block;
+      margin: 0 var(--ha-space-6) var(--ha-space-6);
+    }
+
+    ha-alert ul {
+      margin: var(--ha-space-2) 0 0;
+      padding-inline-start: var(--ha-space-5);
+    }
+
     ha-dialog {
       --dialog-content-padding: 0;
     }

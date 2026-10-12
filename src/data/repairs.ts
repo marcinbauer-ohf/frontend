@@ -4,6 +4,10 @@ import type { Store } from "home-assistant-js-websocket/dist/store";
 import { debounce } from "../common/util/debounce";
 import type { HomeAssistant } from "../types";
 import type { DataEntryFlowStep } from "./data_entry_flow";
+import {
+  MOCK_CONTAINMENT_EVENT,
+  withMockRepairsIssue,
+} from "./zone_containment_mock";
 
 export interface RepairsIssue {
   domain: string;
@@ -96,11 +100,23 @@ const subscribeRepairsIssueUpdates = (
 export const subscribeRepairsIssueRegistry = (
   conn: Connection,
   onChange: (repairs: { issues: RepairsIssue[] }) => void
-) =>
-  createCollection<{ issues: RepairsIssue[] }>(
+) => {
+  // MOCKUP: adds the fake zone containment repair, re-emitted on flag changes
+  let last: { issues: RepairsIssue[] } | undefined;
+  const emit = () => last && onChange(withMockRepairsIssue(last));
+  window.addEventListener(MOCK_CONTAINMENT_EVENT, emit);
+  const unsub = createCollection<{ issues: RepairsIssue[] }>(
     "_repairsIssueRegistry",
     fetchRepairsIssues,
     subscribeRepairsIssueUpdates,
     conn,
-    onChange
+    (repairs) => {
+      last = repairs;
+      emit();
+    }
   );
+  return () => {
+    window.removeEventListener(MOCK_CONTAINMENT_EVENT, emit);
+    unsub();
+  };
+};

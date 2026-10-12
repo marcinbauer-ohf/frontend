@@ -26,6 +26,11 @@ import { haStyle } from "../../../resources/styles";
 import type { HomeAssistant } from "../../../types";
 import { brandsUrl } from "../../../util/brands-url";
 import { documentationUrl } from "../../../util/documentation-url";
+import {
+  MOCK_CONTAINMENT_ID,
+  mockContainmentFeature,
+  setMockContainmentEnabled,
+} from "../../../data/zone_containment_mock";
 import { showToast } from "../../../util/toast";
 import { showLabsPreviewFeatureEnableDialog } from "./show-dialog-labs-preview-feature-enable";
 import {
@@ -66,7 +71,9 @@ class HaConfigLabs extends SubscribeMixin(LitElement) {
 
   public hassSubscribe() {
     return [
-      subscribeLabFeatures(this.hass.connection, (features) => {
+      subscribeLabFeatures(this.hass.connection, (coreFeatures) => {
+        // MOCKUP: fake zone containment feature until core ships it
+        const features = [...coreFeatures, mockContainmentFeature()];
         // Load title and preview_features translations for integrations with preview features
         const domains = [...new Set(features.map((f) => f.domain))];
         this.hass.loadBackendTranslation("title", domains);
@@ -367,6 +374,27 @@ class HaConfigLabs extends SubscribeMixin(LitElement) {
       return;
     }
     const [domain, preview_feature] = parts;
+
+    // MOCKUP: the fake feature only flips a local flag
+    if (previewFeatureId === MOCK_CONTAINMENT_ID) {
+      if (createBackup) {
+        closeLabsProgressDialog();
+      }
+      setMockContainmentEnabled(enabled);
+      this._preview_features = this._preview_features?.map((f) =>
+        `${f.domain}.${f.preview_feature}` === MOCK_CONTAINMENT_ID
+          ? { ...f, enabled }
+          : f
+      );
+      showToast(this, {
+        message: this.hass.localize(
+          enabled
+            ? "ui.panel.config.labs.enabled_success"
+            : "ui.panel.config.labs.disabled_success"
+        ),
+      });
+      return;
+    }
 
     try {
       await labsUpdatePreviewFeature(

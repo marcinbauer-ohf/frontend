@@ -10,6 +10,7 @@ import { shouldHandleRequestSelectedEvent } from "../../../common/mwc/handle-req
 import { navigate } from "../../../common/navigate";
 import { stringCompare } from "../../../common/string/compare";
 import { slugify } from "../../../common/string/slugify";
+import { formatNumber } from "../../../common/number/format_number";
 import "../../../components/ha-button";
 import "../../../components/ha-card";
 import "../../../components/ha-icon-button";
@@ -44,6 +45,10 @@ import {
   fetchZones,
   updateZone,
 } from "../../../data/zone";
+import {
+  setMockSmallZones,
+  smallZones,
+} from "../../../data/zone_containment_mock";
 import {
   showAlertDialog,
   showConfirmationDialog,
@@ -93,6 +98,17 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
 
   @query("ha-locations-editor") private _map?: HaLocationsEditor;
 
+  private _renderRadius(radius: number | undefined) {
+    if (radius === undefined) {
+      return nothing;
+    }
+    return html`<span slot="secondary">
+      ${this.hass.localize("ui.panel.config.zone.list_radius", {
+        radius: formatNumber(Math.round(radius), this.hass.locale),
+      })}
+    </span>`;
+  }
+
   private _regEntities: string[] = [];
 
   // Registry creation order decides the zone colors
@@ -137,6 +153,7 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
     const hass = this.hass;
     return html`
       <ha-list-item
+        twoline
         .entry=${entry}
         .id=${this.narrow ? entry.id : ""}
         graphic="avatar"
@@ -151,6 +168,7 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
           entry.name
         )}
         ${entry.name}
+        ${this._renderRadius(this._pendingEdits[entry.id]?.radius ?? entry.radius)}
         ${
           !this.narrow
             ? html`
@@ -176,6 +194,7 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
     const hass = this.hass;
     return html`
       <ha-list-item
+        twoline
         graphic="avatar"
         .id=${this.narrow ? stateObject.entity_id : ""}
         .hasMeta=${!this.narrow || stateObject.entity_id !== "zone.home"}
@@ -190,6 +209,10 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
           stateObject.attributes.friendly_name || stateObject.entity_id
         )}
         ${stateObject.attributes.friendly_name || stateObject.entity_id}
+        ${this._renderRadius(
+          this._pendingEdits[stateObject.entity_id]?.radius ??
+            stateObject.attributes.radius
+        )}
         ${
           this.narrow &&
           stateObject.entity_id === "zone.home" &&
@@ -441,6 +464,10 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
     const oldHass = changedProps.get("hass") as HomeAssistant | undefined;
     if (oldHass && this._stateItems) {
       this._getStates(oldHass);
+    }
+    // MOCKUP: core would raise the repair; here the page reports small zones
+    if (changedProps.has("hass")) {
+      setMockSmallZones(smallZones(this.hass.states));
     }
     // Zone colors come from theme variables
     if (oldHass && oldHass.themes !== this.hass.themes) {
@@ -777,6 +804,11 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
       height: 100%;
       overflow: auto;
     }
+    .flex .overflow {
+      flex-shrink: 0;
+      width: 250px;
+      border-left: 1px solid var(--divider-color);
+    }
     ha-locations-editor {
       flex-grow: 1;
       height: 100%;
@@ -786,8 +818,7 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
     }
     .flex ha-list,
     .flex .empty {
-      border-left: 1px solid var(--divider-color);
-      width: 250px;
+      width: 100%;
       min-height: 100%;
       box-sizing: border-box;
     }
