@@ -12,27 +12,41 @@ import {
   mdiProgressWrench,
   mdiStopCircleOutline,
 } from "@mdi/js";
+import type { ContextType } from "@lit/context";
+import type { HassConfig } from "home-assistant-js-websocket";
 import type { CSSResultGroup } from "lit";
 import { css, html, LitElement, nothing } from "lit";
-import { customElement, property, query } from "lit/decorators";
-import type { HomeAssistant } from "../types";
-import type { Trace } from "../data/trace";
+import { customElement, property, query, state } from "lit/decorators";
 import { formatDateVeryShort } from "../common/datetime/format_date";
+import { formatDateTimeWithSeconds } from "../common/datetime/format_date_time";
 import { formatTimeWithSeconds } from "../common/datetime/format_time";
+import { consume } from "../common/decorators/consume";
+import { transform } from "../common/decorators/transform";
 import { fireEvent } from "../common/dom/fire_event";
-import { computeRTL } from "../common/util/compute_rtl";
+import { mainWindow } from "../common/dom/get_main_window";
+import { configContext, internationalizationContext } from "../data/context";
+import type { Trace } from "../data/trace";
+import type { HomeAssistantConfig } from "../types";
 import "./ha-button";
 import "./ha-icon-button";
 import "./ha-ripple";
 import "./ha-svg-icon";
 import "./ha-generic-picker";
 import type { HaGenericPicker } from "./ha-generic-picker";
-import { formatDateTimeWithSeconds } from "../common/datetime/format_date_time";
 import type { PickerComboBoxItem } from "./ha-picker-combo-box";
 
 @customElement("ha-trace-picker")
 class HaTracePicker extends LitElement {
-  @property({ attribute: false }) public hass!: HomeAssistant;
+  @state()
+  @consume({ context: internationalizationContext, subscribe: true })
+  private _i18n!: ContextType<typeof internationalizationContext>;
+
+  @state()
+  @consume({ context: configContext, subscribe: true })
+  @transform<HomeAssistantConfig, HassConfig>({
+    transformer: ({ config }) => config,
+  })
+  private _hassConfig!: HassConfig;
 
   @property({ attribute: false }) public traces!: Trace[];
 
@@ -55,8 +69,7 @@ class HaTracePicker extends LitElement {
     }
     return html` <ha-generic-picker
       name="trace"
-      .hass=${this.hass}
-      .label=${this.hass.localize(
+      .label=${this._i18n.localize(
         "ui.panel.config.automation.trace.select_trace"
       )}
       .value=${this.value}
@@ -77,14 +90,11 @@ class HaTracePicker extends LitElement {
   }
 
   private _renderPeriod() {
-    const localize = this.hass.localize;
+    const localize = this._i18n.localize;
     const index = this.traces.findIndex((t) => t.run_id === this.value);
     const trace = this.traces[index];
     const item = trace ? this._traceItem(trace) : undefined;
-    const rtl = computeRTL(
-      this.hass.language,
-      this.hass.translationMetadata.translations
-    );
+    const rtl = mainWindow.document.dir === "rtl";
     const latestLabel = localize("ui.panel.config.automation.trace.latest");
     return html`
       <ha-generic-picker
@@ -116,8 +126,8 @@ class HaTracePicker extends LitElement {
                 trace
                   ? formatDateVeryShort(
                       new Date(trace.timestamp.start),
-                      this.hass.locale,
-                      this.hass.config
+                      this._i18n.locale,
+                      this._hassConfig
                     )
                   : this.value
               }
@@ -127,8 +137,8 @@ class HaTracePicker extends LitElement {
                 trace
                   ? formatTimeWithSeconds(
                       new Date(trace.timestamp.start),
-                      this.hass.locale,
-                      this.hass.config
+                      this._i18n.locale,
+                      this._hassConfig
                     )
                   : nothing
               }
@@ -217,27 +227,27 @@ class HaTracePicker extends LitElement {
       id: trace.run_id,
       primary: formatDateTimeWithSeconds(
         new Date(trace.timestamp.start),
-        this.hass.locale,
-        this.hass.config
+        this._i18n.locale,
+        this._hassConfig
       ),
     };
     if (trace.state === "running") {
-      item.secondary = this.hass.localize(
+      item.secondary = this._i18n.localize(
         "ui.panel.config.automation.trace.picker.still_running"
       );
       item.icon_path = mdiProgressClock;
     } else if (trace.state === "debugged") {
-      item.secondary = this.hass.localize(
+      item.secondary = this._i18n.localize(
         "ui.panel.config.automation.trace.picker.debugged"
       );
       item.icon_path = mdiProgressWrench;
     } else if (trace.not_triggered) {
-      item.secondary = this.hass.localize(
+      item.secondary = this._i18n.localize(
         "ui.panel.config.automation.trace.picker.not_triggered"
       );
       item.icon_path = mdiCircleOffOutline;
     } else if (trace.script_execution === "finished") {
-      item.secondary = this.hass.localize(
+      item.secondary = this._i18n.localize(
         "ui.panel.config.automation.trace.picker.finished",
         {
           executiontime: renderRuntime(),
@@ -245,7 +255,7 @@ class HaTracePicker extends LitElement {
       );
       item.icon_path = mdiCheckCircleOutline;
     } else if (trace.script_execution === "aborted") {
-      item.secondary = this.hass.localize(
+      item.secondary = this._i18n.localize(
         "ui.panel.config.automation.trace.picker.aborted",
         {
           executiontime: renderRuntime(),
@@ -253,7 +263,7 @@ class HaTracePicker extends LitElement {
       );
       item.icon_path = mdiAlertCircleOutline;
     } else if (trace.script_execution === "cancelled") {
-      item.secondary = this.hass.localize(
+      item.secondary = this._i18n.localize(
         "ui.panel.config.automation.trace.picker.cancelled",
         {
           executiontime: renderRuntime(),
@@ -293,7 +303,7 @@ class HaTracePicker extends LitElement {
           icon = mdiHelpCircleOutline;
       }
 
-      item.secondary = this.hass.localize(
+      item.secondary = this._i18n.localize(
         `ui.panel.config.automation.trace.picker.${message}`,
         {
           error,
@@ -311,8 +321,8 @@ class HaTracePicker extends LitElement {
       trace
         ? formatDateTimeWithSeconds(
             new Date(trace.timestamp.start),
-            this.hass.locale,
-            this.hass.config
+            this._i18n.locale,
+            this._hassConfig
           )
         : runId
     }`;

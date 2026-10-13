@@ -3,7 +3,6 @@ import {
   mdiDownload,
   mdiFilterRemove,
   mdiFilterVariantRemove,
-  mdiRefresh,
   mdiTextBoxOutline,
   mdiTuneVariant,
 } from "@mdi/js";
@@ -132,7 +131,7 @@ export class HaPanelLogbook extends LitElement {
             <ha-logbook
               .hass=${this.hass}
               .time=${this._time}
-              .entityIds=${entityIds}
+              .entityIds=${this._shownEntityIds}
               .narrow=${this.narrow}
               show-cause
               virtualize
@@ -174,10 +173,6 @@ export class HaPanelLogbook extends LitElement {
                   .label=${this.hass.localize("ui.common.menu")}
                   .path=${mdiDotsVertical}
                 ></ha-icon-button>
-                <ha-dropdown-item value="refresh">
-                  ${this.hass.localize("ui.common.refresh")}
-                  <ha-svg-icon slot="icon" .path=${mdiRefresh}></ha-svg-icon>
-                </ha-dropdown-item>
                 <ha-dropdown-item value="download">
                   ${this.hass.localize("ui.panel.logbook.download_data")}
                   <ha-svg-icon slot="icon" .path=${mdiDownload}></ha-svg-icon>
@@ -278,11 +273,15 @@ export class HaPanelLogbook extends LitElement {
   protected willUpdate(changedProps: PropertyValues<this>) {
     super.willUpdate(changedProps);
 
-    if (this.hasUpdated) {
-      return;
+    if (!this.hasUpdated) {
+      this._applyURLParams();
     }
 
-    this._applyURLParams();
+    // The sources sheet covers the results, so only apply the sources once it
+    // is closed instead of on every source change.
+    if (!this._showSources) {
+      this._shownEntityIds = this._getEntityIds();
+    }
   }
 
   protected firstUpdated(changedProps: PropertyValues<this>) {
@@ -396,6 +395,8 @@ export class HaPanelLogbook extends LitElement {
 
   private _lastEntityIds?: string[];
 
+  private _shownEntityIds?: string[];
+
   // A list keyed on the states must keep its identity or ha-logbook resubscribes.
   private _stableEntityIds(entityIds: string[]): string[] {
     if (this._lastEntityIds && shallowEqual(this._lastEntityIds, entityIds)) {
@@ -508,18 +509,11 @@ export class HaPanelLogbook extends LitElement {
     navigate("/logbook", { replace: true });
   }
 
-  private _refreshLogbook() {
-    this.shadowRoot!.querySelector("ha-logbook")?.refresh();
-  }
-
   private async _handleMenuAction(ev: HaDropdownSelectEvent) {
     const action = ev.detail.item.value;
     switch (action) {
       case "download":
         this._downloadData();
-        break;
-      case "refresh":
-        this._refreshLogbook();
         break;
       case "reset":
         this._resetLogbook();

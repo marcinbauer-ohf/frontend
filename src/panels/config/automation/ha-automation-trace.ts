@@ -56,7 +56,8 @@ import type {
   AutomationTrace,
   AutomationTraceExtended,
 } from "../../../data/trace";
-import { loadTrace, loadTraces } from "../../../data/trace";
+import { getTracePath, loadTrace, loadTraces } from "../../../data/trace";
+import { TraceRunController } from "../../../data/trace-run-controller";
 import { showAlertDialog } from "../../../dialogs/generic/show-dialog-box";
 import "../../../layouts/hass-subpage";
 import { haStyle } from "../../../resources/styles";
@@ -110,6 +111,15 @@ export class HaAutomationTrace extends LitElement {
   @state() private _splitPosition = DEFAULT_SPLIT_POSITION;
 
   @query("hat-script-graph") private _graph?: HatScriptGraph;
+
+  private _runNavigation = new TraceRunController(this, {
+    tracePath: () => getTracePath("automation", this.automationId),
+    shownRunId: () => this._runId,
+    loadRun: (runId) => {
+      this._selected = undefined;
+      this._loadTraces(runId);
+    },
+  });
 
   /**
    * `hass` is replaced on every state update, so comparing it would rebuild
@@ -179,7 +189,6 @@ export class HaAutomationTrace extends LitElement {
                 ? html`<ha-trace-picker
                     period
                     .narrow=${this.narrow}
-                    .hass=${this.hass}
                     .traces=${traces}
                     .value=${this._runId}
                     @value-changed=${this._pickTrace}
@@ -417,10 +426,13 @@ export class HaAutomationTrace extends LitElement {
       this._traces = undefined;
       this._entityId = undefined;
       this._runId = undefined;
+      this._selected = undefined;
       this._trace = undefined;
       this._logbookEntries = undefined;
       if (this.automationId) {
-        this._loadTraces();
+        // A link from another trace reuses this page and names the run.
+        const params = new URLSearchParams(location.search);
+        this._loadTraces(params.get("run_id") || undefined);
       }
     }
 
@@ -428,6 +440,7 @@ export class HaAutomationTrace extends LitElement {
       this._trace = undefined;
       this._logbookEntries = undefined;
       this._loadTrace();
+      this._runNavigation.writeRunIdToUrl(this._runId);
     }
 
     if (
@@ -468,7 +481,12 @@ export class HaAutomationTrace extends LitElement {
   }
 
   private _pickTrace(ev) {
-    this._runId = ev.detail.value;
+    this._pickRun(ev.detail.value);
+  }
+
+  private _pickRun(runId: string) {
+    this._runNavigation.cancelLinkRequest();
+    this._runId = runId;
     this._selected = undefined;
   }
 
@@ -490,11 +508,18 @@ export class HaAutomationTrace extends LitElement {
   );
 
   private _refreshTraces() {
-    this._loadTraces();
+    // Keep the run of a link that is still loading.
+    this._loadTraces(this._runNavigation.requestedRunId);
   }
 
   private async _loadTraces(runId?: string) {
-    this._traces = await loadTraces(this.hass, "automation", this.automationId);
+    const request = this._runNavigation.startListRequest(runId);
+    const traces = await loadTraces(this.hass, "automation", this.automationId);
+    if (!this._runNavigation.isLatestListRequest(request)) {
+      return;
+    }
+    this._runNavigation.endListRequest();
+    this._traces = traces;
     // Newest will be on top.
     this._traces.reverse();
 
@@ -522,6 +547,9 @@ export class HaAutomationTrace extends LitElement {
           "ui.panel.config.automation.trace.trace_no_longer_available"
         ),
       });
+      if (!this._runNavigation.isLatestListRequest(request)) {
+        return;
+      }
     }
 
     // See if we can set a default runID
@@ -531,13 +559,15 @@ export class HaAutomationTrace extends LitElement {
   }
 
   private async _loadTrace() {
+    const request = this._runNavigation.startTraceRequest();
+    const runId = this._runId!;
     const trace = await loadTrace(
       this.hass,
       "automation",
       this.automationId,
-      this._runId!
+      runId
     );
-    this._logbookEntries = isComponentLoaded(this.hass.config, "logbook")
+    const logbookEntries = isComponentLoaded(this.hass.config, "logbook")
       ? await getLogbookDataForContext(
           this.hass,
           trace.timestamp.start,
@@ -545,6 +575,14 @@ export class HaAutomationTrace extends LitElement {
         )
       : [];
 
+    // Another run was picked, or the same run loaded again, meanwhile.
+    if (
+      !this._runNavigation.isLatestTraceRequest(request) ||
+      runId !== this._runId
+    ) {
+      return;
+    }
+    this._logbookEntries = logbookEntries;
     this._trace = trace;
   }
 
