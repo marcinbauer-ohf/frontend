@@ -26,6 +26,7 @@ import type { HASSDomEvent } from "../../common/dom/fire_event";
 import { fireEvent } from "../../common/dom/fire_event";
 import { mainWindow } from "../../common/dom/get_main_window";
 import { stopPropagation } from "../../common/dom/stop_propagation";
+import { computeDeviceName } from "../../common/entity/compute_device_name";
 import { computeDomain } from "../../common/entity/compute_domain";
 import { computeEntityName } from "../../common/entity/compute_entity_name";
 import {
@@ -232,7 +233,8 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
         }).hero ??
         params.entityId)
       : params.entityId;
-    if (!this._entityId) {
+    // A device without an entity to lead with still opens, on its settings.
+    if (!this._entityId && !this._deviceId) {
       this.closeDialog();
       return;
     }
@@ -632,7 +634,7 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
 
   protected render() {
     if (!this._entityId) {
-      return nothing;
+      return this._deviceId ? this._renderDeviceOnly(this._deviceId) : nothing;
     }
     const entityId = this._entityId;
     const stateObj = this.hass.states[entityId] as HassEntity | undefined;
@@ -1091,6 +1093,69 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
               </div>
             `
           )}
+          ${this.renderScrollableFades()}
+        </div>
+      </ha-adaptive-dialog>
+    `;
+  }
+
+  /**
+   * A device with no entity to feature, such as a service that only has a
+   * connection: just its settings, with the views they open on top.
+   */
+  private _renderDeviceOnly(deviceId: string) {
+    const device = this.hass.devices[deviceId];
+    return html`
+      <ha-adaptive-dialog
+        .open=${this._open}
+        width="medium"
+        @closed=${this._dialogClosed}
+        @show-child-view=${this._showChildView}
+        flexcontent
+      >
+        ${
+          this._childView
+            ? html`<ha-icon-button-prev
+                slot="headerNavigationIcon"
+                @click=${this._goBack}
+              ></ha-icon-button-prev>`
+            : html`<ha-icon-button
+                slot="headerNavigationIcon"
+                @click=${this.closeDialog}
+                .label=${this.hass.localize("ui.common.close")}
+                .path=${mdiClose}
+              ></ha-icon-button>`
+        }
+        <span slot="headerTitle" class="title">
+          <p class="main">
+            ${device ? computeDeviceName(device) || deviceId : deviceId}
+          </p>
+        </span>
+        ${
+          this._childView?.viewHeaderTag
+            ? dynamicElement(this._childView.viewHeaderTag, {
+                slot: "headerActionItems",
+                hass: this.hass,
+                params: this._childView.viewParams,
+              })
+            : nothing
+        }
+        <div class="content-wrapper">
+          <div class="content ha-scrollbar" tabindex="-1">
+            ${
+              this._childView
+                ? html`<div class="child-view">
+                    ${dynamicElement(this._childView.viewTag, {
+                      hass: this.hass,
+                      params: this._childView.viewParams,
+                    })}
+                  </div>`
+                : html`<ha-more-info-device
+                    .hass=${this.hass}
+                    .deviceId=${deviceId}
+                  ></ha-more-info-device>`
+            }
+          </div>
           ${this.renderScrollableFades()}
         </div>
       </ha-adaptive-dialog>

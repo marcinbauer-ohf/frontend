@@ -1000,15 +1000,15 @@ describe("ha-more-info-device", () => {
     ];
     expect(groups.map((group) => group.header)).toEqual([
       // The facts need no heading of their own — the tab is the device — and
-      // neither do the things that can be done with it.
-      undefined,
+      // neither do the things that can be done with it, which come last.
       undefined,
       "ui.dialogs.more_info_control.configure_entities",
+      undefined,
     ]);
 
     // The device's own settings lead its actions; with no integration to ask,
     // recreating its entity IDs is the only other one.
-    const deviceRows = groups[1].querySelectorAll(
+    const deviceRows = groups[2].querySelectorAll(
       "ha-list-item-button:not([href])"
     );
     expect(
@@ -1023,7 +1023,7 @@ describe("ha-more-info-device", () => {
     // Every entity of the device is settable from here, the hidden and the
     // stateless ones included.
     const entityRows = [
-      ...groups[2].querySelectorAll<HTMLElement & { entityId: string }>(
+      ...groups[1].querySelectorAll<HTMLElement & { entityId: string }>(
         "ha-list-item-button"
       ),
     ];
@@ -1378,5 +1378,39 @@ describe("more info dialog device scope", () => {
       entityId: null,
       deviceId: "dev2",
     });
+  });
+
+  it("opens a device without entities on its settings", async () => {
+    // A service that only holds a connection has nothing to feature, so the
+    // dialog opens anyway and the view is just the device's settings.
+    const hass = { ...fakeHass(), entities: {}, states: {} } as HomeAssistant;
+
+    const dialog = document.createElement(
+      "ha-more-info-dialog"
+    ) as unknown as DialogInternals;
+    dialog.hass = hass;
+    dialog.showDialog({ entityId: null, deviceId: DEVICE });
+    expect(dialog._deviceId).toBe(DEVICE);
+    expect(dialog._entityId).toBeFalsy();
+
+    const el = document.createElement(
+      "ha-more-info-device"
+    ) as HaMoreInfoDevice;
+    el.hass = hass;
+    el.deviceId = DEVICE;
+    document.body.append(el);
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector(".pane.device")).not.toBeNull();
+    // No tabs and no features list when there is nothing to show in them.
+    expect(el.shadowRoot!.querySelector(".bar")).toBeNull();
+    expect(
+      [
+        ...el.shadowRoot!.querySelectorAll<HTMLElement & { header?: string }>(
+          ".pane.device ha-grouped-list"
+        ),
+      ].map((group) => group.header)
+    ).not.toContain("ui.dialogs.more_info_control.configure_entities");
+    el.remove();
   });
 });

@@ -1348,16 +1348,17 @@ export class HaConfigDeviceDashboard extends LitElement {
       );
       return;
     }
-    // The device more info needs an entity to lead with; a device without
-    // one keeps its page
-    if (
-      !resolveDeviceCardEntities(this.hass, { type: "device", device: id }).hero
-    ) {
-      this._ignoreLocationChange = true;
-      navigate(`/config/devices/device/${id}`);
-      return;
-    }
-    showMoreInfoDialog(this, { entityId: null, deviceId: id });
+    // The device more info needs an entity to lead with. Services often have
+    // only diagnostic ones, which the device card never leads with, so any
+    // entity with a state will do. A device without one opens on its
+    // settings.
+    const entityId =
+      resolveDeviceCardEntities(this.hass, { type: "device", device: id })
+        .hero ??
+      Object.values(this.hass.entities).find(
+        (entry) => entry.device_id === id && this.hass.states[entry.entity_id]
+      )?.entity_id;
+    showMoreInfoDialog(this, { entityId: entityId ?? null, deviceId: id });
   }
 
   private _handleSearchChange(ev: CustomEvent) {

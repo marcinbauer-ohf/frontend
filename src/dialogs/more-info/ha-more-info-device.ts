@@ -409,7 +409,8 @@ export class HaMoreInfoDevice extends LitElement {
     // device starts over. Which tabs exist never depends on the entity, so the
     // open one is always still there.
     if (changedProps.has("deviceId")) {
-      this._view = "info";
+      // A device with nothing to feature is only its settings.
+      this._view = this.primaryEntityId ? "info" : "settings";
       this._compareEntityIds = [];
     }
 
@@ -599,11 +600,13 @@ export class HaMoreInfoDevice extends LitElement {
     const featured = featuredId ? this.hass.states[featuredId] : undefined;
 
     if (!featured && !rows.length) {
-      return html`
-        <ha-alert alert-type="info">
-          ${this.hass.localize("ui.panel.config.devices.entities.none")}
-        </ha-alert>
-      `;
+      return this._view === "settings" && !__DEMO__ && this.hass.user?.is_admin
+        ? this._renderSettings()
+        : html`
+            <ha-alert alert-type="info">
+              ${this.hass.localize("ui.panel.config.devices.entities.none")}
+            </ha-alert>
+          `;
     }
 
     const readOnly = featured
@@ -940,30 +943,35 @@ export class HaMoreInfoDevice extends LitElement {
 
   /**
    * The tab is everything the device page offers, scoped to the device: what
-   * integrations want said about it, what it is, what can be done with it, one
-   * row per entity it provides, and the devices and items around it.
+   * integrations want said about it, what it is, one row per entity it
+   * provides, the devices and items around it, and last what can be done
+   * with it.
    * Everything opens as a view of this dialog or on top of it, so one back
    * arrow lands here again.
    */
   private _renderSettings() {
     const device = this.hass.devices[this.deviceId];
+    const settable = this._settableEntities(this.deviceId, this.hass.entities);
 
     return html`
       <div class="pane device">
         ${this._renderDeviceAlerts(device)} ${this._renderDeviceInfo(device)}
         ${this._renderIntegrationInfo(device)}
-        ${this._renderDeviceActions(device)}
-        <ha-grouped-list
-          .header=${this.hass.localize(
-            "ui.dialogs.more_info_control.configure_entities"
-          )}
-        >
-          ${repeat(
-            this._settableEntities(this.deviceId, this.hass.entities),
-            (entry) => entry.entity_id,
-            (entry) => this._renderEntitySettingsRow(entry)
-          )}
-        </ha-grouped-list>
+        ${
+          settable.length
+            ? html`<ha-grouped-list
+                .header=${this.hass.localize(
+                  "ui.dialogs.more_info_control.configure_entities"
+                )}
+              >
+                ${repeat(
+                  settable,
+                  (entry) => entry.entity_id,
+                  (entry) => this._renderEntitySettingsRow(entry)
+                )}
+              </ha-grouped-list>`
+            : nothing
+        }
         ${this._renderRelatedDevices(device)}
         <!--
           What else in the config refers to the device, scoped to the device
@@ -976,6 +984,9 @@ export class HaMoreInfoDevice extends LitElement {
           .itemId=${this.deviceId}
           .itemType=${"device"}
         ></ha-related-items>
+        <!-- What can be done with the device comes last, after everything
+             about it, so the page reads down before it acts. -->
+        ${this._renderDeviceActions(device)}
       </div>
     `;
   }
@@ -2437,6 +2448,7 @@ export class HaMoreInfoDevice extends LitElement {
       display: flex;
       flex-direction: column;
       gap: var(--ha-space-6);
+      padding-bottom: var(--ha-space-6);
     }
     .pane.device ha-related-items {
       padding: 0;
