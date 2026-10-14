@@ -331,19 +331,21 @@ export class HaSceneEditor extends DirtyStateProviderMixin<number>()(
         </ha-dropdown>
         ${this._errors ? html` <div class="errors">${this._errors}</div> ` : ""}
         ${this._mode === "yaml" ? this._renderYamlMode() : this._renderUiMode()}
-        <ha-button
-          slot="fab"
-          size="l"
-          .disabled=${this._saving}
-          @click=${this._saveScene}
-          class=${classMap({
-            dirty: this.isDirtyState || !this.sceneId,
-            saving: this._saving,
-          })}
-        >
-          <ha-svg-icon slot="start" .path=${mdiContentSave}></ha-svg-icon>
-          ${this.hass.localize("ui.panel.config.scene.editor.save")}
-        </ha-button>
+        ${
+          // Shown on the page's bar while there is something to save
+          this.isDirtyState || !this.sceneId
+            ? html`<ha-button
+                slot="fab"
+                size="l"
+                .disabled=${this._saving}
+                @click=${this._saveScene}
+                class=${classMap({ saving: this._saving })}
+              >
+                <ha-svg-icon slot="start" .path=${mdiContentSave}></ha-svg-icon>
+                ${this.hass.localize("ui.panel.config.scene.editor.save")}
+              </ha-button>`
+            : nothing
+        }
       </hass-subpage>
     `;
   }
@@ -1458,12 +1460,6 @@ export class HaSceneEditor extends DirtyStateProviderMixin<number>()(
         span[slot="introduction"] a {
           color: var(--primary-color);
         }
-        ha-button[slot="fab"] {
-          position: relative;
-          bottom: calc(-80px - var(--safe-area-inset-bottom));
-          transition: bottom 0.3s;
-          --ha-button-box-shadow: var(--ha-box-shadow-l);
-        }
         ha-alert {
           display: block;
           margin-bottom: 24px;
@@ -1471,9 +1467,6 @@ export class HaSceneEditor extends DirtyStateProviderMixin<number>()(
         ha-alert ha-button[slot="action"] {
           width: max-content;
           white-space: nowrap;
-        }
-        ha-button[slot="fab"].dirty {
-          bottom: 0;
         }
         ha-button[slot="fab"].saving {
           opacity: var(--light-disabled-opacity);

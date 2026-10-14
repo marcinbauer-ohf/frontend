@@ -258,20 +258,26 @@ export class HaButton extends Button {
         }
 
         slot[name="start"]::slotted(*) {
-          margin-inline-end: var(--ha-space-1);
+          margin-inline-end: var(--ha-button-start-gap, var(--ha-space-1));
         }
         slot[name="end"]::slotted(*) {
           margin-inline-start: var(--ha-space-1);
         }
 
         .button.has-start {
-          padding-inline-start: var(--ha-space-2);
+          padding-inline-start: var(
+            --ha-button-start-padding,
+            var(--ha-space-2)
+          );
         }
         .button.has-end {
           padding-inline-end: var(--ha-space-2);
         }
 
+        /* --ha-button-label-max-width: 0 leaves just the icon; the label
+           still names the button for screen readers */
         .label {
+          max-width: var(--ha-button-label-max-width, none);
           overflow: var(--ha-button-label-overflow, hidden);
           text-overflow: ellipsis;
           padding: var(--ha-space-1) 0;

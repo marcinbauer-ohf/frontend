@@ -251,6 +251,22 @@ export const manualEditorStyles = css`
     display: none;
   }
 
+  /* The info pane sits exactly where the sidebar for a selected row does. */
+  .info-pane {
+    position: fixed;
+    top: calc(var(--header-height) + 16px);
+    height: calc(-81px + 100vh - var(--safe-area-inset-top, 0px));
+    height: calc(-81px + 100dvh - var(--safe-area-inset-top, 0px));
+    width: var(--sidebar-width);
+    display: block;
+    z-index: 6;
+  }
+
+  .info-pane ::slotted(*) {
+    height: calc(100% - var(--safe-area-inset-top, 0px));
+    margin-top: var(--safe-area-inset-top, 0px);
+  }
+
   .sidebar-positioner {
     display: flex;
     justify-content: flex-end;

@@ -36,7 +36,23 @@ export class HaFloatingBar extends LitElement {
       );
       background-color: var(--card-background-color);
       box-shadow: var(--ha-box-shadow-l);
+      /* A search in the bar is as round as its buttons */
+      --ha-input-search-border-radius: var(--ha-border-radius-pill);
       pointer-events: auto;
+      animation: bar-enter 200ms ease-out;
+    }
+
+    /* Arrives with the page: fades in quickly, rising from just below */
+    @keyframes bar-enter {
+      from {
+        opacity: 0;
+        transform: translateY(var(--ha-space-4));
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      :host {
+        animation: none;
+      }
     }
   `;
 }

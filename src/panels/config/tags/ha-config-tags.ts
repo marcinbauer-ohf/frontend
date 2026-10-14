@@ -13,7 +13,6 @@ import { storage } from "../../../common/decorators/storage";
 import type { HASSDomEvent } from "../../../common/dom/fire_event";
 import type { LocalizeFunc } from "../../../common/translations/localize";
 import { hasRejectedItems } from "../../../common/util/promise-all-settled-results";
-import "../../../components/chips/ha-assist-chip";
 import type {
   DataTableColumnContainer,
   RowClickedEvent,
@@ -234,12 +233,14 @@ export class HaConfigTags extends SubscribeMixin(LitElement) {
           .label=${this.hass.localize("ui.common.help")}
           .path=${mdiHelpCircleOutline}
         ></ha-icon-button>
-        <ha-assist-chip
+        <ha-button
+          appearance="filled"
+          variant="brand"
           slot="selection-bar"
-          .label=${this.hass.localize("ui.panel.config.tag.delete_selected")}
           .disabled=${!this._selected.length}
           @click=${this._removeSelected}
-        ></ha-assist-chip>
+          >${this.hass.localize("ui.panel.config.tag.delete_selected")}</ha-button
+        >
         <ha-button slot="fab" size="l" @click=${this._addTag}>
           <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
           ${this.hass.localize("ui.panel.config.tag.add_tag")}

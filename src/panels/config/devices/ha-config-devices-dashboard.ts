@@ -97,7 +97,7 @@ import {
   getLabelsTableColumn,
   getModifiedAtTableColumn,
 } from "../common/data-table-columns";
-import { configSections } from "../config-sections";
+import { configPage } from "../config-sections";
 import "../integrations/ha-integration-overflow-menu";
 import { showAddIntegrationDialog } from "../integrations/show-add-integration-dialog";
 import { showLabelDetailDialog } from "../labels/show-dialog-label-detail";
@@ -875,7 +875,7 @@ export class HaConfigDeviceDashboard extends LitElement {
         .hass=${this.hass}
         .narrow=${this.narrow}
         back-path="/config"
-        .tabs=${configSections.devices}
+        .tabs=${configPage["/config/devices"]}
         .route=${this.route}
         .searchLabel=${this.hass.localize(
           "ui.panel.config.devices.picker.search",
@@ -1003,17 +1003,12 @@ export class HaConfigDeviceDashboard extends LitElement {
                   slot="selection-bar"
                   @wa-select=${this._handleBulkLabel}
                 >
-                  <ha-assist-chip
-                    slot="trigger"
-                    .label=${this.hass.localize(
+                  <ha-button appearance="filled" variant="brand" slot="trigger">
+                    <ha-svg-icon slot="end" .path=${mdiMenuDown}></ha-svg-icon>
+                    ${this.hass.localize(
                       "ui.panel.config.automation.picker.bulk_actions.add_label"
-                    )}
+                    )}</ha-button
                   >
-                    <ha-svg-icon
-                      slot="trailing-icon"
-                      .path=${mdiMenuDown}
-                    ></ha-svg-icon>
-                  </ha-assist-chip>
                   ${this._renderLabelItems()}
                 </ha-dropdown>
 
@@ -1024,17 +1019,19 @@ export class HaConfigDeviceDashboard extends LitElement {
                         slot="selection-bar"
                         @wa-select=${this._handleBulkArea}
                       >
-                        <ha-assist-chip
+                        <ha-button
+                          appearance="filled"
+                          variant="brand"
                           slot="trigger"
-                          .label=${this.hass.localize(
-                            "ui.panel.config.devices.picker.bulk_actions.move_area"
-                          )}
                         >
                           <ha-svg-icon
-                            slot="trailing-icon"
+                            slot="end"
                             .path=${mdiMenuDown}
                           ></ha-svg-icon>
-                        </ha-assist-chip>
+                          ${this.hass.localize(
+                            "ui.panel.config.devices.picker.bulk_actions.move_area"
+                          )}</ha-button
+                        >
                         ${this._renderAreaItems()}
                       </ha-dropdown>`
                 }`
@@ -1043,17 +1040,16 @@ export class HaConfigDeviceDashboard extends LitElement {
         <ha-dropdown slot="selection-bar" @wa-select=${this._handleBulkAction}>
           ${
             this.narrow
-              ? html`<ha-assist-chip
-                  .label=${this.hass.localize(
-                    "ui.panel.config.automation.picker.bulk_action"
-                  )}
+              ? html`<ha-button
+                  appearance="filled"
+                  variant="brand"
                   slot="trigger"
                 >
-                  <ha-svg-icon
-                    slot="trailing-icon"
-                    .path=${mdiMenuDown}
-                  ></ha-svg-icon>
-                </ha-assist-chip>`
+                  <ha-svg-icon slot="end" .path=${mdiMenuDown}></ha-svg-icon>
+                  ${this.hass.localize(
+                    "ui.panel.config.automation.picker.bulk_action"
+                  )}</ha-button
+                >`
               : html`<ha-icon-button
                   .path=${mdiDotsVertical}
                   .label=${this.hass.localize(
@@ -1393,18 +1389,12 @@ ${rejected
           text-transform: uppercase;
           direction: var(--direction);
         }
-        ha-assist-chip {
-          --ha-assist-chip-container-shape: 10px;
-        }
         ha-alert ha-skeleton-text {
           --ha-skeleton-text-width: 100px;
         }
         ha-dropdown::part(menu),
         ha-dropdown::part(submenu) {
           --auto-size-available-width: calc(50vw - var(--ha-space-4));
-        }
-        ha-dropdown ha-assist-chip {
-          --ha-assist-chip-trailing-space: 8px;
         }
       `,
       haStyle,

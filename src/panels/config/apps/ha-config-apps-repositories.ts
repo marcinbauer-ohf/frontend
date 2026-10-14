@@ -189,7 +189,7 @@ export class HaConfigAppsRepositories extends LitElement {
           id="slug"
           has-fab
         ></ha-data-table>
-        <ha-button size="l" @click=${this._showAddRepositoryDialog}>
+        <ha-button slot="fab" size="l" @click=${this._showAddRepositoryDialog}>
           <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
           ${this.hass.localize("ui.panel.config.apps.repositories.add")}
         </ha-button>
@@ -274,14 +274,12 @@ export class HaConfigAppsRepositories extends LitElement {
     ha-icon-button.delete {
       color: var(--error-color);
     }
-    ha-button[size="l"] {
-      position: fixed;
-      right: calc(var(--ha-space-4) + var(--safe-area-inset-right));
-      bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom));
-      inset-inline-end: calc(var(--ha-space-4) + var(--safe-area-inset-right));
-      inset-inline-start: initial;
-      z-index: 1;
-      --ha-button-box-shadow: var(--ha-box-shadow-l);
+    /* Room to scroll the last row above the bar with the add button */
+    ha-data-table {
+      --data-table-empty-row-height: calc(
+        64px + var(--ha-space-10) + var(--ha-space-4) +
+          var(--safe-area-inset-bottom, 0px)
+      );
     }
   `;
 }

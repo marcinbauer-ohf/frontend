@@ -10,6 +10,7 @@ import "../../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
 import "../../../components/ha-icon-button";
+import "../../../components/ha-floating-bar";
 import "../../../components/input/ha-input-search";
 import type {
   HassioAddonRepository,
@@ -158,15 +159,16 @@ export class HaConfigAppsAvailable extends LitElement {
           repos.length === 0
             ? html`<hass-loading-screen no-toolbar></hass-loading-screen>`
             : html`
-                <div class="search">
+                <ha-floating-bar slot="floating-bar" class="bar">
                   <ha-input-search
                     appearance="outlined"
                     .value=${this._filter}
                     @input=${this._filterChanged}
                   ></ha-input-search>
-                </div>
+                </ha-floating-bar>
 
                 ${repos}
+                <div class="bar-space"></div>
               `
         }
       </hass-subpage>
@@ -324,15 +326,15 @@ export class HaConfigAppsAvailable extends LitElement {
     supervisor-apps-repository {
       margin-top: 24px;
     }
-    .search {
-      position: sticky;
-      top: 0;
-      z-index: 2;
+    /* The search floats over the bottom of the page */
+    .bar {
+      --ha-floating-bar-control-radius: 24px;
+      --ha-input-search-height: 48px;
     }
-    ha-input-search {
-      padding: var(--ha-space-3) var(--ha-space-2);
-      background: var(--sidebar-background-color);
-      border-bottom: 1px solid var(--divider-color);
+    .bar-space {
+      height: calc(
+        64px + var(--ha-space-10) + var(--safe-area-inset-bottom, 0px)
+      );
     }
   `;
 }

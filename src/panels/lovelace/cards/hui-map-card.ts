@@ -1,5 +1,6 @@
 import {
   mdiDotsHexagon,
+  mdiFormatListBulleted,
   mdiGoogleCirclesCommunities,
   mdiImageFilterCenterFocus,
 } from "@mdi/js";
@@ -149,6 +150,11 @@ class HuiMapCard extends LitElement implements LovelaceCard {
   private _path?: string;
 
   @state() private _overviewTab: OverviewTab = "people";
+
+  // Open beside the map on a wide screen; a phone opens it from the buttons,
+  // so nothing stays docked to the bottom of the screen
+  @state() private _overviewOpen =
+    !window.matchMedia("(max-width: 600px)").matches;
 
   // Height of the overview drawer when it sits over the bottom of the map
   @state() private _overviewSize: HASSDomEvents["map-overview-resize"] = {
@@ -330,6 +336,19 @@ class HuiMapCard extends LitElement implements LovelaceCard {
           ></ha-map>
           <div id="buttons">
             ${
+              this.layout === PANEL_VIEW_LAYOUT && !this.preview
+                ? html`<ha-icon-button
+                    .label=${this.hass!.localize(
+                      "ui.panel.lovelace.cards.map.overview.label"
+                    )}
+                    .path=${mdiFormatListBulleted}
+                    style=${isDarkMode ? "color:#ffffff" : "color:#000000"}
+                    aria-pressed=${this._overviewOpen}
+                    @click=${this._toggleOverview}
+                  ></ha-icon-button>`
+                : nothing
+            }
+            ${
               this._filteredMapEntities.length > 1
                 ? html`
                     <ha-icon-button
@@ -365,6 +384,8 @@ class HuiMapCard extends LitElement implements LovelaceCard {
                   .entities=${this._overviewEntities}
                   .selected=${this._overviewSelected}
                   .tab=${this._overviewTab}
+                  .open=${this._overviewOpen}
+                  @map-overview-closed=${this._closeOverview}
                   @map-overview-select=${this._handleOverviewSelect}
                   @map-overview-tab=${this._handleOverviewTab}
                   @map-overview-resize=${this._handleOverviewResize}
@@ -725,6 +746,8 @@ class HuiMapCard extends LitElement implements LovelaceCard {
       return;
     }
     ev.stopPropagation();
+    // The pane shows what was picked
+    this._overviewOpen = true;
     this._select(entityId);
   }
 
@@ -739,6 +762,14 @@ class HuiMapCard extends LitElement implements LovelaceCard {
     if (this._overviewSelected && this._overviewPadding() !== padding) {
       this._focusEntity(this._overviewSelected);
     }
+  }
+
+  private _toggleOverview() {
+    this._overviewOpen = !this._overviewOpen;
+  }
+
+  private _closeOverview() {
+    this._overviewOpen = false;
   }
 
   private _handleOverviewTab(

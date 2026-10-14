@@ -1,22 +1,36 @@
-import { mdiPencil, mdiPencilOff, mdiPlus } from "@mdi/js";
+import {
+  mdiDelete,
+  mdiFitToScreenOutline,
+  mdiFormatListBulleted,
+  mdiPencil,
+  mdiPlus,
+} from "@mdi/js";
 import type { HassEntity, UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { PropertyValues, TemplateResult } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
+import { ifDefined } from "lit/directives/if-defined";
 import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
 import { computeStateDomain } from "../../../common/entity/compute_state_domain";
 import { shouldHandleRequestSelectedEvent } from "../../../common/mwc/handle-request-selected-event";
 import { navigate } from "../../../common/navigate";
 import { stringCompare } from "../../../common/string/compare";
-import { slugify } from "../../../common/string/slugify";
+import { formatNumber } from "../../../common/number/format_number";
 import "../../../components/ha-button";
 import "../../../components/ha-card";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-list";
 import "../../../components/ha-list-item";
 import "../../../components/ha-svg-icon";
-import "../../../components/ha-tooltip";
+import "../../../components/ha-alert";
+import "../../../components/ha-floating-bar";
+import "../../../components/ha-form/ha-form";
+import type { SchemaUnion } from "../../../components/ha-form/types";
+import "../../../components/item/ha-list-item-value";
+import "../../../components/list/ha-grouped-list";
+import "../../../components/ha-side-pane";
+import "../../../components/input/ha-input-search";
 import "../../../components/map/ha-locations-editor";
 import type {
   HaLocationsEditor,
@@ -33,11 +47,7 @@ import {
   contrastingZoneContent,
   zoneInitials,
 } from "../../../common/map/zone-marker";
-import type {
-  HomeZoneMutableParams,
-  Zone,
-  ZoneMutableParams,
-} from "../../../data/zone";
+import type { Zone, ZoneMutableParams } from "../../../data/zone";
 import {
   createZone,
   deleteZone,
@@ -52,10 +62,35 @@ import "../../../layouts/hass-loading-screen";
 import "../../../layouts/hass-tabs-subpage";
 import { SubscribeMixin } from "../../../mixins/subscribe-mixin";
 import type { HomeAssistant, Route } from "../../../types";
-import "../ha-config-section";
-import { configSections } from "../config-sections";
-import { showHomeZoneDetailDialog } from "./show-dialog-home-zone-detail";
+import { configPage } from "../config-sections";
 import { showZoneDetailDialog } from "./show-dialog-zone-detail";
+
+interface ZoneDraft {
+  name?: string;
+  icon?: string;
+  radius?: number;
+  passive?: boolean;
+}
+
+const ZONE_FORM_SCHEMA = [
+  { name: "name", required: true, selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  {
+    name: "radius",
+    required: true,
+    selector: { number: { min: 1, mode: "box", unit_of_measurement: "m" } },
+  },
+  { name: "passive_note", type: "constant" },
+  { name: "passive", selector: { boolean: {} } },
+] as const;
+
+const HOME_FORM_SCHEMA = [
+  {
+    name: "radius",
+    required: true,
+    selector: { number: { min: 1, mode: "box", unit_of_measurement: "m" } },
+  },
+] as const;
 
 interface PendingEdit {
   latitude?: number;
@@ -76,7 +111,7 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
 
   @property({ attribute: "is-wide", type: Boolean }) public isWide = false;
 
-  @property({ type: Boolean }) public narrow = false;
+  @property({ type: Boolean, reflect: true }) public narrow = false;
 
   @property({ attribute: false }) public route!: Route;
 
@@ -90,6 +125,26 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
   @state() private _pendingEdits: Record<string, PendingEdit> = {};
 
   @state() private _canEditCore = false;
+
+  // The zone picked on the map or in the list: an entry id or entity id
+  @state() private _selected?: string;
+
+  @state() private _filter = "";
+
+  // Editing the selected zone in the pane
+  @state() private _editing = false;
+
+  @state() private _draft?: ZoneDraft;
+
+  @state() private _editError?: string;
+
+  @state() private _savingEdit = false;
+
+  private _editOriginal?: ZoneDraft;
+
+  // The zones pane: open beside the map on a wide screen, asked for on a
+  // phone, where it covers the map
+  @state() private _paneOpen = false;
 
   @query("ha-locations-editor") private _map?: HaLocationsEditor;
 
@@ -110,7 +165,9 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
       storageItems: Zone[],
       stateItems: HassEntity[],
       language: string
-    ): ({ entry: Zone } | { stateObject: HassEntity })[] => {
+    ): (
+      { entry: Zone; name: string } | { stateObject: HassEntity; name: string }
+    )[] => {
       const items = [
         ...storageItems.map((entry) => ({
           entry,
@@ -133,94 +190,15 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
     }
   );
 
-  private _renderStorageItem(entry: Zone) {
-    const hass = this.hass;
+  private _renderListItem(id: string, name: string, graphic: TemplateResult) {
     return html`
       <ha-list-item
-        .entry=${entry}
-        .id=${this.narrow ? entry.id : ""}
         graphic="avatar"
-        .hasMeta=${!this.narrow}
+        .value=${id}
+        .activated=${this._selected === id}
         @request-selected=${this._itemClicked}
-        .value=${entry.id}
       >
-        ${this._renderZoneGraphic(
-          this._zoneEntityIds[entry.id] ?? `zone.${entry.id}`,
-          !!entry.passive,
-          entry.icon,
-          entry.name
-        )}
-        ${entry.name}
-        ${
-          !this.narrow
-            ? html`
-                <div slot="meta">
-                  <ha-icon-button
-                    .id=${entry.id}
-                    .entry=${entry}
-                    @click=${this._openEditEntry}
-                    .path=${mdiPencil}
-                    .label=${hass.localize("ui.common.edit_item", {
-                      name: entry.name,
-                    })}
-                  ></ha-icon-button>
-                </div>
-              `
-            : ""
-        }
-      </ha-list-item>
-    `;
-  }
-
-  private _renderStateItem(stateObject: HassEntity) {
-    const hass = this.hass;
-    return html`
-      <ha-list-item
-        graphic="avatar"
-        .id=${this.narrow ? stateObject.entity_id : ""}
-        .hasMeta=${!this.narrow || stateObject.entity_id !== "zone.home"}
-        .value=${stateObject.entity_id}
-        @request-selected=${this._stateItemClicked}
-        .noEdit=${stateObject.entity_id !== "zone.home" || !this._canEditCore}
-      >
-        ${this._renderZoneGraphic(
-          stateObject.entity_id,
-          !!stateObject.attributes.passive,
-          stateObject.attributes.icon,
-          stateObject.attributes.friendly_name || stateObject.entity_id
-        )}
-        ${stateObject.attributes.friendly_name || stateObject.entity_id}
-        ${
-          this.narrow &&
-          stateObject.entity_id === "zone.home" &&
-          !this._canEditCore
-            ? nothing
-            : html`<ha-icon-button
-                  .id="zone-${slugify(stateObject.entity_id)}"
-                  .entityId=${stateObject.entity_id}
-                  .noEdit=${
-                    stateObject.entity_id !== "zone.home" || !this._canEditCore
-                  }
-                  .path=${
-                    stateObject.entity_id === "zone.home" && this._canEditCore
-                      ? mdiPencil
-                      : mdiPencilOff
-                  }
-                  .label=${hass.localize("ui.common.edit_item", {
-                    name: hass.config.location_name,
-                  })}
-                  @click=${this._editHomeZone}
-                  slot="meta"
-                ></ha-icon-button>
-                <ha-tooltip
-                  .for="zone-${slugify(stateObject.entity_id)}"
-                  placement="left"
-                  .disabled=${stateObject.entity_id === "zone.home"}
-                  hoist
-                >
-                  ${hass.localize("ui.panel.config.zone.configured_in_yaml")}
-                </ha-tooltip>`
-        }
+        ${graphic} ${name}
       </ha-list-item>
     `;
   }
@@ -230,7 +208,8 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
     entityId: string,
     passive: boolean,
     icon: string | undefined,
-    name: string
+    name: string,
+    inList = true
   ) {
     const color = zoneColor(
       entityId,
@@ -240,7 +219,7 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
     );
     return html`
       <div
-        slot="graphic"
+        slot=${ifDefined(inList ? "graphic" : undefined)}
         class="zone-avatar"
         style=${styleMap({
           background: color,
@@ -278,6 +257,7 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
             entityReg,
             computedStyles
           ),
+          clickable: true,
           location_editable:
             entityState.entity_id === HOME_ZONE_ENTITY_ID && this._canEditCore,
           radius_editable:
@@ -294,6 +274,7 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
           entityReg,
           computedStyles
         ),
+        clickable: true,
         location_editable: true,
         radius_editable: true,
         fit: !zone.passive,
@@ -331,85 +312,361 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
       return html`<hass-loading-screen></hass-loading-screen>`;
     }
     const hass = this.hass;
-    const listBox =
-      this._storageItems.length === 0 && this._stateItems.length === 0
-        ? html`
-            <div class="empty">
-              ${hass.localize("ui.panel.config.zone.no_zones_created_yet")}
-              <br />
-              <ha-button size="s" @click=${this._createZone}>
-                ${hass.localize("ui.panel.config.zone.create_zone")}</ha-button
-              >
-            </div>
-          `
-        : html`
-            <ha-list>
-              ${this._sortedItems(
-                this._storageItems,
-                this._stateItems,
-                hass.locale.language
-              ).map((item) =>
-                "entry" in item
-                  ? this._renderStorageItem(item.entry)
-                  : this._renderStateItem(item.stateObject)
-              )}
-            </ha-list>
-          `;
+    const zones = this._getZones(
+      this._storageItems,
+      this._stateItems,
+      this._zoneEntityIds,
+      this._pendingEdits,
+      this._entityReg,
+      this._colorVersion
+    );
+    const items = this._filterItems(
+      this._sortedItems(
+        this._storageItems,
+        this._stateItems,
+        hass.locale.language
+      ),
+      this._filter
+    );
+    const hasZones = this._storageItems.length + this._stateItems.length > 0;
 
     return html`
       <hass-tabs-subpage
         .hass=${this.hass}
         .route=${this.route}
         back-path="/config"
-        .tabs=${configSections.areas}
-        has-fab
+        .tabs=${configPage["/config/zone"]}
       >
-        ${
-          this.narrow
-            ? html`
-                <ha-config-section .isWide=${this.isWide}>
-                  <span slot="introduction">
-                    ${hass.localize("ui.panel.config.zone.introduction")}
-                  </span>
-                  <ha-card outlined>${listBox}</ha-card>
-                </ha-config-section>
-              `
-            : ""
-        }
-        ${
-          !this.narrow
-            ? html`
-                <div class="flex">
-                  <ha-locations-editor
-                    .locations=${this._getZones(
-                      this._storageItems,
-                      this._stateItems,
-                      this._zoneEntityIds,
-                      this._pendingEdits,
-                      this._entityReg,
-                      this._colorVersion
-                    )}
-                    @location-updated=${this._locationUpdated}
-                    @radius-updated=${this._radiusUpdated}
-                  ></ha-locations-editor>
-                  <div class="overflow">${listBox}</div>
-                </div>
-              `
-            : ""
-        }
-        <ha-button slot="fab" size="l" @click=${this._createZone}>
-          <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
-          ${hass.localize("ui.panel.config.zone.create_zone")}
-        </ha-button>
+        <ha-icon-button
+          slot="toolbar-icon"
+          .path=${mdiFormatListBulleted}
+          .label=${hass.localize("ui.panel.config.zone.show_list")}
+          aria-pressed=${this._paneOpen}
+          @click=${this._togglePane}
+        ></ha-icon-button>
+        <ha-locations-editor
+          .locations=${zones}
+          @location-updated=${this._locationUpdated}
+          @radius-updated=${this._radiusUpdated}
+          @marker-clicked=${this._markerClicked}
+        ></ha-locations-editor>
+        ${this._paneOpen ? this._renderPane(zones, items, hasZones) : nothing}
+        <ha-floating-bar slot="floating-bar">
+          <div class="bar-row">
+            <ha-input-search
+              appearance="outlined"
+              .value=${this._filter}
+              .placeholder=${hass.localize("ui.common.search")}
+              .disabled=${!hasZones}
+              @input=${this._handleSearch}
+            ></ha-input-search>
+            <ha-icon-button
+              .path=${mdiFitToScreenOutline}
+              .label=${hass.localize("ui.panel.config.zone.fit_zones")}
+              title=${hass.localize("ui.panel.config.zone.fit_zones")}
+              .disabled=${!hasZones}
+              @click=${this._fitZones}
+            ></ha-icon-button>
+            <ha-button class="add" size="l" @click=${this._createZone}>
+              <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
+              ${hass.localize("ui.common.add")}
+            </ha-button>
+          </div>
+        </ha-floating-bar>
       </hass-tabs-subpage>
     `;
   }
+
+  // The zones, or the selected zone's details
+  private _renderPane(
+    zones: MarkerLocation[],
+    items: ReturnType<HaConfigZone["_sortedItems"]>,
+    hasZones: boolean
+  ) {
+    const hass = this.hass;
+    const zone = this._selected
+      ? zones.find((location) => location.id === this._selected)
+      : undefined;
+    return html`<ha-side-pane
+      slot="side-pane"
+      .narrow=${this.narrow}
+      .heading=${zone ? (zone.name ?? zone.id) : hass.localize("ui.panel.config.zone.caption")}
+      .back=${!!zone}
+      @side-pane-closed=${this._closePane}
+      @side-pane-back=${this._deselect}
+    >
+      ${
+        zone && !this._editing && this._isEditable(zone.id)
+          ? html`<ha-icon-button
+              slot="actions"
+              .path=${mdiPencil}
+              .label=${hass.localize("ui.common.edit")}
+              @click=${this._startEdit}
+            ></ha-icon-button>`
+          : nothing
+      }
+      ${
+        zone
+          ? this._renderZoneDetails(zone)
+          : !hasZones
+            ? html`<div class="empty">
+                ${hass.localize("ui.panel.config.zone.no_zones_created_yet")}
+              </div>`
+            : items.length
+              ? html`<ha-list class="zones">
+                  ${items.map((item) =>
+                    "entry" in item
+                      ? this._renderListItem(
+                          item.entry.id,
+                          item.entry.name,
+                          this._renderZoneGraphic(
+                            this._zoneEntityIds[item.entry.id] ??
+                              `zone.${item.entry.id}`,
+                            !!item.entry.passive,
+                            item.entry.icon,
+                            item.entry.name
+                          )
+                        )
+                      : this._renderListItem(
+                          item.stateObject.entity_id,
+                          item.name,
+                          this._renderZoneGraphic(
+                            item.stateObject.entity_id,
+                            !!item.stateObject.attributes.passive,
+                            item.stateObject.attributes.icon,
+                            item.name
+                          )
+                        )
+                  )}
+                </ha-list>`
+              : html`<div class="empty">
+                  ${hass.localize("ui.panel.config.zone.no_matches")}
+                </div>`
+      }
+    </ha-side-pane>`;
+  }
+
+  // What the zone covers, and editing it where it can be edited
+  private _isEditable(id: string) {
+    return (
+      !!this._storageItems?.some((item) => item.id === id) ||
+      (id === HOME_ZONE_ENTITY_ID && this._canEditCore)
+    );
+  }
+
+  private _renderZoneDetails(zone: MarkerLocation) {
+    const hass = this.hass;
+    const entry = this._storageItems!.find((item) => item.id === zone.id);
+    const stateObj = entry ? undefined : hass.states[zone.id];
+    const name = zone.name ?? zone.id;
+    const editable =
+      !!entry || (zone.id === HOME_ZONE_ENTITY_ID && this._canEditCore);
+    const passive = !!(entry ? entry.passive : stateObj?.attributes.passive);
+    const coordinate = (value: number) =>
+      formatNumber(value, hass.locale, { maximumFractionDigits: 5 });
+    if (this._editing) {
+      return this._renderZoneForm(!entry);
+    }
+    return html`
+      ${
+        editable
+          ? nothing
+          : html`<ha-alert alert-type="info">
+              ${hass.localize("ui.panel.config.zone.configured_in_yaml")}
+            </ha-alert>`
+      }
+      <ha-grouped-list class="details">
+        <ha-list-item-value
+          .label=${hass.localize("ui.panel.config.zone.detail.icon")}
+        >
+          ${this._renderZoneGraphic(
+            entry
+              ? (this._zoneEntityIds[entry.id] ?? `zone.${entry.id}`)
+              : zone.id,
+            passive,
+            zone.icon,
+            name,
+            false
+          )}
+        </ha-list-item-value>
+        <ha-list-item-value
+          .label=${hass.localize("ui.panel.config.zone.detail.radius")}
+        >
+          ${hass.localize("ui.panel.config.zone.radius_value", {
+            radius: formatNumber(Math.round(zone.radius ?? 0), hass.locale),
+          })}
+        </ha-list-item-value>
+        <ha-list-item-value
+          .label=${hass.localize("ui.panel.config.zone.detail.location")}
+        >
+          ${coordinate(zone.latitude)}, ${coordinate(zone.longitude)}
+        </ha-list-item-value>
+        ${
+          zone.id === HOME_ZONE_ENTITY_ID
+            ? nothing
+            : html`<ha-list-item-value
+                .label=${hass.localize("ui.panel.config.zone.detail.passive")}
+              >
+                ${hass.localize(passive ? "ui.common.yes" : "ui.common.no")}
+              </ha-list-item-value>`
+        }
+      </ha-grouped-list>
+    `;
+  }
+
+  // The zone's settings, edited in place; its center and radius can also be
+  // dragged on the map, which saves right away
+  // The home zone is the core location: only its radius is set here, and it
+  // is moved on the map like the other zones
+  private _renderZoneForm(home: boolean) {
+    const hass = this.hass;
+    return html`
+      ${
+        this._editError
+          ? html`<ha-alert alert-type="error">${this._editError}</ha-alert>`
+          : nothing
+      }
+      <ha-form
+        .hass=${hass}
+        .data=${this._draft ?? {}}
+        .schema=${home ? HOME_FORM_SCHEMA : ZONE_FORM_SCHEMA}
+        .computeLabel=${this._computeFormLabel}
+        .disabled=${this._savingEdit}
+        @value-changed=${this._draftChanged}
+      ></ha-form>
+      <div class="form-actions">
+        ${
+          home
+            ? nothing
+            : html`<ha-button
+                appearance="plain"
+                variant="danger"
+                .disabled=${this._savingEdit}
+                @click=${this._deleteEdited}
+              >
+                <ha-svg-icon slot="start" .path=${mdiDelete}></ha-svg-icon>
+                ${hass.localize("ui.common.delete")}
+              </ha-button>`
+        }
+        <span class="spacer"></span>
+        <ha-button
+          appearance="plain"
+          .disabled=${this._savingEdit}
+          @click=${this._cancelEdit}
+        >
+          ${hass.localize("ui.common.cancel")}
+        </ha-button>
+        <ha-button
+          .disabled=${this._savingEdit || (!home && !this._draft?.name)}
+          @click=${this._saveEdited}
+        >
+          ${hass.localize("ui.common.save")}
+        </ha-button>
+      </div>
+    `;
+  }
+
+  private _computeFormLabel = (
+    schema: SchemaUnion<typeof ZONE_FORM_SCHEMA>
+  ): string => this.hass.localize(`ui.panel.config.zone.detail.${schema.name}`);
+
+  private _startEdit() {
+    const entry = this._storageItems?.find(
+      (item) => item.id === this._selected
+    );
+    if (!entry) {
+      if (this._selected !== HOME_ZONE_ENTITY_ID || !this._canEditCore) {
+        return;
+      }
+      this._editOriginal = {
+        radius: Math.round(
+          this.hass.states[HOME_ZONE_ENTITY_ID]?.attributes.radius ?? 100
+        ),
+      };
+      this._draft = { ...this._editOriginal };
+      this._editError = undefined;
+      this._editing = true;
+      return;
+    }
+    this._editOriginal = {
+      name: entry.name,
+      icon: entry.icon,
+      radius: entry.radius,
+      passive: !!entry.passive,
+    };
+    this._draft = { ...this._editOriginal };
+    this._editError = undefined;
+    this._editing = true;
+  }
+
+  private _draftChanged(ev: CustomEvent<{ value: ZoneDraft }>) {
+    this._draft = ev.detail.value;
+  }
+
+  private _cancelEdit() {
+    this._editing = false;
+  }
+
+  // Sends only what the form changed, so a drag on the map while editing is
+  // not undone by the form's older values
+  private async _saveEdited() {
+    const entry = this._storageItems?.find(
+      (item) => item.id === this._selected
+    );
+    const home = !entry && this._selected === HOME_ZONE_ENTITY_ID;
+    if ((!entry && !home) || !this._draft || !this._editOriginal) {
+      return;
+    }
+    const changes = Object.fromEntries(
+      Object.entries(this._draft).filter(
+        ([key, value]) => this._editOriginal![key as keyof ZoneDraft] !== value
+      )
+    ) as Partial<ZoneMutableParams>;
+    if ("icon" in changes && !changes.icon) {
+      changes.icon = undefined;
+    }
+    this._savingEdit = true;
+    try {
+      if (home && changes.radius !== undefined) {
+        await saveCoreConfig(this.hass, { radius: Math.round(changes.radius) });
+      } else if (entry && Object.keys(changes).length) {
+        await this._updateEntry(entry, changes);
+      }
+      this._editing = false;
+    } catch (err: any) {
+      this._editError = err?.message ?? String(err);
+    } finally {
+      this._savingEdit = false;
+    }
+  }
+
+  private async _deleteEdited() {
+    const entry = this._storageItems?.find(
+      (item) => item.id === this._selected
+    );
+    if (entry && (await this._removeEntry(entry))) {
+      this._editing = false;
+    }
+  }
+
+  private _filterItems = memoizeOne(
+    (
+      items: ReturnType<HaConfigZone["_sortedItems"]>,
+      filter: string
+    ): ReturnType<HaConfigZone["_sortedItems"]> => {
+      const term = filter.trim().toLowerCase();
+      return term
+        ? items.filter((item) => item.name.toLowerCase().includes(term))
+        : items;
+    }
+  );
 
   protected firstUpdated(changedProps: PropertyValues<this>) {
     super.firstUpdated(changedProps);
     this._canEditCore =
       Boolean(this.hass.user?.is_admin) &&
       ["storage", "default"].includes(this.hass.config.config_source);
+    this._paneOpen = !this.narrow;
     this._fetchData();
   }
 
@@ -428,12 +685,9 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
       return;
     }
     const id = this.route.path.slice(6);
-    this._editZone(id);
     navigate("/config/zone", { replace: true });
-    if (this.narrow) {
-      return;
-    }
-    this._zoomZone(id);
+    this._select(id);
+    this._startEdit();
   }
 
   public willUpdate(changedProps: PropertyValues<this>) {
@@ -601,58 +855,53 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
     if (!shouldHandleRequestSelectedEvent(ev)) {
       return;
     }
-
-    if (this.narrow) {
-      this._openEditEntry(ev);
-      return;
-    }
-    this._zoomZone((ev.currentTarget! as any).value);
+    this._select((ev.currentTarget as HTMLElement & { value: string }).value);
   }
 
-  private _stateItemClicked(ev: CustomEvent) {
-    if (!shouldHandleRequestSelectedEvent(ev)) {
-      return;
+  private _markerClicked(ev: CustomEvent<{ id: string }>) {
+    if (ev.detail.id !== this._selected) {
+      this._editing = false;
     }
-
-    const entryId: string = (ev.currentTarget! as any).value;
-
-    if (this.narrow && entryId === HOME_ZONE_ENTITY_ID) {
-      this._editHomeZone(ev);
-      return;
-    }
-
-    this._zoomZone(entryId);
+    this._selected = ev.detail.id;
+    this._paneOpen = true;
   }
 
-  private async _zoomZone(id: string) {
+  private _select(id: string) {
+    if (id !== this._selected) {
+      this._editing = false;
+    }
+    this._selected = id;
+    this._paneOpen = true;
+    this._zoomZone(id);
+  }
+
+  private _deselect() {
+    this._editing = false;
+    this._selected = undefined;
+  }
+
+  private _togglePane() {
+    this._paneOpen = !this._paneOpen;
+  }
+
+  private _closePane() {
+    this._paneOpen = false;
+  }
+
+  private _handleSearch(ev: InputEvent) {
+    this._filter = (ev.target as HTMLInputElement).value;
+    if (this._filter) {
+      this._selected = undefined;
+      this._paneOpen = true;
+    }
+  }
+
+  private _fitZones() {
+    this._map?.fitMap();
+  }
+
+  private _zoomZone(id: string) {
     this._map?.fitMarker(id);
-  }
-
-  private async _editZone(id: string) {
-    await this.updateComplete;
-    // eslint-disable-next-line lit/prefer-query-decorators
-    (this.shadowRoot?.querySelector(`[id="${id}"]`) as HTMLElement)?.click();
-  }
-
-  private _openEditEntry(ev: Event) {
-    const entry: Zone = (ev.currentTarget! as any).entry;
-    this._openDialog(entry);
-    ev.stopPropagation();
-  }
-
-  private async _editHomeZone(ev) {
-    // Keep the click from selecting the list item, which zooms the map
-    ev.stopPropagation();
-    if (ev.currentTarget.noEdit) {
-      showAlertDialog(this, {
-        title: this.hass.localize("ui.panel.config.zone.can_not_edit"),
-        text: this.hass.localize("ui.panel.config.zone.configured_in_yaml"),
-      });
-      return;
-    }
-    showHomeZoneDetailDialog(this, {
-      updateEntry: (values) => this._updateHomeZoneEntry(values),
-    });
   }
 
   private async _createEntry(values: ZoneMutableParams) {
@@ -661,21 +910,10 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
       (ent1, ent2) =>
         stringCompare(ent1.name, ent2.name, this.hass!.locale.language)
     );
-    if (this.narrow) {
-      return;
-    }
+    this._selected = created.id;
     await this.updateComplete;
     await this._map?.updateComplete;
     this._map?.fitMarker(created.id);
-  }
-
-  private async _updateHomeZoneEntry(values: HomeZoneMutableParams) {
-    await saveCoreConfig(this.hass, {
-      latitude: values.latitude,
-      longitude: values.longitude,
-      radius: values.radius,
-    });
-    this._zoomZone(HOME_ZONE_ENTITY_ID);
   }
 
   private async _updateEntry(
@@ -687,7 +925,7 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
     this._storageItems = this._storageItems!.map((ent) =>
       ent === entry ? updated : ent
     );
-    if (this.narrow || !fitMap) {
+    if (!fitMap) {
       return;
     }
     await this.updateComplete;
@@ -710,9 +948,10 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
     try {
       await deleteZone(this.hass!, entry!.id);
       this._storageItems = this._storageItems!.filter((ent) => ent !== entry);
-      if (!this.narrow) {
-        this._map?.fitMap();
+      if (this._selected === entry.id) {
+        this._selected = undefined;
       }
+      this._map?.fitMap();
       return true;
     } catch (_err: any) {
       return false;
@@ -732,19 +971,20 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
   }
 
   static styles = css`
+    /* On a phone the add button is just its icon */
+    :host([narrow]) .add {
+      --ha-button-label-max-width: 0;
+      --ha-button-start-gap: 0;
+      --ha-button-start-padding: 12px;
+      --wa-form-control-padding-inline: 12px;
+    }
+
     hass-loading-screen {
       --app-header-background-color: var(--sidebar-background-color);
       --app-header-text-color: var(--sidebar-text-color);
     }
-    ha-list-item {
-      --mdc-list-item-meta-size: 48px;
-    }
     a {
       color: var(--primary-color);
-    }
-    ha-card {
-      margin: 16px auto;
-      overflow: hidden;
     }
     ha-icon,
     ha-icon-button:not([disabled]) {
@@ -762,37 +1002,55 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
     .zone-avatar ha-icon {
       color: inherit;
     }
-    ha-icon-button {
-      --mdc-theme-text-disabled-on-light: var(--disabled-text-color);
+    /* The pane floats over the map, which keeps the whole width. */
+    hass-tabs-subpage {
+      --ha-side-pane-content-space: 0px;
     }
-    .empty {
-      text-align: center;
-      padding: 8px;
-    }
-    .flex {
-      display: flex;
-      height: 100%;
-    }
-    .overflow {
-      height: 100%;
-      overflow: auto;
+    ha-side-pane:not([narrow]) {
+      box-shadow: var(--ha-box-shadow-l);
     }
     ha-locations-editor {
-      flex-grow: 1;
+      display: block;
       height: 100%;
     }
-    .flex ha-list {
-      padding-bottom: 64px;
+    .empty {
+      padding: var(--ha-space-4);
+      text-align: center;
+      color: var(--secondary-text-color);
     }
-    .flex ha-list,
-    .flex .empty {
-      border-left: 1px solid var(--divider-color);
-      width: 250px;
-      min-height: 100%;
-      box-sizing: border-box;
+    .zones {
+      border: 1px solid var(--divider-color);
+      border-radius: var(--ha-border-radius-xl);
+      overflow: hidden;
+      padding: 0;
     }
-    ha-tooltip {
-      display: block;
+    .details .zone-avatar {
+      width: 32px;
+      height: 32px;
+      --mdc-icon-size: 20px;
+      font-size: var(--ha-font-size-s);
+    }
+    .form-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--ha-space-2);
+    }
+    .form-actions .spacer {
+      flex: 1;
+    }
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: var(--ha-space-2);
+    }
+    .bar-row > * {
+      flex-shrink: 0;
+    }
+    .bar-row ha-input-search {
+      flex: 1;
+      flex-shrink: 1;
+      min-width: 0;
     }
   `;
 }

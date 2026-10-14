@@ -158,11 +158,13 @@ class PanelEnergy extends LitElement {
         .lovelace=${this._lovelace}
         .route=${this.route}
         .panel=${this.panel}
+        no-edit
         .backButton=${this._searchParms.has("historyBack")}
         .backPath=${
           sanitizeNavigationPath(this._searchParms.get("backPath")) || "/"
         }
         @reload-energy-panel=${this._reloadConfig}
+        @energy-edit=${this._navigateConfig}
       >
       </hui-root>
     `;

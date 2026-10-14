@@ -20,10 +20,7 @@ import memoizeOne from "memoize-one";
 import { formatTime } from "../../../../common/datetime/format_time";
 import { consume } from "../../../../common/decorators/consume";
 import { transform } from "../../../../common/decorators/transform";
-import type {
-  HASSDomCurrentTargetEvent,
-  HASSDomEvent,
-} from "../../../../common/dom/fire_event";
+import type { HASSDomCurrentTargetEvent } from "../../../../common/dom/fire_event";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import { computeDomain } from "../../../../common/entity/compute_domain";
 import { computeStateDomain } from "../../../../common/entity/compute_state_domain";
@@ -38,8 +35,7 @@ import "../../../../components/ha-button";
 import "../../../../components/ha-icon-button";
 import "../../../../components/ha-icon-button-prev";
 import "../../../../components/ha-relative-time";
-import "../../../../components/ha-snap-bottom-sheet";
-import type { HaSnapBottomSheet } from "../../../../components/ha-snap-bottom-sheet";
+import "../../../../components/ha-side-pane";
 import "../../../../components/ha-spinner";
 import "../../../../components/ha-state-icon";
 import "../../../../components/ha-svg-icon";
@@ -80,10 +76,10 @@ declare global {
   interface HASSDomEvents {
     "map-overview-select": { entityId?: string };
     "map-overview-tab": { tab: OverviewTab };
+    "map-overview-closed": undefined;
     /**
      * Rendered size, so the host keeps controls and focused markers clear of
-     * it. The phone sheet also sends the height markers are framed for, the
-     * same at every position so moving the sheet never moves the map.
+     * it. The phone sheet comes and goes over the map, so it reports none.
      */
     "map-overview-resize": {
       width: number;
@@ -100,6 +96,12 @@ export class HuiMapOverview extends LitElement {
   @property({ attribute: false }) public selected?: string;
 
   @property({ attribute: false }) public tab: OverviewTab = "people";
+
+  /**
+   * Whether the pane shows. Closing it fires map-overview-closed; a phone
+   * opens it on request, so it leaves the bottom of the screen free.
+   */
+  @property({ type: Boolean }) public open = false;
 
   @state()
   @consume({ context: statesContext, subscribe: true })
@@ -143,28 +145,15 @@ export class HuiMapOverview extends LitElement {
   @queryAll(".tablist button")
   private _tabButtons!: NodeListOf<HTMLButtonElement>;
 
-  // On phones the overview is a bottom sheet; elsewhere a floating panel
+  // On phones the overview is a bottom sheet; elsewhere a floating pane
   @state() private _phone = false;
 
   private _phoneQuery = window.matchMedia("(max-width: 600px)");
-
-  // The sheet never shrinks below the strip that stays useful when collapsed
-  @state() private _sheetMinHeight?: number;
-
-  @query(".panel.sheet") private _sheetPanel?: HTMLElement;
-
-  @query("ha-snap-bottom-sheet") private _sheet?: HaSnapBottomSheet;
-
-  @query(".peek") private _peek?: HTMLElement;
 
   @query(".detail-name") private _detailName?: HTMLElement;
 
   @queryAll("ha-list-item-button")
   private _listItems!: NodeListOf<HTMLElement>;
-
-  private _peekObserver?: ResizeObserver;
-
-  private _observedPeek?: HTMLElement;
 
   @state() private _activity?: ActivityEntry[];
 
@@ -183,11 +172,9 @@ export class HuiMapOverview extends LitElement {
     this._phone = this._phoneQuery.matches;
     this._phoneQuery.addEventListener("change", this._handlePhoneChange);
     this._resizeObserver ??= new ResizeObserver(() => {
-      // The sheet reports its own size
-      if (this._phone) {
-        return;
-      }
-      const { width, height } = this.getBoundingClientRect();
+      const { width, height } = this._phone
+        ? { width: 0, height: 0 }
+        : this.getBoundingClientRect();
       fireEvent(this, "map-overview-resize", { width, height });
     });
     this._resizeObserver.observe(this);
@@ -197,8 +184,6 @@ export class HuiMapOverview extends LitElement {
     super.disconnectedCallback();
     this._phoneQuery.removeEventListener("change", this._handlePhoneChange);
     this._resizeObserver?.disconnect();
-    this._peekObserver?.disconnect();
-    this._observedPeek = undefined;
     fireEvent(this, "map-overview-resize", { width: 0, height: 0 });
   }
 
@@ -208,7 +193,6 @@ export class HuiMapOverview extends LitElement {
 
   protected updated(changedProps: PropertyValues<this>): void {
     super.updated(changedProps);
-    this._watchPeek();
     // The host filters the map by the tab it set; tell it when that one is gone
     const tabs = Object.keys(
       this._itemsPerTab(this._getPeople(), this._getDevices(), this._getZones())
@@ -219,9 +203,6 @@ export class HuiMapOverview extends LitElement {
     this.toggleAttribute("single-tab", tabs.length === 1);
     if (changedProps.has("selected")) {
       this._moveFocus(changedProps.get("selected"));
-      if (this.selected) {
-        this._sheet?.snapTo("half");
-      }
     }
   }
 
@@ -245,45 +226,9 @@ export class HuiMapOverview extends LitElement {
     }
   }
 
-  // Measures the tabs or the detail header, whichever the sheet shows, plus
-  // the panel's padding around it
-  private _watchPeek(): void {
-    const peek = this._phone ? this._peek : undefined;
-    if (peek === this._observedPeek) {
-      return;
-    }
-    this._peekObserver?.disconnect();
-    this._observedPeek = peek;
-    if (!peek) {
-      this._sheetMinHeight = undefined;
-      // The phone sheet is gone; clear the size so the host drops its inset.
-      fireEvent(this, "map-overview-resize", { width: 0, height: 0 });
-      return;
-    }
-    this._peekObserver = new ResizeObserver(() => {
-      const panel = this._sheetPanel;
-      if (!panel) {
-        return;
-      }
-      const style = getComputedStyle(panel);
-      // The sheet adds the bottom safe area below this strip
-      this._sheetMinHeight =
-        parseFloat(style.paddingTop) +
-        peek.offsetHeight +
-        parseFloat(style.getPropertyValue("--ha-space-3"));
-    });
-    this._peekObserver.observe(peek);
-  }
-
-  private _handleSheetResized(
-    ev: HASSDomEvent<HASSDomEvents["bottom-sheet-resized"]> &
-      HASSDomCurrentTargetEvent<HaSnapBottomSheet>
-  ) {
-    fireEvent(this, "map-overview-resize", {
-      width: window.innerWidth,
-      height: ev.detail.height,
-      fitHeight: ev.currentTarget.halfHeight,
-    });
+  private _handleClosed(ev: Event) {
+    ev.stopPropagation();
+    fireEvent(this, "map-overview-closed");
   }
 
   private _getPeople(): HassEntity[] {
@@ -507,21 +452,20 @@ export class HuiMapOverview extends LitElement {
       ? this._renderDetail(selectedStateObj)
       : this._renderList(people, devices, zones);
 
-    return html`
-      ${
-        this._phone
-          ? html`<ha-snap-bottom-sheet
-              .minHeight=${this._sheetMinHeight}
-              .label=${this._i18n.localize(
-                "ui.panel.lovelace.cards.map.overview.label"
-              )}
-              @bottom-sheet-resized=${this._handleSheetResized}
-            >
-              <div class="panel sheet">${content}</div>
-            </ha-snap-bottom-sheet>`
-          : html`<div class="panel">${content}</div>`
-      }
-    `;
+    if (!this.open) {
+      return nothing;
+    }
+    // The same pane as the zones editor's: floating beside the map, or a
+    // sheet over it on a phone
+    return html`<ha-side-pane
+      .narrow=${this._phone}
+      .heading=${this._i18n.localize(
+        "ui.panel.lovelace.cards.map.overview.label"
+      )}
+      @side-pane-closed=${this._handleClosed}
+    >
+      <div class="panel">${content}</div>
+    </ha-side-pane>`;
   }
 
   private _renderDetail(stateObj: HassEntity) {
@@ -529,7 +473,7 @@ export class HuiMapOverview extends LitElement {
     const zoneCount = isZone ? Number(stateObj.state) : undefined;
 
     return html`
-      <div class="detail-header peek">
+      <div class="detail-header">
         <ha-icon-button-prev
           .label=${this._i18n.localize("ui.common.back")}
           @click=${this._handleBack}
@@ -711,10 +655,9 @@ export class HuiMapOverview extends LitElement {
     const tab = tabs.includes(this.tab) ? this.tab : tabs[0];
     const items = itemsPerTab[tab]!;
 
-    // A lone heading also serves as the phone sheet's peek strip
     if (tabs.length === 1) {
       return html`
-        <div class="heading peek" id="tab-${tab}">
+        <div class="heading" id="tab-${tab}">
           ${this._i18n.localize(`ui.panel.lovelace.cards.map.overview.${tab}`)}
         </div>
         ${this._renderItems(tab, items)}
@@ -722,7 +665,7 @@ export class HuiMapOverview extends LitElement {
     }
 
     return html`
-      <div class="tabs peek">
+      <div class="tabs">
         <span
           class="pill"
           style=${styleMap({
@@ -911,43 +854,22 @@ export class HuiMapOverview extends LitElement {
       pointer-events: none;
     }
 
+    ha-side-pane {
+      pointer-events: auto;
+    }
+
+    /* Floats over the map, so it keeps its shadow where cards lose theirs */
+    ha-side-pane:not([narrow]) {
+      box-shadow: var(--ha-box-shadow-l);
+    }
+
     .panel {
       --avatar-size: 48px;
-      pointer-events: auto;
-      box-sizing: border-box;
-      width: 100%;
-      max-height: 100%;
-      display: flex;
-      flex-direction: column;
-      padding: var(--ha-space-3);
-      border-radius: var(--ha-border-radius-xl);
-      background: var(--card-background-color);
-      color: var(--primary-text-color);
-      /* Floats over the map, so it keeps its shadow where cards lose theirs */
-      box-shadow: var(--ha-box-shadow-m);
-    }
-
-    ha-snap-bottom-sheet {
-      pointer-events: auto;
-      /* The tabs sit right under the handle */
-      --ha-bottom-sheet-handle-padding: var(--ha-space-2);
-      --ha-bottom-sheet-inset-left: 0px;
-      --ha-bottom-sheet-inset-right: 0px;
-    }
-
-    .panel.sheet {
       flex: 1;
       min-height: 0;
-      background: none;
-      box-shadow: none;
-      --sheet-bottom-space: max(
-        var(--ha-space-3),
-        var(--safe-area-inset-bottom)
-      );
-      padding-top: var(--ha-space-7);
-      padding-right: max(var(--ha-space-3), var(--safe-area-inset-right));
-      padding-bottom: var(--sheet-bottom-space);
-      padding-left: max(var(--ha-space-3), var(--safe-area-inset-left));
+      display: flex;
+      flex-direction: column;
+      color: var(--primary-text-color);
     }
 
     .heading {
@@ -1036,8 +958,6 @@ export class HuiMapOverview extends LitElement {
       min-height: 0;
       overflow-y: auto;
       margin-top: var(--ha-space-2);
-      margin-bottom: calc(-1 * var(--sheet-bottom-space, 0px));
-      padding-bottom: var(--sheet-bottom-space, 0px);
     }
 
     ha-list-item-button {

@@ -209,6 +209,19 @@ export class HuiViewFooter extends LitElement {
       position: sticky;
       bottom: var(--row-gap);
       z-index: 4;
+      /* Arrives like the floating bars of other pages */
+      animation: footer-enter 200ms ease-out;
+    }
+    @keyframes footer-enter {
+      from {
+        opacity: 0;
+        transform: translateY(var(--ha-space-4));
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      :host([sticky]) {
+        animation: none;
+      }
     }
 
     /* Matches the floating bars of other pages: 40px above the bottom edge on
@@ -234,6 +247,35 @@ export class HuiViewFooter extends LitElement {
         --ha-view-footer-box-shadow,
         var(--ha-box-shadow-l)
       );
+      /* The same surface as the floating bars of other pages */
+      --ha-card-border-radius: calc(var(--ha-space-2) + 20px);
+      --ha-card-border-width: 0;
+    }
+
+    /* A sticky footer floats over the view; fade the cards scrolling under
+       it into the page colour, as the floating bars of other pages do. The
+       fade spans the footer's width, down past its gap to the bottom. */
+    :host([sticky])::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      inset-inline: 0;
+      top: calc(-1 * var(--ha-space-8));
+      bottom: calc(-1 * var(--row-gap, 8px));
+      background: linear-gradient(
+        to bottom,
+        transparent,
+        color-mix(in srgb, var(--primary-background-color) 80%, transparent) 50%
+      );
+      pointer-events: none;
+    }
+    @media (min-width: 601px) {
+      :host([sticky])::before {
+        bottom: calc(-1 * (var(--ha-space-10) - var(--ha-space-2)));
+      }
+    }
+    :host([sticky][hidden])::before {
+      display: none;
     }
 
     .container {

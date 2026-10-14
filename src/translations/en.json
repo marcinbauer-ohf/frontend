@@ -2833,12 +2833,12 @@
         "header": "Configure Home Assistant",
         "dashboard": {
           "devices": {
-            "main": "Devices & services",
-            "secondary": "Integrations, devices, entities, and helpers"
+            "main": "Devices",
+            "secondary": "The devices your integrations set up"
           },
           "automations": {
-            "main": "Automations & scenes",
-            "secondary": "Automations, scenes, scripts, and blueprints"
+            "main": "Automations",
+            "secondary": "Make your home react to what happens"
           },
           "backup": {
             "main": "Backup",
@@ -2874,11 +2874,11 @@
           },
           "people": {
             "main": "People",
-            "secondary": "Manage who can access your home"
+            "secondary": "The people in your home and where they are"
           },
           "areas": {
-            "main": "Areas, labels & zones",
-            "secondary": "Manage locations in and around your house"
+            "main": "Areas",
+            "secondary": "The rooms and spaces in your home"
           },
           "companion": {
             "main": "Companion app",
@@ -2946,6 +2946,42 @@
           "insteon": {
             "main": "Insteon",
             "secondary": "Dual-mesh home automation"
+          },
+          "integrations": {
+            "main": "Integrations",
+            "secondary": "Connect the services and devices you use"
+          },
+          "entities": {
+            "main": "Entities",
+            "secondary": "Every sensor, switch, and light in your home"
+          },
+          "helpers": {
+            "main": "Helpers",
+            "secondary": "Toggles, timers, and other building blocks"
+          },
+          "scenes": {
+            "main": "Scenes",
+            "secondary": "Set several devices to a saved state at once"
+          },
+          "scripts": {
+            "main": "Scripts",
+            "secondary": "Sequences of actions to run on demand"
+          },
+          "blueprints": {
+            "main": "Blueprints",
+            "secondary": "Ready-made automations and scripts"
+          },
+          "labels": {
+            "main": "Labels",
+            "secondary": "Group and filter anything with your own labels"
+          },
+          "zones": {
+            "main": "Zones",
+            "secondary": "Places on the map, like home or work"
+          },
+          "users": {
+            "main": "Users",
+            "secondary": "Who can sign in to Home Assistant"
           }
         },
         "common": {
@@ -5383,6 +5419,18 @@
             "run": "Run actions",
             "rename": "[%key:ui::panel::config::automation::editor::triggers::rename%]",
             "show_trace": "Traces",
+            "info_pane": {
+              "title": "Info",
+              "add_details": "Add details",
+              "description": "[%key:ui::panel::config::automation::editor::description::label%]",
+              "category": "[%key:ui::components::category-picker::category%]",
+              "labels": "Labels",
+              "area": "Area",
+              "status": "Automation status",
+              "enabled": "Enabled",
+              "disabled": "Disabled",
+              "mode": "Automation mode"
+            },
             "view_list": "List",
             "view_yaml": "YAML",
             "view_nodes": "Nodes",
@@ -6361,6 +6409,19 @@
               "not_triggered": "This trigger evaluated a relevant change but did not trigger the automation. The reason is shown in the result below.",
               "no_logbook_entries": "No activity found for this step.",
               "no_variables_changed": "No variables changed",
+              "technical_details": "Technical details",
+              "result_data": "Result data",
+              "outcome": "Result",
+              "when": "When",
+              "outcome_failed": "Failed",
+              "outcome_passed": "Passed",
+              "outcome_not_passed": "Did not pass",
+              "outcome_started": "Started the automation",
+              "outcome_not_started": "Did not start the automation",
+              "outcome_option": "Ran option {number}",
+              "outcome_default_option": "Ran the default actions",
+              "outcome_done": "Done",
+              "activity": "What happened",
               "unable_to_find_config": "Unable to find config"
             },
             "messages": {
@@ -7412,7 +7473,11 @@
             "create": "Create",
             "update": "Update"
           },
-          "core_location_dialog": "Home Assistant location"
+          "core_location_dialog": "Home Assistant location",
+          "show_list": "Show zones",
+          "fit_zones": "Show all zones",
+          "no_matches": "No zones found",
+          "radius_value": "{radius} m"
         },
         "integrations": {
           "caption": "Integrations",
@@ -12385,12 +12450,12 @@
         "load_failed": "The Marketplace could not load its data: {error}",
         "warning": {
           "title": "Before you install from the Marketplace",
-          "intro": "Marketplace items are made by community contributors and are not reviewed by the Home\u00a0Assistant project. Treat them like plugins for any other software.",
+          "intro": "Marketplace items are made by community contributors and are not reviewed by the Home Assistant project. Treat them like plugins for any other software.",
           "risks_title": "Anything you install can",
           "risks": {
             "internet": "Connect to the internet",
             "data": "Share your data with others",
-            "stability": "Slow down or crash Home\u00a0Assistant"
+            "stability": "Slow down or crash Home Assistant"
           },
           "mindful_title": "So be mindful",
           "mindful": {

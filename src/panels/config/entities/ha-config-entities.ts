@@ -116,7 +116,7 @@ import {
   getLabelsTableColumn,
   getModifiedAtTableColumn,
 } from "../common/data-table-columns";
-import { configSections } from "../config-sections";
+import { configPage } from "../config-sections";
 import type { Helper } from "../helpers/const";
 import { isHelperDomain } from "../helpers/const";
 import "../integrations/ha-integration-overflow-menu";
@@ -810,7 +810,7 @@ export class HaConfigEntities extends LitElement {
         .narrow=${this.narrow}
         back-path="/config"
         .route=${this.route}
-        .tabs=${configSections.devices}
+        .tabs=${configPage["/config/entities"]}
         .columns=${this._columns(this.hass.localize, filteredEntities)}
         .data=${filteredEntities}
         .searchLabel=${this.hass.localize(
@@ -860,17 +860,12 @@ export class HaConfigEntities extends LitElement {
                 slot="selection-bar"
                 @wa-select=${this._handleBulkLabel}
               >
-                <ha-assist-chip
-                  slot="trigger"
-                  .label=${this.hass.localize(
+                <ha-button appearance="filled" variant="brand" slot="trigger">
+                  <ha-svg-icon slot="end" .path=${mdiMenuDown}></ha-svg-icon>
+                  ${this.hass.localize(
                     "ui.panel.config.automation.picker.bulk_actions.add_label"
-                  )}
+                  )}</ha-button
                 >
-                  <ha-svg-icon
-                    slot="trailing-icon"
-                    .path=${mdiMenuDown}
-                  ></ha-svg-icon>
-                </ha-assist-chip>
                 ${this._renderLabelItems()}
               </ha-dropdown>`
             : nothing
@@ -878,17 +873,16 @@ export class HaConfigEntities extends LitElement {
         <ha-dropdown slot="selection-bar" @wa-select=${this._handleBulkAction}>
           ${
             this.narrow
-              ? html`<ha-assist-chip
-                  .label=${this.hass.localize(
-                    "ui.panel.config.automation.picker.bulk_action"
-                  )}
+              ? html`<ha-button
+                  appearance="filled"
+                  variant="brand"
                   slot="trigger"
                 >
-                  <ha-svg-icon
-                    slot="trailing-icon"
-                    .path=${mdiMenuDown}
-                  ></ha-svg-icon>
-                </ha-assist-chip>`
+                  <ha-svg-icon slot="end" .path=${mdiMenuDown}></ha-svg-icon>
+                  ${this.hass.localize(
+                    "ui.panel.config.automation.picker.bulk_action"
+                  )}</ha-button
+                >`
               : html`<ha-icon-button
                   .path=${mdiDotsVertical}
                   .label=${this.hass.localize(
@@ -1678,9 +1672,6 @@ ${rejected
           direction: var(--direction);
         }
 
-        ha-assist-chip {
-          --ha-assist-chip-container-shape: 10px;
-        }
         ha-dropdown::part(menu) {
           --auto-size-available-width: calc(50vw - var(--ha-space-4));
         }
@@ -1688,9 +1679,6 @@ ${rejected
           max-width: calc(60vw - var(--ha-space-8));
           max-height: calc(100vh - var(--ha-space-8));
           overflow-y: auto;
-        }
-        ha-dropdown ha-assist-chip {
-          --ha-assist-chip-trailing-space: 8px;
         }
       `,
     ];

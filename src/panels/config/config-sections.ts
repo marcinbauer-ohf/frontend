@@ -56,11 +56,37 @@ const getHasDomainCheck = (domain: string) => {
 };
 
 export const configSections: Record<string, PageNavigation[]> = {
+  // Each page of the devices, automations and areas sections stands on its
+  // own here, rather than behind one entry with tabs
   dashboard: [
     {
       path: "/config/integrations",
+      translationKey: "integrations",
+      iconPath: mdiPuzzle,
+      iconColor: "#0D47A1",
+      core: true,
+      adminOnly: true,
+    },
+    {
+      path: "/config/devices",
       translationKey: "devices",
       iconPath: mdiDevices,
+      iconColor: "#0D47A1",
+      core: true,
+      adminOnly: true,
+    },
+    {
+      path: "/config/entities",
+      translationKey: "entities",
+      iconPath: mdiShape,
+      iconColor: "#0D47A1",
+      core: true,
+      adminOnly: true,
+    },
+    {
+      path: "/config/helpers",
+      translationKey: "helpers",
+      iconPath: mdiTools,
       iconColor: "#0D47A1",
       core: true,
       adminOnly: true,
@@ -70,13 +96,53 @@ export const configSections: Record<string, PageNavigation[]> = {
       translationKey: "automations",
       iconPath: mdiRobot,
       iconColor: "#518C43",
-      core: true,
+      component: "automation",
+      adminOnly: true,
+    },
+    {
+      path: "/config/scene",
+      translationKey: "scenes",
+      iconPath: mdiPalette,
+      iconColor: "#518C43",
+      component: "scene",
+      adminOnly: true,
+    },
+    {
+      path: "/config/script",
+      translationKey: "scripts",
+      iconPath: mdiScriptText,
+      iconColor: "#518C43",
+      component: "script",
+      adminOnly: true,
+    },
+    {
+      path: "/config/blueprint",
+      translationKey: "blueprints",
+      iconPath: mdiPaletteSwatch,
+      iconColor: "#518C43",
+      component: "blueprint",
       adminOnly: true,
     },
     {
       path: "/config/areas",
       translationKey: "areas",
       iconPath: mdiSofa,
+      iconColor: "#E48629",
+      core: true,
+      adminOnly: true,
+    },
+    {
+      path: "/config/labels",
+      translationKey: "labels",
+      iconPath: mdiLabel,
+      iconColor: "#E48629",
+      core: true,
+      adminOnly: true,
+    },
+    {
+      path: "/config/zone",
+      translationKey: "zones",
+      iconPath: mdiMapMarkerRadius,
       iconColor: "#E48629",
       component: "zone",
       adminOnly: true,
@@ -249,7 +315,15 @@ export const configSections: Record<string, PageNavigation[]> = {
       translationKey: "people",
       iconPath: mdiAccount,
       iconColor: "#5A87FA",
-      component: ["person", "users"],
+      component: "person",
+      adminOnly: true,
+    },
+    {
+      path: "/config/users",
+      translationKey: "users",
+      iconPath: mdiBadgeAccountHorizontal,
+      iconColor: "#5A87FA",
+      core: true,
       adminOnly: true,
     },
     {
@@ -611,3 +685,17 @@ export const configSections: Record<string, PageNavigation[]> = {
     },
   ],
 };
+
+/**
+ * Each page of a section on its own, for its page to pass as tabs: one tab
+ * shows as the page title, without a tab bar.
+ */
+export const configPage: Record<string, PageNavigation[]> = Object.fromEntries(
+  [
+    ...configSections.devices,
+    ...configSections.automations,
+    ...configSections.areas,
+    ...configSections.persons,
+    ...configSections.integration_credentials,
+  ].map((page) => [page.path, [page]])
+);

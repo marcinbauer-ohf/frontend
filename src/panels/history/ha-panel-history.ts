@@ -42,12 +42,12 @@ import "../../components/chart/state-history-charts";
 import type { StateHistoryCharts } from "../../components/chart/state-history-charts";
 import "../../components/date-picker/ha-date-range-period";
 import "../../components/ha-button";
+import "../../components/ha-svg-icon";
 import "../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
 import "../../components/ha-dropdown-item";
 import "../../components/ha-empty-state";
 import "../../components/ha-filter-pane";
-import "../../components/ha-filter-pane-chip";
 import "../../components/ha-floating-bar";
 import "../../components/ha-icon-button";
 import type { SourceFilters } from "../../components/ha-sources-picker";
@@ -199,14 +199,21 @@ class HaPanelHistory extends LitElement {
     );
     // The label counts the entities the sources resolve to, which is what the
     // charts show; the badge counts the filters applied to them.
-    const sources = html`<ha-filter-pane-chip
-        .label=${sourcesLabel}
-        .path=${mdiTuneVariant}
-        .count=${filterCount}
-        .active=${sourceCount > 0}
+    const sources = html`<ha-button
+        class="sources"
+        appearance="filled"
+        .variant=${sourceCount > 0 ? "brand" : "neutral"}
         .disabled=${this._isLoading}
         @click=${this._openSources}
-      ></ha-filter-pane-chip>
+      >
+        <ha-svg-icon slot="start" .path=${mdiTuneVariant}></ha-svg-icon>
+        ${sourcesLabel}
+        ${
+          filterCount
+            ? html`<span slot="end" class="count">${filterCount}</span>`
+            : nothing
+        }
+      </ha-button>
       ${
         sourceCount
           ? html`<ha-icon-button
@@ -303,7 +310,9 @@ class HaPanelHistory extends LitElement {
                     `
             }
           </div>
-          <ha-floating-bar class="controls">${controls}</ha-floating-bar>
+          <div class="controls">
+            <ha-floating-bar>${controls}</ha-floating-bar>
+          </div>
         </div>
         ${
           this._showSources
@@ -907,12 +916,49 @@ class HaPanelHistory extends LitElement {
           position: absolute;
           inset-inline: var(--ha-space-4);
           bottom: calc(var(--ha-space-10) + var(--safe-area-inset-bottom, 0px));
+          --floating-bar-fade-below: calc(
+            var(--ha-space-10) + var(--safe-area-inset-bottom, 0px)
+          );
           margin-inline: auto;
         }
 
+        /* A fade from the content into the page colour behind the bar, down
+           to the page's bottom edge, so it stands apart from the list. */
+        /* The wrapper places the bar and draws the fade, behind the bar's
+           own surface, as the page layouts do */
+        .controls {
+          z-index: 1;
+          display: flex;
+          justify-content: center;
+          pointer-events: none;
+        }
+
+        .controls ha-floating-bar {
+          flex: 1;
+        }
+
+        .controls::before {
+          content: "";
+          position: absolute;
+          z-index: -1;
+          inset-inline: -100vw;
+          top: calc(-1 * var(--ha-space-8));
+          bottom: calc(-1 * var(--floating-bar-fade-below));
+          background: linear-gradient(
+            to bottom,
+            transparent,
+            color-mix(in srgb, var(--primary-background-color) 80%, transparent)
+              50%
+          );
+          pointer-events: none;
+        }
+
         :host([narrow]) .controls {
-          inset-inline: var(--ha-space-2);
-          bottom: calc(var(--ha-space-2) + var(--safe-area-inset-bottom, 0px));
+          inset-inline: var(--ha-space-4);
+          bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom, 0px));
+          --floating-bar-fade-below: calc(
+            var(--ha-space-4) + var(--safe-area-inset-bottom, 0px)
+          );
         }
 
         .controls-row {
@@ -943,10 +989,23 @@ class HaPanelHistory extends LitElement {
           margin-inline: var(--ha-space-1);
         }
 
-        .controls-row ha-filter-pane-chip {
+        .controls-row .sources {
           flex: 1;
           flex-shrink: 1;
           min-width: 0;
+        }
+
+        .count {
+          box-sizing: border-box;
+          min-width: 18px;
+          height: 18px;
+          padding: 0 var(--ha-space-1);
+          border-radius: var(--ha-border-radius-pill);
+          background-color: var(--ha-color-fill-primary-loud-resting);
+          color: var(--ha-color-on-primary-loud);
+          font-size: var(--ha-font-size-xs);
+          line-height: 18px;
+          text-align: center;
         }
 
         .controls-row ha-date-range-period {
@@ -961,9 +1020,12 @@ class HaPanelHistory extends LitElement {
              neighbours) below the controls. */
           isolation: isolate;
           padding: var(--ha-space-4);
-          /* Centres the charts within the widest page content (a dashboard at
-             its default column count), keeping the scrollbar at the edge. */
-          padding-inline: max(var(--ha-space-4), (100% - 2000px) / 2);
+          /* Centres the charts in the shared content width (the automation
+             editor's), keeping the scrollbar at the edge. */
+          padding-inline: max(
+            var(--ha-space-4),
+            (100% - var(--ha-content-max-width, 1540px)) / 2
+          );
           /* Room to scroll the last chart out from under the controls. */
           padding-bottom: 200px;
         }

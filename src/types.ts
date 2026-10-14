@@ -155,6 +155,9 @@ export interface ToggleButton {
   label: string;
   iconPath?: string;
   value: string;
+  disabled?: boolean;
+  /** A count or short text shown in a badge after the icon or label. */
+  badge?: string;
 }
 
 export interface Translation {

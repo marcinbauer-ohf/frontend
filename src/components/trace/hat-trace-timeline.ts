@@ -2,7 +2,6 @@ import {
   mdiAlertCircle,
   mdiCircle,
   mdiCircleOffOutline,
-  mdiCircleOutline,
   mdiProgressClock,
   mdiProgressWrench,
   mdiRecordCircleOutline,
@@ -13,7 +12,7 @@ import { customElement, property, state } from "lit/decorators";
 import { ifDefined } from "lit/directives/if-defined";
 import { consume } from "../../common/decorators/consume";
 import { formatDateTimeWithSeconds } from "../../common/datetime/format_date_time";
-import { relativeTime } from "../../common/datetime/relative_time";
+import type { HASSDomEvent } from "../../common/dom/fire_event";
 import { fireEvent } from "../../common/dom/fire_event";
 import { fullEntitiesContext } from "../../data/context";
 import type { EntityRegistryEntry } from "../../data/entity/entity_registry";
@@ -40,63 +39,23 @@ import type {
 } from "../../data/trace";
 import { getDataFromPath, isTriggerPath } from "../../data/trace";
 import type { HomeAssistant } from "../../types";
-import "./ha-timeline";
-import type { HaTimeline } from "./ha-timeline";
+import "../../panels/logbook/ha-logbook-entry";
+import type {
+  HaLogbookEntry,
+  LogbookEntrySelectedDetail,
+} from "../../panels/logbook/ha-logbook-entry";
+import { showLogbookDetailDialog } from "../../panels/logbook/show-dialog-logbook-detail";
 import { childTraceLinkStyles, renderChildTraceLink } from "./trace-child-link";
 
-const LOGBOOK_ENTRIES_BEFORE_FOLD = 2;
-
 /* eslint max-classes-per-file: "off" */
-
-// Report time entry when more than this time has passed
-const SIGNIFICANT_TIME_CHANGE = 1000; // 1 seconds
-
-const isSignificantTimeChange = (a: Date, b: Date) =>
-  Math.abs(b.getTime() - a.getTime()) > SIGNIFICANT_TIME_CHANGE;
-
-class RenderedTimeTracker {
-  private lastReportedTime: Date;
-
-  constructor(
-    private hass: HomeAssistant,
-    private entries: TemplateResult[],
-    trace: AutomationTraceExtended
-  ) {
-    this.lastReportedTime = new Date(trace.timestamp.start);
-  }
-
-  setLastReportedTime(date: Date) {
-    this.lastReportedTime = date;
-  }
-
-  renderTime(from: Date, to: Date): void {
-    this.entries.push(html`
-      <ha-timeline label>
-        ${relativeTime(from, this.hass.locale, to, false)} later
-      </ha-timeline>
-    `);
-    this.lastReportedTime = to;
-  }
-
-  maybeRenderTime(timestamp: Date): boolean {
-    if (!isSignificantTimeChange(timestamp, this.lastReportedTime)) {
-      this.lastReportedTime = timestamp;
-      return false;
-    }
-
-    this.renderTime(this.lastReportedTime, timestamp);
-    return true;
-  }
-}
 
 class LogbookRenderer {
   private curIndex: number;
 
-  private pendingItems: [Date, LogbookEntry][] = [];
-
   constructor(
+    private hass: HomeAssistant,
+    private narrow: boolean,
     private entries: TemplateResult[],
-    private timeTracker: RenderedTimeTracker,
     private logbookEntries: LogbookEntry[]
   ) {
     // Skip the "automation got triggered item"
@@ -115,90 +74,39 @@ class LogbookRenderer {
   }
 
   maybeRenderItem() {
-    const logbookEntry = this.curItem;
+    this.entries.push(this._renderLogbookEntryHelper(this.curItem));
     this.curIndex++;
-    const entryDate = new Date(logbookEntry.when * 1000);
-
-    if (this.pendingItems.length === 0) {
-      this.pendingItems.push([entryDate, logbookEntry]);
-      return;
-    }
-
-    const previousEntryDate =
-      this.pendingItems[this.pendingItems.length - 1][0];
-
-    // If logbook entry is too long after the last one,
-    // add a time passed label
-    if (isSignificantTimeChange(previousEntryDate, entryDate)) {
-      this._renderLogbookEntries();
-      this.timeTracker.renderTime(previousEntryDate, entryDate);
-    }
-
-    this.pendingItems.push([entryDate, logbookEntry]);
   }
 
-  flush() {
-    if (this.pendingItems.length > 0) {
-      this._renderLogbookEntries();
-    }
-  }
-
-  private _renderLogbookEntries() {
-    this.timeTracker.maybeRenderTime(this.pendingItems[0][0]);
-
-    const parts: TemplateResult[] = [];
-
-    let i: number;
-
-    for (
-      i = 0;
-      i < Math.min(this.pendingItems.length, LOGBOOK_ENTRIES_BEFORE_FOLD);
-      i++
-    ) {
-      parts.push(this._renderLogbookEntryHelper(this.pendingItems[i][1]));
-    }
-
-    let moreItems: TemplateResult[] | undefined;
-
-    // If we didn't render all items, push rest into `moreItems`
-    if (i < this.pendingItems.length) {
-      moreItems = [];
-      for (; i < this.pendingItems.length; i++) {
-        moreItems.push(this._renderLogbookEntryHelper(this.pendingItems[i][1]));
-      }
-    }
-
-    this.entries.push(html`
-      <ha-timeline .icon=${mdiCircleOutline} .moreItems=${moreItems}>
-        ${parts}
-      </ha-timeline>
-    `);
-
-    // Clear rendered items.
-    this.timeTracker.setLastReportedTime(
-      this.pendingItems[this.pendingItems.length - 1][0]
-    );
-    this.pendingItems = [];
-  }
-
+  // As on the Activity page: the entity, what changed, why and when, with
+  // the entry's details a click away
   private _renderLogbookEntryHelper(entry: LogbookEntry) {
-    return html`${entry.name} (${entry.entity_id})
-      ${entry.message || `turned ${entry.state}`}<br />`;
+    return html`<ha-logbook-entry
+      dot-node
+      class="logbook-entry"
+      .hass=${this.hass}
+      .item=${entry}
+      .narrow=${this.narrow}
+      show-cause
+    ></ha-logbook-entry>`;
   }
 }
 
 class ActionRenderer {
   private curIndex = 0;
 
+  // When the step being rendered ran
+  private _when?: number;
+
   private keys: string[];
 
   constructor(
     private hass: HomeAssistant,
+    private narrow: boolean,
     private entityReg: EntityRegistryEntry[],
     private entries: TemplateResult[],
     private trace: AutomationTraceExtended,
-    private logbookRenderer: LogbookRenderer,
-    private timeTracker: RenderedTimeTracker
+    private logbookRenderer: LogbookRenderer
   ) {
     this.keys = Object.keys(trace.trace);
   }
@@ -241,6 +149,7 @@ class ActionRenderer {
     value: ActionTraceStep,
     actionType?: ReturnType<typeof getActionType>
   ) {
+    this._when = new Date(value.timestamp).getTime();
     if (isTriggerPath(value.path)) {
       return this._handleTrigger(index, value as TriggerTraceStep);
     }
@@ -254,9 +163,6 @@ class ActionRenderer {
     ) {
       this.logbookRenderer.maybeRenderItem();
     }
-
-    this.logbookRenderer.flush();
-    this.timeTracker.maybeRenderTime(timestamp);
 
     const path = value.path;
     let data;
@@ -647,7 +553,15 @@ class ActionRenderer {
     childId?: TraceId
   ) {
     this.entries.push(html`
-      <ha-timeline .icon=${icon} data-path=${path} .notEnabled=${disabled}>
+      <ha-logbook-entry
+        dot-node
+        class=${disabled ? "step disabled" : "step"}
+        .hass=${this.hass}
+        .narrow=${this.narrow}
+        .when=${this._when}
+        .iconPath=${icon}
+        data-path=${path}
+      >
         ${description}${
           disabled
             ? html`<span class="disabled">
@@ -665,7 +579,7 @@ class ActionRenderer {
                 )}`
             : ""
         }
-      </ha-timeline>
+      </ha-logbook-entry>
     `);
   }
 
@@ -687,6 +601,8 @@ export class HaAutomationTracer extends LitElement {
   @property({ attribute: "allow-pick", type: Boolean }) public allowPick =
     false;
 
+  @property({ type: Boolean }) public narrow = false;
+
   @state()
   @consume({ context: fullEntitiesContext, subscribe: true })
   _entityReg: EntityRegistryEntry[] = [];
@@ -698,19 +614,19 @@ export class HaAutomationTracer extends LitElement {
 
     const entries: TemplateResult[] = [];
 
-    const timeTracker = new RenderedTimeTracker(this.hass, entries, this.trace);
     const logbookRenderer = new LogbookRenderer(
+      this.hass,
+      this.narrow,
       entries,
-      timeTracker,
       this.logbookEntries || []
     );
     const actionRenderer = new ActionRenderer(
       this.hass,
+      this.narrow,
       this._entityReg,
       entries,
       this.trace,
-      logbookRenderer,
-      timeTracker
+      logbookRenderer
     );
 
     while (actionRenderer.hasNext) {
@@ -720,8 +636,6 @@ export class HaAutomationTracer extends LitElement {
     while (logbookRenderer.hasNext) {
       logbookRenderer.maybeRenderItem();
     }
-
-    logbookRenderer.flush();
 
     // Render footer
     const renderFinishedAt = () =>
@@ -846,16 +760,34 @@ export class HaAutomationTracer extends LitElement {
     }
 
     entries.push(html`
-      <ha-timeline
-        last-item
-        .icon=${entry.icon}
+      <ha-logbook-entry
+        dot-node
         class=${ifDefined(entry.className)}
+        .hass=${this.hass}
+        .narrow=${this.narrow}
+        .when=${
+          this.trace.timestamp.finish
+            ? new Date(this.trace.timestamp.finish).getTime()
+            : undefined
+        }
+        .iconPath=${entry.icon}
+        .nodeColor=${
+          entry.className === "error" ? "var(--error-color)" : undefined
+        }
+        no-detail
       >
         ${entry.description}
-      </ha-timeline>
+      </ha-logbook-entry>
     `);
 
-    return html`${entries}`;
+    return html`<div @logbook-entry-selected=${this._logbookEntrySelected}>
+      ${entries}
+    </div>`;
+  }
+
+  private _logbookEntrySelected(ev: HASSDomEvent<LogbookEntrySelectedDetail>) {
+    ev.stopPropagation();
+    showLogbookDetailDialog(this, { entry: ev.detail.item });
   }
 
   protected updated(props: PropertyValues<this>) {
@@ -869,8 +801,8 @@ export class HaAutomationTracer extends LitElement {
       this.selectedPath &&
       !(this.selectedPath in this.trace.trace)
     ) {
-      const element = this.shadowRoot!.querySelector<HaTimeline>(
-        "ha-timeline[data-path]"
+      const element = this.shadowRoot!.querySelector<HaLogbookEntry>(
+        "ha-logbook-entry[data-path]"
       );
       if (element) {
         fireEvent(this, "value-changed", { value: element.dataset.path });
@@ -878,30 +810,27 @@ export class HaAutomationTracer extends LitElement {
       }
     }
 
+    // The rail runs from the first row to the last
+    const rows =
+      this.shadowRoot!.querySelectorAll<HaLogbookEntry>("ha-logbook-entry");
+    rows.forEach((row, i) => {
+      row.firstOfDay = i === 0;
+      row.lastOfDay = i === rows.length - 1;
+    });
+
     if (props.has("trace") || props.has("selectedPath")) {
-      this.shadowRoot!.querySelectorAll<HaTimeline>(
-        "ha-timeline[data-path]"
+      this.shadowRoot!.querySelectorAll<HaLogbookEntry>(
+        "ha-logbook-entry[data-path]"
       ).forEach((el) => {
-        el.toggleAttribute("selected", this.selectedPath === el.dataset.path);
-        if (!this.allowPick || el.tabIndex === 0) {
+        el.selected = this.selectedPath === el.dataset.path;
+        el.noDetail = !this.allowPick;
+        if (!this.allowPick || el.dataset.listening) {
           return;
         }
-        el.tabIndex = 0;
-        const selectEl = () => {
+        el.dataset.listening = "true";
+        el.addEventListener("click", () => {
           this.selectedPath = el.dataset.path;
           fireEvent(this, "value-changed", { value: el.dataset.path });
-        };
-        el.addEventListener("click", selectEl);
-        el.addEventListener("keydown", (ev: KeyboardEvent) => {
-          if (ev.key === "Enter" || ev.key === " ") {
-            selectEl();
-          }
-        });
-        el.addEventListener("mouseover", () => {
-          el.raised = true;
-        });
-        el.addEventListener("mouseout", () => {
-          el.raised = false;
         });
       });
     }
@@ -911,22 +840,15 @@ export class HaAutomationTracer extends LitElement {
     return [
       childTraceLinkStyles,
       css`
-        ha-timeline[lastItem].condition {
-          --timeline-ball-color: var(--error-color);
-        }
-        ha-timeline[data-path] {
-          cursor: pointer;
-        }
-        ha-timeline[selected] {
-          --timeline-ball-color: var(--primary-color);
-        }
-        ha-timeline:focus {
-          outline: none;
-          --timeline-ball-color: var(--accent-color);
+        .step.disabled {
+          opacity: 0.6;
         }
         .error {
-          --timeline-ball-color: var(--error-color);
           color: var(--error-color);
+        }
+        ha-logbook-entry {
+          display: block;
+          --logbook-horizontal-padding: 0;
         }
       `,
     ];

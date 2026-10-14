@@ -28,7 +28,7 @@ import {
 import "../../../layouts/hass-tabs-subpage-data-table";
 import type { HaTabsSubpageDataTable } from "../../../layouts/hass-tabs-subpage-data-table";
 import type { HomeAssistant, Route } from "../../../types";
-import { configSections } from "../config-sections";
+import { configPage } from "../config-sections";
 import { showAddApplicationCredentialDialog } from "./show-dialog-add-application-credential";
 
 @customElement("ha-config-application-credentials")
@@ -156,7 +156,7 @@ export class HaConfigApplicationCredentials extends LitElement {
         .narrow=${this.narrow}
         .route=${this.route}
         back-path="/config"
-        .tabs=${configSections.devices}
+        .tabs=${configPage["/config/application_credentials"]}
         .columns=${this._columns(this.hass.localize)}
         .loading=${this._loading}
         .data=${this._getApplicationCredentials(

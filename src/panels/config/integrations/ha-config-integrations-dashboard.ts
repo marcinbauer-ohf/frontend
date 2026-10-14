@@ -5,7 +5,6 @@ import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
-import { ifDefined } from "lit/directives/if-defined";
 import memoizeOne from "memoize-one";
 import { consume } from "../../../common/decorators/consume";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
@@ -25,6 +24,7 @@ import { extractSearchParam } from "../../../common/url/search-params";
 import { nextRender } from "../../../common/util/render-status";
 import "../../../components/ha-button";
 import "../../../components/ha-dropdown";
+import "../../../components/ha-floating-bar";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
 import "../../../components/ha-icon-button";
@@ -68,7 +68,7 @@ import { KeyboardShortcutMixin } from "../../../mixins/keyboard-shortcut-mixin";
 import { SubscribeMixin } from "../../../mixins/subscribe-mixin";
 import { haStyle } from "../../../resources/styles";
 import type { HomeAssistant, Route } from "../../../types";
-import { configSections } from "../config-sections";
+import { configPage } from "../config-sections";
 import { isHelperDomain } from "../helpers/const";
 import "./ha-config-flow-card";
 import type { DataEntryFlowProgressExtended } from "./ha-config-integrations";
@@ -479,118 +479,69 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
       this._filter
     );
 
-    const filterMenu = html`
-      <div slot=${ifDefined(this.narrow ? "toolbar-icon" : undefined)}>
-        <div class="menu-badge-container">
-          ${
-            !this._showDisabled && this.narrow && disabledConfigEntries.length
-              ? html`<span class="badge">${disabledConfigEntries.length}</span>`
-              : ""
-          }
-          <ha-dropdown multi @wa-select=${this._handleMenuAction}>
-            <ha-icon-button
-              slot="trigger"
-              .label=${this.hass.localize("ui.common.menu")}
-              .path=${mdiFilterVariant}
-            >
-            </ha-icon-button>
-            <ha-dropdown-item
-              type="checkbox"
-              .checked=${this._showIgnored}
-              value="show-ignored"
-            >
-              ${this.hass.localize(
-                "ui.panel.config.integrations.ignore.show_ignored"
-              )}
-            </ha-dropdown-item>
-            <ha-dropdown-item
-              type="checkbox"
-              .checked=${this._showDisabled}
-              value="show-disabled"
-            >
-              ${this.hass.localize(
-                "ui.panel.config.integrations.disable.show_disabled"
-              )}
-            </ha-dropdown-item>
-          </ha-dropdown>
-        </div>
-        ${
-          this.narrow
-            ? html`
-                <ha-integration-overflow-menu
-                  .hass=${this.hass}
-                  slot="toolbar-icon"
-                ></ha-integration-overflow-menu>
-              `
-            : ""
-        }
-      </div>
-    `;
+    // Search, the filters and adding an integration, in one bar over the
+    // bottom of the page; the search sits over the rest on a phone.
+    const filterMenu = html`<div class="menu-badge-container">
+      ${
+        !this._showDisabled && disabledConfigEntries.length
+          ? html`<span class="badge">${disabledConfigEntries.length}</span>`
+          : nothing
+      }
+      <ha-dropdown
+        multi
+        placement="top-start"
+        @wa-select=${this._handleMenuAction}
+      >
+        <ha-icon-button
+          slot="trigger"
+          .label=${this.hass.localize("ui.components.subpage-data-table.filters")}
+          .path=${mdiFilterVariant}
+        >
+        </ha-icon-button>
+        <ha-dropdown-item
+          type="checkbox"
+          .checked=${this._showIgnored}
+          value="show-ignored"
+        >
+          ${this.hass.localize("ui.panel.config.integrations.ignore.show_ignored")}
+        </ha-dropdown-item>
+        <ha-dropdown-item
+          type="checkbox"
+          .checked=${this._showDisabled}
+          value="show-disabled"
+        >
+          ${this.hass.localize(
+            "ui.panel.config.integrations.disable.show_disabled"
+          )}
+        </ha-dropdown-item>
+      </ha-dropdown>
+    </div>`;
+    const search = html`<ha-input-search
+      appearance="outlined"
+      .value=${this._filter}
+      @input=${this._handleSearchChange}
+      .placeholder=${this.hass.localize("ui.panel.config.integrations.search")}
+    >
+    </ha-input-search>`;
+    const addButton = html`<ha-button class="add" @click=${this._createFlow}>
+      <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
+      ${this.hass.localize("ui.panel.config.integrations.add_integration")}
+    </ha-button>`;
 
     return html`
       <hass-tabs-subpage
         .hass=${this.hass}
         back-path="/config"
         .route=${this.route}
-        .tabs=${configSections.devices}
-        has-fab
+        .tabs=${configPage["/config/integrations"]}
       >
-        ${
-          this.narrow
-            ? html`
-                <div slot="header" class="header">
-                  <ha-input-search
-                    appearance="outlined"
-                    .value=${this._filter}
-                    @input=${this._handleSearchChange}
-                    .placeholder=${this.hass.localize(
-                      "ui.panel.config.integrations.search"
-                    )}
-                  >
-                  </ha-input-search>
-                </div>
-                ${filterMenu}
-              `
-            : html`
-                <ha-integration-overflow-menu
-                  .hass=${this.hass}
-                  slot="toolbar-icon"
-                ></ha-integration-overflow-menu>
-                <div class="search">
-                  <ha-input-search
-                    appearance="outlined"
-                    .value=${this._filter}
-                    @input=${this._handleSearchChange}
-                    .placeholder=${this.hass.localize(
-                      "ui.panel.config.integrations.search"
-                    )}
-                  >
-                  </ha-input-search>
-                  <div class="filters">
-                    ${
-                      !this._showDisabled && disabledConfigEntries.length
-                        ? html`<div class="active-filters">
-                            ${this.hass.localize(
-                              "ui.panel.config.integrations.disable.disabled_integrations",
-                              { number: disabledConfigEntries.length }
-                            )}
-                            <ha-button
-                              appearance="plain"
-                              size="s"
-                              @click=${this._toggleShowDisabled}
-                            >
-                              ${this.hass.localize(
-                                "ui.panel.config.integrations.disable.show"
-                              )}
-                            </ha-button>
-                          </div>`
-                        : nothing
-                    }
-                    ${filterMenu}
-                  </div>
-                </div>
-              `
-        }
+        <ha-integration-overflow-menu
+          .hass=${this.hass}
+          slot="toolbar-icon"
+        ></ha-integration-overflow-menu>
+        <ha-floating-bar slot="floating-bar" class="bar">
+          <div class="bar-row">${search}${filterMenu}${addButton}</div>
+        </ha-floating-bar>
         ${
           this._showIgnored
             ? html`<h1>
@@ -757,10 +708,7 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
                     : ""
           }
         </div>
-        <ha-button slot="fab" size="l" @click=${this._createFlow}>
-          <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
-          ${this.hass.localize("ui.panel.config.integrations.add_integration")}
-        </ha-button>
+        <div class="bar-space"></div>
       </hass-tabs-subpage>
     `;
   }
@@ -1081,7 +1029,9 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
           );
           gap: var(--ha-space-4);
           padding: var(--ha-space-4);
-          margin: var(--ha-space-2);
+          /* Centred in the shared content width, as the tables and
+             Activity */
+          margin: var(--ha-space-2) var(--content-side);
         }
         .empty-message {
           margin: auto;
@@ -1092,60 +1042,43 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
         .empty-message h1 {
           margin: 0;
         }
-        ha-input-search {
+        .bar {
+          --ha-floating-bar-control-radius: 24px;
+          --ha-input-search-height: 48px;
+          --ha-input-search-border-radius: var(--ha-border-radius-pill);
+          --ha-button-height: 48px;
+        }
+        .bar-row {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-1);
+          min-width: 0;
+        }
+        .bar ha-input-search {
           flex: 1;
           min-width: 0;
         }
-        .header {
-          display: flex;
-          min-width: 0;
+        .bar ha-dropdown {
+          margin: 0;
         }
-        .search {
-          display: flex;
-          justify-content: space-between;
-          width: 100%;
-          align-items: center;
-          height: 56px;
-          position: sticky;
-          top: 0;
-          z-index: 2;
-          background-color: var(--primary-background-color);
-          padding: 0 16px;
-          gap: var(--ha-space-4);
-          box-sizing: border-box;
-          border-bottom: 1px solid var(--divider-color);
+        /* On a phone the add button is just its icon */
+        :host([narrow]) .bar .add {
+          --ha-button-label-max-width: 0;
+          --ha-button-start-gap: 0;
+          --ha-button-start-padding: 12px;
+          --wa-form-control-padding-inline: 12px;
         }
-        .filters {
-          --mdc-text-field-fill-color: var(--input-fill-color);
-          --mdc-text-field-idle-line-color: var(--input-idle-line-color);
-          --mdc-shape-small: 4px;
-          --text-field-overflow: initial;
-          display: flex;
-          justify-content: flex-end;
-          align-items: center;
-          color: var(--primary-text-color);
+        /* Room to scroll the last cards above the bar */
+        .bar-space {
+          height: calc(
+            64px + var(--ha-space-10) + var(--ha-space-4) +
+              var(--safe-area-inset-bottom, 0px)
+          );
         }
-        .active-filters {
-          color: var(--primary-text-color);
-          display: flex;
-          align-items: center;
-          padding: 2px 2px 2px 8px;
-          line-height: 1;
-          padding-inline-start: 8px;
-          padding-inline-end: 2px;
-          font-size: var(--ha-font-size-m);
-          width: max-content;
-          cursor: initial;
-          direction: var(--direction);
-          height: 32px;
-          background-color: var(--ha-color-fill-primary-normal-resting);
-          border-radius: var(--ha-border-radius-sm);
-        }
-        .active-filters ha-button {
-          margin-left: 8px;
-          margin-inline-start: 8px;
-          margin-inline-end: initial;
-          direction: var(--direction);
+        :host([narrow]) .bar-space {
+          height: calc(
+            64px + var(--ha-space-8) + var(--safe-area-inset-bottom, 0px)
+          );
         }
         .badge {
           min-width: 20px;
@@ -1165,10 +1098,15 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
         .menu-badge-container {
           position: relative;
         }
+        :host {
+          --content-side: max(
+            var(--ha-space-2),
+            (100% - var(--ha-content-max-width, 1540px)) / 2
+          );
+        }
         h1 {
           margin-top: 8px;
-          margin-left: 16px;
-          margin-inline-start: 16px;
+          margin-inline-start: calc(var(--content-side) + var(--ha-space-4));
           margin-inline-end: initial;
         }
         ha-dropdown ha-icon-button {

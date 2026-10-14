@@ -1,6 +1,6 @@
 import "@home-assistant/webawesome/dist/components/button-group/button-group";
 import type { TemplateResult } from "lit";
-import { css, html, LitElement } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import { fireEvent } from "../common/dom/fire_event";
 import type { ToggleButton } from "../types";
@@ -59,7 +59,7 @@ export class HaButtonToggleGroup extends LitElement {
               .value=${button.value}
               @click=${this._handleClick}
               .title=${button.label}
-              .disabled=${this.disabled}
+              .disabled=${this.disabled || !!button.disabled}
               .appearance=${this.active === button.value ? "accent" : "filled"}
             >
               ${
@@ -69,6 +69,11 @@ export class HaButtonToggleGroup extends LitElement {
                       .path=${button.iconPath}
                     ></ha-svg-icon>`
                   : button.label
+              }
+              ${
+                button.badge
+                  ? html`<span slot="end" class="badge">${button.badge}</span>`
+                  : nothing
               }
             </ha-button>`
         )}
@@ -101,6 +106,20 @@ export class HaButtonToggleGroup extends LitElement {
 
     :host([full-width]) ha-button {
       flex: 1;
+    }
+
+    .badge {
+      box-sizing: border-box;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 var(--ha-space-1);
+      border-radius: var(--ha-border-radius-pill);
+      background-color: var(--ha-color-fill-primary-loud-resting);
+      color: var(--ha-color-on-primary-loud);
+      font-size: var(--ha-font-size-xs);
+      font-weight: var(--ha-font-weight-medium);
+      line-height: 18px;
+      text-align: center;
     }
   `;
 }

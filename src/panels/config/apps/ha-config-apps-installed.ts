@@ -17,6 +17,7 @@ import "../../../components/ha-button";
 import "../../../components/ha-card";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-svg-icon";
+import "../../../components/ha-floating-bar";
 import "../../../components/input/ha-input-search";
 import type {
   HassioAddonInfo,
@@ -41,7 +42,7 @@ import { supervisorAppsStyle } from "./resources/supervisor-apps-style";
 export class HaConfigAppsInstalled extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
-  @property({ type: Boolean }) public narrow = false;
+  @property({ type: Boolean, reflect: true }) public narrow = false;
 
   @property({ attribute: false }) public route!: Route;
 
@@ -92,7 +93,7 @@ export class HaConfigAppsInstalled extends LitElement {
             "ui.panel.config.apps.store.check_updates"
           )}
         ></ha-icon-button>
-        <div class="search">
+        <ha-floating-bar slot="floating-bar" class="bar">
           <ha-input-search
             appearance="outlined"
             .value=${this._filter}
@@ -103,7 +104,11 @@ export class HaConfigAppsInstalled extends LitElement {
             @input=${this._handleSearchChange}
           >
           </ha-input-search>
-        </div>
+          <ha-button class="add" href="/config/apps/available">
+            <ha-svg-icon slot="start" .path=${mdiStorePlus}></ha-svg-icon>
+            ${this.hass.localize("ui.panel.config.apps.installed.add_app")}
+          </ha-button>
+        </ha-floating-bar>
         <div class="content">
           ${
             addons.length === 0
@@ -164,11 +169,6 @@ export class HaConfigAppsInstalled extends LitElement {
                 )
           }
         </div>
-
-        <ha-button size="l" href="/config/apps/available">
-          <ha-svg-icon slot="start" .path=${mdiStorePlus}></ha-svg-icon>
-          ${this.hass.localize("ui.panel.config.apps.installed.add_app")}
-        </ha-button>
       </hass-subpage>
     `;
   }
@@ -254,6 +254,14 @@ export class HaConfigAppsInstalled extends LitElement {
   static styles: CSSResultGroup = [
     supervisorAppsStyle,
     css`
+      /* On a phone the add button is just its icon */
+      :host([narrow]) .add {
+        --ha-button-label-max-width: 0;
+        --ha-button-start-gap: 0;
+        --ha-button-start-padding: 12px;
+        --wa-form-control-padding-inline: 12px;
+      }
+
       :host {
         display: block;
         height: 100%;
@@ -269,28 +277,20 @@ export class HaConfigAppsInstalled extends LitElement {
         background-color: var(--ha-color-fill-neutral-quiet-resting);
       }
 
-      .search {
-        display: flex;
-        align-items: center;
-        width: 100%;
-        height: 56px;
-        position: sticky;
-        top: 0;
-        z-index: 2;
-        background-color: var(--primary-background-color);
-        padding: 0 var(--ha-space-4);
-        box-sizing: border-box;
-        border-bottom: 1px solid var(--divider-color);
-      }
-
       ha-input-search {
         flex: 1;
         min-width: 0;
       }
 
       .content {
+        /* The shared content width, as the tables and Activity */
+        max-width: var(--ha-content-max-width, 1540px);
+        margin-inline: auto;
         padding: var(--ha-space-4);
-        margin-bottom: var(--ha-space-18);
+        /* Room to scroll the last cards above the bar */
+        margin-bottom: calc(
+          64px + var(--ha-space-10) + var(--safe-area-inset-bottom, 0px)
+        );
         gap: var(--ha-space-4);
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(min(336px, 100%), 1fr));
@@ -311,16 +311,14 @@ export class HaConfigAppsInstalled extends LitElement {
         cursor: pointer;
       }
 
-      ha-button[size="l"] {
-        position: fixed;
-        right: calc(var(--ha-space-4) + var(--safe-area-inset-right));
-        bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom));
-        inset-inline-end: calc(
-          var(--ha-space-4) + var(--safe-area-inset-right)
-        );
-        inset-inline-start: initial;
-        z-index: 1;
-        --ha-button-box-shadow: var(--ha-box-shadow-l);
+      /* Search and adding an app, in one bar over the bottom of the page */
+      .bar {
+        flex-direction: row;
+        align-items: center;
+        gap: var(--ha-space-1);
+        --ha-floating-bar-control-radius: 24px;
+        --ha-input-search-height: 48px;
+        --ha-button-height: 48px;
       }
     `,
   ];

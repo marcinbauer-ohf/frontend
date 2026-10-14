@@ -38,6 +38,7 @@ export class EnergyViewStrategy extends ReactiveElement {
       footer: {
         card: {
           type: "energy-date-selection",
+          show_edit_button: hass.user?.is_admin,
           collection_key: collectionKey,
           opening_direction: "right",
           vertical_opening_direction: "up",

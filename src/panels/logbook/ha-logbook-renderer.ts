@@ -156,7 +156,9 @@ class HaLogbookRenderer extends LitElement {
     // The virtualizer positions one element per item, so the date header and
     // the row share a single wrapper.
     return html`
-      <div class="entry-container">
+      <div
+        class="entry-container ${index === this.entries.length - 1 ? "last" : ""}"
+      >
         ${
           firstOfDay
             ? html`<h4 class="date">
@@ -242,6 +244,11 @@ class HaLogbookRenderer extends LitElement {
 
         .entry-container {
           width: 100%;
+        }
+
+        /* Room under the last entry for controls floating over the list */
+        .entry-container.last {
+          padding-bottom: var(--logbook-end-space, 0px);
         }
 
         .date {

@@ -6,6 +6,7 @@ import {
   mdiDotsVertical,
   mdiDownload,
   mdiHomeClock,
+  mdiPencil,
 } from "@mdi/js";
 import {
   differenceInCalendarMonths,
@@ -40,6 +41,7 @@ import {
 import type { DateRange } from "../../../common/datetime/calc_date_range";
 import { calcDateRange } from "../../../common/datetime/calc_date_range";
 import { firstWeekdayIndex } from "../../../common/datetime/first_weekday";
+import { fireEvent } from "../../../common/dom/fire_event";
 import {
   formatDateMonth,
   formatDateMonthShort,
@@ -115,6 +117,9 @@ export class HuiEnergyPeriodSelector extends LitElement {
 
   @property({ type: Boolean, attribute: "allow-compare" }) public allowCompare =
     true;
+
+  /** Shows an edit button that fires energy-edit, for the page to handle */
+  @property({ type: Boolean, attribute: "show-edit" }) public showEdit = false;
 
   @property({ attribute: "vertical-opening-direction" })
   public verticalOpeningDirection?: VerticalOpeningDirection;
@@ -273,6 +278,12 @@ export class HuiEnergyPeriodSelector extends LitElement {
           "ui.panel.lovelace.components.energy_period_selector.compare"
         ),
         action: () => this._toggleCompare(),
+      },
+      {
+        path: mdiPencil,
+        label: this._i18n.localize("ui.panel.energy.configure"),
+        hidden: !this.showEdit,
+        action: () => fireEvent(this, "energy-edit"),
       },
       {
         path: mdiDownload,
@@ -889,5 +900,8 @@ export class HuiEnergyPeriodSelector extends LitElement {
 declare global {
   interface HTMLElementTagNameMap {
     "hui-energy-period-selector": HuiEnergyPeriodSelector;
+  }
+  interface HASSDomEvents {
+    "energy-edit": undefined;
   }
 }

@@ -31,12 +31,12 @@ import { deepEqual } from "../../common/util/deep-equal";
 import { shallowEqual } from "../../common/util/shallow-equal";
 import "../../components/date-picker/ha-date-range-period";
 import "../../components/ha-button";
+import "../../components/ha-svg-icon";
 import "../../components/ha-card";
 import "../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
 import "../../components/ha-dropdown-item";
 import "../../components/ha-empty-state";
-import "../../components/ha-filter-pane-chip";
 import "../../components/ha-filter-pane";
 import "../../components/ha-floating-bar";
 import "../../components/ha-icon-button";
@@ -156,63 +156,77 @@ export class HaPanelLogbook extends LitElement {
               }
             </ha-logbook>
           </ha-card>
-          <ha-floating-bar class="controls">
-            <div class="controls-row">
-              <ha-date-range-period
-                .startDate=${this._time.range[0]}
-                .endDate=${this._time.range[1]}
-                .narrow=${this.narrow}
-                @value-changed=${this._dateRangeChanged}
-              ></ha-date-range-period>
-              <ha-dropdown
-                placement="top-end"
-                @wa-select=${this._handleMenuAction}
-              >
-                <ha-icon-button
-                  slot="trigger"
-                  .label=${this.hass.localize("ui.common.menu")}
-                  .path=${mdiDotsVertical}
-                ></ha-icon-button>
-                <ha-dropdown-item value="download">
-                  ${this.hass.localize("ui.panel.logbook.download_data")}
-                  <ha-svg-icon slot="icon" .path=${mdiDownload}></ha-svg-icon>
-                </ha-dropdown-item>
-                <ha-dropdown-item
-                  value="reset"
-                  .disabled=${this._isDefaultState()}
+          <div class="controls">
+            <ha-floating-bar>
+              <div class="controls-row">
+                <ha-date-range-period
+                  .startDate=${this._time.range[0]}
+                  .endDate=${this._time.range[1]}
+                  .narrow=${this.narrow}
+                  @value-changed=${this._dateRangeChanged}
+                ></ha-date-range-period>
+                <ha-dropdown
+                  placement="top-end"
+                  @wa-select=${this._handleMenuAction}
                 >
-                  ${this.hass.localize("ui.common.reset")}
+                  <ha-icon-button
+                    slot="trigger"
+                    .label=${this.hass.localize("ui.common.menu")}
+                    .path=${mdiDotsVertical}
+                  ></ha-icon-button>
+                  <ha-dropdown-item value="download">
+                    ${this.hass.localize("ui.panel.logbook.download_data")}
+                    <ha-svg-icon slot="icon" .path=${mdiDownload}></ha-svg-icon>
+                  </ha-dropdown-item>
+                  <ha-dropdown-item
+                    value="reset"
+                    .disabled=${this._isDefaultState()}
+                  >
+                    ${this.hass.localize("ui.common.reset")}
+                    <ha-svg-icon
+                      slot="icon"
+                      .path=${mdiFilterRemove}
+                    ></ha-svg-icon>
+                  </ha-dropdown-item>
+                </ha-dropdown>
+              </div>
+              <div class="controls-row">
+                <ha-button
+                  class="sources"
+                  appearance="filled"
+                  .variant=${sourceCount > 0 ? "brand" : "neutral"}
+                  @click=${this._openSources}
+                >
                   <ha-svg-icon
-                    slot="icon"
-                    .path=${mdiFilterRemove}
+                    slot="start"
+                    .path=${mdiTuneVariant}
                   ></ha-svg-icon>
-                </ha-dropdown-item>
-              </ha-dropdown>
-            </div>
-            <div class="controls-row">
-              <ha-filter-pane-chip
-                .label=${sourcesLabel}
-                .path=${mdiTuneVariant}
-                .count=${filterCount}
-                .active=${sourceCount > 0}
-                @click=${this._openSources}
-              ></ha-filter-pane-chip>
-              ${
-                sourceCount
-                  ? html`<ha-icon-button
-                      .path=${mdiFilterVariantRemove}
-                      .label=${this.hass.localize(
-                        "ui.components.subpage-data-table.clear_filter"
-                      )}
-                      title=${this.hass.localize(
-                        "ui.components.subpage-data-table.clear_filter"
-                      )}
-                      @click=${this._clearSources}
-                    ></ha-icon-button>`
-                  : nothing
-              }
-            </div>
-          </ha-floating-bar>
+                  ${sourcesLabel}
+                  ${
+                    filterCount
+                      ? html`<span slot="end" class="count"
+                          >${filterCount}</span
+                        >`
+                      : nothing
+                  }
+                </ha-button>
+                ${
+                  sourceCount
+                    ? html`<ha-icon-button
+                        .path=${mdiFilterVariantRemove}
+                        .label=${this.hass.localize(
+                          "ui.components.subpage-data-table.clear_filter"
+                        )}
+                        title=${this.hass.localize(
+                          "ui.components.subpage-data-table.clear_filter"
+                        )}
+                        @click=${this._clearSources}
+                      ></ha-icon-button>`
+                    : nothing
+                }
+              </div>
+            </ha-floating-bar>
+          </div>
         </div>
         ${
           this._showSources
@@ -599,25 +613,35 @@ export class HaPanelLogbook extends LitElement {
           );
           box-sizing: border-box;
           overflow: hidden;
-          /* The list ends above the controls rather than under them. */
-          padding-bottom: 160px;
         }
 
-        /* A column as wide as the config pages' content, so the entries stay
-           readable on a large screen. */
+        /* A column in the shared content width (the automation editor's),
+           centred on a large screen. It runs down under the controls, off
+           the bottom of the page, with room after the last entry to scroll
+           it into view above them. */
         .list {
+          --logbook-end-space: calc(
+            104px + var(--ha-space-10) + var(--ha-space-4) +
+              var(--safe-area-inset-bottom, 0px)
+          );
+          border-bottom: none;
+          border-end-start-radius: 0;
+          border-end-end-radius: 0;
           flex: 1;
           min-height: 0;
           width: 100%;
-          max-width: 1040px;
+          max-width: var(--ha-content-max-width, 1540px);
           margin: var(--ha-space-4) auto 0;
           display: flex;
           flex-direction: column;
           overflow: hidden;
         }
 
-        /* A phone shows the entries edge to edge. */
+        /* A phone shows the entries edge to edge */
         :host([narrow]) .list {
+          --logbook-end-space: calc(
+            var(--ha-space-4) + 104px + var(--safe-area-inset-bottom, 0px)
+          );
           margin-top: 0;
           border: none;
           border-radius: 0;
@@ -634,12 +658,49 @@ export class HaPanelLogbook extends LitElement {
           position: absolute;
           inset-inline: var(--ha-space-4);
           bottom: calc(var(--ha-space-10) + var(--safe-area-inset-bottom, 0px));
+          --floating-bar-fade-below: calc(
+            var(--ha-space-10) + var(--safe-area-inset-bottom, 0px)
+          );
           margin-inline: auto;
         }
 
+        /* A fade from the content into the page colour behind the bar, down
+           to the page's bottom edge, so it stands apart from the list. */
+        /* The wrapper places the bar and draws the fade, behind the bar's
+           own surface, as the page layouts do */
+        .controls {
+          z-index: 1;
+          display: flex;
+          justify-content: center;
+          pointer-events: none;
+        }
+
+        .controls ha-floating-bar {
+          flex: 1;
+        }
+
+        .controls::before {
+          content: "";
+          position: absolute;
+          z-index: -1;
+          inset-inline: -100vw;
+          top: calc(-1 * var(--ha-space-8));
+          bottom: calc(-1 * var(--floating-bar-fade-below));
+          background: linear-gradient(
+            to bottom,
+            transparent,
+            color-mix(in srgb, var(--primary-background-color) 80%, transparent)
+              50%
+          );
+          pointer-events: none;
+        }
+
         :host([narrow]) .controls {
-          inset-inline: var(--ha-space-2);
-          bottom: calc(var(--ha-space-2) + var(--safe-area-inset-bottom, 0px));
+          inset-inline: var(--ha-space-4);
+          bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom, 0px));
+          --floating-bar-fade-below: calc(
+            var(--ha-space-4) + var(--safe-area-inset-bottom, 0px)
+          );
         }
 
         .controls-row {
@@ -650,9 +711,22 @@ export class HaPanelLogbook extends LitElement {
         }
 
         .controls-row ha-date-range-period,
-        .controls-row ha-filter-pane-chip {
+        .controls-row .sources {
           flex: 1;
           min-width: 0;
+        }
+
+        .count {
+          box-sizing: border-box;
+          min-width: 18px;
+          height: 18px;
+          padding: 0 var(--ha-space-1);
+          border-radius: var(--ha-border-radius-pill);
+          background-color: var(--ha-color-fill-primary-loud-resting);
+          color: var(--ha-color-on-primary-loud);
+          font-size: var(--ha-font-size-xs);
+          line-height: 18px;
+          text-align: center;
         }
 
         .controls-row ha-icon-button {

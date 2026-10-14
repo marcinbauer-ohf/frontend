@@ -56,7 +56,7 @@ import {
 import "../../../layouts/hass-tabs-subpage";
 import type { HomeAssistant, Route } from "../../../types";
 import { showToast } from "../../../util/toast";
-import { configSections } from "../config-sections";
+import { configPage } from "../config-sections";
 import {
   loadAreaRegistryDetailDialog,
   showAreaRegistryDetailDialog,
@@ -83,6 +83,8 @@ export class HaConfigAreasDashboard extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @property({ attribute: "is-wide", type: Boolean }) public isWide = false;
+
+  @property({ type: Boolean, reflect: true }) public narrow = false;
 
   @property({ attribute: false }) public route!: Route;
 
@@ -210,7 +212,7 @@ export class HaConfigAreasDashboard extends LitElement {
         .hass=${this.hass}
         .isWide=${this.isWide}
         back-path="/config"
-        .tabs=${configSections.areas}
+        .tabs=${configPage["/config/areas"]}
         .route=${this.route}
       >
         <ha-icon-button
@@ -377,7 +379,7 @@ export class HaConfigAreasDashboard extends LitElement {
               placement="top-end"
               @wa-select=${this._handleCreateAction}
             >
-              <ha-button slot="trigger" size="l">
+              <ha-button class="add" slot="trigger" size="l">
                 <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
                 ${this.hass.localize("ui.common.add")}
               </ha-button>
@@ -716,9 +718,17 @@ export class HaConfigAreasDashboard extends LitElement {
   }
 
   static styles = css`
-    /* As wide as the History charts, centred on a large screen. */
+    /* On a phone the add button is just its icon */
+    :host([narrow]) .add {
+      --ha-button-label-max-width: 0;
+      --ha-button-start-gap: 0;
+      --ha-button-start-padding: 12px;
+      --wa-form-control-padding-inline: 12px;
+    }
+
+    /* The shared content width, as History and the tables, centred */
     .container {
-      max-width: 2000px;
+      max-width: var(--ha-content-max-width, 1540px);
       padding: 8px 16px 16px;
       /* Room to scroll the last areas out from under the floating bar. */
       margin: 0 auto 120px auto;

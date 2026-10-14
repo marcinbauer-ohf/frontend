@@ -19,6 +19,7 @@ import { getHistoryState, navigate } from "../common/navigate";
 import type { LocalizeFunc } from "../common/translations/localize";
 import { sanitizeNavigationPath } from "../common/url/sanitize-navigation-path";
 import { handleBackClick } from "./back-navigation";
+import "../components/ha-floating-bar";
 import "../components/ha-icon-button-arrow-prev";
 import "../components/ha-menu-button";
 import "../components/ha-svg-icon";
@@ -248,13 +249,27 @@ export class HassTabsSubpage extends LitElement {
           ${this.hasFab ? html`<div class="fab-bottom-space"></div>` : nothing}
         </div>
       </div>
-      <div id="floating-bar">
-        <slot name="floating-bar"></slot>
+      <div id="side-pane">
+        <slot name="side-pane" @slotchange=${this._slotChanged}></slot>
       </div>
-      <div id="fab">
-        <slot name="fab"></slot>
+      <div id="floating-bar">
+        <slot name="floating-bar" @slotchange=${this._slotChanged}></slot>
+        <ha-floating-bar class="fab-bar">
+          <slot name="fab" @slotchange=${this._slotChanged}></slot>
+        </ha-floating-bar>
       </div>
     `;
+  }
+
+  // The content and the floating bar make room for a side pane beside them.
+  // Sets has-side-pane, has-floating-bar or has-fab-button while the page
+  // fills that slot; a page may pass its own slot on, so look through it
+  private _slotChanged(ev: Event) {
+    const slot = ev.target as HTMLSlotElement;
+    this.toggleAttribute(
+      slot.name === "fab" ? "has-fab-button" : `has-${slot.name}`,
+      slot.assignedElements({ flatten: true }).length > 0
+    );
   }
 
   @eventOptions({ passive: true })
@@ -419,6 +434,10 @@ export class HassTabsSubpage extends LitElement {
           line-height: var(--ha-line-height-normal);
           color: var(--sidebar-text-color);
           margin-inline-start: var(--main-title-margin, var(--ha-space-6));
+          /* One line, cut short with an ellipsis */
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .narrow .main-title {
           margin-inline-start: var(--main-title-margin, var(--ha-space-2));
@@ -442,62 +461,150 @@ export class HassTabsSubpage extends LitElement {
           );
         }
 
+        /* Room to scroll the last of the content above the button's bar */
         .content .fab-bottom-space {
-          height: calc(64px + var(--safe-area-inset-bottom, 0px));
+          height: calc(
+            64px + var(--ha-space-10) + var(--ha-space-4) +
+              var(--safe-area-inset-bottom, 0px)
+          );
+        }
+
+        :host([narrow]) .content .fab-bottom-space {
+          height: calc(
+            64px + var(--ha-space-8) + var(--safe-area-inset-bottom, 0px)
+          );
         }
 
         :host([narrow][show-tabs]) .content .fab-bottom-space {
-          height: calc(80px + var(--safe-area-inset-bottom, 0px));
+          height: calc(64px + var(--ha-space-8));
         }
 
         /* Centres an ha-floating-bar over the bottom of the content, above the
-           tab bar on a phone. The page leaves room below its content. */
+           tab bar on a phone. The page leaves room below its content, and
+           sets --ha-floating-bar-inset-end for a sidebar of its own. */
         #floating-bar {
           position: absolute;
           inset-inline: calc(
               var(--ha-space-4) + var(--safe-area-inset-left, 0px)
             )
-            calc(var(--ha-space-4) + var(--safe-area-inset-right, 0px));
+            calc(
+              var(--ha-floating-bar-inset-end, 0px) + var(--ha-space-4) +
+                var(--safe-area-inset-right, 0px)
+            );
           bottom: calc(var(--ha-space-10) + var(--safe-area-inset-bottom, 0px));
+          --floating-bar-fade-below: calc(
+            var(--ha-space-10) + var(--safe-area-inset-bottom, 0px)
+          );
           display: flex;
           justify-content: center;
           pointer-events: none;
           z-index: 1;
         }
+        /* A fade from the content into the page colour behind the bar,
+           from above it to the page's bottom edge, so the bar stands apart
+           from what scrolls under it. */
+        :host([has-floating-bar]) #floating-bar::before,
+        :host([has-fab-button]) #floating-bar::before {
+          content: "";
+          position: absolute;
+          z-index: -1;
+          inset-inline: calc(-1 * var(--ha-space-4));
+          top: calc(-1 * var(--ha-space-8));
+          bottom: calc(-1 * var(--floating-bar-fade-below));
+          background: linear-gradient(
+            to bottom,
+            transparent,
+            color-mix(in srgb, var(--primary-background-color) 80%, transparent)
+              50%
+          );
+          pointer-events: none;
+        }
+        /* A phone keeps the usual 16px page edge around it */
         :host([narrow]) #floating-bar {
-          inset-inline: var(--ha-space-2);
-          bottom: calc(var(--ha-space-2) + var(--safe-area-inset-bottom, 0px));
+          inset-inline: calc(
+              var(--ha-space-4) + var(--safe-area-inset-left, 0px)
+            )
+            calc(var(--ha-space-4) + var(--safe-area-inset-right, 0px));
+          bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom, 0px));
+          --floating-bar-fade-below: calc(
+            var(--ha-space-4) + var(--safe-area-inset-bottom, 0px)
+          );
         }
         :host([narrow][show-tabs]) #floating-bar {
           bottom: calc(
-            var(--header-height, 0px) + var(--ha-space-2) +
+            var(--header-height, 0px) + var(--ha-space-4) +
               var(--safe-area-inset-bottom, 0px)
+          );
+          /* The fade stops at the tab bar */
+          --floating-bar-fade-below: var(--ha-space-4);
+        }
+        /* A side pane fills the height beside the content on a wide screen;
+           on a phone it is a bottom sheet of its own. */
+        #side-pane {
+          display: none;
+        }
+        :host([has-side-pane]:not([narrow])) #side-pane {
+          display: flex;
+          position: absolute;
+          top: calc(
+            var(--header-height, 0px) + var(--safe-area-inset-top, 0px)
+          );
+          bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom, 0px));
+          inset-inline-end: calc(
+            var(--ha-space-4) + var(--safe-area-inset-right, 0px)
+          );
+          width: var(--ha-side-pane-width, 360px);
+          padding-top: var(--ha-space-4);
+          box-sizing: border-box;
+          z-index: 2;
+        }
+        /* The sheet covers the floating bar, as a dialog would */
+        :host([has-side-pane][narrow]) #side-pane {
+          display: block;
+          position: relative;
+          z-index: 3;
+        }
+        /* A page whose content should run under the pane, such as a map,
+           sets --ha-side-pane-content-space to 0px. */
+        :host([has-side-pane]:not([narrow])) .content {
+          width: calc(
+            100% - var(
+                --ha-side-pane-content-space,
+                calc(var(--ha-side-pane-width, 360px) + var(--ha-space-4))
+              ) - var(--safe-area-inset-right, 0px)
+          );
+        }
+        :host([has-side-pane]:not([narrow])) #floating-bar {
+          inset-inline-end: calc(
+            var(--ha-side-pane-width, 360px) + var(--ha-space-8) +
+              var(--safe-area-inset-right, 0px)
           );
         }
         ::slotted([slot="floating-bar"]) {
           flex: 1;
         }
-        #fab {
-          position: fixed;
-          right: calc(16px + var(--safe-area-inset-right, 0px));
-          inset-inline-end: calc(16px + var(--safe-area-inset-right));
-          inset-inline-start: initial;
-          bottom: calc(16px + var(--safe-area-inset-bottom, 0px));
-          z-index: 1;
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: flex-end;
+        /* The page's main button, such as Add, on the toolbar's surface:
+           large, and filling the bar on a phone. */
+        .fab-bar {
+          display: none;
+          grid-auto-flow: column;
           gap: var(--ha-space-2);
-          --ha-button-box-shadow: var(--ha-box-shadow-l);
+          --ha-floating-bar-control-radius: 24px;
+          --ha-button-height: 48px;
+          --ha-button-box-shadow: none;
         }
-        :host([narrow][show-tabs]) #fab {
-          bottom: calc(84px + var(--safe-area-inset-bottom, 0px));
+        :host([has-fab-button]) .fab-bar {
+          display: grid;
         }
-        #fab[is-wide] {
-          bottom: 24px;
-          right: 24px;
-          inset-inline-end: 24px;
-          inset-inline-start: initial;
+        /* On a phone the button is just its icon, at the end of the bar */
+        :host([narrow]) .fab-bar {
+          --ha-button-label-max-width: 0;
+          --ha-button-start-gap: 0;
+          --ha-button-start-padding: 12px;
+          --wa-form-control-padding-inline: 12px;
+        }
+        :host([narrow]:not([has-floating-bar])) #floating-bar {
+          justify-content: flex-end;
         }
 
         .pane {
