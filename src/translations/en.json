@@ -816,6 +816,8 @@
           "new_entity": "Creates a new entity",
           "placeholder": "Select an entity",
           "create_helper": "Create a new {domain, select, \n undefined {} \n other {{domain} }\n }helper",
+          "view_more": "View more",
+          "copy_entity_id": "Copy entity ID",
           "unknown": "Unknown entity selected"
         },
         "entity-name-picker": {
@@ -1040,8 +1042,8 @@
         "clear": "Clear",
         "show_areas": "Show areas",
         "area": "Area",
-        "add_new_suggestion": "Add new area ''{name}''",
         "add_new": "Add new area…",
+        "manage": "Manage areas and floors",
         "no_areas": "No areas available",
         "no_match": "No areas found for {term}",
         "failed_create_area": "Failed to create area.",
@@ -1051,8 +1053,8 @@
         "clear": "Clear",
         "show_floors": "Show floors",
         "floor": "Floor",
-        "add_new_suggestion": "Add new floor ''{name}''",
         "add_new": "Add new floor…",
+        "copy_id": "Copy floor ID",
         "no_floors": "No floors available",
         "no_match": "No floors found for {term}",
         "failed_create_floor": "Failed to create floor.",
@@ -3051,6 +3053,8 @@
           "gen_data_description": "Suggest automation names.",
           "gen_image_header": "Image generation tasks",
           "gen_image_description": "Generate images.",
+          "add_integration": "Add AI integration",
+          "manage_integrations": "Manage integrations",
           "gen_data_settings": "Data generation settings",
           "gen_image_settings": "Image generation settings"
         },

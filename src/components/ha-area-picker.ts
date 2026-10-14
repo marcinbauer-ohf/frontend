@@ -7,6 +7,7 @@ import { customElement, property, query, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { consume } from "../common/decorators/consume";
 import { fireEvent } from "../common/dom/fire_event";
+import { navigate } from "../common/navigate";
 import { computeAreaName } from "../common/entity/compute_area_name";
 import { computeFloorName } from "../common/entity/compute_floor_name";
 import { getAreaContext } from "../common/entity/context/get_area_context";
@@ -24,17 +25,15 @@ import {
 import { showAlertDialog } from "../dialogs/generic/show-dialog-box";
 import { showAreaRegistryDetailDialog } from "../panels/config/areas/show-dialog-area-registry-detail";
 import type { HaEntityPickerEntityFilterFunc } from "../data/entity/entity";
+import type { LocalizeFunc } from "../common/translations/localize";
 import type { ValueChangedEvent } from "../types";
 import type { HaDevicePickerDeviceFilterFunc } from "./device/ha-device-picker";
 import "./ha-combo-box-item";
 import "./ha-generic-picker";
-import type { HaGenericPicker } from "./ha-generic-picker";
+import type { HaGenericPicker, PickerFooterAction } from "./ha-generic-picker";
 import "./ha-icon-button";
-import type { PickerComboBoxItem } from "./ha-picker-combo-box";
 import type { PickerValueRenderer } from "./ha-picker-field";
 import "./ha-svg-icon";
-
-const ADD_NEW_ID = "___ADD_NEW___";
 
 @customElement("ha-area-picker")
 export class HaAreaPicker extends LitElement {
@@ -223,38 +222,24 @@ export class HaAreaPicker extends LitElement {
         .filter(Boolean) as string[]
   );
 
-  private _getAdditionalItems = (
-    searchString?: string
-  ): PickerComboBoxItem[] => {
-    if (this.noAdd) {
-      return [];
-    }
-
-    const allAreas = this._allAreaNames(this._areas);
-
-    if (searchString && !allAreas.includes(searchString.toLowerCase())) {
-      return [
-        {
-          id: ADD_NEW_ID + searchString,
-          primary: this._i18n.localize(
-            "ui.components.area-picker.add_new_suggestion",
+  private _footerActions = memoizeOne(
+    (noAdd: boolean, localize: LocalizeFunc): PickerFooterAction[] =>
+      noAdd
+        ? []
+        : [
             {
-              name: searchString,
-            }
-          ),
-          icon_path: mdiPlus,
-        },
-      ];
-    }
-
-    return [
-      {
-        id: ADD_NEW_ID,
-        primary: this._i18n.localize("ui.components.area-picker.add_new"),
-        icon_path: mdiPlus,
-      },
-    ];
-  };
+              id: "add",
+              label: localize("ui.components.area-picker.add_new"),
+              icon: mdiPlus,
+              run: this._addArea,
+            },
+            {
+              id: "manage",
+              label: localize("ui.components.area-picker.manage"),
+              run: () => navigate("/config/areas/dashboard"),
+            },
+          ]
+  );
 
   protected render(): TemplateResult {
     const baseLabel =
@@ -286,7 +271,7 @@ export class HaAreaPicker extends LitElement {
         .required=${this.required}
         .value=${this.value}
         .getItems=${this._getItems}
-        .getAdditionalItems=${this._getAdditionalItems}
+        .footerActions=${this._footerActions(this.noAdd, this._i18n.localize)}
         .valueRenderer=${valueRenderer}
         .addButtonLabel=${this.addButtonLabel}
         .searchKeys=${areaComboBoxKeys}
@@ -308,36 +293,39 @@ export class HaAreaPicker extends LitElement {
       return;
     }
 
-    if (value.startsWith(ADD_NEW_ID)) {
-      this._i18n.loadFragmentTranslation("config");
-
-      const suggestedName = value.substring(ADD_NEW_ID.length);
-
-      showAreaRegistryDetailDialog(this, {
-        suggestedName: suggestedName,
-        createEntry: async (values) => {
-          try {
-            const area = await createAreaRegistryEntry(this._api, values);
-            if (this._areas[area.area_id]) {
-              this._setValue(area.area_id);
-            } else {
-              this._pendingAreaId = area.area_id;
-            }
-          } catch (err: any) {
-            showAlertDialog(this, {
-              title: this._i18n.localize(
-                "ui.components.area-picker.failed_create_area"
-              ),
-              text: err.message,
-            });
-          }
-        },
-      });
-      return;
-    }
-
     this._setValue(value);
   }
+
+  private _addArea = (search: string) => {
+    this._i18n.loadFragmentTranslation("config");
+
+    const suggestedName = this._allAreaNames(this._areas).includes(
+      search.toLowerCase()
+    )
+      ? undefined
+      : search || undefined;
+
+    showAreaRegistryDetailDialog(this, {
+      suggestedName,
+      createEntry: async (values) => {
+        try {
+          const area = await createAreaRegistryEntry(this._api, values);
+          if (this._areas[area.area_id]) {
+            this._setValue(area.area_id);
+          } else {
+            this._pendingAreaId = area.area_id;
+          }
+        } catch (err: any) {
+          showAlertDialog(this, {
+            title: this._i18n.localize(
+              "ui.components.area-picker.failed_create_area"
+            ),
+            text: err.message,
+          });
+        }
+      },
+    });
+  };
 
   private _setValue(value?: string) {
     this.value = value;
