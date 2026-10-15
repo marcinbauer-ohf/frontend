@@ -745,6 +745,7 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
     }
     // Skips section titles and placeholder rows, and scrolls the row into view.
     this._list.setActiveItemIndex(index, true);
+    this._fireActiveItem();
     return this._list.getActiveItemIndex() !== -1;
   }
 
@@ -765,35 +766,35 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
       return;
     }
 
-    this._list.moveActiveItem("next");
+    this._moveActiveItem("next");
   };
 
   private _selectPreviousItem = (ev: KeyboardEvent) => {
     ev.stopPropagation();
     ev.preventDefault();
-    this._list?.moveActiveItem("previous");
+    this._moveActiveItem("previous");
   };
 
   private _selectFirstItem = (ev: KeyboardEvent) => {
     ev.stopPropagation();
-    this._list?.moveActiveItem("first");
+    this._moveActiveItem("first");
   };
 
   private _selectLastItem = (ev: KeyboardEvent) => {
     ev.stopPropagation();
-    this._list?.moveActiveItem("last");
+    this._moveActiveItem("last");
   };
 
   private _selectNextPage = (ev: KeyboardEvent) => {
     ev.stopPropagation();
     ev.preventDefault();
-    this._list?.moveActiveItem("next-page");
+    this._moveActiveItem("next-page");
   };
 
   private _selectPreviousPage = (ev: KeyboardEvent) => {
     ev.stopPropagation();
     ev.preventDefault();
-    this._list?.moveActiveItem("previous-page");
+    this._moveActiveItem("previous-page");
   };
 
   private _pickSelectedItem = (ev: KeyboardEvent) => {
@@ -837,6 +838,20 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
 
   private _resetSelectedItem() {
     this._list?.clearActiveItem();
+    this._fireActiveItem();
+  }
+
+  private _moveActiveItem(target: Parameters<HaListBase["moveActiveItem"]>[0]) {
+    this._list?.moveActiveItem(target);
+    this._fireActiveItem();
+  }
+
+  // Lets the owner show actions for the row Enter would pick.
+  private _fireActiveItem() {
+    const item = this._items[this._list?.getActiveItemIndex() ?? -1];
+    fireEvent(this, "picker-active-item-changed", {
+      item: this._isOption(item) ? item : undefined,
+    });
   }
 
   private _keyFunction = (item: PickerComboBoxItem | string) =>
@@ -1025,5 +1040,6 @@ declare global {
 
   interface HASSDomEvents {
     "index-selected": PickerComboBoxIndexSelectedDetail;
+    "picker-active-item-changed": { item?: PickerComboBoxItem };
   }
 }

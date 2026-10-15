@@ -8,7 +8,7 @@ import memoizeOne from "memoize-one";
 import { consume } from "../../common/decorators/consume";
 import type { NavigationFilterOptions } from "../../common/config/filter_navigation_pages";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
-import { fireEvent } from "../../common/dom/fire_event";
+import { fireEvent, type HASSDomEvent } from "../../common/dom/fire_event";
 import { ctrlOrCmdLabel } from "../../common/keyboard/ctrl-or-cmd";
 import { navigate } from "../../common/navigate";
 import { caseInsensitiveStringCompare } from "../../common/string/compare";
@@ -19,6 +19,8 @@ import "../../components/ha-combo-box-item";
 import "../../components/ha-domain-icon";
 import "../../components/ha-icon";
 import "../../components/ha-picker-combo-box";
+import "../../components/ha-picker-footer";
+import type { PickerFooterAction } from "../../components/ha-picker-footer";
 import type {
   HaPickerComboBox,
   PickerComboBoxIndexSelectedDetail,
@@ -64,6 +66,7 @@ import { isIosApp } from "../../util/is_ios";
 import { showConfirmationDialog } from "../generic/show-dialog-box";
 import "../restart/automation-restart-status";
 import { showShortcutsDialog } from "../shortcuts/show-shortcuts-dialog";
+import { getEntityQuickActions } from "./quick-bar-entity-actions";
 import { showVoiceCommandDialog } from "../voice-command-dialog/show-ha-voice-command-dialog";
 import {
   effectiveQuickBarMode,
@@ -102,6 +105,8 @@ export class QuickBar extends LitElement {
   @state() private _selectedSection?: QuickBarSection;
 
   @state() private _opened = false;
+
+  @state() private _activeItem?: QuickBarComboBoxItem;
 
   @query("ha-picker-combo-box") private _comboBox?: HaPickerComboBox;
 
@@ -208,6 +213,7 @@ export class QuickBar extends LitElement {
 
   private _dialogClosed = () => {
     this._selectedSection = undefined;
+    this._activeItem = undefined;
     this._opened = false;
     this._open = false;
     this._itemSelected = false;
@@ -277,6 +283,7 @@ export class QuickBar extends LitElement {
             ? html`<ha-picker-combo-box
                 id="combo-box"
                 @index-selected=${this._handleItemSelected}
+                @picker-active-item-changed=${this._activeItemChanged}
                 .notFoundLabel=${this.hass.localize(
                   "ui.dialogs.quick-bar.nothing_found"
                 )}
@@ -292,22 +299,55 @@ export class QuickBar extends LitElement {
             : nothing
         }
         ${
-          this._showHint
-            ? html`<ha-tip slot="footer"
-                >${this.hass.localize("ui.tips.key_shortcut_quick_search", {
-                  keyboard_shortcut: html`<button
-                    class="link"
-                    @click=${this._openShortcutDialog}
-                  >
-                    ${this.hass.localize("ui.tips.keyboard_shortcut")}
-                  </button>`,
-                  modifier: ctrlOrCmdLabel(this.hass.localize),
-                })}</ha-tip
-              >`
-            : nothing
+          this._footerActions(this._activeItem, this.hass.states).length
+            ? html`<ha-picker-footer
+                slot="footer"
+                .actions=${this._footerActions(this._activeItem, this.hass.states)}
+                @picker-footer-action=${this._footerAction}
+              ></ha-picker-footer>`
+            : this._showHint
+              ? html`<ha-tip slot="footer"
+                  >${this.hass.localize("ui.tips.key_shortcut_quick_search", {
+                    keyboard_shortcut: html`<button
+                      class="link"
+                      @click=${this._openShortcutDialog}
+                    >
+                      ${this.hass.localize("ui.tips.keyboard_shortcut")}
+                    </button>`,
+                    modifier: ctrlOrCmdLabel(this.hass.localize),
+                  })}</ha-tip
+                >`
+              : nothing
         }
       </ha-adaptive-dialog>
     `;
+  }
+
+  private _activeItemChanged(
+    ev: HASSDomEvent<HASSDomEvents["picker-active-item-changed"]>
+  ) {
+    this._activeItem = ev.detail.item as QuickBarComboBoxItem | undefined;
+  }
+
+  // Only entities have quick actions.
+  private _footerActions = memoizeOne(
+    (
+      item: QuickBarComboBoxItem | undefined,
+      states: HomeAssistant["states"]
+    ): PickerFooterAction[] =>
+      item && "stateObj" in item
+        ? getEntityQuickActions(
+            this,
+            this.hass,
+            states[item.search_labels!.entityId as string]
+          )
+        : []
+  );
+
+  private _footerAction(
+    ev: HASSDomEvent<HASSDomEvents["picker-footer-action"]>
+  ) {
+    ev.detail.action.run("");
   }
 
   private _getRowRenderer = memoizeOne(

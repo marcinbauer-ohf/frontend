@@ -16,7 +16,7 @@ import { ifDefined } from "lit/directives/if-defined";
 import { styleMap } from "lit/directives/style-map";
 import { tinykeys } from "tinykeys";
 import { consume } from "../common/decorators/consume";
-import { fireEvent } from "../common/dom/fire_event";
+import { fireEvent, type HASSDomEvent } from "../common/dom/fire_event";
 import { configContext } from "../data/context";
 import { PickerMixin } from "../mixins/picker-mixin";
 import type { FuseWeightedKey } from "../resources/fuseMultiTerm";
@@ -32,17 +32,11 @@ import type {
   PickerComboBoxSearchFn,
 } from "./ha-picker-combo-box";
 import "./ha-picker-field";
+import "./ha-picker-footer";
+import type { PickerFooterAction } from "./ha-picker-footer";
 import "./ha-svg-icon";
 
-/** A contextual action shown in the footer of the open picker. */
-export interface PickerFooterAction {
-  id: string;
-  label: string;
-  /** Icon path, shown before the label. */
-  icon?: string;
-  /** Runs once the picker has closed, with the text typed in its search. */
-  run: (search: string) => void;
-}
+export type { PickerFooterAction } from "./ha-picker-footer";
 
 @customElement("ha-generic-picker")
 export class HaGenericPicker extends PickerMixin(LitElement) {
@@ -317,43 +311,22 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
   }
 
   private _renderFooter() {
-    if (!this.footerActions?.length) {
-      return nothing;
-    }
-    return html`<div class="footer">
-      ${this.footerActions.map(
-        (action) =>
-          html`<ha-button
-            appearance="filled"
-            variant="neutral"
-            size="s"
-            .action=${action}
-            @click=${this._footerActionClicked}
-          >
-            ${
-              action.icon
-                ? html`<ha-svg-icon
-                    slot="start"
-                    .path=${action.icon}
-                  ></ha-svg-icon>`
-                : nothing
-            }
-            ${action.label}
-          </ha-button>`
-      )}
-    </div>`;
+    return this.footerActions?.length
+      ? html`<ha-picker-footer
+          .actions=${this.footerActions}
+          @picker-footer-action=${this._footerActionClicked}
+        ></ha-picker-footer>`
+      : nothing;
   }
 
   // Run after the picker closes, so a dialog it opens doesn't fight the
   // popover's focus trap.
   private _pendingAction?: () => void;
 
-  private _footerActionClicked(ev: Event) {
-    const action = (
-      ev.currentTarget as HTMLElement & {
-        action: PickerFooterAction;
-      }
-    ).action;
+  private _footerActionClicked(
+    ev: HASSDomEvent<HASSDomEvents["picker-footer-action"]>
+  ) {
+    const { action } = ev.detail;
     const search = this._comboBox?.search ?? "";
     this._pendingAction = () => action.run(search);
     this._pickerWrapperOpen = false;
@@ -585,19 +558,6 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
           --ha-bottom-sheet-border-radius: var(--ha-border-radius-2xl);
           --ha-bottom-sheet-content-padding: 0 var(--safe-area-inset-right)
             var(--safe-area-inset-bottom) var(--safe-area-inset-left);
-        }
-
-        .footer {
-          display: flex;
-          flex-shrink: 0;
-          gap: var(--ha-space-2);
-          padding: var(--ha-space-3);
-          overflow-x: auto;
-          background-color: var(--ha-color-surface-low);
-        }
-
-        .footer ha-button {
-          flex-shrink: 0;
         }
 
         ha-picker-field.opened {
