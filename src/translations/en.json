@@ -875,6 +875,11 @@
         "target_details": "Target details",
         "no_targets": "No targets",
         "no_target_found": "No target found for {term}",
+        "manage_entities": "Manage entities",
+        "manage_devices": "Manage devices",
+        "manage_labels": "Manage labels",
+        "view": "View",
+        "copy_id": "Copy ID",
         "type": {
           "area": "Area",
           "areas": "Areas",

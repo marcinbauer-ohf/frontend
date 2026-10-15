@@ -12,7 +12,9 @@ import { ensureArray } from "../common/array/ensure-array";
 import type { HASSDomEvent } from "../common/dom/fire_event";
 import { fireEvent } from "../common/dom/fire_event";
 import { isValidEntityId } from "../common/entity/valid_entity_id";
+import { navigate } from "../common/navigate";
 import { caseInsensitiveStringCompare } from "../common/string/compare";
+import { copyToClipboard } from "../common/util/copy-clipboard";
 import { computeRTL } from "../common/util/compute_rtl";
 import {
   areaFloorComboBoxKeys,
@@ -20,6 +22,7 @@ import {
   type AreaFloorValue,
   type FloorComboBoxItem,
 } from "../data/area_floor_picker";
+import { createAreaRegistryEntry } from "../data/area/area_registry";
 import { getConfigEntries, type ConfigEntry } from "../data/config_entries";
 import { labelsContext } from "../data/context";
 import {
@@ -39,16 +42,23 @@ import {
 } from "../data/entity/entity_picker";
 import { domainToName } from "../data/integration";
 import { getLabels, labelComboBoxKeys } from "../data/label/label_picker";
-import type { LabelRegistryEntry } from "../data/label/label_registry";
+import {
+  createLabelRegistryEntry,
+  type LabelRegistryEntry,
+} from "../data/label/label_registry";
 import {
   getTargetComboBoxItemType,
   type TargetItem,
   type TargetType,
   type TargetTypeFloorless,
 } from "../data/target";
+import { showAlertDialog } from "../dialogs/generic/show-dialog-box";
+import { showMoreInfoDialog } from "../dialogs/more-info/show-ha-more-info-dialog";
 import { SubscribeMixin } from "../mixins/subscribe-mixin";
+import { showAreaRegistryDetailDialog } from "../panels/config/areas/show-dialog-area-registry-detail";
 import { isHelperDomain } from "../panels/config/helpers/const";
 import { showHelperDetailDialog } from "../panels/config/helpers/show-dialog-helper-detail";
+import { showLabelDetailDialog } from "../panels/config/labels/show-dialog-label-detail";
 import {
   multiTermSearch,
   multiTermSortedSearch,
@@ -56,9 +66,10 @@ import {
 } from "../resources/fuseMultiTerm";
 import type { HomeAssistant, ValueChangedEvent } from "../types";
 import { brandsUrl } from "../util/brands-url";
+import { showToast } from "../util/toast";
 import type { HaDevicePickerDeviceFilterFunc } from "./device/ha-device-picker";
 import "./ha-generic-picker";
-import type { HaGenericPicker } from "./ha-generic-picker";
+import type { HaGenericPicker, PickerFooterAction } from "./ha-generic-picker";
 import type { PickerComboBoxItem } from "./ha-picker-combo-box";
 import "./ha-svg-icon";
 import "./ha-tree-indicator";
@@ -413,6 +424,11 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
           .popoverAnchor=${this._replaceTargetAnchor}
           .rowRenderer=${this._renderRow}
           .getItems=${this._getItems}
+          .footerActions=${this._footerActions(
+            this._selectedSection,
+            this._replaceTarget,
+            this.hass.localize
+          )}
           @value-changed=${this._targetPicked}
           @picker-closed=${this._handlePickerClosed}
           .addButtonLabel=${this.hass.localize(
@@ -424,6 +440,135 @@ export class HaTargetPicker extends SubscribeMixin(LitElement) {
       </div>
     `;
   }
+
+  private _footerActions = memoizeOne(
+    (
+      section: TargetTypeFloorless | undefined,
+      replaceTarget: TargetItem | undefined,
+      localize: HomeAssistant["localize"]
+    ): PickerFooterAction[] => {
+      if (replaceTarget) {
+        const { type, id } = replaceTarget;
+        const view =
+          type === "entity"
+            ? () => showMoreInfoDialog(this, { entityId: id })
+            : type === "area"
+              ? () => navigate(`/config/areas/area/${id}`)
+              : undefined;
+        return [
+          ...(view
+            ? [
+                {
+                  id: "view",
+                  label: localize("ui.components.target-picker.view"),
+                  run: view,
+                },
+              ]
+            : []),
+          {
+            id: "copy",
+            label: localize("ui.components.target-picker.copy_id"),
+            run: () => this._copyId(id),
+          },
+        ];
+      }
+      switch (section) {
+        case "entity":
+          return [
+            {
+              id: "manage",
+              label: localize("ui.components.target-picker.manage_entities"),
+              run: () => navigate("/config/entities"),
+            },
+          ];
+        case "device":
+          return [
+            {
+              id: "manage",
+              label: localize("ui.components.target-picker.manage_devices"),
+              run: () => navigate("/config/devices/dashboard"),
+            },
+          ];
+        case "area":
+          return [
+            {
+              id: "add",
+              label: localize("ui.components.area-picker.add_new"),
+              icon: mdiPlus,
+              run: this._addArea,
+            },
+            {
+              id: "manage",
+              label: localize("ui.components.area-picker.manage"),
+              run: () => navigate("/config/areas/dashboard"),
+            },
+          ];
+        case "label":
+          return [
+            {
+              id: "add",
+              label: localize("ui.components.label-picker.add_new"),
+              icon: mdiPlus,
+              run: this._addLabel,
+            },
+            {
+              id: "manage",
+              label: localize("ui.components.target-picker.manage_labels"),
+              run: () => navigate("/config/labels"),
+            },
+          ];
+        default:
+          return [];
+      }
+    }
+  );
+
+  private async _copyId(id: string) {
+    await copyToClipboard(id);
+    showToast(this, {
+      message: this.hass.localize("ui.common.copied_clipboard"),
+    });
+  }
+
+  private _addArea = (search: string) => {
+    this.hass.loadFragmentTranslation("config");
+    showAreaRegistryDetailDialog(this, {
+      suggestedName: search || undefined,
+      createEntry: async (values) => {
+        try {
+          const area = await createAreaRegistryEntry(this.hass, values);
+          this._addTarget(area.area_id, "area");
+        } catch (err: any) {
+          showAlertDialog(this, {
+            title: this.hass.localize(
+              "ui.components.area-picker.failed_create_area"
+            ),
+            text: err.message,
+          });
+        }
+      },
+    });
+  };
+
+  private _addLabel = (search: string) => {
+    this.hass.loadFragmentTranslation("config");
+    showLabelDetailDialog(this, {
+      suggestedName: search || undefined,
+      createEntry: async (values) => {
+        try {
+          const label = await createLabelRegistryEntry(this.hass, values);
+          this._addTarget(label.label_id, "label");
+        } catch (err: any) {
+          showAlertDialog(this, {
+            title: this.hass.localize(
+              "ui.components.label-picker.failed_create_label"
+            ),
+            text: err.message,
+          });
+        }
+      },
+    });
+  };
 
   private _targetPicked(ev: ValueChangedEvent<string>) {
     ev.stopPropagation();
