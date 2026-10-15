@@ -41,13 +41,19 @@ export class HaCard extends LitElement {
       color: var(--ha-card-header-color, var(--primary-text-color));
       font-family: var(--ha-card-header-font-family, inherit);
       font-size: var(--ha-card-header-font-size, var(--ha-font-size-2xl));
-      letter-spacing: -0.012em;
+      letter-spacing: var(--ha-card-header-letter-spacing, -0.012em);
       line-height: var(--ha-line-height-condensed);
-      padding: var(--ha-space-5) var(--ha-space-4) var(--ha-space-6);
+      padding: var(
+        --ha-card-header-padding,
+        var(--ha-space-5) var(--ha-space-4) var(--ha-space-6)
+      );
       display: block;
       margin-block-start: 0;
       margin-block-end: 0;
-      font-weight: var(--ha-font-weight-normal);
+      font-weight: var(
+        --ha-card-header-font-weight,
+        var(--ha-font-weight-normal)
+      );
     }
 
     /* clean-css ignore:start */

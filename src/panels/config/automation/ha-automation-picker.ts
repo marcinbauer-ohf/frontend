@@ -1,12 +1,10 @@
 import "@home-assistant/webawesome/dist/components/divider/divider";
 import { ResizeController } from "@lit-labs/observers/resize-controller";
 import {
-  mdiCloseThick,
   mdiCog,
   mdiContentDuplicate,
   mdiDelete,
   mdiDotsVertical,
-  mdiExclamationThick,
   mdiHelpCircleOutline,
   mdiInformationOutline,
   mdiMenuDown,
@@ -24,7 +22,6 @@ import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
-import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
 import { consume } from "../../../common/decorators/consume";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
@@ -90,7 +87,6 @@ import {
   isRelatedItemsFilterUsed,
   serializeFilters,
 } from "../../../data/data_table_filters";
-import { UNAVAILABLE } from "../../../data/entity/entity";
 import type {
   EntityRegistryEntry,
   UpdateEntityRegistryEntryResult,
@@ -127,29 +123,8 @@ import {
   getAssistantsTableColumn,
 } from "../voice-assistants/expose/assistants-table-column";
 import { getAvailableAssistants } from "../voice-assistants/expose/available-assistants";
+import { renderAutomationStateIcon } from "../../../components/automation/render-automation-state-icon";
 import { showNewAutomationDialog } from "./show-dialog-new-automation";
-
-const renderIconBadge = (path: string, color: string) => html`
-  <div
-    style=${styleMap({
-      position: "absolute",
-      top: "-5px",
-      insetInlineEnd: "-7px",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      width: "18px",
-      height: "18px",
-      borderRadius: "50%",
-      backgroundColor: color,
-      boxShadow: "0 0 0 2px var(--data-table-background-color)",
-      color: "var(--data-table-background-color)",
-      "--mdc-icon-size": "12px",
-    })}
-  >
-    <ha-svg-icon style="margin: 0;" .path=${path}></ha-svg-icon>
-  </div>
-`;
 
 type AutomationItem = AutomationEntity & {
   name: string;
@@ -338,34 +313,11 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
           type: "icon",
           moveable: false,
           showNarrow: true,
-          template: (automation) => {
-            const unavailable = automation.state === UNAVAILABLE;
-            const disabled = automation.state === "off";
-            return html`<div
-              style="position: relative; display: inline-flex; width: 24px; height: 24px;"
-            >
-              <ha-state-icon
-                .stateObj=${automation}
-                .stateValue=${unavailable || disabled ? "on" : undefined}
-                style=${styleMap({
-                  display: "flex",
-                  margin: "0",
-                  color: unavailable
-                    ? "var(--error-color)"
-                    : disabled
-                      ? "var(--disabled-color)"
-                      : "unset",
-                })}
-              ></ha-state-icon>
-              ${
-                unavailable
-                  ? renderIconBadge(mdiExclamationThick, "var(--error-color)")
-                  : disabled
-                    ? renderIconBadge(mdiCloseThick, "var(--disabled-color)")
-                    : nothing
-              }
-            </div>`;
-          },
+          template: (automation) =>
+            renderAutomationStateIcon(
+              automation,
+              "var(--data-table-background-color)"
+            ),
         },
         entity_id: getEntityIdHiddenTableColumn(),
         name: {

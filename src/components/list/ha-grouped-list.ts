@@ -15,6 +15,7 @@ import { HaListBase } from "./ha-list-base";
  * facts and `ha-list-item-button` for navigable rows.
  *
  * @slot - List items (`<ha-list-item-*>`).
+ * @slot header-actions - Actions at the end of the header, such as a menu.
  *
  * @csspart header - The header above the frame.
  * @csspart base - The framed `<div role="list">`.
@@ -35,8 +36,9 @@ export class HaGroupedList extends HaListBase {
     return html`
       ${
         this.header
-          ? html`<div part="header" class="header" id="header">
-              ${this.header}
+          ? html`<div part="header" class="header">
+              <span id="header" class="header-text">${this.header}</span>
+              <slot name="header-actions"></slot>
             </div>`
           : nothing
       }
@@ -59,6 +61,9 @@ export class HaGroupedList extends HaListBase {
       }
 
       .header {
+        display: flex;
+        align-items: center;
+        gap: var(--ha-space-2);
         margin: 0 0 var(--ha-space-1);
         margin-inline-start: calc(
           var(--ha-row-item-padding-inline) + var(--ha-border-width-sm)
@@ -68,13 +73,20 @@ export class HaGroupedList extends HaListBase {
         color: var(--secondary-text-color);
       }
 
+      .header-text {
+        flex: 1;
+        min-width: 0;
+      }
+
       .base {
         border: var(--ha-border-width-sm) solid var(--divider-color);
         border-radius: var(--ha-card-border-radius, var(--ha-border-radius-lg));
         overflow: hidden;
       }
 
-      ::slotted(:not(:first-child)) {
+      /* Between rows only: header actions are children too, wherever they
+         are in the markup */
+      ::slotted(:not([slot]):not(:nth-child(1 of :not([slot])))) {
         border-top: var(--ha-border-width-sm) solid var(--divider-color);
       }
     `,

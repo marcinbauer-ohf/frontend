@@ -8,12 +8,15 @@ import type { HassEntity } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
+import { classMap } from "lit/directives/class-map";
 import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../common/dom/fire_event";
 import type { HASSDomCurrentTargetEvent } from "../common/dom/fire_event";
+import { computeStateDomain } from "../common/entity/compute_state_domain";
 import { caseInsensitiveStringCompare } from "../common/string/compare";
 import type { Blueprints } from "../data/blueprint";
+import { UNAVAILABLE } from "../data/entity/entity";
 import { fetchBlueprints } from "../data/blueprint";
 import type { ConfigEntry } from "../data/config_entries";
 import { getConfigEntries } from "../data/config_entries";
@@ -21,6 +24,7 @@ import type { ItemType, RelatedResult } from "../data/search";
 import { findRelated } from "../data/search";
 import type { HomeAssistant } from "../types";
 import { brandsUrl } from "../util/brands-url";
+import { renderAutomationStateIcon } from "./automation/render-automation-state-icon";
 import "./ha-icon";
 import "./ha-icon-next";
 import "./ha-state-icon";
@@ -391,14 +395,38 @@ export class HaRelatedItems extends LitElement {
     `;
   }
 
+  // Automations show when they are disabled or unavailable, as in the
+  // automation list
   private _renderEntityRow(entity: HassEntity) {
+    const isAutomation = computeStateDomain(entity) === "automation";
+    const unavailable = isAutomation && entity.state === UNAVAILABLE;
+    const disabled = isAutomation && entity.state === "off";
     return html`
       <ha-list-item-button
+        class=${classMap({ inactive: unavailable || disabled })}
         .headline=${this.hass.formatEntityName(entity)}
+        .supportingText=${
+          unavailable
+            ? this.hass.localize("state.default.unavailable")
+            : disabled
+              ? this.hass.localize("ui.panel.config.automation.picker.disabled")
+              : undefined
+        }
         data-entity-id=${entity.entity_id}
         @click=${this._openMoreInfo}
       >
-        <ha-state-icon slot="start" .stateObj=${entity}></ha-state-icon>
+        ${
+          isAutomation
+            ? renderAutomationStateIcon(
+                entity,
+                "var(--card-background-color)",
+                "start"
+              )
+            : html`<ha-state-icon
+                slot="start"
+                .stateObj=${entity}
+              ></ha-state-icon>`
+        }
         <ha-icon-next slot="end"></ha-icon-next>
       </ha-list-item-button>
     `;
@@ -493,6 +521,10 @@ export class HaRelatedItems extends LitElement {
     }
 
     ha-icon-next {
+      color: var(--secondary-text-color);
+    }
+
+    ha-list-item-button.inactive {
       color: var(--secondary-text-color);
     }
   `;

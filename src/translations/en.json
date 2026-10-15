@@ -7063,7 +7063,25 @@
           "filtering_by_config_entry": "[%key:ui::panel::config::entities::picker::filtering_by_config_entry%]",
           "config_entries_load_failed": "An unknown error occurred while loading integrations for your devices.",
           "device_info": "{type} info",
-          "edit_settings": "Edit settings",
+          "overview": {
+            "online": "Online",
+            "offline": "Offline",
+            "update_available": "Update available"
+          },
+          "info_pane": {
+            "show": "Show {type} info",
+            "model": "Model",
+            "manufacturer": "Manufacturer",
+            "firmware": "Firmware",
+            "version": "Version",
+            "hardware": "Hardware",
+            "serial_number": "Serial number",
+            "connected_via": "Connected via",
+            "part_of": "Part of",
+            "area": "Area",
+            "battery": "Battery",
+            "integrations": "Integrations"
+          },
           "restore_entity_ids": "Recreate entity IDs",
           "quick_links": {
             "entities": "[%key:ui::panel::config::common::quick_links::entities%]",
