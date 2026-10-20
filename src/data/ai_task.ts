@@ -10,6 +10,7 @@ export enum AITaskEntityFeature {
 export interface AITaskPreferences {
   evaluate_entity_id: string | null;
   allow_automatic_evaluation: boolean;
+  enabled: boolean;
   gen_data_entity_id: string | null;
   gen_image_entity_id: string | null;
 }

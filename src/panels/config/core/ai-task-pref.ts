@@ -1,4 +1,4 @@
-import { mdiCog, mdiHelpCircleOutline, mdiStarFourPoints } from "@mdi/js";
+import { mdiCog, mdiStarFourPoints } from "@mdi/js";
 import type { HassEntity } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
@@ -7,6 +7,7 @@ import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import type { HASSDomCurrentTargetEvent } from "../../../common/dom/fire_event";
 import { computeDomain } from "../../../common/entity/compute_domain";
 import { supportsFeature } from "../../../common/entity/supports-feature";
+import "../../../components/buttons/ha-progress-button";
 import type { HaProgressButton } from "../../../components/buttons/ha-progress-button";
 import "../../../components/entity/ha-entity-picker";
 import type { HaEntityPicker } from "../../../components/entity/ha-entity-picker";
@@ -27,12 +28,11 @@ import {
   showEntityConfigFlow,
 } from "../../../dialogs/config-flow/entity-config-flow";
 import type { HomeAssistant, ValueChangedEvent } from "../../../types";
-import { brandsUrl } from "../../../util/brands-url";
 import { documentationUrl } from "../../../util/documentation-url";
 
 type EntityPreferenceKey = Exclude<
   keyof AITaskPreferences,
-  "allow_automatic_evaluation"
+  "allow_automatic_evaluation" | "enabled"
 >;
 
 const filterGenData = (entity: HassEntity) =>
@@ -83,33 +83,6 @@ export class AITaskPref extends LitElement {
         isComponentLoaded(this.hass.config, "ai_task"));
     return html`
       <ha-card outlined>
-        <h1 class="card-header">
-          <img
-            alt=""
-            src=${brandsUrl(
-              {
-                domain: "ai_task",
-                type: "icon",
-                darkOptimized: this.hass.themes?.darkMode,
-              },
-              this.hass.auth.data.hassUrl
-            )}
-            crossorigin="anonymous"
-            referrerpolicy="no-referrer"
-          />${this.hass.localize("ui.panel.config.ai_task.header")}
-        </h1>
-        <div class="header-actions">
-          <ha-icon-button
-            .label=${this.hass.localize(
-              "ui.panel.config.cloud.account.alexa.link_learn_how_it_works"
-            )}
-            .path=${mdiHelpCircleOutline}
-            href=${documentationUrl(this.hass, "/integrations/ai_task/")}
-            target="_blank"
-            rel="noreferrer"
-            class="icon-link"
-          ></ha-icon-button>
-        </div>
         <div class="card-content">
           <p>
             ${this.hass!.localize("ui.panel.config.ai_task.description", {
@@ -117,76 +90,109 @@ export class AITaskPref extends LitElement {
                 .path=${mdiStarFourPoints}
               ></ha-svg-icon>`,
             })}
+            <a
+              href=${documentationUrl(this.hass, "/integrations/ai_task/")}
+              target="_blank"
+              rel="noreferrer"
+              >${this.hass.localize("ui.panel.config.common.learn_more")}</a
+            >
           </p>
           <ha-settings-row .narrow=${this.narrow}>
             <span slot="heading">
-              ${this.hass!.localize("ui.panel.config.ai_task.gen_data_header")}
+              ${this.hass.localize("ui.panel.config.ai_task.enable_suggestions")}
             </span>
-            <span slot="description">
-              ${this.hass!.localize(
-                "ui.panel.config.ai_task.gen_data_description"
-              )}
-            </span>
-            ${this._renderPicker(
-              "gen_data_entity_id",
-              filterGenData,
-              this.hass.localize("ui.panel.config.ai_task.gen_data_header"),
-              this.hass.localize("ui.panel.config.ai_task.gen_data_settings")
-            )}
+            <ha-switch
+              .checked=${prefs.enabled !== false}
+              .disabled=${this._prefs === undefined}
+              @change=${this._enabledChanged}
+            ></ha-switch>
           </ha-settings-row>
-          <ha-settings-row .narrow=${this.narrow}>
-            <span slot="heading">
-              ${this.hass!.localize("ui.panel.config.ai_task.gen_image_header")}
-            </span>
-            <span slot="description">
-              ${this.hass!.localize(
-                "ui.panel.config.ai_task.gen_image_description"
-              )}
-            </span>
-            ${this._renderPicker(
-              "gen_image_entity_id",
-              filterGenImage,
-              this.hass.localize("ui.panel.config.ai_task.gen_image_header"),
-              this.hass.localize("ui.panel.config.ai_task.gen_image_settings")
-            )}
-          </ha-settings-row>
-          <ha-settings-row .narrow=${this.narrow}>
-            <span slot="heading">
-              ${this.hass.localize("ui.panel.config.ai_task.evaluate_header")}
-            </span>
-            <span slot="description">
-              ${this.hass.localize("ui.panel.config.ai_task.evaluate_description")}
-            </span>
-            ${this._renderPicker(
-              "evaluate_entity_id",
-              filterEvaluate,
-              this.hass.localize("ui.panel.config.ai_task.evaluate_header"),
-              this.hass.localize("ui.panel.config.ai_task.evaluate_settings")
-            )}
-          </ha-settings-row>
-          <ha-switch
-            .checked=${prefs.allow_automatic_evaluation ?? false}
-            .disabled=${disabled || !prefs.evaluate_entity_id}
-            @change=${this._handleAutomaticEvaluationChange}
-          >
-            <span class="automatic-evaluation-heading">
-              ${this.hass.localize(
-                "ui.panel.config.ai_task.allow_automatic_evaluation"
-              )}
-            </span>
-            <span class="automatic-evaluation-description">
-              ${this.hass.localize(
-                "ui.panel.config.ai_task.allow_automatic_evaluation_description"
-              )}
-            </span>
-          </ha-switch>
+          ${
+            prefs.enabled === false
+              ? nothing
+              : this._renderPreferences(prefs, disabled)
+          }
         </div>
-        <div class="card-actions">
-          <ha-progress-button .disabled=${disabled} @click=${this._update}>
-            ${this.hass!.localize("ui.common.save")}
-          </ha-progress-button>
-        </div>
+        ${
+          prefs.enabled === false
+            ? nothing
+            : html`<div class="card-actions">
+                <ha-progress-button
+                  .disabled=${disabled}
+                  @click=${this._update}
+                >
+                  ${this.hass!.localize("ui.common.save")}
+                </ha-progress-button>
+              </div>`
+        }
       </ha-card>
+    `;
+  }
+
+  private _renderPreferences(
+    prefs: Partial<AITaskPreferences>,
+    disabled: boolean
+  ) {
+    return html`
+      <ha-settings-row .narrow=${this.narrow}>
+        <span slot="heading">
+          ${this.hass!.localize("ui.panel.config.ai_task.gen_data_header")}
+        </span>
+        <span slot="description">
+          ${this.hass!.localize("ui.panel.config.ai_task.gen_data_description")}
+        </span>
+        ${this._renderPicker(
+          "gen_data_entity_id",
+          filterGenData,
+          this.hass.localize("ui.panel.config.ai_task.gen_data_header"),
+          this.hass.localize("ui.panel.config.ai_task.gen_data_settings")
+        )}
+      </ha-settings-row>
+      <ha-settings-row .narrow=${this.narrow}>
+        <span slot="heading">
+          ${this.hass!.localize("ui.panel.config.ai_task.gen_image_header")}
+        </span>
+        <span slot="description">
+          ${this.hass!.localize("ui.panel.config.ai_task.gen_image_description")}
+        </span>
+        ${this._renderPicker(
+          "gen_image_entity_id",
+          filterGenImage,
+          this.hass.localize("ui.panel.config.ai_task.gen_image_header"),
+          this.hass.localize("ui.panel.config.ai_task.gen_image_settings")
+        )}
+      </ha-settings-row>
+      <ha-settings-row .narrow=${this.narrow}>
+        <span slot="heading">
+          ${this.hass.localize("ui.panel.config.ai_task.evaluate_header")}
+        </span>
+        <span slot="description">
+          ${this.hass.localize("ui.panel.config.ai_task.evaluate_description")}
+        </span>
+        ${this._renderPicker(
+          "evaluate_entity_id",
+          filterEvaluate,
+          this.hass.localize("ui.panel.config.ai_task.evaluate_header"),
+          this.hass.localize("ui.panel.config.ai_task.evaluate_settings")
+        )}
+      </ha-settings-row>
+      <ha-switch
+        class="automatic-evaluation"
+        .checked=${prefs.allow_automatic_evaluation ?? false}
+        .disabled=${disabled || !prefs.evaluate_entity_id}
+        @change=${this._handleAutomaticEvaluationChange}
+      >
+        <span class="automatic-evaluation-heading">
+          ${this.hass.localize(
+            "ui.panel.config.ai_task.allow_automatic_evaluation"
+          )}
+        </span>
+        <span class="automatic-evaluation-description">
+          ${this.hass.localize(
+            "ui.panel.config.ai_task.allow_automatic_evaluation_description"
+          )}
+        </span>
+      </ha-switch>
     `;
   }
 
@@ -209,6 +215,9 @@ export class AITaskPref extends LitElement {
           }
           .value=${this._entityId(key) ?? undefined}
           .entityFilter=${entityFilter}
+          .addIntegrationLabel=${this.hass.localize(
+            "ui.panel.config.ai_task.add_integration"
+          )}
           @value-changed=${this._handlePrefChange}
         ></ha-entity-picker>
         ${
@@ -271,6 +280,21 @@ export class AITaskPref extends LitElement {
     }
   }
 
+  private async _enabledChanged(ev: HASSDomCurrentTargetEvent<HaSwitch>) {
+    const enabled = ev.currentTarget.checked;
+    this._prefs = { ...this._prefs!, enabled };
+    try {
+      const saved = await saveAITaskPreferences(this.hass, { enabled });
+      // Cores without the `enabled` preference omit it from the response;
+      // keep the local value so the toggle stays usable until core support
+      // lands.
+      this._prefs = { ...saved, enabled: saved.enabled ?? enabled };
+    } catch (_err: any) {
+      // Core rejected the (not yet supported) `enabled` key; keep the local
+      // value so the UI remains testable.
+    }
+  }
+
   private _handleAutomaticEvaluationChange(
     ev: HASSDomCurrentTargetEvent<HaSwitch>
   ) {
@@ -301,46 +325,24 @@ export class AITaskPref extends LitElement {
   }
 
   static styles = css`
-    .card-header {
-      display: flex;
-      align-items: center;
-    }
-    .card-header img {
-      max-width: 28px;
-      margin-right: 16px;
+    a {
+      color: var(--primary-color);
     }
     ha-settings-row {
       padding: 0;
     }
-    .header-actions {
-      position: absolute;
-      right: 0px;
-      inset-inline-end: 0px;
-      inset-inline-start: initial;
-      top: 24px;
-      display: flex;
-      flex-direction: row;
-    }
-    .header-actions .icon-link {
-      margin-top: -16px;
-      margin-right: 8px;
-      margin-inline-end: 8px;
-      margin-inline-start: initial;
-      direction: var(--direction);
-      color: var(--secondary-text-color);
-    }
     .card-actions {
       text-align: right;
     }
-    ha-switch {
+    ha-switch.automatic-evaluation {
       display: block;
       margin-block-start: var(--ha-space-4);
     }
-    ha-switch::part(base) {
+    ha-switch.automatic-evaluation::part(base) {
       height: auto;
       flex-direction: row-reverse;
     }
-    ha-switch::part(label) {
+    ha-switch.automatic-evaluation::part(label) {
       flex: 1;
       margin-inline-start: 0;
       margin-inline-end: var(--ha-space-4);

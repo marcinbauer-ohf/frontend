@@ -14,7 +14,7 @@ class HaConfigSectionAI extends LitElement {
   protected render() {
     return html`
       <hass-subpage
-        back-path="/config/system"
+        back-path="/config/voice-assistants/assistants"
         .hass=${this.hass}
         .narrow=${this.narrow}
         .header=${this.hass.localize("ui.panel.config.ai.caption")}
@@ -38,7 +38,7 @@ class HaConfigSectionAI extends LitElement {
     }
     ai-task-pref,
     mcp-pref {
-      max-width: 600px;
+      max-width: 800px;
       margin: 0 auto;
       display: block;
     }

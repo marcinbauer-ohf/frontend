@@ -6,13 +6,17 @@ import type { HASSDomEvent } from "../common/dom/fire_event";
 import { mainWindow } from "../common/dom/get_main_window";
 import { ShortcutManager } from "../common/keyboard/shortcuts";
 import { extractSearchParamsObject } from "../common/url/search-params";
+import { isAssistEnabled } from "../data/assist_pipeline";
 import type { QuickBarSection } from "../dialogs/quick-bar/show-dialog-quick-bar";
 import {
   closeQuickBar,
   showQuickBar,
 } from "../dialogs/quick-bar/show-dialog-quick-bar";
 import { showShortcutsDialog } from "../dialogs/shortcuts/show-shortcuts-dialog";
-import { showVoiceCommandDialog } from "../dialogs/voice-command-dialog/show-ha-voice-command-dialog";
+import {
+  closeVoiceCommandDialog,
+  showVoiceCommandDialog,
+} from "../dialogs/voice-command-dialog/show-ha-voice-command-dialog";
 import type { Constructor, HomeAssistant } from "../types";
 import { storeState } from "../util/ha-pref-storage";
 import { showToast } from "../util/toast";
@@ -29,6 +33,8 @@ export default <T extends Constructor<HassElement>>(superClass: T) =>
   class extends superClass {
     private _quickBarOpen = false;
 
+    private _assistOpen = false;
+
     protected firstUpdated(changedProps: PropertyValues<this>) {
       super.firstUpdated(changedProps);
 
@@ -40,10 +46,13 @@ export default <T extends Constructor<HassElement>>(superClass: T) =>
       this.addEventListener(
         "show-dialog",
         (ev) => {
-          if (
-            (ev as HASSDomEvent<HASSDomEvents["show-dialog"]>).detail
-              .dialogTag === "ha-quick-bar"
-          ) {
+          const { dialogTag } = (
+            ev as HASSDomEvent<HASSDomEvents["show-dialog"]>
+          ).detail;
+          if (dialogTag === "ha-voice-command-dialog") {
+            this._assistOpen = true;
+          }
+          if (dialogTag === "ha-quick-bar") {
             // If quick bar is already open, prevent opening it again
             if (this._quickBarOpen) {
               ev.stopPropagation();
@@ -57,11 +66,12 @@ export default <T extends Constructor<HassElement>>(superClass: T) =>
       );
 
       this.addEventListener("dialog-closed", (ev) => {
-        if (
-          (ev as HASSDomEvent<HASSDomEvents["dialog-closed"]>).detail.dialog ===
-          "ha-quick-bar"
-        ) {
+        const { dialog } = (ev as HASSDomEvent<HASSDomEvents["dialog-closed"]>)
+          .detail;
+        if (dialog === "ha-quick-bar") {
           this._quickBarOpen = false;
+        } else if (dialog === "ha-voice-command-dialog") {
+          this._assistOpen = false;
         }
       });
 
@@ -142,7 +152,7 @@ export default <T extends Constructor<HassElement>>(superClass: T) =>
       isComponentLoaded(this.hass!.config, "conversation")
     );
 
-    private _showVoiceCommandDialog(e: KeyboardEvent) {
+    private async _showVoiceCommandDialog(e: KeyboardEvent) {
       if (
         !this.hass?.enableShortcuts ||
         !canOverrideAlphanumericInput(e.composedPath()) ||
@@ -155,6 +165,16 @@ export default <T extends Constructor<HassElement>>(superClass: T) =>
         return;
       }
       e.preventDefault();
+
+      // The same key closes it again, like $mod+k does for the quick bar.
+      if (this._assistOpen) {
+        closeVoiceCommandDialog();
+        return;
+      }
+
+      if (!(await isAssistEnabled(this.hass!))) {
+        return;
+      }
 
       showVoiceCommandDialog(this, this.hass!, { pipeline_id: "last_used" });
     }

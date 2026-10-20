@@ -1,10 +1,19 @@
-import { css, html, LitElement } from "lit";
+import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
+import { storage } from "../../../../common/decorators/storage";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import type { LocalizeKeys } from "../../../../common/translations/localize";
 import "../../../../components/ha-form/ha-form";
+import "../../../../components/ha-textarea";
+import type { HaTextArea } from "../../../../components/ha-textarea";
+import {
+  ASSIST_AGENT_INSTRUCTIONS_OVERRIDE_STORAGE_KEY,
+  type AssistAgentInstructionsOverride,
+} from "../../../../data/assist_agent_instructions_override";
 import type { AssistPipeline } from "../../../../data/assist_pipeline";
+import { HOME_ASSISTANT_AGENT } from "../../../../data/assist_pipeline";
+import { getConversationAgentInfo } from "../../../../data/conversation";
 import type { HomeAssistant } from "../../../../types";
 
 @customElement("assist-pipeline-detail-conversation")
@@ -15,12 +24,47 @@ export class AssistPipelineDetailConversation extends LitElement {
 
   @state() private _supportedLanguages?: "*" | string[];
 
+  @state() private _prompt?: string | null;
+
+  @state() private _localInstructionsOverride?: string;
+
+  @state()
+  @storage({
+    key: ASSIST_AGENT_INSTRUCTIONS_OVERRIDE_STORAGE_KEY,
+    state: true,
+    subscribe: true,
+  })
+  private _instructionsOverrides: AssistAgentInstructionsOverride = {};
+
+  private _promptEngine?: string;
+
+  protected willUpdate(changed: PropertyValues) {
+    if (changed.has("data")) {
+      const engine = this.data?.conversation_engine;
+      if (engine && engine !== this._promptEngine) {
+        this._promptEngine = engine;
+        this._fetchPrompt(engine);
+      }
+    }
+  }
+
+  private async _fetchPrompt(engine: string) {
+    this._prompt = undefined;
+    try {
+      const info = await getConversationAgentInfo(this.hass, engine);
+      if (this._promptEngine === engine) {
+        this._prompt = info.prompt ?? null;
+      }
+    } catch (_err) {
+      // The backend command that exposes the agent's prompt may not exist yet.
+      if (this._promptEngine === engine) {
+        this._prompt = null;
+      }
+    }
+  }
+
   private _schema = memoizeOne(
-    (
-      engine?: string,
-      language?: string,
-      supportedLanguages?: "*" | string[]
-    ) => {
+    (language?: string, supportedLanguages?: "*" | string[]) => {
       const fields: any = [
         {
           name: "",
@@ -49,16 +93,6 @@ export class AssistPipelineDetailConversation extends LitElement {
         });
       }
 
-      if (engine !== "conversation.home_assistant") {
-        fields.push({
-          name: "prefer_local_intents",
-          default: true,
-          selector: {
-            boolean: {},
-          },
-        });
-      }
-
       return fields;
     }
   );
@@ -79,33 +113,96 @@ export class AssistPipelineDetailConversation extends LitElement {
 
   protected render() {
     return html`
-      <div class="section">
-        <div class="intro">
-          <h3>
-            ${this.hass.localize(
-              `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.conversation.title`
-            )}
-          </h3>
-          <p>
-            ${this.hass.localize(
-              `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.conversation.description`
-            )}
-          </p>
-        </div>
-        <ha-form
-          .schema=${this._schema(
-            this.data?.conversation_engine,
-            this.data?.language,
-            this._supportedLanguages
+      <div class="intro">
+        <h3>
+          ${this.hass.localize(
+            `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.conversation.title`
           )}
-          .data=${this.data}
-          .hass=${this.hass}
-          .computeLabel=${this._computeLabel}
-          .computeHelper=${this._computeHelper}
-          @supported-languages-changed=${this._supportedLanguagesChanged}
-        ></ha-form>
+        </h3>
+        <p>
+          ${this.hass.localize(
+            `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.conversation.description`
+          )}
+        </p>
       </div>
+      <ha-form
+        .schema=${this._schema(this.data?.language, this._supportedLanguages)}
+        .data=${this.data}
+        .hass=${this.hass}
+        .computeLabel=${this._computeLabel}
+        .computeHelper=${this._computeHelper}
+        @supported-languages-changed=${this._supportedLanguagesChanged}
+      ></ha-form>
+      ${
+        this._supportsInstructions()
+          ? html`<div class="instructions">
+              <ha-textarea
+                autogrow
+                .label=${this.hass.localize(
+                  "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.instructions"
+                )}
+                .placeholder=${
+                  this._prompt ||
+                  this.hass.localize(
+                    "ui.panel.config.voice_assistants.assistants.pipeline.detail.access.instructions_empty"
+                  )
+                }
+                .value=${this._instructionsOverride() ?? ""}
+                @change=${this._instructionsChanged}
+              ></ha-textarea>
+            </div>`
+          : nothing
+      }
     `;
+  }
+
+  /**
+   * The built-in agent and Home Assistant Cloud (Nabu Casa) don't take custom
+   * instructions, so the field is hidden for them.
+   */
+  private _supportsInstructions(): boolean {
+    const engine = this.data?.conversation_engine;
+    return (
+      !!engine &&
+      engine !== HOME_ASSISTANT_AGENT &&
+      this.hass.entities[engine]?.platform !== "cloud"
+    );
+  }
+
+  /**
+   * The user's per-agent instructions override, if any. The agent's own prompt
+   * is shown as placeholder (ghost) text rather than as the field value, so it
+   * is not returned here.
+   */
+  private _instructionsOverride(): string | undefined {
+    if (this._localInstructionsOverride !== undefined) {
+      return this._localInstructionsOverride;
+    }
+    const id = (this.data as AssistPipeline | undefined)?.id;
+    if (id && id in this._instructionsOverrides) {
+      return this._instructionsOverrides[id];
+    }
+    return undefined;
+  }
+
+  private _instructionsChanged(ev: Event) {
+    const value = (ev.target as HaTextArea).value;
+    this._localInstructionsOverride = value || undefined;
+    const id = (this.data as AssistPipeline | undefined)?.id;
+    if (!id) {
+      return;
+    }
+    if (!value) {
+      // Cleared — drop the override so the agent's own prompt (ghost text)
+      // applies again.
+      const { [id]: _removed, ...rest } = this._instructionsOverrides;
+      this._instructionsOverrides = rest;
+      return;
+    }
+    this._instructionsOverrides = {
+      ...this._instructionsOverrides,
+      [id]: value,
+    };
   }
 
   private _supportedLanguagesChanged(ev) {
@@ -132,11 +229,10 @@ export class AssistPipelineDetailConversation extends LitElement {
   }
 
   static styles = css`
-    .section {
-      border: 1px solid var(--divider-color);
-      border-radius: var(--ha-border-radius-md);
-      box-sizing: border-box;
-      padding: 16px;
+    /* No card of its own: the dialog wraps this and the access rows in one
+       agent card. */
+    :host {
+      display: block;
     }
     .intro {
       margin-bottom: 16px;
@@ -153,6 +249,13 @@ export class AssistPipelineDetailConversation extends LitElement {
       font-size: var(--ha-font-size-s);
       margin-top: 0;
       margin-bottom: 0;
+    }
+    .instructions {
+      margin-top: 16px;
+    }
+    .instructions ha-textarea {
+      display: block;
+      width: 100%;
     }
   `;
 }

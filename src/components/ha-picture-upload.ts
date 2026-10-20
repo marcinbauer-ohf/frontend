@@ -1,8 +1,8 @@
 import type { ContextType } from "@lit/context";
 import { mdiImagePlus } from "@mdi/js";
 import type { TemplateResult } from "lit";
-import { LitElement, css, html } from "lit";
-import { customElement, property, state } from "lit/decorators";
+import { LitElement, css, html, nothing } from "lit";
+import { customElement, property, query, state } from "lit/decorators";
 import { consume } from "../common/decorators/consume";
 import {
   apiContext,
@@ -24,6 +24,7 @@ import type { CropOptions } from "../dialogs/image-cropper-dialog/show-image-cro
 import { showImageCropperDialog } from "../dialogs/image-cropper-dialog/show-image-cropper-dialog";
 import "./ha-button";
 import "./ha-file-upload";
+import "./ha-svg-icon";
 import { showMediaBrowserDialog } from "./media-player/show-media-browser-dialog";
 
 @customElement("ha-picture-upload")
@@ -68,27 +69,31 @@ export class HaPictureUpload extends LitElement {
 
   @property({ type: Number }) public size = 512;
 
+  /** Render a single button instead of the full drop zone. */
+  @property({ type: Boolean, reflect: true }) public compact = false;
+
   @state() private _uploading = false;
 
   @state() private _pickedFile?: File;
+  @query("#compact-input") private _compactInput?: HTMLInputElement;
 
   public render(): TemplateResult {
+    if (this.compact) {
+      return this._renderCompact();
+    }
     if (!this.value) {
+      const selectMediaLink = this.selectMedia
+        ? html`<button class="link" @click=${this._chooseMedia}>
+            ${this._i18n.localize("ui.components.picture-upload.select_media")}
+          </button>`
+        : undefined;
+
       const secondary =
         this.secondary ||
-        (this.selectMedia
+        (selectMediaLink
           ? html`${this._i18n.localize(
               "ui.components.picture-upload.secondary",
-              {
-                select_media: html`<button
-                  class="link"
-                  @click=${this._chooseMedia}
-                >
-                  ${this._i18n.localize(
-                    "ui.components.picture-upload.select_media"
-                  )}
-                </button>`,
-              }
+              { select_media: selectMediaLink }
             )}`
           : undefined);
 
@@ -117,7 +122,11 @@ export class HaPictureUpload extends LitElement {
     return html`<div class="center-vertical">
       <div class="value">
         <img
-          .src=${this.value}
+          .src=${
+            this.value.startsWith("/")
+              ? this._connection.hassUrl(this.value)
+              : this.value
+          }
           alt=${
             this.currentImageAltText ||
             this._i18n.localize(
@@ -137,6 +146,78 @@ export class HaPictureUpload extends LitElement {
         </div>
       </div>
     </div>`;
+  }
+
+  private _renderCompact(): TemplateResult {
+    return html`
+      <input
+        id="compact-input"
+        type="file"
+        accept="image/png, image/jpeg, image/gif"
+        hidden
+        @change=${this._handleInputPicked}
+      />
+      ${
+        this.value
+          ? html`<img
+              .src=${
+                this.value.startsWith("/")
+                  ? this._connection.hassUrl(this.value)
+                  : this.value
+              }
+              alt=${
+                this.currentImageAltText ||
+                this._i18n.localize(
+                  "ui.components.picture-upload.current_image_alt"
+                )
+              }
+            />`
+          : nothing
+      }
+      <ha-button
+        appearance="plain"
+        size="s"
+        .loading=${this._uploading}
+        @click=${this._openFilePicker}
+      >
+        <ha-svg-icon slot="start" .path=${mdiImagePlus}></ha-svg-icon>
+        ${
+          this.label ||
+          this._i18n.localize("ui.components.picture-upload.label")
+        }
+      </ha-button>
+      ${
+        this.value
+          ? html`<ha-button
+              appearance="plain"
+              size="s"
+              variant="danger"
+              @click=${this._handleChangeClick}
+            >
+              ${this._i18n.localize("ui.components.picture-upload.clear_picture")}
+            </ha-button>`
+          : nothing
+      }
+    `;
+  }
+
+  private _openFilePicker = () => {
+    this._compactInput?.click();
+  };
+
+  private _handleInputPicked(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    // Reset so cancelling the crop and picking the same file again still fires.
+    input.value = "";
+    if (!file) {
+      return;
+    }
+    if (this.crop) {
+      this._cropFile(file);
+    } else {
+      this._uploadFile(file);
+    }
   }
 
   private _handleChangeClick() {
@@ -309,6 +390,19 @@ export class HaPictureUpload extends LitElement {
         :host {
           display: block;
           height: 240px;
+        }
+        :host([compact]) {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+          height: auto;
+        }
+        :host([compact]) img {
+          width: 40px;
+          height: 40px;
+          margin-bottom: 0;
+          object-fit: cover;
+          border-radius: var(--ha-border-radius-circle);
         }
         ha-file-upload {
           height: 100%;

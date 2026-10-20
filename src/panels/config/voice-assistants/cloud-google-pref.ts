@@ -1,12 +1,13 @@
-import { mdiHelpCircleOutline } from "@mdi/js";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { isEmptyEntityDomainFilter } from "../../../common/entity/entity_domain_filter";
 import "../../../components/ha-alert";
-import "../../../components/ha-button";
 import "../../../components/ha-card";
+import "../../../components/ha-icon-next";
+import "../../../components/item/ha-list-item-base";
+import "../../../components/item/ha-list-item-button";
 import "../../../components/ha-switch";
 import type { HaSwitch } from "../../../components/ha-switch";
 import "../../../components/input/ha-input";
@@ -73,20 +74,21 @@ export class CloudGooglePref extends LitElement {
           <voice-assistant-brand-icon
             .voiceAssistantId=${"cloud.google_assistant"}
           >
-          </voice-assistant-brand-icon
-          >${this.hass.localize("ui.panel.config.cloud.account.google.title")}
+          </voice-assistant-brand-icon>
+          <span class="title-block">
+            <span class="title"
+              >${this.hass.localize(
+                "ui.panel.config.cloud.account.google.title"
+              )}</span
+            >
+            <span class="subtitle"
+              >${this.hass.localize(
+                "ui.panel.config.cloud.account.google.company"
+              )}</span
+            >
+          </span>
         </h1>
         <div class="header-actions">
-          <ha-icon-button
-            .label=${this.hass.localize(
-              "ui.panel.config.cloud.account.google.link_learn_how_it_works"
-            )}
-            .path=${mdiHelpCircleOutline}
-            href="https://www.nabucasa.com/config/google_assistant/"
-            target="_blank"
-            rel="noreferrer"
-            class="icon-link"
-          ></ha-icon-button>
           <ha-switch
             .checked=${google_enabled}
             @change=${this._enabledToggleChanged}
@@ -95,6 +97,12 @@ export class CloudGooglePref extends LitElement {
         <div class="card-content">
           <p>
             ${this.hass.localize("ui.panel.config.cloud.account.google.info")}
+            <a
+              href="https://www.nabucasa.com/config/google_assistant/"
+              target="_blank"
+              rel="noreferrer"
+              >${this.hass.localize("ui.panel.config.common.learn_more")}</a
+            >
           </p>
           ${
             manualConfig
@@ -138,7 +146,7 @@ export class CloudGooglePref extends LitElement {
                         `
                       : nothing
                   }
-                  <ha-row-item>
+                  <ha-list-item-base>
                     <span slot="headline"
                       >${this.hass!.localize(
                         "ui.panel.config.cloud.account.google.expose_new_entities"
@@ -155,7 +163,7 @@ export class CloudGooglePref extends LitElement {
                       .disabled=${this._exposeNew === undefined}
                       @change=${this._exposeNewToggleChanged}
                     ></ha-switch>
-                  </ha-row-item>
+                  </ha-list-item-base>
                   ${
                     google_registered
                       ? html`
@@ -183,7 +191,7 @@ export class CloudGooglePref extends LitElement {
                                 `
                               : nothing
                           }
-                          <ha-row-item>
+                          <ha-list-item-base>
                             <span slot="headline"
                               >${this.hass!.localize(
                                 "ui.panel.config.cloud.account.google.enable_state_reporting"
@@ -199,9 +207,9 @@ export class CloudGooglePref extends LitElement {
                               .checked=${google_report_state}
                               @change=${this._reportToggleChanged}
                             ></ha-switch>
-                          </ha-row-item>
+                          </ha-list-item-base>
 
-                          <ha-row-item>
+                          <ha-list-item-base>
                             <span slot="headline"
                               >${this.hass.localize(
                                 "ui.panel.config.cloud.account.google.security_devices"
@@ -213,7 +221,7 @@ export class CloudGooglePref extends LitElement {
                               )}</span
                             >
                             <ha-switch slot="end"></ha-switch>
-                          </ha-row-item>
+                          </ha-list-item-base>
 
                           <ha-input
                             id="google_secure_devices_pin"
@@ -229,35 +237,35 @@ export class CloudGooglePref extends LitElement {
                         `
                       : nothing
                   }
+                  <ha-list-item-button
+                    href="/config/voice-assistants/expose?assistants=cloud.google_assistant&historyBack"
+                  >
+                    <span slot="headline"
+                      >${this.hass.localize(
+                        "ui.panel.config.voice_assistants.assistants.general.accessible_entities"
+                      )}</span
+                    >
+                    ${
+                      manualConfig
+                        ? nothing
+                        : html`<span slot="supporting-text"
+                            >${this.hass.localize(
+                              "ui.panel.config.voice_assistants.assistants.general.accessible_entities_count",
+                              {
+                                number: this.exposedEntities
+                                  ? this._exposedEntitiesCount(
+                                      this.exposedEntities
+                                    )
+                                  : 0,
+                              }
+                            )}</span
+                          >`
+                    }
+                    <ha-icon-next slot="end"></ha-icon-next>
+                  </ha-list-item-button>
                 `
           }
         </div>
-        ${
-          google_enabled
-            ? html`<div class="card-actions">
-                <ha-button
-                  appearance="plain"
-                  size="s"
-                  href="/config/voice-assistants/expose?assistants=cloud.google_assistant&historyBack"
-                >
-                  ${
-                    manualConfig
-                      ? this.hass!.localize(
-                          "ui.panel.config.cloud.account.google.show_entities"
-                        )
-                      : this.hass.localize(
-                          "ui.panel.config.cloud.account.google.exposed_entities",
-                          {
-                            number: this.exposedEntities
-                              ? this._exposedEntitiesCount(this.exposedEntities)
-                              : 0,
-                          }
-                        )
-                  }
-                </ha-button>
-              </div>`
-            : nothing
-        }
       </ha-card>
     `;
   }
@@ -336,30 +344,18 @@ export class CloudGooglePref extends LitElement {
       display: flex;
       flex-direction: row;
     }
-    .header-actions .icon-link {
-      margin-top: -16px;
-      margin-right: 8px;
-      margin-inline-end: 8px;
-      margin-inline-start: initial;
-      direction: var(--direction);
-      color: var(--secondary-text-color);
-    }
-    ha-row-item {
+    ha-list-item-base,
+    ha-list-item-button {
+      /* Rows sit inside the card content's own padding. */
       --ha-row-item-padding-inline: 0;
     }
-    ha-row-item::part(headline),
-    ha-row-item::part(supporting-text) {
+    ha-list-item-base::part(headline),
+    ha-list-item-base::part(supporting-text) {
       white-space: normal;
     }
     ha-input {
       width: 250px;
       margin-top: 8px;
-    }
-    .card-actions {
-      display: flex;
-    }
-    .card-actions a {
-      text-decoration: none;
     }
     .warning {
       color: var(--error-color);
@@ -367,6 +363,20 @@ export class CloudGooglePref extends LitElement {
     .card-header {
       display: flex;
       align-items: center;
+    }
+    .card-header .title-block {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .card-header .title {
+      line-height: var(--ha-line-height-condensed);
+    }
+    .card-header .subtitle {
+      font-size: var(--ha-font-size-m);
+      font-weight: var(--ha-font-weight-normal);
+      color: var(--secondary-text-color);
+      line-height: var(--ha-line-height-condensed);
     }
     voice-assistant-brand-icon {
       height: 28px;

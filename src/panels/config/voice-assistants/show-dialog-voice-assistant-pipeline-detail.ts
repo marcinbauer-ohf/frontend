@@ -8,8 +8,16 @@ export interface VoiceAssistantPipelineDetailsDialogParams {
   cloudActiveSubscription?: boolean;
   pipeline?: AssistPipeline | Omit<AssistPipeline, "id">;
   hideWakeWord?: boolean;
-  updatePipeline?: (updates: AssistPipelineMutableParams) => Promise<unknown>;
-  createPipeline?: (values: AssistPipelineMutableParams) => Promise<unknown>;
+  /** Current agent avatar (media URL), stored client-side. */
+  avatar?: string | null;
+  updatePipeline?: (
+    updates: AssistPipelineMutableParams,
+    avatar?: string | null
+  ) => Promise<unknown>;
+  createPipeline?: (
+    values: AssistPipelineMutableParams,
+    avatar?: string | null
+  ) => Promise<unknown>;
 }
 
 export const loadVoiceAssistantPipelineDetailDialog = () =>

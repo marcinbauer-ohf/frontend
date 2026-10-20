@@ -1,4 +1,4 @@
-import { mdiCog } from "@mdi/js";
+import { mdiCog, mdiPlus } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -11,11 +11,17 @@ import {
   fetchEntityConfigFlow,
   showEntityConfigFlow,
 } from "../dialogs/config-flow/entity-config-flow";
+import { showAddIntegrationDialog } from "../panels/config/integrations/show-add-integration-dialog";
 import type { HomeAssistant } from "../types";
+import "./ha-icon-button";
 import "./ha-select";
 import type { HaSelectOption, HaSelectSelectEvent } from "./ha-select";
 
 const NONE = "__NONE_OPTION__";
+
+const ADD_INTEGRATION = "__ADD_INTEGRATION__";
+
+const HOME_ASSISTANT_AGENT = "conversation.home_assistant";
 
 @customElement("ha-conversation-agent-picker")
 export class HaConversationAgentPicker extends LitElement {
@@ -46,7 +52,14 @@ export class HaConversationAgentPicker extends LitElement {
 
     const options: HaSelectOption[] = this._agents.map((agent) => ({
       value: agent.id,
-      label: agent.name,
+      // The built-in agent cannot be deleted or found via the UI, so label it
+      // explicitly as "(built-in)" to disambiguate it from custom agents.
+      label:
+        agent.id === HOME_ASSISTANT_AGENT
+          ? this.hass.localize(
+              "ui.components.conversation-agent-picker.home_assistant_built_in"
+            )
+          : agent.name,
       disabled:
         agent.supported_languages !== "*" &&
         agent.supported_languages.length === 0,
@@ -60,6 +73,14 @@ export class HaConversationAgentPicker extends LitElement {
         ),
       });
     }
+
+    options.push({
+      value: ADD_INTEGRATION,
+      label: this.hass.localize(
+        "ui.components.conversation-agent-picker.add_integration"
+      ),
+      iconPath: mdiPlus,
+    });
 
     return html`
       <ha-select
@@ -134,7 +155,7 @@ export class HaConversationAgentPicker extends LitElement {
       // Select Home Assistant conversation agent if it supports the language
       for (const agent of this._agents) {
         if (
-          agent.id === "conversation.home_assistant" &&
+          agent.id === HOME_ASSISTANT_AGENT &&
           (!this.language ||
             agent.supported_languages === "*" ||
             agent.supported_languages.includes(this.language))
@@ -203,6 +224,10 @@ export class HaConversationAgentPicker extends LitElement {
 
   private _changed(ev: HaSelectSelectEvent): void {
     const value = ev.detail.value;
+    if (value === ADD_INTEGRATION) {
+      this._addIntegration();
+      return;
+    }
     if (
       !this.hass ||
       value === "" ||
@@ -217,6 +242,18 @@ export class HaConversationAgentPicker extends LitElement {
       value: this._agents!.find((agent) => agent.id === this.value)
         ?.supported_languages,
     });
+  }
+
+  private _addIntegration(): void {
+    // Reset the select back to the current value (the "Add integration" row
+    // is an action, not a selectable value).
+    this.requestUpdate();
+    const refresh = () => {
+      document.removeEventListener("dialog-closed", refresh);
+      this._updateAgents();
+    };
+    document.addEventListener("dialog-closed", refresh);
+    showAddIntegrationDialog(this, { navigateToResult: false });
   }
 }
 

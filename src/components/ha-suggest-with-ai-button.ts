@@ -69,7 +69,11 @@ export class HaSuggestWithAIButton extends LitElement {
   }
 
   render() {
-    if (!this._aiPrefs || !this._aiPrefs.gen_data_entity_id) {
+    if (
+      !this._aiPrefs ||
+      this._aiPrefs.enabled === false ||
+      !this._aiPrefs.gen_data_entity_id
+    ) {
       return nothing;
     }
 

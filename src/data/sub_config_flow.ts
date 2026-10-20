@@ -1,9 +1,12 @@
 import type { HomeAssistant } from "../types";
 import type { DataEntryFlowStep } from "./data_entry_flow";
 
-const HEADERS = {
-  "HA-Frontend-Base": `${location.protocol}//${location.host}`,
-};
+// DEV-ONLY TWEAK — DO NOT COMMIT.
+// The "HA-Frontend-Base" header is not CORS-allowed cross-origin, so it makes
+// config-flow preflights 403 when the dev frontend (localhost) talks to a
+// remote core. Removed here to unblock local testing; restore before any PR
+// (it is needed for external-step / OAuth-redirect config flows).
+const HEADERS = {};
 
 export const createSubConfigFlow = (
   hass: HomeAssistant,

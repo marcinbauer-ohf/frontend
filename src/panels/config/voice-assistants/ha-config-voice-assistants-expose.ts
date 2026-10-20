@@ -501,7 +501,7 @@ export class VoiceAssistantsExpose extends LitElement {
         .narrow=${this.narrow}
         back-path="/config"
         .route=${this.route}
-        .tabs=${voiceAssistantTabs}
+        .tabs=${[voiceAssistantTabs[1]]}
         .columns=${this._columns(
           this.narrow,
           this._availableAssistants,

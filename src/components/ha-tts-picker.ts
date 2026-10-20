@@ -1,3 +1,4 @@
+import { mdiPlus } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -6,11 +7,14 @@ import { computeDomain } from "../common/entity/compute_domain";
 import { debounce } from "../common/util/debounce";
 import type { TTSEngine } from "../data/tts";
 import { listTTSEngines } from "../data/tts";
+import { showAddIntegrationDialog } from "../panels/config/integrations/show-add-integration-dialog";
 import type { HomeAssistant } from "../types";
 import type { HaSelectOption, HaSelectSelectEvent } from "./ha-select";
 import "./ha-select";
 
 const NONE = "__NONE_OPTION__";
+
+const ADD_INTEGRATION = "__ADD_INTEGRATION__";
 
 @customElement("ha-tts-picker")
 export class HaTTSPicker extends LitElement {
@@ -84,6 +88,12 @@ export class HaTTSPicker extends LitElement {
       });
     }
 
+    options.push({
+      value: ADD_INTEGRATION,
+      label: this.hass.localize("ui.components.tts-picker.add_integration"),
+      iconPath: mdiPlus,
+    });
+
     return html`
       <ha-select
         .label=${
@@ -137,6 +147,18 @@ export class HaTTSPicker extends LitElement {
     }
   }
 
+  private _addIntegration(): void {
+    // Reset the select back to the current value (the "Add integration" row
+    // is an action, not a selectable value).
+    this.requestUpdate();
+    const refresh = () => {
+      document.removeEventListener("dialog-closed", refresh);
+      this._updateEngines();
+    };
+    document.addEventListener("dialog-closed", refresh);
+    showAddIntegrationDialog(this, { navigateToResult: false });
+  }
+
   static styles = css`
     ha-select {
       width: 100%;
@@ -145,6 +167,10 @@ export class HaTTSPicker extends LitElement {
 
   private _changed(ev: HaSelectSelectEvent): void {
     const value = ev.detail.value;
+    if (value === ADD_INTEGRATION) {
+      this._addIntegration();
+      return;
+    }
     if (
       !this.hass ||
       value === "" ||

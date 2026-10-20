@@ -1,3 +1,4 @@
+import type { TemplateResult } from "lit";
 import type {
   ConversationChatLogAssistantDelta,
   ConversationChatLogToolResultDelta,
@@ -7,7 +8,8 @@ import type { ChatLogToolResult } from "./chat_log";
 
 export interface AssistMessage {
   who: string;
-  text: string;
+  // Composed answers (cards, previews) render a template instead of markdown.
+  text: string | TemplateResult;
   thinking: string;
   thinking_expanded?: boolean;
   tool_calls: Record<
@@ -28,6 +30,9 @@ export interface AssistMessageProcessor {
   setError: (error: string) => void;
   processEvent: (event: PipelineRunEvent) => void;
 }
+
+// The processor only ever streams plain text into its own messages.
+type StreamedAssistMessage = AssistMessage & { text: string };
 
 type ChatLogDelta =
   | Partial<ConversationChatLogAssistantDelta>
@@ -54,7 +59,7 @@ const joinWithBreak = (previous: string, next: string): string => {
     : `${previous}\n\n${next}`;
 };
 
-const newAssistantMessage = (): AssistMessage => ({
+const newAssistantMessage = (): StreamedAssistMessage => ({
   who: "hass",
   text: STREAMING_ELLIPSIS,
   thinking: "",
@@ -76,7 +81,7 @@ export const createAssistMessageProcessor = ({
   let streamingMarker = true;
   let latestSegment = "";
   let continueConversation = false;
-  let hassMessage: AssistMessage = newAssistantMessage();
+  let hassMessage: StreamedAssistMessage = newAssistantMessage();
 
   const isMessageEmpty = (message: AssistMessage) =>
     streamingMarker &&

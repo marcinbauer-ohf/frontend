@@ -66,16 +66,16 @@ export class AssistPipelineDetailTTS extends LitElement {
       <div class="section">
         <div class="content">
           <div class="intro">
-          <h3>
-            ${this.hass.localize(
-              `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.tts.title`
-            )}
-          </h3>
-          <p>
-            ${this.hass.localize(
-              `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.tts.description`
-            )}
-          </p>
+            <h3>
+              ${this.hass.localize(
+                `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.tts.title`
+              )}
+            </h3>
+            <p>
+              ${this.hass.localize(
+                `ui.panel.config.voice_assistants.assistants.pipeline.detail.steps.tts.description`
+              )}
+            </p>
           </div>
           <ha-form
             .schema=${this._schema(
