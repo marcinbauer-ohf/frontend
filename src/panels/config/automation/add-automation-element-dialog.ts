@@ -8,6 +8,7 @@ import { classMap } from "lit/directives/class-map";
 import { repeat } from "lit/directives/repeat";
 import memoizeOne from "memoize-one";
 import { consume } from "../../../common/decorators/consume";
+import { storage } from "../../../common/decorators/storage";
 import { ensureArray } from "../../../common/array/ensure-array";
 import type { HASSDomTargetEvent } from "../../../common/dom/fire_event";
 import { fireEvent } from "../../../common/dom/fire_event";
@@ -30,6 +31,7 @@ import { debounce } from "../../../common/util/debounce";
 import { deepEqual } from "../../../common/util/deep-equal";
 import "../../../components/entity/state-badge";
 import "../../../components/ha-bottom-sheet";
+import { getIntegrationDescriptions } from "../../../data/integrations";
 import "../../../components/ha-button";
 import "../../../components/ha-button-toggle-group";
 import "../../../components/ha-combo-box-item";
@@ -221,6 +223,19 @@ class DialogAddAutomationElement
 
   @state() private _filter = "";
 
+  // The type tab lists groups by category, or integrations by brand; kept
+  // between opens
+  @state()
+  @storage({
+    key: "automation-add-type-browse-by",
+    state: true,
+    subscribe: false,
+  })
+  private _typeBrowseBy: "category" | "brand" = "category";
+
+  // The brands each integration belongs to, loaded when browsing by brand
+  @state() private _brandsOf?: Record<string, string[]>;
+
   @state() private _manifests?: DomainManifestLookup;
 
   @state() private _domains?: Set<string>;
@@ -310,6 +325,9 @@ class DialogAddAutomationElement
     this._loadConfigEntries();
 
     this._fetchManifests();
+    if (this._typeBrowseBy === "brand") {
+      this._loadBrands();
+    }
     this._calculateUsedDomains();
 
     if (!queryTarget) {
@@ -733,13 +751,37 @@ class DialogAddAutomationElement
                       "ha-scrollbar": true,
                     })}
                   >
+                    <div class="browse-by">
+                      <ha-button-toggle-group
+                        variant="neutral"
+                        active-variant="brand"
+                        size="s"
+                        full-width
+                        .buttons=${this._typeBrowseByButtons(
+                          this.hass.localize
+                        )}
+                        .active=${this._typeBrowseBy}
+                        @value-changed=${this._typeBrowseByChanged}
+                      ></ha-button-toggle-group>
+                    </div>
                     <ha-automation-add-element-paste
                       .automationElementType=${automationElementType}
                       .clipboardItem=${this._params!.clipboardItem}
                       @paste-element=${this._paste}
                       divider
                     ></ha-automation-add-element-paste>
-                    ${collections.map(
+                    ${
+                      this._typeBrowseBy === "brand"
+                        ? this._renderBrands(
+                            this._getBrandSections(
+                              automationElementType,
+                              collections,
+                              this._brandsOf
+                            )
+                          )
+                        : nothing
+                    }
+                    ${(this._typeBrowseBy === "brand" ? [] : collections).map(
                       (collection) => html`
                         ${
                           collection.titleKey && collection.groups.length
@@ -2151,6 +2193,134 @@ class DialogAddAutomationElement
     this._tab = ev.detail.value;
   }
 
+  private _typeBrowseByButtons = memoizeOne((localize: LocalizeFunc) => [
+    {
+      label: localize("ui.panel.config.automation.editor.browse_by.category"),
+      value: "category",
+    },
+    {
+      label: localize("ui.panel.config.automation.editor.browse_by.brand"),
+      value: "brand",
+    },
+  ]);
+
+  private _typeBrowseByChanged(ev: CustomEvent<{ value: string }>) {
+    this._typeBrowseBy = ev.detail.value as "category" | "brand";
+    this._selectedGroup = undefined;
+    this._selectedCollectionIndex = undefined;
+    if (this._typeBrowseBy === "brand") {
+      this._loadBrands();
+    }
+  }
+
+  private async _loadBrands() {
+    if (this._brandsOf) {
+      return;
+    }
+    const descriptions = await getIntegrationDescriptions(this.hass);
+    const brandsOf: Record<string, string[]> = {};
+    Object.entries({
+      ...descriptions.core.integration,
+      ...descriptions.custom.integration,
+    }).forEach(([brandDomain, brand]) => {
+      if ("integration_type" in brand || !brand.integrations) {
+        return;
+      }
+      Object.keys(brand.integrations).forEach((domain) => {
+        (brandsOf[domain] ||= []).push(brand.name || brandDomain);
+      });
+    });
+    this._brandsOf = brandsOf;
+  }
+
+  // The integrations of the type tab under the brands they belong to. One
+  // without a brand is under its own name, like the add integration dialog.
+  private _getBrandSections = memoizeOne(
+    (
+      type: AddAutomationElementDialogParams["type"],
+      collections: CollectionGroup[],
+      brandsOf?: Record<string, string[]>
+    ): {
+      name: string;
+      collectionIndex: number;
+      groups: AddAutomationElementListItem[];
+    }[] => {
+      if (!brandsOf) {
+        return [];
+      }
+      const sections = new Map<
+        string,
+        {
+          name: string;
+          collectionIndex: number;
+          groups: AddAutomationElementListItem[];
+        }
+      >();
+      collections
+        .filter(
+          (collection) =>
+            TYPES[type].collections[collection.collectionIndex]?.groups
+              .integrationGroups
+        )
+        .forEach((collection) =>
+          collection.groups
+            .filter((group) => group.key.startsWith(DYNAMIC_PREFIX))
+            .forEach((group) => {
+              const domain = group.key.substring(DYNAMIC_PREFIX.length);
+              (brandsOf[domain] || [group.name]).forEach((name) => {
+                if (!sections.has(name)) {
+                  sections.set(name, {
+                    name,
+                    collectionIndex: collection.collectionIndex,
+                    groups: [],
+                  });
+                }
+                sections.get(name)!.groups.push(group);
+              });
+            })
+        );
+      const byName = (a: { name: string }, b: { name: string }) =>
+        stringCompare(a.name, b.name, this.hass.locale.language);
+      const sorted = [...sections.values()].sort(byName);
+      sorted.forEach((section) => section.groups.sort(byName));
+      return sorted;
+    }
+  );
+
+  private _renderBrands(
+    sections: {
+      name: string;
+      collectionIndex: number;
+      groups: AddAutomationElementListItem[];
+    }[]
+  ) {
+    return sections.map(
+      (section) => html`
+        <ha-section-title>${section.name}</ha-section-title>
+        ${repeat(
+          section.groups,
+          (item) => `${section.name}/${item.key}`,
+          (item) => html`
+            <ha-list-item-button
+              .value=${item.key}
+              .index=${section.collectionIndex}
+              @click=${this._groupSelected}
+              class=${item.key === this._selectedGroup ? "selected" : ""}
+            >
+              <div slot="headline">${item.name}</div>
+              ${item.icon ? html`<span slot="start">${item.icon}</span>` : nothing}
+              ${
+                this._narrow
+                  ? html`<ha-icon-next slot="end"></ha-icon-next>`
+                  : nothing
+              }
+            </ha-list-item-button>
+          `
+        )}
+      `
+    );
+  }
+
   private _searchItemSelected(
     ev: CustomEvent<PickerComboBoxItem | FloorComboBoxItem | EntityComboBoxItem>
   ) {
@@ -2475,6 +2645,10 @@ class DialogAddAutomationElement
 
         ha-svg-icon.plus {
           color: var(--primary-color);
+        }
+
+        .browse-by {
+          padding: var(--ha-space-2) var(--ha-space-3);
         }
 
         .section-title-wrapper {
