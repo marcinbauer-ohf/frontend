@@ -107,6 +107,7 @@ import "../../../layouts/hass-tabs-subpage-data-table";
 import type { HaTabsSubpageDataTable } from "../../../layouts/hass-tabs-subpage-data-table";
 import { haStyle } from "../../../resources/styles";
 import type { HomeAssistant, Route } from "../../../types";
+import { showToast } from "../../../util/toast";
 import {
   getAreaTableColumn,
   getCreatedAtTableColumn,
@@ -1299,7 +1300,7 @@ export class HaConfigEntities extends LitElement {
 
         this._clearSelection();
         // If restart is required by any entity, show a dialog.
-        // Otherwise, show a dialog explaining that some patience is needed
+        // Otherwise, show a toast explaining that some patience is needed
         if (require_restart) {
           showAlertDialog(this, {
             text: this.hass.localize(
@@ -1307,8 +1308,8 @@ export class HaConfigEntities extends LitElement {
             ),
           });
         } else if (reload_delay) {
-          showAlertDialog(this, {
-            text: this.hass.localize(
+          showToast(this, {
+            message: this.hass.localize(
               "ui.dialogs.entity_registry.editor.enabled_delay_confirm",
               { delay: reload_delay }
             ),

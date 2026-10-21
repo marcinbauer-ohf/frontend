@@ -1415,8 +1415,8 @@ export class EntityRegistrySettingsEditor extends LitElement {
       });
     }
     if (result.reload_delay) {
-      showAlertDialog(this, {
-        text: this.hass.localize(
+      showToast(this, {
+        message: this.hass.localize(
           "ui.dialogs.entity_registry.editor.enabled_delay_confirm",
           { delay: result.reload_delay }
         ),

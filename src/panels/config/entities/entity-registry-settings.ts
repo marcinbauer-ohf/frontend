@@ -32,6 +32,7 @@ import {
 import { SubscribeMixin } from "../../../mixins/subscribe-mixin";
 import { haStyle } from "../../../resources/styles";
 import type { HomeAssistant } from "../../../types";
+import { showToast } from "../../../util/toast";
 import { showDeviceRegistryDetailDialog } from "../devices/device-registry-detail/show-dialog-device-registry-detail";
 import "./entity-registry-settings-editor";
 import type { EntityRegistrySettingsEditor } from "./entity-registry-settings-editor";
@@ -202,8 +203,8 @@ export class EntityRegistrySettings extends SubscribeMixin(LitElement) {
         });
       }
       if (result.reload_delay) {
-        showAlertDialog(this, {
-          text: this.hass.localize(
+        showToast(this, {
+          message: this.hass.localize(
             "ui.dialogs.entity_registry.editor.enabled_delay_confirm",
             { delay: result.reload_delay }
           ),
