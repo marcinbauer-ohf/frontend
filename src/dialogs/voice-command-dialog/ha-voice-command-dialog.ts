@@ -9,7 +9,6 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { storage } from "../../common/decorators/storage";
 import { fireEvent } from "../../common/dom/fire_event";
-import { navigate } from "../../common/navigate";
 import "../../components/ha-adaptive-side-dialog";
 import "../../components/ha-alert";
 import "../../components/ha-assist-chat";
@@ -207,14 +206,9 @@ export class HaVoiceCommandDialog extends LitElement {
         class=${hidden ? "hidden" : ""}
         .hass=${this.hass}
         .pipeline=${this._pipeline}
-        .pipelines=${this._pipelines}
-        .pipelineId=${this._pipelineId}
-        .preferredPipeline=${this._preferredPipeline}
         .startListening=${this._startListening}
         .initialPrompt=${this._prompt}
         .submitInitialPrompt=${this._submitPrompt}
-        @pipeline-changed=${this._handlePipelineChanged}
-        @assist-open-settings=${this._openSettings}
       >
       </ha-assist-chat>
     `;
@@ -245,11 +239,6 @@ export class HaVoiceCommandDialog extends LitElement {
     this._chat?.startNewConversation();
     this._currentConversationStoreId = undefined;
     this._view = "chat";
-  }
-
-  private _openSettings() {
-    navigate("/config/voice-assistants/assistants");
-    this.closeDialog();
   }
 
   private _saveCurrentConversation() {
@@ -308,13 +297,6 @@ export class HaVoiceCommandDialog extends LitElement {
     if (this._currentConversationStoreId === ev.detail.id) {
       this._currentConversationStoreId = undefined;
     }
-  }
-
-  private async _handlePipelineChanged(
-    ev: CustomEvent<{ pipelineId: string }>
-  ): Promise<void> {
-    this._pipelineId = ev.detail.pipelineId;
-    await this.updateComplete;
   }
 
   private async _loadPipelines() {

@@ -135,6 +135,7 @@ export class HatScriptGraph extends LitElement {
     choose: this._renderChooseNode,
     if: this._renderIfNode,
     sequence: this._renderSequenceNode,
+    ai_decision: this._renderSequenceNode,
     parallel: this._renderParallelNode,
     other: this._renderOtherNode,
   };

@@ -1,21 +1,16 @@
-import "@home-assistant/webawesome/dist/components/divider/divider";
 import {
   mdiAlertCircle,
   mdiChevronDown,
   mdiChevronUp,
   mdiCog,
   mdiCommentProcessingOutline,
-  mdiEyeOutline,
-  mdiHammerWrench,
   mdiLightbulbOnOutline,
   mdiMicrophone,
   mdiRobotOutline,
   mdiSend,
   mdiShieldCheckOutline,
-  mdiStar,
   mdiViewDashboardOutline,
   mdiWashingMachine,
-  mdiWeb,
 } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing, svg } from "lit";
@@ -24,9 +19,7 @@ import { classMap } from "lit/directives/class-map";
 import { keyed } from "lit/directives/keyed";
 import { consume } from "../common/decorators/consume";
 import { consumeLocalize } from "../common/decorators/consume-context-entry";
-import { storage } from "../common/decorators/storage";
 import { fireEvent } from "../common/dom/fire_event";
-import { stopPropagation } from "../common/dom/stop_propagation";
 import type {
   LocalizeFunc,
   LocalizeKeys,
@@ -36,31 +29,18 @@ import {
   type AssistMessage,
   type AssistMessageProcessor,
 } from "../data/assist_chat";
-import {
-  ASSIST_AGENT_AVATARS_STORAGE_KEY,
-  type AssistAgentAvatars,
-} from "../data/assist_agent_avatars";
-import {
-  ASSIST_AGENT_BUILD_OVERRIDE_STORAGE_KEY,
-  ASSIST_AGENT_CONTROL_OVERRIDE_STORAGE_KEY,
-  type AssistAgentControlOverride,
-} from "../data/assist_agent_control_override";
+
 import type { StoredAssistMessage } from "../data/assist_conversation_history";
 import {
-  assistAgentBuildsHome,
-  assistAgentControlsHome,
-  assistAgentIsCloud,
   runAssistPipeline,
   type AssistPipeline,
   type PipelineRunEvent,
 } from "../data/assist_pipeline";
-import type { IntegrationManifest } from "../data/integration";
 import type { LovelaceCardConfig } from "../data/lovelace/config/card";
 import "../panels/lovelace/cards/hui-card";
 import {
   configContext,
   connectionContext,
-  entitiesContext,
   statesContext,
 } from "../data/context";
 import { showAlertDialog } from "../dialogs/generic/show-dialog-box";
@@ -79,17 +59,11 @@ import {
 } from "../util/documentation-url";
 import "./ha-alert";
 import "./ha-button";
-import "./ha-dropdown";
-import type { HaDropdownSelectEvent } from "./ha-dropdown";
-import "./ha-dropdown-item";
 import "./ha-markdown";
 import "./ha-svg-icon";
 import "./ha-switch";
-import "./ha-tooltip";
 import "./ha-textarea";
 import type { HaTextArea } from "./ha-textarea";
-
-const OPEN_SETTINGS = "__OPEN_SETTINGS__";
 
 // ponytail: front-end-only mock of the agentic "may I run this?" prompt. There is
 // no backend contract for it yet, so it is faked from the composer: send
@@ -268,12 +242,6 @@ export class HaAssistChat extends LitElement {
 
   @property({ attribute: false }) public pipeline?: AssistPipeline;
 
-  @property({ attribute: false }) public pipelines?: AssistPipeline[];
-
-  @property({ attribute: false }) public pipelineId?: string;
-
-  @property({ attribute: false }) public preferredPipeline?: string;
-
   @property({ type: Boolean, attribute: "disable-speech" })
   public disableSpeech = false;
 
@@ -303,11 +271,6 @@ export class HaAssistChat extends LitElement {
 
   @state() private _thinkingVariant = randomThinkingVariant();
 
-  // Integration domain -> iot_class for every agent's conversation engine, used
-  // to show the cloud/local data-locality icon. Resolved from the integration
-  // manifests; an agent is treated as local until its manifest is known.
-  @state() private _iotClasses: Record<string, string | null> = {};
-
   @state()
   @consumeLocalize()
   private _localize!: LocalizeFunc;
@@ -323,34 +286,6 @@ export class HaAssistChat extends LitElement {
   @state()
   @consume({ context: connectionContext, subscribe: true })
   private _connection!: HomeAssistantConnection;
-
-  @state()
-  @consume({ context: entitiesContext, subscribe: true })
-  private _entities?: HomeAssistant["entities"];
-
-  @state()
-  @storage({
-    key: ASSIST_AGENT_AVATARS_STORAGE_KEY,
-    state: true,
-    subscribe: true,
-  })
-  private _avatars: AssistAgentAvatars = {};
-
-  @state()
-  @storage({
-    key: ASSIST_AGENT_CONTROL_OVERRIDE_STORAGE_KEY,
-    state: true,
-    subscribe: true,
-  })
-  private _controlOverrides: AssistAgentControlOverride = {};
-
-  @state()
-  @storage({
-    key: ASSIST_AGENT_BUILD_OVERRIDE_STORAGE_KEY,
-    state: true,
-    subscribe: true,
-  })
-  private _buildOverrides: AssistAgentControlOverride = {};
 
   private _conversationId: string | null = null;
 
@@ -381,9 +316,8 @@ export class HaAssistChat extends LitElement {
 
   protected willUpdate(_changedProperties: PropertyValues<this>): void {
     // Seed an empty conversation on first render so the empty state is shown.
-    // The conversation is NOT reset when the pipeline (agent) changes so that
-    // switching agents keeps the visible history; use startNewConversation()
-    // to explicitly start over.
+    // The conversation is NOT reset when the pipeline changes; use
+    // startNewConversation() to explicitly start over.
     if (!this._restoring && !this.hasUpdated) {
       this._conversation = [];
       this._conversationId = null;
@@ -463,77 +397,6 @@ export class HaAssistChat extends LitElement {
         this._processText(prompt);
       }
     }
-    if (
-      changedProps.has("pipeline") ||
-      changedProps.has("pipelines") ||
-      changedProps.has("_entities")
-    ) {
-      this._loadManifests();
-    }
-  }
-
-  /** The integration domain that provides a pipeline's conversation agent. */
-  private _pipelineDomain(pipeline?: AssistPipeline): string | undefined {
-    const engine = pipeline?.conversation_engine;
-    return engine ? this._entities?.[engine]?.platform : undefined;
-  }
-
-  /**
-   * Where an agent processes requests, from its integration's iot_class.
-   * `undefined` while the manifest is unknown or missing — we say nothing about
-   * an agent whose provenance we can't verify rather than imply it is local.
-   */
-  private _pipelineLocality(
-    pipeline?: AssistPipeline
-  ): "cloud" | "local" | undefined {
-    const domain = this._pipelineDomain(pipeline);
-    const iotClass = domain ? this._iotClasses[domain] : undefined;
-    if (!iotClass) {
-      return undefined;
-    }
-    return assistAgentIsCloud(iotClass) ? "cloud" : "local";
-  }
-
-  /**
-   * Fetch the iot_class of every listed agent's integration so the disclaimer
-   * and the agent selector can show a consistent cloud/local icon.
-   */
-  private async _loadManifests() {
-    if (!this._connection) {
-      return;
-    }
-    const domains = new Set<string>();
-    const current = this._pipelineDomain(this.pipeline);
-    if (current) {
-      domains.add(current);
-    }
-    for (const pipeline of this.pipelines ?? []) {
-      const domain = this._pipelineDomain(pipeline);
-      if (domain) {
-        domains.add(domain);
-      }
-    }
-    const missing = [...domains].filter(
-      (domain) => !(domain in this._iotClasses)
-    );
-    if (!missing.length) {
-      return;
-    }
-    const updates: Record<string, string | null> = {};
-    await Promise.all(
-      missing.map(async (domain) => {
-        try {
-          const manifest =
-            await this._connection.connection.sendMessagePromise<IntegrationManifest>(
-              { type: "manifest/get", integration: domain }
-            );
-          updates[domain] = manifest.iot_class ?? null;
-        } catch (_err) {
-          updates[domain] = null;
-        }
-      })
-    );
-    this._iotClasses = { ...this._iotClasses, ...updates };
   }
 
   public disconnectedCallback() {
@@ -542,28 +405,6 @@ export class HaAssistChat extends LitElement {
     this._unloadAudio();
   }
 
-  /**
-   * The current agent's uploaded avatar, resolved against the Home Assistant
-   * instance. Stored avatar URLs are relative (/api/image/serve/...), so they
-   * must be resolved to load when the frontend is served from another origin
-   * (yarn dev).
-   */
-  private _uploadedAvatarSrc(): string | undefined {
-    const uploaded = this.pipeline
-      ? this._avatars[this.pipeline.id]
-      : undefined;
-    if (!uploaded) {
-      return undefined;
-    }
-    return uploaded.startsWith("/")
-      ? new URL(uploaded, this._config.auth.data.hassUrl).toString()
-      : uploaded;
-  }
-
-  /**
-   * Four-petal thinking animation. Starts on a random variant, then chains
-   * into a random different one each time the current one finishes.
-   */
   private _renderThinkingIcon() {
     const petal = svg`<path
       d="M0 32C17.6731 32 32 17.6731 32 0C14.3269 0 0 14.3269 0 32Z"
@@ -637,81 +478,9 @@ export class HaAssistChat extends LitElement {
     );
   }
 
-  /** Whether the agent can read/write (control) Home Assistant. */
-  private _controlsHome(pipeline: AssistPipeline): boolean {
-    return assistAgentControlsHome(
-      this._states,
-      pipeline,
-      this._controlOverrides
-    );
-  }
-
-  /** Whether the agent may also build (create and edit) in Home Assistant. */
-  private _buildsHome(pipeline: AssistPipeline): boolean {
-    return assistAgentBuildsHome(
-      this._controlsHome(pipeline),
-      pipeline,
-      this._buildOverrides
-    );
-  }
-
-  /**
-   * What an agent may do, as icons: control, build, and where its requests go.
-   * Shared by the chat footer (which adds the wording as tooltips), the agent
-   * list in the picker, and the picker's closed state.
-   */
-  private _capabilityIcons(
-    pipeline?: AssistPipeline
-  ): { icon: string; text: string }[] {
-    if (!pipeline) {
-      return [];
-    }
-    const controlHA = this._controlsHome(pipeline);
-    const locality = this._pipelineLocality(pipeline);
-    const partiallyLocal =
-      locality === "cloud" && !!pipeline.prefer_local_intents;
-
-    const icons = [
-      {
-        icon: controlHA ? mdiRobotOutline : mdiEyeOutline,
-        text: this._localize(
-          controlHA
-            ? "ui.dialogs.voice_command.disclaimer"
-            : "ui.dialogs.voice_command.disclaimer_no_control"
-        ),
-      },
-    ];
-    if (this._buildsHome(pipeline)) {
-      icons.push({
-        icon: mdiHammerWrench,
-        text: this._localize("ui.dialogs.voice_command.disclaimer_build"),
-      });
-    }
-    if (locality) {
-      icons.push({
-        icon: locality === "cloud" ? mdiWeb : mdiShieldCheckOutline,
-        text: this._localize(
-          locality === "local"
-            ? "ui.dialogs.voice_command.disclaimer_data_local"
-            : partiallyLocal
-              ? "ui.dialogs.voice_command.disclaimer_data_cloud_partial"
-              : "ui.dialogs.voice_command.disclaimer_data_cloud"
-        ),
-      });
-    }
-    return icons;
-  }
-
   protected render(): TemplateResult {
-    const controlHA = this.pipeline ? this._controlsHome(this.pipeline) : false;
-    const buildHA = this.pipeline ? this._buildsHome(this.pipeline) : false;
-    const locality = this._pipelineLocality(this.pipeline);
-    // A cloud agent that handles simple commands locally only sends the rest.
-    const partiallyLocal =
-      locality === "cloud" && !!this.pipeline?.prefer_local_intents;
     const supportsMicrophone = AudioRecorder.isSupported;
     const supportsSTT = this.pipeline?.stt_engine && !this.disableSpeech;
-    const avatarSrc = this._uploadedAvatarSrc();
 
     return html`
       <div class="messages ha-scrollbar" @scroll=${this._handleMessagesScroll}>
@@ -719,13 +488,7 @@ export class HaAssistChat extends LitElement {
           this._conversation.length === 0
             ? html`
                 <div class="empty-state">
-                  <span class="empty-logo">
-                    ${
-                      avatarSrc
-                        ? html`<img class="avatar" alt="" src=${avatarSrc} />`
-                        : assistCasitaIcon
-                    }
-                  </span>
+                  <span class="empty-logo">${assistCasitaIcon}</span>
                   <p class="empty-heading">
                     ${this._localize("ui.dialogs.voice_command.how_can_i_help")}
                   </p>
@@ -884,7 +647,6 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
             )}
           ></ha-textarea>
           <div class="composer-actions">
-            ${this._renderAgentPill()}
             <div class="composer-buttons">
               ${
                 this._showSendButton || !supportsSTT
@@ -938,131 +700,8 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
             </div>
           </div>
         </div>
-        <div
-          class="disclaimer ${classMap({
-            hidden: this._conversation.length > 0,
-          })}"
-          aria-hidden=${this._conversation.length > 0 ? "true" : "false"}
-        >
-          <span class="disclaimer-icons">
-            ${this._capabilityIcons(this.pipeline).map(
-              (capability, index) => html`
-                <ha-svg-icon
-                  id="disclaimer-icon-${index}"
-                  .path=${capability.icon}
-                ></ha-svg-icon>
-                <ha-tooltip for="disclaimer-icon-${index}"
-                  >${capability.text}</ha-tooltip
-                >
-              `
-            )}
-          </span>
-          <span class="disclaimer-text">
-            ${this._localize(
-              buildHA
-                ? "ui.dialogs.voice_command.control_summary_build"
-                : controlHA
-                  ? "ui.dialogs.voice_command.control_summary"
-                  : "ui.dialogs.voice_command.control_summary_no"
-            )}
-            ${
-              locality
-                ? this._localize(
-                    locality === "local"
-                      ? "ui.dialogs.voice_command.data_summary_local"
-                      : partiallyLocal
-                        ? "ui.dialogs.voice_command.data_summary_cloud_partial"
-                        : "ui.dialogs.voice_command.data_summary_cloud"
-                  )
-                : nothing
-            }
-            <a
-              href=${documentationUrl(this._config, "/docs/assist/")}
-              target="_blank"
-              rel="noopener noreferrer"
-              >${this._localize("ui.dialogs.voice_command.learn_more")}</a
-            >
-          </span>
-        </div>
       </div>
     `;
-  }
-
-  private _renderAgentPill() {
-    if (!this.pipelines) {
-      return nothing;
-    }
-    return html`
-      <ha-dropdown
-        class="agent-pill"
-        @closed=${stopPropagation}
-        @wa-select=${this._selectPipeline}
-      >
-        <ha-button
-          slot="trigger"
-          appearance="filled"
-          variant="neutral"
-          size="s"
-          .loading=${!this.pipelines}
-        >
-          ${this.pipeline?.name}
-          <!-- Same icons as the footer and the agent list, so the closed picker
-               still says what this agent may do. -->
-          ${this._capabilityIcons(this.pipeline).map(
-            (capability) =>
-              html`<ha-svg-icon
-                class="agent-capability"
-                .path=${capability.icon}
-              ></ha-svg-icon>`
-          )}
-          <ha-svg-icon slot="end" .path=${mdiChevronDown}></ha-svg-icon>
-        </ha-button>
-        ${this.pipelines.map(
-          (pipeline) => html`
-            <ha-dropdown-item
-              ?selected=${
-                pipeline.id === this.pipelineId ||
-                (!this.pipelineId && pipeline.id === this.preferredPipeline)
-              }
-              .value=${pipeline.id}
-            >
-              ${pipeline.name}
-              ${this._capabilityIcons(pipeline).map(
-                (capability) =>
-                  html`<ha-svg-icon
-                    class="agent-capability"
-                    .path=${capability.icon}
-                  ></ha-svg-icon>`
-              )}
-              ${
-                pipeline.id === this.preferredPipeline
-                  ? html`<ha-svg-icon
-                      slot="details"
-                      .path=${mdiStar}
-                    ></ha-svg-icon>`
-                  : nothing
-              }
-            </ha-dropdown-item>
-          `
-        )}
-        <wa-divider></wa-divider>
-        <ha-dropdown-item .value=${OPEN_SETTINGS}>
-          ${this._localize("ui.dialogs.voice_command.open_settings")}
-          <ha-svg-icon slot="icon" .path=${mdiCog}></ha-svg-icon>
-        </ha-dropdown-item>
-      </ha-dropdown>
-    `;
-  }
-
-  private _selectPipeline(ev: HaDropdownSelectEvent) {
-    const pipelineId = ev.detail?.item?.value;
-    if (pipelineId === OPEN_SETTINGS) {
-      fireEvent(this, "assist-open-settings");
-      return;
-    }
-    if (pipelineId) {
-      fireEvent(this, "pipeline-changed", { pipelineId });
-    }
   }
 
   private async _scrollMessagesBottom() {
@@ -2055,12 +1694,6 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
           width: 96px;
           height: 96px;
         }
-        .empty-logo img.avatar {
-          width: 96px;
-          height: 96px;
-          border-radius: var(--ha-border-radius-circle);
-          object-fit: cover;
-        }
         .empty-heading {
           margin: 0;
           font-size: var(--ha-font-size-2xl);
@@ -2254,70 +1887,12 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
           align-items: center;
           gap: var(--ha-space-2);
         }
-        .agent-pill {
-          display: flex;
-        }
-        .agent-pill ha-button {
-          --ha-button-height: var(--ha-space-8);
-        }
-        .agent-pill ha-svg-icon {
-          height: var(--ha-space-5);
-        }
-        .agent-capability {
-          --mdc-icon-size: 16px;
-          margin-left: var(--ha-space-1);
-          margin-inline-start: var(--ha-space-1);
-          margin-inline-end: initial;
-          color: var(--secondary-text-color);
-          vertical-align: middle;
-        }
         .composer-buttons {
           display: flex;
           align-items: center;
           margin-left: auto;
           margin-inline-start: auto;
           margin-inline-end: 0;
-        }
-        .disclaimer {
-          display: flex;
-          align-items: center;
-          gap: var(--ha-space-2);
-          padding: 0 var(--ha-space-2);
-          font-size: var(--ha-font-size-s);
-          line-height: var(--ha-line-height-normal);
-          color: var(--secondary-text-color);
-          /* Reserve the two clamped lines so fading it out shifts nothing. */
-          height: calc(
-            2 * var(--ha-font-size-s) * var(--ha-line-height-normal)
-          );
-          transition: opacity var(--ha-animation-duration-normal) ease-out;
-        }
-        .disclaimer.hidden {
-          opacity: 0;
-          pointer-events: none;
-        }
-        .disclaimer-icons {
-          display: inline-flex;
-          align-items: center;
-          gap: var(--ha-space-1);
-          flex-shrink: 0;
-        }
-        .disclaimer-text {
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
-          line-clamp: 2;
-          overflow: hidden;
-        }
-        .disclaimer ha-svg-icon {
-          --mdc-icon-size: 16px;
-          flex-shrink: 0;
-          display: block;
-          color: var(--disabled-text-color);
-        }
-        .disclaimer a {
-          color: inherit;
-          text-decoration: none;
         }
         .spacer {
           flex: 1;
@@ -2671,11 +2246,5 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
 declare global {
   interface HTMLElementTagNameMap {
     "ha-assist-chat": HaAssistChat;
-  }
-  interface HASSDomEvents {
-    "assist-open-settings": undefined;
-  }
-  interface HASSDomEvents {
-    "pipeline-changed": { pipelineId: string };
   }
 }

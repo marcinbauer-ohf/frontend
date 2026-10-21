@@ -21,12 +21,20 @@ import type {
   ParallelAction,
   RepeatAction,
   SequenceAction,
+  ServiceAction,
   SetConversationResponseAction,
   StopAction,
   VariablesAction,
   WaitForTriggerAction,
 } from "./script";
 import { getActionType } from "./script";
+import {
+  AI_TASK_EVALUATE_ACTION,
+  camerasFromAttachments,
+  parseAIDecision,
+  type AITaskEvaluateData,
+} from "./ai_task";
+import { computeStateName } from "../common/entity/compute_state_name";
 
 const actionTranslationBaseKey =
   "ui.panel.config.automation.editor.actions.type";
@@ -73,6 +81,22 @@ export const describeAction = <T extends ActionType>(
   }
 };
 
+const describeEvaluate = (hass: HomeAssistant, config: ServiceAction) => {
+  const data = (config.data ?? {}) as Partial<AITaskEvaluateData>;
+  const cameraId = camerasFromAttachments(data.attachments)[0];
+  const camera = cameraId && hass.states[cameraId];
+  const question = Object.values(data.questions ?? {})[0]?.instructions;
+  return hass.localize(
+    `${actionTranslationBaseKey}.ai_decision.description.full`,
+    {
+      hasCamera: String(!!cameraId),
+      camera: camera ? computeStateName(camera) : cameraId,
+      hasQuestion: String(!!question),
+      question,
+    }
+  );
+};
+
 const tryDescribeAction = <T extends ActionType>(
   hass: HomeAssistant,
   entityRegistry: EntityRegistryEntry[],
@@ -90,6 +114,10 @@ const tryDescribeAction = <T extends ActionType>(
 
   if (actionType === "service") {
     const config = action as ActionTypes["service"];
+
+    if (config.action === AI_TASK_EVALUATE_ACTION) {
+      return describeEvaluate(hass, config);
+    }
 
     const targets: string[] = [];
     const targetOrData = config.target || config.data;
@@ -366,6 +394,10 @@ const tryDescribeAction = <T extends ActionType>(
 
   if (actionType === "sequence") {
     const config = action as SequenceAction;
+    const decision = parseAIDecision(config);
+    if (decision) {
+      return describeEvaluate(hass, decision.evaluate);
+    }
     const numActions = ensureArray(config.sequence ?? []).length;
     return hass.localize(
       `${actionTranslationBaseKey}.sequence.description.full`,

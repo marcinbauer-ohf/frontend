@@ -102,6 +102,7 @@ import { getEntityTarget } from "../target/get_entity_target";
 import "../target/ha-automation-row-targets";
 import "./ha-automation-action-editor";
 import type HaAutomationActionEditor from "./ha-automation-action-editor";
+import "./types/ha-automation-action-ai_decision";
 import "./types/ha-automation-action-choose";
 import "./types/ha-automation-action-condition";
 import "./types/ha-automation-action-delay";
