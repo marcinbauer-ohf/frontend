@@ -8,6 +8,7 @@ import {
   mdiDevices,
   mdiFormatListNumbered,
   mdiGestureDoubleTap,
+  mdiHeadQuestionOutline,
   mdiHandBackRight,
   mdiPlay,
   mdiRefresh,
@@ -17,6 +18,7 @@ import {
   mdiTrafficLight,
 } from "@mdi/js";
 import type { AutomationElementGroupCollection } from "./automation";
+import { parseAIDecision } from "./ai_task";
 import { CONDITION_BUILDING_BLOCKS } from "./condition";
 import type { Action } from "./script";
 import { getActionType } from "./script";
@@ -42,6 +44,7 @@ export const ACTION_ICONS = {
   parallel: mdiShuffleDisabled,
   variables: mdiApplicationVariableOutline,
   set_conversation_response: mdiBullhorn,
+  ai_decision: mdiHeadQuestionOutline,
 } as const;
 
 // Plain function on purpose: the trace tree calls this once per action node
@@ -53,6 +56,10 @@ export const getAutomationActionType = (action: Action | undefined) => {
   }
   if ("action" in action) {
     return getActionType(action);
+  }
+  // A sequence written by the "Ask AI" building block
+  if ("sequence" in action && parseAIDecision(action)) {
+    return "ai_decision" as const;
   }
   if (CONDITION_BUILDING_BLOCKS.some((key) => key in action)) {
     return "condition" as const;
@@ -105,6 +112,7 @@ export const ACTION_BUILDING_BLOCKS_GROUP = {
   if: {},
   stop: {},
   sequence: {},
+  ai_decision: {},
   parallel: {},
   variables: {},
 };
@@ -140,6 +148,7 @@ export const VIRTUAL_ACTIONS: Partial<
 } as const;
 
 export const COLLAPSIBLE_ACTION_ELEMENTS = [
+  "ha-automation-action-ai_decision",
   "ha-automation-action-choose",
   "ha-automation-action-condition",
   "ha-automation-action-if",
@@ -162,4 +171,5 @@ export const ACTION_COMBINED_BLOCKS = [
   "repeat_count", // virtual repeat variant
   "repeat_for_each", // virtual repeat variant
   "wait_for_trigger",
+  "ai_decision",
 ];

@@ -6398,6 +6398,40 @@
                     "full": "Set response of conversation to ''{response}''"
                   }
                 },
+                "ai_decision": {
+                  "label": "Ask AI",
+                  "description": {
+                    "picker": "Asks AI a question about cameras, entities or text you give it, and runs different actions depending on the answer.",
+                    "full": "Ask AI{hasCamera, select, \n true { about {camera}} \n other {}\n }{hasQuestion, select, \n true {: ''{question}''} \n other {}\n }"
+                  },
+                  "cameras": "Cameras",
+                  "cameras_helper": "The AI looks at a snapshot from each camera.",
+                  "entities": "Entities",
+                  "entities_helper": "The AI gets the name, state and unit of each entity at the time the block runs.",
+                  "context": "Extra context",
+                  "context_helper": "Anything else the AI should know. Templates are allowed.",
+                  "instructions": "Question",
+                  "type": "Answer type",
+                  "type_noul": "Yes or no",
+                  "type_choice": "One of several options",
+                  "type_score": "A level on a scale",
+                  "threshold": "Confidence needed",
+                  "threshold_helper": "How sure the AI must be before the yes actions run.",
+                  "if_yes": "If yes",
+                  "option": "Option {number}",
+                  "level": "Level {number}",
+                  "add_option": "Add option",
+                  "add_level": "Add level",
+                  "rename_option": "Rename option",
+                  "option_name": "Name",
+                  "remove_option": "Remove option",
+                  "otherwise": "Otherwise",
+                  "advanced": "Advanced",
+                  "entity_id": "Decision model",
+                  "entity_id_helper": "Leave empty to use the default decision model from the AI settings.",
+                  "response_variable": "Response variable",
+                  "response_variable_helper": "The full answer is also available to the actions in each branch under this name."
+                },
                 "unknown": {
                   "label": "Unknown"
                 }

@@ -353,6 +353,7 @@ export class TraceTree {
         ];
         break;
       }
+      case "ai_decision":
       case "sequence":
         node.branches = [
           this._branch(
