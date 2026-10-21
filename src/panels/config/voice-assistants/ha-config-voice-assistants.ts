@@ -67,10 +67,6 @@ class HaConfigVoiceAssistants extends HassRouterPage {
         tag: "ha-config-voice-assistants-expose",
         load: () => import("./ha-config-voice-assistants-expose"),
       },
-      mcp: {
-        tag: "ha-config-voice-assistants-mcp",
-        load: () => import("./ha-config-voice-assistants-mcp"),
-      },
       debug: {
         tag: "assist-debug",
         load: () => import("./debug/assist-debug"),

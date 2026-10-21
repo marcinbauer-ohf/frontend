@@ -6,7 +6,6 @@ import type { HASSDomEvent } from "../common/dom/fire_event";
 import { mainWindow } from "../common/dom/get_main_window";
 import { ShortcutManager } from "../common/keyboard/shortcuts";
 import { extractSearchParamsObject } from "../common/url/search-params";
-import { isAssistEnabled } from "../data/assist_pipeline";
 import type { QuickBarSection } from "../dialogs/quick-bar/show-dialog-quick-bar";
 import {
   closeQuickBar,
@@ -169,10 +168,6 @@ export default <T extends Constructor<HassElement>>(superClass: T) =>
       // The same key closes it again, like $mod+k does for the quick bar.
       if (this._assistOpen) {
         closeVoiceCommandDialog();
-        return;
-      }
-
-      if (!(await isAssistEnabled(this.hass!))) {
         return;
       }
 

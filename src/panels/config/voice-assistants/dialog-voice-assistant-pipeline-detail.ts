@@ -19,7 +19,6 @@ import type {
 import { fetchAssistPipelineLanguages } from "../../../data/assist_pipeline";
 import { haStyleDialog } from "../../../resources/styles";
 import type { HomeAssistant } from "../../../types";
-import "./assist-pipeline-detail/assist-pipeline-detail-access";
 import "./assist-pipeline-detail/assist-pipeline-detail-config";
 import "./assist-pipeline-detail/assist-pipeline-detail-conversation";
 import "./assist-pipeline-detail/assist-pipeline-detail-stt";
@@ -28,26 +27,17 @@ import "./assist-pipeline-detail/assist-pipeline-detail-wakeword";
 import type { VoiceAssistantPipelineDetailsDialogParams } from "./show-dialog-voice-assistant-pipeline-detail";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
 
-type PipelineDialogData = Partial<AssistPipeline> & {
-  avatar?: string | null;
-  // Client-only flags mirroring the "Control Home Assistant" and "Build in Home
-  // Assistant" overrides so the dialog tracks them as a change; not part of the
-  // saved pipeline params.
-  control_home?: boolean;
-  build_home?: boolean;
-};
-
 @customElement("dialog-voice-assistant-pipeline-detail")
-export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<PipelineDialogData>()(
-  LitElement
-) {
+export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
+  Partial<AssistPipeline>
+>()(LitElement) {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @state() private _params?: VoiceAssistantPipelineDetailsDialogParams;
 
   @state() private _open = false;
 
-  @state() private _data?: PipelineDialogData;
+  @state() private _data?: Partial<AssistPipeline>;
 
   @state() private _hideWakeWord = false;
 
@@ -70,10 +60,7 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
       "id" in this._params.pipeline &&
       this._params.pipeline.id
     ) {
-      this._data = {
-        ...this._params.pipeline,
-        avatar: this._params.avatar ?? null,
-      };
+      this._data = { ...this._params.pipeline };
 
       this._hideWakeWord =
         this._params.hideWakeWord || !this._data.wake_word_entity;
@@ -104,9 +91,6 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
       }
     }
     this._data = {
-      // New agents handle simple commands locally by default. Existing
-      // pipelines keep whatever they were stored with (absent = off, above).
-      prefer_local_intents: true,
       ...(this._params.pipeline || {}),
       language:
         this._params.pipeline?.language ||
@@ -116,7 +100,6 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
         ),
       stt_engine: this._params.pipeline?.stt_engine || sstDefault,
       tts_engine: this._params.pipeline?.tts_engine || ttsDefault,
-      avatar: this._params.avatar ?? null,
     };
     this._initDirtyTracking({ type: "deep" }, this._data);
   }
@@ -198,27 +181,17 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
           <assist-pipeline-detail-config
             .hass=${this.hass}
             .data=${this._data}
-            .avatar=${this._data.avatar}
             .supportedLanguages=${this._supportedLanguages}
             keys="name,language"
             @value-changed=${this._valueChanged}
-            @avatar-changed=${this._avatarChanged}
             ?autofocus=${!isExistingPipeline}
           ></assist-pipeline-detail-config>
-          <div class="agent-card">
-            <assist-pipeline-detail-conversation
-              .hass=${this.hass}
-              .data=${this._data}
-              keys="conversation_engine,conversation_language"
-              @value-changed=${this._valueChanged}
-            ></assist-pipeline-detail-conversation>
-            <assist-pipeline-detail-access
-              .hass=${this.hass}
-              .data=${this._data}
-              keys="prefer_local_intents,control_home,build_home"
-              @value-changed=${this._valueChanged}
-            ></assist-pipeline-detail-access>
-          </div>
+          <assist-pipeline-detail-conversation
+            .hass=${this.hass}
+            .data=${this._data}
+            keys="conversation_engine,conversation_language,prefer_local_intents"
+            @value-changed=${this._valueChanged}
+          ></assist-pipeline-detail-conversation>
           ${
             !this._cloudActive &&
             (this._data.tts_engine === "cloud" ||
@@ -310,12 +283,6 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
     this._updateDirtyState(this._data);
   }
 
-  private _avatarChanged(ev: CustomEvent) {
-    this._error = undefined;
-    this._data = { ...this._data, avatar: ev.detail.value };
-    this._updateDirtyState(this._data);
-  }
-
   private async _updatePipeline() {
     this._submitting = true;
     try {
@@ -325,7 +292,7 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
         language: data.language!,
         conversation_engine: data.conversation_engine!,
         conversation_language: data.conversation_language ?? null,
-        prefer_local_intents: data.prefer_local_intents ?? false,
+        prefer_local_intents: data.prefer_local_intents ?? true,
         stt_engine: data.stt_engine ?? null,
         stt_language: data.stt_language ?? null,
         tts_engine: data.tts_engine ?? null,
@@ -334,16 +301,15 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
         wake_word_entity: data.wake_word_entity ?? null,
         wake_word_id: data.wake_word_id ?? null,
       };
-      const avatar = data.avatar ?? null;
       if (
         this._params!.pipeline &&
         "id" in this._params!.pipeline &&
         !!this._params!.pipeline.id &&
         this._params!.updatePipeline
       ) {
-        await this._params!.updatePipeline(values, avatar);
+        await this._params!.updatePipeline(values);
       } else if (this._params!.createPipeline) {
-        await this._params!.createPipeline(values, avatar);
+        await this._params!.createPipeline(values);
       } else {
         // eslint-disable-next-line no-console
         console.error("No createPipeline function provided");
@@ -364,18 +330,6 @@ export class DialogVoiceAssistantPipelineDetail extends DirtyStateProviderMixin<
         .content > *:not(:last-child) {
           margin-bottom: 16px;
           display: block;
-        }
-        /* The conversation agent and its access rows read as one card: the
-           agent picker and instructions on top, what it may do below. */
-        .agent-card {
-          border: 1px solid var(--divider-color);
-          border-radius: var(--ha-border-radius-md);
-          box-sizing: border-box;
-          padding: 16px;
-        }
-        .agent-card > assist-pipeline-detail-access {
-          display: block;
-          margin-top: 16px;
         }
         ha-alert {
           margin-bottom: 16px;

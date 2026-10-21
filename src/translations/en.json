@@ -1815,19 +1815,6 @@
         "start_listening": "Start listening",
         "new_conversation": "New conversation",
         "open_settings": "Settings",
-        "disclaimer": "This assistant can read and write to your Home Assistant.",
-        "disclaimer_no_control": "This assistant can’t control your home.",
-        "disclaimer_build": "This assistant can also create and edit automations, dashboards, and settings.",
-        "disclaimer_data_local": "Your requests are processed locally and no data is sent to the internet.",
-        "disclaimer_data_cloud": "Your requests are sent to the internet for processing.",
-        "disclaimer_data_cloud_partial": "Commands your home understands are handled locally; anything else is sent to the internet for processing.",
-        "control_summary": "Can control your home.",
-        "control_summary_build": "Can control and build in your home.",
-        "control_summary_no": "Can’t control your home.",
-        "data_summary_local": "No data leaves your home.",
-        "data_summary_cloud": "Requests are sent to the internet.",
-        "data_summary_cloud_partial": "Only commands your home can’t handle are sent to the internet.",
-        "learn_more": "Learn more",
         "history": {
           "title": "Past conversations",
           "search": "Search conversations",
@@ -3013,8 +3000,12 @@
             "secondary": "Communication protocols and radios for your devices"
           },
           "voice_assistants": {
-            "main": "Assistants and AI",
-            "secondary": "Manage your assistants and AI agents"
+            "main": "Voice assistants",
+            "secondary": "Manage your voice assistants"
+          },
+          "ai": {
+            "main": "[%key:ui::panel::config::ai::caption%]",
+            "secondary": "[%key:ui::panel::config::ai::description%]"
           },
           "energy": {
             "main": "Energy",
@@ -5242,43 +5233,20 @@
         },
         "voice_assistants": {
           "assistants": {
-            "caption": "Assistants and AI",
-            "status_enabled": "[%key:ui::panel::config::ai::enabled%]",
-            "status_disabled": "[%key:ui::panel::config::ai::disabled%]",
+            "caption": "Voice assistants",
             "general": {
-              "title": "Settings",
               "accessible_entities": "Shared entities",
-              "all_exposed_entities": "All shared entities",
               "accessible_entities_count": "{number} {number, plural,\n  one {entity}\n  other {entities}\n}"
-            },
-            "mcp": {
-              "title": "Model Context Protocol",
-              "short_description": "Connect AI agents to your home",
-              "description": "Add one of the URLs below to your AI agent. See the {documentation} for agent-specific instructions.",
-              "documentation": "documentation",
-              "your_api": "Your MCP API",
-              "individual_apis": "Individual MCP APIs",
-              "assist_api": "Assist",
-              "configure": "Configure",
-              "copy_url": "Copy URL",
-              "copied_url": "Copied URL to clipboard"
             },
             "pipeline": {
               "link_learn_how_it_works": "[%key:ui::panel::config::cloud::account::remote::link_learn_how_it_works%]",
-              "provider": "Home Assistant",
-              "intro": "Assist is Home Assistant's built-in text and voice chat that lets you interact with your home.",
-              "enable_assist": "Enable Assist",
-              "agents": "Agents",
-              "agents_intro_title": "Meet agents",
-              "agents_intro": "Assist now supports multiple agents. Each agent has its own conversation agent, voice, and access to your home. Give them an avatar and custom instructions, and switch between them in the Assist chat.",
-              "controls_home": "Control Home Assistant",
-              "builds_home": "Build in Home Assistant",
-              "cannot_control_home": "Can’t control Home Assistant",
-              "data_local": "Your requests are handled on your network, not sent to the internet",
-              "data_cloud": "Sends your requests to the internet",
-              "data_cloud_partial": "Only commands your home can’t handle are sent to the internet",
-              "no_agents": "You don’t have any agents yet",
-              "add_assistant": "Create agent",
+              "header": "Home Assistant Voice",
+              "intro": "Home Assistant Voice is the built-in voice assistant that lets you talk to your home.",
+              "agents": "Voice profiles",
+              "agents_intro_title": "Meet voice profiles",
+              "agents_intro": "Home Assistant Voice supports multiple voice profiles. Each profile has its own conversation agent, voice, and language. Pick one for each voice device.",
+              "no_agents": "You don’t have any voice profiles yet",
+              "add_assistant": "Create voice profile",
               "expose_new_entities": "Share new devices automatically",
               "expose_new_entities_info": "New supported devices are shared automatically, except security devices like locks and alarm panels.",
               "assist_devices": "Assist devices",
@@ -5288,7 +5256,6 @@
                 "confirm_text": "{name} will be permanently deleted.",
                 "error_preferred": "You cannot delete the preferred assistant"
               },
-              "start_conversation": "Start conversation",
               "devices": {
                 "title": "Assist devices",
                 "device": "Device",
@@ -5297,39 +5264,19 @@
               },
               "detail": {
                 "update_assistant_action": "Update",
-                "add_assistant_title": "Create agent",
-                "edit_assistant_title": "Edit agent",
+                "add_assistant_title": "Create voice profile",
+                "edit_assistant_title": "Edit voice profile",
                 "add_assistant_action": "Create",
                 "try_tts": "Try voice",
                 "debug": "Debug",
                 "set_as_preferred": "Set as preferred",
                 "add_streaming_wake_word": "Add streaming wake word",
-                "access": {
-                  "control_on": "Enabled",
-                  "control_off": "Disabled",
-                  "control_locked_local": "Always on while commands are handled locally",
-                  "build_description": "Let this agent create and edit automations, dashboards, and settings",
-                  "build_needs_control": "Requires control of Home Assistant",
-                  "control_hint": "Change control access in the conversation agent’s settings.",
-                  "can_read": "Read or control {count} {count, plural,\n  one {entity}\n  other {entities}\n}",
-                  "exposed_shared": "Shared by all agents",
-                  "internet_cloud": "Requires the internet",
-                  "internet_cloud_description": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::data_cloud%]",
-                  "internet_local": "Runs locally",
-                  "internet_local_description": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::data_local%]",
-                  "internet_cloud_partial_description": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::data_cloud_partial%]",
-                  "instructions": "Instructions",
-                  "instructions_empty": "No custom instructions"
-                },
                 "form": {
                   "name": "[%key:ui::common::name%]",
-                  "avatar": "Avatar",
-                  "avatar_add": "Add avatar",
                   "conversation_engine": "Conversation agent",
                   "conversation_language": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::detail::form::language%]",
                   "prefer_local_intents": "Prefer handling commands locally",
                   "prefer_local_intents_description": "Commands Home Assistant understands are answered locally. Everything else is sent to the internet.",
-                  "prefer_local_intents_description_local": "Commands Home Assistant understands are answered directly, without the agent.",
                   "language": "Language",
                   "stt_engine": "Speech-to-text",
                   "stt_language": "[%key:ui::panel::config::voice_assistants::assistants::pipeline::detail::form::language%]",
@@ -9475,9 +9422,7 @@
         },
         "ai": {
           "caption": "AI",
-          "description": "Configure AI suggestions, task preferences, and the Model Context Protocol server",
-          "enabled": "Enabled",
-          "disabled": "Disabled"
+          "description": "Configure AI suggestions, task preferences, and the Model Context Protocol server"
         },
         "entity_id_format": {
           "caption": "Entity ID format",
