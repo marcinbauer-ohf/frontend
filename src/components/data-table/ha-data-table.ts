@@ -21,6 +21,7 @@ import {
 } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { ifDefined } from "lit/directives/if-defined";
+import { repeat } from "lit/directives/repeat";
 import { join } from "lit/directives/join";
 import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
@@ -193,6 +194,14 @@ export class HaDataTable extends LitElement {
   @property({ attribute: false }) public hiddenColumns?: string[];
 
   @property({ attribute: false }) public columnOrder?: string[];
+
+  /**
+   * Renders each row as a card instead of a table row. Search, sort and
+   * grouping stay the same, only the body becomes a card grid.
+   */
+  @property({ attribute: false }) public renderCard?: (
+    row: DataTableRowData
+  ) => TemplateResult | typeof nothing;
 
   @state() private _filterable = false;
 
@@ -478,11 +487,14 @@ export class HaDataTable extends LitElement {
 
     const items = this._filteredData
       ? this._groupData(
-          this._withChildren(
-            this._filteredData,
-            this._expandedRows,
-            this._filter
-          ),
+          // A card shows a device whole, so its entity rows stay folded
+          this.renderCard
+            ? this._filteredData
+            : this._withChildren(
+                this._filteredData,
+                this._expandedRows,
+                this._filter
+              ),
           this._i18n?.localize,
           this._i18n?.locale,
           this.appendRow,
@@ -515,113 +527,131 @@ export class HaDataTable extends LitElement {
           class="mdc-data-table__table ${classMap({
             "auto-height": this.autoHeight,
           })}"
-          role="table"
-          aria-rowcount=${this._countRows(items) + (this.loadError ? 2 : 1)}
+          role=${this.renderCard ? "group" : "table"}
+          aria-rowcount=${ifDefined(
+            this.renderCard
+              ? undefined
+              : this._countRows(items) + (this.loadError ? 2 : 1)
+          )}
           style=${styleMap({
             height: this.autoHeight
               ? `${(filteredDataLength || 1) * 53 + 53}px`
               : `calc(100% - ${this._headerHeight}px)`,
           })}
         >
-          <div
-            class="mdc-data-table__header-row"
-            role="row"
-            aria-rowindex="1"
-            @scroll=${this._scrollContent}
-          >
-            <slot name="header-row">
-              ${
-                this.selectable
-                  ? html`
-                      <div
-                        class="mdc-data-table__header-cell mdc-data-table__header-cell--checkbox"
-                        role="columnheader"
-                      >
-                        <ha-checkbox
-                          class="mdc-data-table__row-checkbox"
-                          @change=${this._handleHeaderRowCheckboxClick}
-                          .indeterminate=${
-                            !!this._checkedRows.length &&
-                            this._checkedRows.length !==
-                              this._checkableRowsCount
-                          }
-                          .checked=${
-                            !!this._checkedRows.length &&
-                            this._checkedRows.length ===
-                              this._checkableRowsCount
-                          }
-                        >
-                        </ha-checkbox>
-                      </div>
-                    `
-                  : ""
-              }
-              ${
-                this._hasChildren(this.data)
-                  ? html`<div
-                      class="mdc-data-table__header-cell mdc-data-table__header-cell--expand"
-                      role="columnheader"
-                    ></div>`
-                  : nothing
-              }
-              ${Object.entries(columns).map(([key, column]) => {
-                if (!this._isColumnVisible(key, column)) {
-                  return nothing;
-                }
-                const sorted = key === this.sortColumn;
-                const classes = {
-                  "mdc-data-table__header-cell--numeric":
-                    column.type === "numeric",
-                  "mdc-data-table__header-cell--icon": column.type === "icon",
-                  "mdc-data-table__header-cell--icon-button":
-                    column.type === "icon-button",
-                  "mdc-data-table__header-cell--overflow-menu":
-                    column.type === "overflow-menu",
-                  "mdc-data-table__header-cell--overflow":
-                    column.type === "overflow",
-                  sortable: Boolean(column.sortable),
-                  "not-sorted": Boolean(column.sortable && !sorted),
-                };
-                return html`
+          ${
+            this.renderCard
+              ? // Cards have no column headers, but the narrow toolbar still
+                // slots in here
+                html`<div class="mdc-data-table__header-row cards-header-row">
+                  <slot name="header-row"></slot>
+                </div>`
+              : html`
                   <div
-                    aria-label=${ifDefined(column.label)}
-                    class="mdc-data-table__header-cell ${classMap(classes)}"
-                    style=${styleMap({
-                      minWidth: column.minWidth,
-                      maxWidth: column.maxWidth,
-                      flex: column.flex || 1,
-                    })}
-                    role="columnheader"
-                    aria-sort=${ifDefined(
-                      sorted
-                        ? this.sortDirection === "desc"
-                          ? "descending"
-                          : "ascending"
-                        : undefined
-                    )}
-                    @click=${this._handleHeaderClick}
-                    .columnId=${key}
-                    title=${ifDefined(column.title)}
+                    class="mdc-data-table__header-row"
+                    role="row"
+                    aria-rowindex="1"
+                    @scroll=${this._scrollContent}
                   >
-                    ${
-                      column.sortable
-                        ? html`<button type="button" class="sort-button">
-                            <ha-svg-icon
-                              .path=${
-                                sorted && this.sortDirection === "desc"
-                                  ? mdiArrowDown
-                                  : mdiArrowUp
-                              }
-                            ></ha-svg-icon>
-                            <span>${column.title}</span>
-                          </button>`
-                        : html`<span>${column.title}</span>`
-                    }
+                    <slot name="header-row">
+                      ${
+                        this.selectable
+                          ? html`
+                              <div
+                                class="mdc-data-table__header-cell mdc-data-table__header-cell--checkbox"
+                                role="columnheader"
+                              >
+                                <ha-checkbox
+                                  class="mdc-data-table__row-checkbox"
+                                  @change=${this._handleHeaderRowCheckboxClick}
+                                  .indeterminate=${
+                                    !!this._checkedRows.length &&
+                                    this._checkedRows.length !==
+                                      this._checkableRowsCount
+                                  }
+                                  .checked=${
+                                    !!this._checkedRows.length &&
+                                    this._checkedRows.length ===
+                                      this._checkableRowsCount
+                                  }
+                                >
+                                </ha-checkbox>
+                              </div>
+                            `
+                          : ""
+                      }
+                      ${
+                        this._hasChildren(this.data)
+                          ? html`<div
+                              class="mdc-data-table__header-cell mdc-data-table__header-cell--expand"
+                              role="columnheader"
+                            ></div>`
+                          : nothing
+                      }
+                      ${Object.entries(columns).map(([key, column]) => {
+                        if (!this._isColumnVisible(key, column)) {
+                          return nothing;
+                        }
+                        const sorted = key === this.sortColumn;
+                        const classes = {
+                          "mdc-data-table__header-cell--numeric":
+                            column.type === "numeric",
+                          "mdc-data-table__header-cell--icon":
+                            column.type === "icon",
+                          "mdc-data-table__header-cell--icon-button":
+                            column.type === "icon-button",
+                          "mdc-data-table__header-cell--overflow-menu":
+                            column.type === "overflow-menu",
+                          "mdc-data-table__header-cell--overflow":
+                            column.type === "overflow",
+                          sortable: Boolean(column.sortable),
+                          "not-sorted": Boolean(column.sortable && !sorted),
+                        };
+                        return html`
+                          <div
+                            aria-label=${ifDefined(column.label)}
+                            class="mdc-data-table__header-cell ${classMap(classes)}"
+                            style=${styleMap({
+                              minWidth: column.minWidth,
+                              maxWidth: column.maxWidth,
+                              flex: column.flex || 1,
+                            })}
+                            role="columnheader"
+                            aria-sort=${ifDefined(
+                              sorted
+                                ? this.sortDirection === "desc"
+                                  ? "descending"
+                                  : "ascending"
+                                : undefined
+                            )}
+                            @click=${this._handleHeaderClick}
+                            .columnId=${key}
+                            title=${ifDefined(column.title)}
+                          >
+                            ${
+                              column.sortable
+                                ? html`<button
+                                    type="button"
+                                    class="sort-button"
+                                  >
+                                    <ha-svg-icon
+                                      .path=${
+                                        sorted && this.sortDirection === "desc"
+                                          ? mdiArrowDown
+                                          : mdiArrowUp
+                                      }
+                                    ></ha-svg-icon>
+                                    <span>${column.title}</span>
+                                  </button>`
+                                : html`<span>${column.title}</span>`
+                            }
+                          </div>
+                        `;
+                      })}
+                    </slot>
                   </div>
-                `;
-              })}
-            </slot>
-          </div>
+                `
+          }
           ${
             this.loadError
               ? html`<div class="load-error" role="row" aria-rowindex="2">
@@ -741,43 +771,66 @@ export class HaDataTable extends LitElement {
                         </div>
                       </div>
                     `
-              : html`
-                  <lit-virtualizer
-                    scroller
-                    class="mdc-data-table__content scroller ha-scrollbar ${classMap(
-                      { grouped: Boolean(this.groupColumn) && !this.autoHeight }
-                    )}"
-                    tabindex=${ifDefined(!this.autoHeight ? "0" : undefined)}
-                    @scroll=${this._saveScrollPos}
-                    @visibilityChanged=${this._handleVisibilityChanged}
-                    .items=${items}
-                    .keyFunction=${this._keyFunction}
-                    .renderItem=${renderRow}
-                  ></lit-virtualizer>
-                  ${
-                    this.groupColumn &&
-                    !this.autoHeight &&
-                    this._stickyGroup !== undefined
-                      ? html`<div
-                          class="mdc-data-table__row sticky-group-header"
-                          aria-hidden="true"
-                          .group=${this._stickyGroup}
-                          @click=${this._collapseStickyGroup}
-                        >
-                          ${this._renderGroupHeader(
-                            this._stickyGroup,
-                            this._collapsedGroups.includes(this._stickyGroup),
-                            this._i18n?.localize,
-                            true
-                          )}
-                        </div>`
-                      : nothing
-                  }
-                `
+              : this.renderCard
+                ? this._renderCards(items)
+                : html`
+                    <lit-virtualizer
+                      scroller
+                      class="mdc-data-table__content scroller ha-scrollbar ${classMap(
+                        {
+                          grouped:
+                            Boolean(this.groupColumn) && !this.autoHeight,
+                        }
+                      )}"
+                      tabindex=${ifDefined(!this.autoHeight ? "0" : undefined)}
+                      @scroll=${this._saveScrollPos}
+                      @visibilityChanged=${this._handleVisibilityChanged}
+                      .items=${items}
+                      .keyFunction=${this._keyFunction}
+                      .renderItem=${renderRow}
+                    ></lit-virtualizer>
+                    ${
+                      this.groupColumn &&
+                      !this.autoHeight &&
+                      this._stickyGroup !== undefined
+                        ? html`<div
+                            class="mdc-data-table__row sticky-group-header"
+                            aria-hidden="true"
+                            .group=${this._stickyGroup}
+                            @click=${this._collapseStickyGroup}
+                          >
+                            ${this._renderGroupHeader(
+                              this._stickyGroup,
+                              this._collapsedGroups.includes(this._stickyGroup),
+                              this._i18n?.localize,
+                              true
+                            )}
+                          </div>`
+                        : nothing
+                    }
+                  `
           }
         </div>
       </div>
     `;
+  }
+
+  private _renderCards(items: DataTableRowData[]) {
+    return html`<div
+      class="mdc-data-table__content scroller ha-scrollbar cards"
+      tabindex="0"
+      @scroll=${this._saveScrollPos}
+    >
+      ${repeat(items, this._keyFunction, (item) =>
+        item.empty
+          ? nothing
+          : item.append
+            ? html`<div class="mdc-data-table__row group-header-row">
+                ${item.content}
+              </div>`
+            : this.renderCard!(item)
+      )}
+    </div>`;
   }
 
   private _keyFunction = (row: DataTableRowData) => row?.[this.id] || row;
@@ -2171,6 +2224,32 @@ export class HaDataTable extends LitElement {
           flex: 1;
           min-height: 0;
           overflow: overlay !important;
+        }
+
+        .cards {
+          display: grid;
+          grid-template-columns: repeat(
+            auto-fill,
+            minmax(var(--ha-data-table-card-min-width, 280px), 1fr)
+          );
+          gap: var(--ha-space-3);
+          padding: var(--ha-space-3);
+          align-content: start;
+          align-items: start;
+        }
+
+        .cards .group-header-row {
+          grid-column: 1 / -1;
+        }
+
+        .cards-header-row {
+          height: auto;
+          border-bottom: none;
+        }
+
+        .cards > :not(.group-header-row) {
+          content-visibility: auto;
+          contain-intrinsic-size: auto 160px;
         }
 
         .mdc-data-table__row,

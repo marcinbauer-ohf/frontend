@@ -8,11 +8,14 @@ import {
   mdiMenuDown,
   mdiPlus,
   mdiShapeOutline,
+  mdiTableLarge,
   mdiTextureBox,
+  mdiViewGridOutline,
 } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
+import { classMap } from "lit/directives/class-map";
 import memoizeOne from "memoize-one";
 import { consume } from "../../../common/decorators/consume";
 import { storage } from "../../../common/decorators/storage";
@@ -39,6 +42,7 @@ import {
   rejectedItems,
 } from "../../../common/util/promise-all-settled-results";
 import type {
+  DataTableRowData,
   DataTableColumnContainer,
   RowClickedEvent,
   SelectionChangedEvent,
@@ -92,6 +96,8 @@ import {
 } from "../../../dialogs/generic/show-dialog-box";
 import { showMoreInfoDialog } from "../../../dialogs/more-info/show-ha-more-info-dialog";
 import { resolveDeviceCardEntities } from "../../lovelace/cards/device/device-card-entities";
+import "../../lovelace/cards/hui-card";
+import type { DeviceCardConfig } from "../../lovelace/cards/types";
 import "../../../layouts/hass-tabs-subpage-data-table";
 import type { HaTabsSubpageDataTable } from "../../../layouts/hass-tabs-subpage-data-table";
 import { haStyle } from "../../../resources/styles";
@@ -177,6 +183,9 @@ export class HaConfigDeviceDashboard extends LitElement {
   @consume({ context: labelsContext, subscribe: true })
   @state()
   _labels?: LabelRegistryEntry[];
+
+  @storage({ key: "devices-view", state: true, subscribe: false })
+  private _view: "cards" | "table" = "cards";
 
   @storage({ key: "devices-table-sort", state: false, subscribe: false })
   private _activeSorting?: SortingChangedEvent;
@@ -1033,7 +1042,7 @@ export class HaConfigDeviceDashboard extends LitElement {
             : undefined
         }
         @retry-load=${this._reloadConfigEntries}
-        selectable
+        .selectable=${this._view === "table"}
         .selected=${this._selected.length}
         @selection-changed=${this._handleSelectionChanged}
         .filter=${this._filter}
@@ -1062,8 +1071,17 @@ export class HaConfigDeviceDashboard extends LitElement {
         @row-click=${this._handleRowClicked}
         clickable
         has-fab
-        class=${this.narrow ? "narrow" : ""}
+        .renderCard=${this._view === "cards" ? this._renderCard : undefined}
+        class=${classMap({ narrow: this.narrow, cards: this._view === "cards" })}
       >
+        <ha-icon-button
+          slot="toolbar-icon"
+          .path=${this._view === "cards" ? mdiTableLarge : mdiViewGridOutline}
+          .label=${this.hass.localize(
+            `ui.panel.config.devices.picker.${this._view === "cards" ? "show_table" : "show_cards"}`
+          )}
+          @click=${this._toggleView}
+        ></ha-icon-button>
         <ha-integration-overflow-menu
           .hass=${this.hass}
           slot="toolbar-icon"
@@ -1328,18 +1346,63 @@ export class HaConfigDeviceDashboard extends LitElement {
       );
       return;
     }
-    // The device more info needs an entity to lead with. Services often have
-    // only diagnostic ones, which the device card never leads with, so any
-    // entity with a state will do. A device without one opens on its
-    // settings.
-    const entityId =
-      resolveDeviceCardEntities(this.hass, { type: "device", device: id })
-        .hero ??
-      Object.values(this.hass.entities).find(
-        (entry) => entry.device_id === id && this.hass.states[entry.entity_id]
-      )?.entity_id;
-    showMoreInfoDialog(this, { entityId: entityId ?? null, deviceId: id });
+    // A device without an entity to lead with opens on its settings
+    showMoreInfoDialog(this, {
+      entityId: this._deviceHero(id) ?? null,
+      deviceId: id,
+    });
   }
+
+  // The device more info and the device card need an entity to lead with.
+  // Services often have only diagnostic ones, which the card never leads with,
+  // so any entity with a state will do.
+  // ponytail: scans the registry per device, build a lookup if it shows
+  private _deviceHero(deviceId: string): string | undefined {
+    return (
+      resolveDeviceCardEntities(this.hass, { type: "device", device: deviceId })
+        .hero ??
+      this.entities?.find(
+        (entry) =>
+          entry.device_id === deviceId && this.hass.states[entry.entity_id]
+      )?.entity_id
+    );
+  }
+
+  private _toggleView() {
+    this._view = this._view === "cards" ? "table" : "cards";
+  }
+
+  private _cardConfigs = new Map<string, DeviceCardConfig>();
+
+  // A Lovelace card is rebuilt whenever its config object changes, so each
+  // row keeps the one it was first given
+  private _cardConfig(row: DataTableRowData): DeviceCardConfig {
+    const entityIds: string[] = row.virtual
+      ? row.entity_id
+        ? [row.entity_id]
+        : (row.subRows ?? []).map((child) => child.entity_id)
+      : [];
+    const key = `${row.id}|${entityIds.join(",")}`;
+    let config = this._cardConfigs.get(key);
+    if (!config) {
+      config = row.virtual
+        ? {
+            type: "device",
+            entity: entityIds[0],
+            entities: entityIds.slice(1),
+            name: row.name,
+          }
+        : { type: "device", device: row.id, entity: this._deviceHero(row.id) };
+      this._cardConfigs.set(key, config);
+    }
+    return config;
+  }
+
+  private _renderCard = (row: DataTableRowData) =>
+    html`<hui-card
+      .hass=${this.hass}
+      .config=${this._cardConfig(row)}
+    ></hui-card>`;
 
   private _handleSearchChange(ev: CustomEvent) {
     this._filter = ev.detail.value;
@@ -1592,6 +1655,10 @@ ${rejected
         }
         hass-tabs-subpage-data-table.narrow {
           --data-table-row-height: 72px;
+        }
+        hass-tabs-subpage-data-table.cards {
+          --data-table-background-color: transparent;
+          --data-table-border-width: 0;
         }
         .clear {
           color: var(--primary-color);

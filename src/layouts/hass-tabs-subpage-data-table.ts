@@ -218,6 +218,9 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
 
   @property({ attribute: false }) public columnOrder?: string[];
 
+  /** Shows the rows as a grid of cards instead of a table. */
+  @property({ attribute: false }) public renderCard?: HaDataTable["renderCard"];
+
   @property({ attribute: false }) public hiddenColumns?: string[];
 
   /**
@@ -482,13 +485,15 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
         `
       : nothing;
 
-    const settingsButton = html`<ha-assist-chip
-      class="has-dropdown select-mode-chip"
-      @click=${this._openSettings}
-      .title=${localize("ui.components.subpage-data-table.settings")}
-    >
-      <ha-svg-icon slot="icon" .path=${mdiTableCog}></ha-svg-icon>
-    </ha-assist-chip>`;
+    const settingsButton = this.renderCard
+      ? nothing
+      : html`<ha-assist-chip
+          class="has-dropdown select-mode-chip"
+          @click=${this._openSettings}
+          .title=${localize("ui.components.subpage-data-table.settings")}
+        >
+          <ha-svg-icon slot="icon" .path=${mdiTableCog}></ha-svg-icon>
+        </ha-assist-chip>`;
 
     return html`
       <hass-tabs-subpage
@@ -630,6 +635,7 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
                   .initialCollapsedGroups=${this.initialCollapsedGroups}
                   .columnOrder=${this.columnOrder}
                   .hiddenColumns=${this.hiddenColumns}
+                  .renderCard=${this.renderCard}
                 >
                   ${
                     !this.narrow

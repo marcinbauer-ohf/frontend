@@ -7436,6 +7436,8 @@
           "error_delete": "Error deleting device",
           "picker": {
             "search": "Search {number} {number, plural,\n  one {device}\n  other {devices}\n}",
+            "show_cards": "Show as cards",
+            "show_table": "Show as table",
             "state": "Status",
             "bulk_actions": {
               "move_area": "Move to area",
