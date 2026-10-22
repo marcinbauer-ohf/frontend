@@ -8,7 +8,7 @@ import { fireEvent } from "../../common/dom/fire_event";
 import { computeAreaName } from "../../common/entity/compute_area_name";
 import { computeDeviceNameDisplay } from "../../common/entity/compute_device_name";
 import { computeDomain } from "../../common/entity/compute_domain";
-import { computeEntityName } from "../../common/entity/compute_entity_name";
+import { computeEntityNameParts } from "../../common/entity/compute_entity_name_display";
 import { computeFloorName } from "../../common/entity/compute_floor_name";
 import { computeStateName } from "../../common/entity/compute_state_name";
 import { getEntityContext } from "../../common/entity/context/get_entity_context";
@@ -105,14 +105,10 @@ class HaMoreInfoRelated extends LitElement {
     const floorName = floor ? computeFloorName(floor) : undefined;
     const areaName = area ? (computeAreaName(area) ?? area.area_id) : undefined;
     const parentDeviceName = parentDevice
-      ? computeDeviceNameDisplay(
-          parentDevice,
-          this.hass.localize,
-          this.hass.states
-        )
+      ? computeDeviceNameDisplay(parentDevice, this.hass.localize)
       : undefined;
     const deviceName = device
-      ? computeDeviceNameDisplay(device, this.hass.localize, this.hass.states)
+      ? computeDeviceNameDisplay(device, this.hass.localize)
       : undefined;
     const integrationName = this.entry?.platform
       ? this.hass.localize(`component.${this.entry.platform}.title`) ||
@@ -128,11 +124,8 @@ class HaMoreInfoRelated extends LitElement {
       {
         translationKey: "ui.dialogs.more_info_control.entity",
         value:
-          computeEntityName(
-            this._stateObj,
-            this.hass.entities,
-            this.hass.devices
-          ) || computeStateName(this._stateObj),
+          computeEntityNameParts(this._stateObj, this.hass).entity ||
+          computeStateName(this._stateObj),
         action: this._goToDetails,
         icon: html`<ha-state-icon .stateObj=${this._stateObj}></ha-state-icon>`,
         subject: true,

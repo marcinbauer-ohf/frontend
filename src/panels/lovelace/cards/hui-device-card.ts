@@ -17,7 +17,7 @@ import type { LocalizeKeys } from "../../../common/translations/localize";
 import { computeDomain } from "../../../common/entity/compute_domain";
 import { computeStateName } from "../../../common/entity/compute_state_name";
 import { computeDeviceName } from "../../../common/entity/compute_device_name";
-import { computeEntityName } from "../../../common/entity/compute_entity_name";
+import { computeEntityNameParts } from "../../../common/entity/compute_entity_name_display";
 import { stateActive } from "../../../common/entity/state_active";
 import { stateColorCss } from "../../../common/entity/state_color";
 import { UNAVAILABLE, UNKNOWN } from "../../../data/entity/entity";
@@ -37,7 +37,7 @@ import { showMoreInfoDialog } from "../../../dialogs/more-info/show-ha-more-info
 import { createEntityNotFoundWarning } from "../components/hui-warning";
 import type { LovelacePath } from "../editor/lovelace-path";
 import type { LovelaceCard, LovelaceCardEditor } from "../types";
-import { getEntityDefaultTileIconAction } from "./hui-tile-card";
+import { getEntityDefaultTileIconAction } from "./tile/tile-card-helpers";
 import {
   PRESSABLE_DOMAINS,
   resolveDeviceCardEntities,
@@ -322,7 +322,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     if (!stateObj) {
       return html`
         <hui-warning .hass=${this.hass}>
-          ${createEntityNotFoundWarning(this.hass, hero)}
+          ${createEntityNotFoundWarning(this.hass.localize, this.hass.config)}
         </hui-warning>
       `;
     }
@@ -399,7 +399,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
               class=${classMap({ image: !!feedImage, plain: readOnly })}
               .imageUrl=${feedImage}
               .interactive=${iconInteractive}
-              .label=${
+              .accessibleLabel=${
                 iconInteractive
                   ? this.hass.localize("ui.card.device.toggle_entity", { name })
                   : undefined
@@ -476,7 +476,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       supportsFeatureType(this.hass!, { entity_id: entityId }, "toggle");
     // Device name only belongs on the hero — rows drop it and keep the rest.
     const name =
-      computeEntityName(stateObj, this.hass!.entities, this.hass!.devices) ||
+      computeEntityNameParts(stateObj, this.hass!).entity ||
       computeStateName(stateObj);
 
     return html`

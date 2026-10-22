@@ -16,22 +16,30 @@ export class HaBadge extends LitElement {
 
   /** Selection state, for a badge that acts as a button in a set of them. */
   @property({ type: Boolean }) public pressed?: boolean;
+  /**
+   * Accessible name for the badge button when it shows only its icon.
+   */
+  @property({ attribute: "accessible-label" }) public accessibleLabel?: string;
 
   protected render() {
     const label = this.label;
+    const isButton = this.type === "button";
 
     return html`
       <div
         class="badge ${classMap({
           "icon-only": this.iconOnly,
         })}"
-        role=${ifDefined(this.type === "button" ? "button" : undefined)}
+        role=${ifDefined(isButton ? "button" : undefined)}
         aria-pressed=${ifDefined(
-          this.type === "button" && this.pressed !== undefined
+          isButton && this.pressed !== undefined
             ? String(this.pressed)
             : undefined
         )}
-        tabindex=${ifDefined(this.type === "button" ? "0" : undefined)}
+        tabindex=${ifDefined(isButton ? "0" : undefined)}
+        aria-label=${ifDefined(
+          isButton && this.iconOnly ? this.accessibleLabel : undefined
+        )}
       >
         <ha-ripple .disabled=${this.type !== "button"}></ha-ripple>
         <slot name="icon"></slot>
@@ -142,7 +150,7 @@ export class HaBadge extends LitElement {
     ::slotted(img[slot="icon"]) {
       width: 30px;
       height: 30px;
-      border-radius: var(--ha-border-radius-circle);
+      border-radius: var(--ha-picture-border-radius);
       object-fit: cover;
       overflow: hidden;
       margin-left: -10px;

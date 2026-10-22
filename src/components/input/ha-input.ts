@@ -126,6 +126,10 @@ export class HaInput extends WaInputMixin(LitElement) {
   @property({ type: Boolean, attribute: "inset-label" })
   public insetLabel = false;
 
+  /** Accessible name for the input when it has no visible label. */
+  @property({ attribute: "accessible-label" })
+  public accessibleLabel?: string;
+
   /** Sets the native input id (and label `for`) on the inner `wa-input`. */
   @property({ attribute: "input-id" })
   public inputId?: string;
@@ -216,6 +220,22 @@ export class HaInput extends WaInputMixin(LitElement) {
     }
   }
 
+  protected override updated(changedProperties: PropertyValues<this>): void {
+    super.updated(changedProperties);
+    this._syncAriaInvalid();
+  }
+
+  // wa-input never sets aria-invalid on its native input. Without it, WebKit
+  // falls back to the native validity, so screen readers announce an empty
+  // required field as invalid before anything was typed.
+  private async _syncAriaInvalid(): Promise<void> {
+    await this._input?.updateComplete;
+    this._getNativeInput()?.setAttribute(
+      "aria-invalid",
+      this.invalid || this._invalid ? "true" : "false"
+    );
+  }
+
   public override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.removeEventListener("focusin", this._syncFromNativeInput);
@@ -260,6 +280,7 @@ export class HaInput extends WaInputMixin(LitElement) {
         .name=${this.name}
         .disabled=${this.disabled}
         .inputId=${this.inputId || "input"}
+        .accessibleLabel=${this.accessibleLabel ?? ""}
         class=${classMap({
           input: true,
           invalid: this.invalid || this._invalid,
@@ -427,7 +448,8 @@ export class HaInput extends WaInputMixin(LitElement) {
 
       wa-input.label-raised::part(label),
       :host(:focus-within) wa-input::part(label),
-      :host([type="date"]) wa-input::part(label) {
+      :host([type="date"]) wa-input::part(label),
+      :host([type="color"]) wa-input::part(label) {
         padding-top: var(--ha-space-3);
         font-size: var(--ha-font-size-xs);
       }

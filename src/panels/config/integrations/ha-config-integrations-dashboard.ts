@@ -481,18 +481,30 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
       this._filter
     );
 
+    const showDisabledBadge =
+      !this._showDisabled && this.narrow && disabledConfigEntries.length > 0;
+
     const filterMenu = html`
       <div slot=${ifDefined(this.narrow ? "toolbar-icon" : undefined)}>
         <div class="menu-badge-container">
           ${
-            !this._showDisabled && this.narrow && disabledConfigEntries.length
-              ? html`<span class="badge">${disabledConfigEntries.length}</span>`
+            showDisabledBadge
+              ? html`<span class="badge" aria-hidden="true"
+                  >${disabledConfigEntries.length}</span
+                >`
               : ""
           }
           <ha-dropdown multi @wa-select=${this._handleMenuAction}>
             <ha-icon-button
               slot="trigger"
-              .label=${this.hass.localize("ui.common.menu")}
+              .label=${
+                showDisabledBadge
+                  ? this.hass.localize(
+                      "ui.panel.config.integrations.filters_disabled_hidden",
+                      { number: disabledConfigEntries.length }
+                    )
+                  : this.hass.localize("ui.panel.config.integrations.filters")
+              }
               .path=${mdiFilterVariant}
             >
             </ha-icon-button>
@@ -548,6 +560,9 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
                     .placeholder=${this.hass.localize(
                       "ui.panel.config.integrations.search"
                     )}
+                    .accessibleLabel=${this.hass.localize(
+                      "ui.panel.config.integrations.search"
+                    )}
                   >
                   </ha-input-search>
                 </div>
@@ -564,6 +579,9 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
                     .value=${this._filter}
                     @input=${this._handleSearchChange}
                     .placeholder=${this.hass.localize(
+                      "ui.panel.config.integrations.search"
+                    )}
+                    .accessibleLabel=${this.hass.localize(
                       "ui.panel.config.integrations.search"
                     )}
                   >
@@ -618,11 +636,11 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
         }
         ${
           this._showIgnored
-            ? html`<h1>
+            ? html`<h2 class="section-header">
                   ${this.hass.localize(
                     "ui.panel.config.integrations.ignore.ignored"
                   )}
-                </h1>
+                </h2>
                 <div class="container">
                   ${
                     ignoredConfigEntries.length > 0
@@ -645,9 +663,9 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
         }
         ${
           configEntriesInProgress.length
-            ? html`<h1>
+            ? html`<h2 class="section-header">
                   ${this.hass.localize("ui.panel.config.integrations.discovered")}
-                </h1>
+                </h2>
                 <div class="container">
                   ${configEntriesInProgress.map(
                     (flow: DataEntryFlowProgressExtended) => html`
@@ -664,9 +682,9 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
         }
         ${
           this._showDisabled
-            ? html`<h1>
+            ? html`<h2 class="section-header">
                   ${this.hass.localize("ui.panel.config.integrations.disabled")}
-                </h1>
+                </h2>
                 <div class="container">
                   ${
                     disabledConfigEntries.length > 0
@@ -1103,8 +1121,8 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
             minmax(min(300px, 100%), 1fr)
           );
           gap: var(--ha-space-4);
-          padding: var(--ha-space-4);
-          margin: var(--ha-space-2);
+          padding: var(--ha-space-6) var(--ha-space-4) 0;
+          margin: 0;
         }
         .tiles {
           display: grid;
@@ -1163,8 +1181,11 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
           grid-column-start: 1;
           grid-column-end: -1;
         }
-        .empty-message h1 {
+        .empty-message h3 {
           margin: 0;
+          font-family: var(--ha-font-family-heading);
+          font-size: var(--ha-font-size-2xl);
+          line-height: var(--ha-line-height-condensed);
         }
         ha-input-search {
           flex: 1;
@@ -1183,7 +1204,10 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
           position: sticky;
           top: 0;
           z-index: 2;
-          background-color: var(--primary-background-color);
+          background: var(
+            --ha-panel-toolbar-background,
+            var(--primary-background-color)
+          );
           padding: 0 16px;
           gap: var(--ha-space-4);
           box-sizing: border-box;
@@ -1239,11 +1263,25 @@ class HaConfigIntegrationsDashboard extends KeyboardShortcutMixin(
         .menu-badge-container {
           position: relative;
         }
-        h1 {
-          margin-top: 8px;
-          margin-left: 16px;
-          margin-inline-start: 16px;
-          margin-inline-end: initial;
+        .section-header {
+          margin: var(--ha-space-6) var(--ha-space-4) 0;
+          font-family: var(--ha-font-family-heading);
+          font-size: var(--ha-font-size-2xl);
+          font-weight: var(--ha-font-weight-normal);
+          line-height: var(--ha-line-height-condensed);
+          white-space: normal;
+          overflow: visible;
+        }
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          padding: 0;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
         }
         ha-dropdown ha-icon-button {
           color: var(--primary-text-color);

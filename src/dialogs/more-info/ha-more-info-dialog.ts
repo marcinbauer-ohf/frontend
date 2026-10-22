@@ -28,11 +28,10 @@ import { mainWindow } from "../../common/dom/get_main_window";
 import { stopPropagation } from "../../common/dom/stop_propagation";
 import { computeDeviceName } from "../../common/entity/compute_device_name";
 import { computeDomain } from "../../common/entity/compute_domain";
-import { computeEntityName } from "../../common/entity/compute_entity_name";
 import {
-  computeEntityEntryNameList,
-  computeEntityNameList,
-  type EntityNameItem,
+  computeEntityEntryNameParts,
+  computeEntityNameParts,
+  type EntityNameType,
 } from "../../common/entity/compute_entity_name_display";
 import { shouldHandleRequestSelectedEvent } from "../../common/mwc/handle-request-selected-event";
 import {
@@ -140,11 +139,11 @@ declare global {
 
 const DEFAULT_VIEW: MoreInfoView = "info";
 
-const BREADCRUMB_NAME: EntityNameItem[] = [
-  { type: "area" },
-  { type: "parent_device" },
-  { type: "device" },
-  { type: "entity" },
+const BREADCRUMB_NAME: EntityNameType[] = [
+  "area",
+  "parent_device",
+  "device",
+  "entity",
 ];
 
 @customElement("ha-more-info-dialog")
@@ -651,25 +650,14 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
     const showDeviceView =
       !!this._deviceId && isDefaultView && this._parentEntityIds.length === 0;
 
-    const names = stateObj
-      ? computeEntityNameList(
-          stateObj,
-          BREADCRUMB_NAME,
-          this.hass.entities,
-          this.hass.devices,
-          this.hass.areas,
-          this.hass.floors
-        )
+    const nameParts = stateObj
+      ? computeEntityNameParts(stateObj, this.hass)
       : this._entry
-        ? computeEntityEntryNameList(
-            this._entry,
-            BREADCRUMB_NAME,
-            this.hass.entities,
-            this.hass.devices,
-            this.hass.areas,
-            this.hass.floors
-          )
-        : [entityId];
+        ? computeEntityEntryNameParts(this._entry, this.hass)
+        : undefined;
+    const names = nameParts
+      ? BREADCRUMB_NAME.map((type) => nameParts[type])
+      : [entityId];
 
     // Inside the device view the breadcrumb gains a level once one of the
     // device's entities is on show, so the header names it with the device
@@ -681,11 +669,7 @@ export class MoreInfoDialog extends DirtyStateProviderMixin<
         ? this.hass.states[this._deviceEntityId]
         : undefined;
     const deviceEntityName = deviceEntityObj
-      ? computeEntityName(
-          deviceEntityObj,
-          this.hass.entities,
-          this.hass.devices
-        )
+      ? computeEntityNameParts(deviceEntityObj, this.hass).entity
       : undefined;
 
     // What the view leads with, for the header to state once the pane has been

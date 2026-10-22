@@ -76,8 +76,8 @@ export class StateHistoryChartTimeline extends LitElement {
 
   @property({ attribute: false }) public chartIndex?;
 
-  @property({ attribute: "hide-reset-button", type: Boolean })
-  public hideResetButton?: boolean;
+  @property({ attribute: "hide-zoom-controls", type: Boolean })
+  public hideZoomControls = false;
 
   /**
    * Height of one row in px. A host that gives the row a block of its own means
@@ -128,11 +128,12 @@ export class StateHistoryChartTimeline extends LitElement {
         }px`}
         .data=${this._chartData as HaECSeries}
         small-controls
+        grow-for-zoom-slider
         @chart-click=${this._handleChartClick}
         @chart-mouseover=${this._handleChartHover}
         @chart-mouseout=${this._handleChartOut}
         @chart-zoom=${this._handleDataZoom}
-        .hideResetButton=${this.hideResetButton}
+        .hideZoomControls=${this.hideZoomControls}
       ></ha-chart-base>
     `;
   }
@@ -348,6 +349,13 @@ export class StateHistoryChartTimeline extends LitElement {
         },
         splitLine: {
           show: false,
+        },
+        // The item tooltip draws no axis line, so mark the pointed time as
+        // line charts do, also where a tap opens the tooltip
+        axisPointer: {
+          show: true,
+          triggerTooltip: false,
+          label: { show: false },
         },
       },
       yAxis: {

@@ -15,8 +15,8 @@ import { storage } from "../../../../common/decorators/storage";
 import { computeDomain } from "../../../../common/entity/compute_domain";
 import {
   computeEntityEntryName,
-  computeEntityName,
-} from "../../../../common/entity/compute_entity_name";
+  computeEntityNameParts,
+} from "../../../../common/entity/compute_entity_name_display";
 import { computeStateName } from "../../../../common/entity/compute_state_name";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import { SubscribeMixin } from "../../../../mixins/subscribe-mixin";
@@ -24,8 +24,8 @@ import "../../../../components/ha-alert";
 import "../../../../components/ha-button";
 import "../../../../components/ha-domain-icon";
 import "../../../../components/ha-icon-button";
-import "../../../../components/ha-md-list";
-import "../../../../components/ha-md-list-item";
+import "../../../../components/ha-list";
+import "../../../../components/ha-list-item";
 import "../../../../components/ha-sortable";
 import "../../../../components/ha-state-icon";
 import "../../../../components/ha-svg-icon";
@@ -220,13 +220,13 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
         const stateObj = hass.states[entityId];
         if (stateObj) {
           return (
-            computeEntityName(stateObj, hass.entities, hass.devices) ||
+            computeEntityNameParts(stateObj, hass).entity ||
             computeStateName(stateObj)
           );
         }
         const entry = entryOf(entityId);
         return (
-          (entry && computeEntityEntryName(entry, hass.devices)) ||
+          (entry && computeEntityEntryName(entry)) ||
           entry?.name ||
           entry?.original_name ||
           entityId
@@ -465,14 +465,14 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
               @item-moved=${this._itemMoved}
               @item-removed=${this._itemRemoved}
             >
-              <ha-md-list class=${section}>
+              <ha-list class=${section}>
                 ${repeat(
                   rows,
                   (row) => row.entityId,
                   (row) => this._renderRow(section, row)
                 )}
                 ${rows.length ? nothing : html`<p class="empty">${helper}</p>`}
-              </ha-md-list>
+              </ha-list>
             </ha-sortable>
           `
         )}
@@ -482,7 +482,7 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
 
   private _renderRow(section: Section, row: Row) {
     return html`
-      <ha-md-list-item class="draggable" .sortableData=${row.entityId}>
+      <ha-list-item class="draggable" .sortableData=${row.entityId}>
         <div slot="start" class="leading">
           <ha-svg-icon
             class="handle"
@@ -540,7 +540,7 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
             })
           }
         </div>
-      </ha-md-list-item>
+      </ha-list-item>
     `;
   }
 
@@ -717,19 +717,19 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
       outline: 2px solid var(--primary-color);
       outline-offset: 2px;
     }
-    ha-md-list {
+    ha-list {
       padding: 0;
       min-height: 48px;
       border: 1px dashed var(--divider-color);
       border-radius: var(--ha-border-radius-md);
       background: none;
     }
-    ha-md-list-item {
+    ha-list-item {
       --md-list-item-top-space: 0;
       --md-list-item-bottom-space: 0;
       --md-list-item-one-line-container-height: 48px;
     }
-    ha-md-list.disabled ha-md-list-item {
+    ha-list.disabled ha-list-item {
       --md-list-item-label-text-color: var(--disabled-text-color);
     }
     .empty {
@@ -796,12 +796,12 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
         border-radius: var(--ha-border-radius-circle);
         background-color: var(--disabled-color);
       }
-      ha-md-list-item:hover .actions ha-icon-button,
-      ha-md-list-item:focus-within .actions ha-icon-button {
+      ha-list-item:hover .actions ha-icon-button,
+      ha-list-item:focus-within .actions ha-icon-button {
         visibility: visible;
       }
-      ha-md-list-item:hover .dot,
-      ha-md-list-item:focus-within .dot {
+      ha-list-item:hover .dot,
+      ha-list-item:focus-within .dot {
         display: none;
       }
     }

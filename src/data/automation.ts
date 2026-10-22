@@ -2,7 +2,6 @@ import type {
   Connection,
   HassEntityAttributeBase,
   HassEntityBase,
-  HassServiceTarget,
 } from "home-assistant-js-websocket";
 import { ensureArray } from "../common/array/ensure-array";
 import type { WeekdayShort } from "../common/datetime/weekday";
@@ -17,7 +16,8 @@ import type {
   DeviceCondition,
   DeviceTrigger,
 } from "./device/device_automation";
-import type { Action, Field, MODES } from "./script";
+import type { Action, Field, MODES, Option } from "./script";
+import type { HassServiceTargetWithExclude } from "./target";
 import { migrateAutomationAction } from "./script";
 import type { TriggerDescription } from "./trigger";
 
@@ -106,7 +106,7 @@ export interface BaseTrigger {
 
 export interface PlatformTrigger extends BaseTrigger {
   trigger: Exclude<string, LegacyTrigger["trigger"]>;
-  target?: HassServiceTarget;
+  target?: HassServiceTargetWithExclude;
 }
 
 export interface StateTrigger extends BaseTrigger {
@@ -251,7 +251,7 @@ interface BaseCondition {
 
 export interface PlatformCondition extends BaseCondition {
   condition: Exclude<string, LegacyCondition["condition"]>;
-  target?: HassServiceTarget;
+  target?: HassServiceTargetWithExclude;
 }
 
 export interface LogicalCondition extends BaseCondition {
@@ -362,11 +362,17 @@ export type ConditionWithShorthand =
   | ShorthandAndConditionList
   | ShorthandAndCondition
   | ShorthandOrCondition
-  | ShorthandNotCondition;
+  | ShorthandNotCondition
+  | string;
 
 export const expandConditionWithShorthand = (
   cond: ConditionWithShorthand
 ): Condition => {
+  // A bare template string is shorthand for a template condition
+  if (typeof cond === "string") {
+    return { condition: "template", value_template: cond };
+  }
+
   if ("condition" in cond && Array.isArray(cond.condition)) {
     return {
       condition: "and",
@@ -518,11 +524,14 @@ export const pickRowConfig = <T extends object>(
   return config as Partial<T>;
 };
 
+export const getRowNote = (note: unknown): string | undefined =>
+  typeof note === "string" ? note.trim() || undefined : undefined;
+
 export const migrateAutomationTrigger = (
   trigger: Trigger | Trigger[],
   report?: AutomationMigrationReport
 ): Trigger | Trigger[] => {
-  if (!trigger) {
+  if (!trigger || typeof trigger !== "object") {
     return trigger;
   }
 
@@ -543,7 +552,11 @@ export const migrateAutomationTrigger = (
   }
 
   if ("options" in trigger) {
-    if (trigger.options && "behavior" in trigger.options) {
+    if (
+      typeof trigger.options === "object" &&
+      trigger.options !== null &&
+      "behavior" in trigger.options
+    ) {
       // Deprecated behavior values renamed in 2026; the backend raises a repair
       // when they are still used, so flag the migration to offer saving.
       if (trigger.options.behavior === "any") {
@@ -573,6 +586,10 @@ export const flattenTriggers = (
   const flatTriggers: Trigger[] = [];
 
   ensureArray(triggers).forEach((t) => {
+    // Incomplete YAML can leave null entries in the trigger list
+    if (!t || typeof t !== "object") {
+      return;
+    }
     if ("triggers" in t) {
       if (t.triggers) {
         flatTriggers.push(...flattenTriggers(t.triggers));
@@ -692,6 +709,7 @@ export interface BaseSidebarConfig {
 export interface TriggerSidebarConfig extends BaseSidebarConfig {
   save: (value: Trigger) => void;
   rename: () => void;
+  editId: () => void;
   disable: () => void;
   duplicate: () => void;
   cut: () => void;
@@ -745,8 +763,14 @@ export interface ActionSidebarConfig extends BaseSidebarConfig {
 }
 
 export interface OptionSidebarConfig extends BaseSidebarConfig {
+  save: (value: unknown) => void;
   rename: () => void;
   duplicate: () => void;
+  toggleYamlMode: (yamlMode?: boolean) => void;
+  yamlMode?: boolean;
+  config: {
+    option?: Option;
+  };
   defaultOption?: boolean;
   note?: string;
 }

@@ -7,7 +7,7 @@ import {
 } from "@mdi/js";
 import { isComponentLoaded } from "../../../../common/config/is_component_loaded";
 import { computeDomain } from "../../../../common/entity/compute_domain";
-import { computeEntityEntryName } from "../../../../common/entity/compute_entity_name";
+import { computeEntityEntryName } from "../../../../common/entity/compute_entity_name_display";
 import {
   isHomeAssistantUrl,
   sanitizeLinkUrl,
@@ -403,9 +403,7 @@ export const updateDeviceWithSideEffects = async (
         }
         // An entity with no name of its own is shown with the device's.
         const name =
-          entity.name ||
-          computeEntityEntryName(entity, hass.devices) ||
-          oldDeviceName;
+          entity.name || computeEntityEntryName(entity) || oldDeviceName;
         let newName: string | null;
         if (
           entity.has_entity_name &&

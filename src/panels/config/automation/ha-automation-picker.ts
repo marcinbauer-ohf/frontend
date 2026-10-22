@@ -32,7 +32,6 @@ import { storage } from "../../../common/decorators/storage";
 import type { HASSDomEvent } from "../../../common/dom/fire_event";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { stopPropagation } from "../../../common/dom/stop_propagation";
-import { computeStateName } from "../../../common/entity/compute_state_name";
 import { navigate } from "../../../common/navigate";
 import type { LocalizeFunc } from "../../../common/translations/localize";
 import {
@@ -267,6 +266,7 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
       automations: AutomationEntity[],
       entityReg: EntityRegistryEntry[],
       areas: HomeAssistant["areas"],
+      formatEntityName: HomeAssistant["formatEntityName"],
       categoryReg?: CategoryRegistryEntry[],
       labelReg?: LabelRegistryEntry[],
       filteredAutomations?: string[] | null
@@ -301,7 +301,7 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
         );
         return {
           ...automation,
-          name: computeStateName(automation),
+          name: formatEntityName(automation),
           area: entityRegEntry?.area_id
             ? areas[entityRegEntry?.area_id]?.name
             : undefined,
@@ -378,6 +378,7 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
           extraTemplate: (automation) =>
             automation.label_entries.length
               ? html`<ha-data-table-labels
+                  .clickable=${!narrow}
                   @label-clicked=${narrow ? undefined : this._labelClicked}
                   .labels=${automation.label_entries}
                 ></ha-data-table-labels>`
@@ -489,6 +490,7 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
       this.automations,
       this._entityReg,
       this.hass.areas,
+      this.hass.formatEntityName,
       this._categories,
       this._labels,
       this._filteredEntityIds
@@ -746,11 +748,11 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
           !this.automations.length
             ? html`<div class="empty" slot="empty">
                 <ha-svg-icon .path=${mdiRobotHappy}></ha-svg-icon>
-                <h1>
+                <h2>
                   ${this.hass.localize(
                     "ui.panel.config.automation.picker.empty_header"
                   )}
-                </h1>
+                </h2>
                 <p>
                   ${this.hass.localize(
                     "ui.panel.config.automation.picker.empty_text_1"
@@ -1625,8 +1627,14 @@ ${rejected
         .empty ha-button {
           --mdc-icon-size: 24px;
         }
-        .empty h1 {
+        .empty h2 {
+          margin-block: var(--ha-space-5);
+          font-family: var(--ha-font-family-heading);
           font-size: var(--ha-font-size-3xl);
+          font-weight: var(--ha-font-weight-normal);
+          line-height: var(--ha-line-height-condensed);
+          white-space: normal;
+          overflow: visible;
         }
         ha-assist-chip {
           --ha-assist-chip-container-shape: 10px;
@@ -1636,7 +1644,7 @@ ${rejected
           --auto-size-available-width: calc(50vw - var(--ha-space-4));
         }
         ha-dropdown ha-assist-chip {
-          --md-assist-chip-trailing-space: 8px;
+          --ha-assist-chip-trailing-space: 8px;
         }
       `,
     ];

@@ -34,7 +34,7 @@ import { computeAreaName } from "../../common/entity/compute_area_name";
 import { computeDeviceNameDisplay } from "../../common/entity/compute_device_name";
 import { computeDomain } from "../../common/entity/compute_domain";
 import { computeFloorName } from "../../common/entity/compute_floor_name";
-import { computeEntityName } from "../../common/entity/compute_entity_name";
+import { computeEntityNameParts } from "../../common/entity/compute_entity_name_display";
 import { computeStateName } from "../../common/entity/compute_state_name";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import { stringCompare } from "../../common/string/compare";
@@ -1024,7 +1024,7 @@ export class HaMoreInfoDevice extends LitElement {
     return (
       entry.name ||
       (stateObj
-        ? computeEntityName(stateObj, this.hass.entities, this.hass.devices) ||
+        ? computeEntityNameParts(stateObj, this.hass).entity ||
           computeStateName(stateObj)
         : undefined) ||
       entry.entity_id
@@ -1270,7 +1270,7 @@ export class HaMoreInfoDevice extends LitElement {
     return this._renderFactLink(
       this.hass.localize(label),
       other
-        ? computeDeviceNameDisplay(other, this.hass.localize, this.hass.states)
+        ? computeDeviceNameDisplay(other, this.hass.localize)
         : this.hass.localize(
             "ui.panel.config.integrations.config_entry.unknown_via_device"
           ),
@@ -1526,8 +1526,8 @@ export class HaMoreInfoDevice extends LitElement {
     (deviceId: string, devices: HomeAssistant["devices"]) => {
       const all = Object.values(devices).sort((a, b) =>
         stringCompare(
-          computeDeviceNameDisplay(a, this.hass.localize, this.hass.states),
-          computeDeviceNameDisplay(b, this.hass.localize, this.hass.states),
+          computeDeviceNameDisplay(a, this.hass.localize),
+          computeDeviceNameDisplay(b, this.hass.localize),
           this.hass.locale.language
         )
       );
@@ -1548,11 +1548,7 @@ export class HaMoreInfoDevice extends LitElement {
         @click=${href ? undefined : this._openDevice}
       >
         <span slot="headline"
-          >${computeDeviceNameDisplay(
-            other,
-            this.hass.localize,
-            this.hass.states
-          )}</span
+          >${computeDeviceNameDisplay(other, this.hass.localize)}</span
         >
         ${
           area
@@ -1872,7 +1868,7 @@ export class HaMoreInfoDevice extends LitElement {
 
   private _entityName(stateObj: HassEntity): string {
     return (
-      computeEntityName(stateObj, this.hass.entities, this.hass.devices) ||
+      computeEntityNameParts(stateObj, this.hass).entity ||
       computeStateName(stateObj)
     );
   }
