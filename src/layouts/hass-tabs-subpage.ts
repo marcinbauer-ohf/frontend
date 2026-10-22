@@ -309,7 +309,6 @@ export class HassTabsSubpage extends LitElement {
         :host {
           display: block;
           height: 100%;
-          background-color: var(--primary-background-color);
         }
 
         :host([narrow]) {
@@ -426,7 +425,6 @@ export class HassTabsSubpage extends LitElement {
           box-sizing: border-box;
           padding-right: var(--safe-area-inset-right);
           overflow: auto;
-          -webkit-overflow-scrolling: touch;
         }
         :host([narrow]) .content {
           padding-left: var(--safe-area-inset-left);
