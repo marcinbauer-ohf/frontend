@@ -112,9 +112,9 @@ const STYLE_KEY = "targetPickerExclusionStyle";
 let exclusionStyle: ExclusionStyle = (() => {
   try {
     const stored = localStorage.getItem(STYLE_KEY) as ExclusionStyle | null;
-    return stored && EXCLUSION_STYLES.includes(stored) ? stored : "sentence";
+    return stored && EXCLUSION_STYLES.includes(stored) ? stored : "tag";
   } catch {
-    return "sentence";
+    return "tag";
   }
 })();
 
