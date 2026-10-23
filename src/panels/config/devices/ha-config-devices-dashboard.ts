@@ -95,7 +95,10 @@ import {
   showConfirmationDialog,
 } from "../../../dialogs/generic/show-dialog-box";
 import { showMoreInfoDialog } from "../../../dialogs/more-info/show-ha-more-info-dialog";
-import { resolveDeviceCardEntities } from "../../lovelace/cards/device/device-card-entities";
+import {
+  deviceCardEntities,
+  resolveDeviceCardEntities,
+} from "../../lovelace/cards/device/device-card-entities";
 import "../../lovelace/cards/hui-card";
 import type { DeviceCardConfig } from "../../lovelace/cards/types";
 import "../../../layouts/hass-tabs-subpage-data-table";
@@ -1385,14 +1388,20 @@ export class HaConfigDeviceDashboard extends LitElement {
     const key = `${row.id}|${entityIds.join(",")}`;
     let config = this._cardConfigs.get(key);
     if (!config) {
-      config = row.virtual
-        ? {
-            type: "device",
-            entity: entityIds[0],
-            entities: entityIds.slice(1),
-            name: row.name,
-          }
-        : { type: "device", device: row.id, entity: this._deviceHero(row.id) };
+      // Only the primary entity: the rest of the device lives in its more info
+      if (row.virtual) {
+        config = { type: "device", entity: entityIds[0], name: row.name };
+      } else {
+        const hero = this._deviceHero(row.id);
+        config = {
+          type: "device",
+          device: row.id,
+          entity: hero,
+          hidden_entities: deviceCardEntities(this.hass, row.id).filter(
+            (entityId) => entityId !== hero
+          ),
+        };
+      }
       this._cardConfigs.set(key, config);
     }
     return config;
