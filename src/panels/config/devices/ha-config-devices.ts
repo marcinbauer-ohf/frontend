@@ -18,6 +18,9 @@ class HaConfigDevices extends HassRouterPage {
 
   @property({ attribute: "is-wide", type: Boolean }) public isWide = false;
 
+  /** Shown as a sidebar panel rather than a settings page. */
+  @property({ type: Boolean, attribute: "main-page" }) public mainPage = false;
+
   protected routerOptions: RouterOptions = {
     defaultPage: "dashboard",
     routes: {
@@ -67,6 +70,7 @@ class HaConfigDevices extends HassRouterPage {
     } else {
       pageEl.entries = this._configEntries;
       pageEl.entriesFailed = this._configEntriesFailed;
+      pageEl.mainPage = this.mainPage;
     }
 
     pageEl.manifests = this._manifests;

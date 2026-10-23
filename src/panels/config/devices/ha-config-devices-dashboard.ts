@@ -103,6 +103,7 @@ import "../../lovelace/cards/hui-card";
 import type { DeviceCardConfig } from "../../lovelace/cards/types";
 import "../../../layouts/hass-tabs-subpage-data-table";
 import type { HaTabsSubpageDataTable } from "../../../layouts/hass-tabs-subpage-data-table";
+import type { PageNavigation } from "../../../layouts/hass-tabs-subpage";
 import { haStyle } from "../../../resources/styles";
 import type { HomeAssistant, Route } from "../../../types";
 import { brandsUrl } from "../../../util/brands-url";
@@ -114,11 +115,19 @@ import {
   getLabelsTableColumn,
   getModifiedAtTableColumn,
 } from "../common/data-table-columns";
-import { configSections } from "../config-sections";
 import "../integrations/ha-integration-overflow-menu";
 import { showAddIntegrationDialog } from "../integrations/show-add-integration-dialog";
 import { showHelperDetailDialog } from "../helpers/show-dialog-helper-detail";
 import { showLabelDetailDialog } from "../labels/show-dialog-label-detail";
+
+// The one tab names the page; there is nothing to switch to
+const DEVICES_TABS: PageNavigation[] = [
+  {
+    path: "/devices",
+    translationKey: "ui.panel.config.devices.caption",
+    iconPath: mdiDevices,
+  },
+];
 
 interface DeviceRowData extends DeviceRegistryEntry {
   device?: DeviceRowData;
@@ -135,6 +144,8 @@ export class HaConfigDeviceDashboard extends LitElement {
   @property({ type: Boolean }) public narrow = false;
 
   @property({ attribute: "is-wide", type: Boolean }) public isWide = false;
+
+  @property({ type: Boolean, attribute: "main-page" }) public mainPage = false;
 
   @property({ attribute: false }) public entries?: ConfigEntry[];
 
@@ -1028,8 +1039,9 @@ export class HaConfigDeviceDashboard extends LitElement {
       <hass-tabs-subpage-data-table
         .hass=${this.hass}
         .narrow=${this.narrow}
-        back-path="/config"
-        .tabs=${configSections.devices}
+        .mainPage=${this.mainPage}
+        .backPath=${this.mainPage ? undefined : "/config"}
+        .tabs=${DEVICES_TABS}
         .route=${this.route}
         .searchLabel=${this.hass.localize(
           "ui.panel.config.devices.picker.search",

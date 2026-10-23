@@ -1,6 +1,7 @@
 {
   "panel": {
     "demo": "Demo",
+    "devices": "Devices",
     "apps": "Apps",
     "energy": "Energy",
     "calendar": "Calendar",
@@ -2954,9 +2955,9 @@
         },
         "header": "Configure Home Assistant",
         "dashboard": {
-          "devices": {
-            "main": "Devices & services",
-            "secondary": "Integrations, devices, entities, and helpers"
+          "integrations": {
+            "main": "Integrations",
+            "secondary": "Services and devices connected to Home Assistant"
           },
           "automations": {
             "main": "Automations & scenes",
@@ -12001,7 +12002,8 @@
             },
             "home": {
               "favorite_entities": "Favorite entities",
-              "add_favorite_entity": "Add favorite"
+              "add_favorite_entity": "Add favorite",
+              "device_cards": "Show devices as device cards"
             }
           },
           "view": {

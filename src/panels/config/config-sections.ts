@@ -8,7 +8,6 @@ import {
   mdiCellphoneCog,
   mdiCog,
   mdiDatabase,
-  mdiDevices,
   mdiFlask,
   mdiHammer,
   mdiInformationOutline,
@@ -58,9 +57,9 @@ const getHasDomainCheck = (domain: string) => {
 export const configSections: Record<string, PageNavigation[]> = {
   dashboard: [
     {
-      path: "/config/devices",
-      translationKey: "devices",
-      iconPath: mdiDevices,
+      path: "/config/integrations",
+      translationKey: "integrations",
+      iconPath: mdiPuzzle,
       iconColor: "#0D47A1",
       core: true,
       adminOnly: true,
@@ -300,15 +299,6 @@ export const configSections: Record<string, PageNavigation[]> = {
   // the features of a device and helpers are virtual devices. Their pages
   // stay reachable by URL, without a tab.
   devices: [
-    {
-      component: "devices",
-      path: "/config/devices",
-      translationKey: "ui.panel.config.devices.caption",
-      iconPath: mdiDevices,
-      iconColor: "#2D338F",
-      core: true,
-      adminOnly: true,
-    },
     {
       component: "integrations",
       path: "/config/integrations",

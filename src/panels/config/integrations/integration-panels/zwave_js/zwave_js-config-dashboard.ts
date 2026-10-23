@@ -326,7 +326,7 @@ class ZWaveJSConfigDashboard extends LitElement {
             )}
           >
             <ha-list-item-button
-              href=${`/config/devices/dashboard?historyBack=1&config_entry=${this.configEntryId}`}
+              href=${`/devices?historyBack=1&config_entry=${this.configEntryId}`}
             >
               <ha-svg-icon slot="start" .path=${mdiDevices}></ha-svg-icon>
               <div slot="headline">

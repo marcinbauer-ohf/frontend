@@ -47,6 +47,7 @@ import "./list/ha-list-nav";
 import "./user/ha-user-badge";
 
 const SORT_VALUE_URL_PATHS = {
+  devices: 0,
   energy: 1,
   map: 2,
   logbook: 3,

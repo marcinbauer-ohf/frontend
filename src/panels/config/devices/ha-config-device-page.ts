@@ -900,7 +900,7 @@ export class HaConfigDevicePage extends LitElement {
     return html`<hass-subpage
       .hass=${this.hass}
       .narrow=${this.narrow}
-      back-path="/config/devices/dashboard"
+      back-path="/devices"
       .header=${deviceName}
     >
       <ha-tooltip for="edit-settings-button" slot="toolbar-icon">

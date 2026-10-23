@@ -38,6 +38,7 @@ import { translationMetadata } from "../resources/translations-metadata";
 import type {
   Constructor,
   HomeAssistant,
+  PanelInfo,
   ServiceCallRequest,
   ServiceCallResponse,
 } from "../types";
@@ -52,6 +53,17 @@ import { getState } from "../util/ha-pref-storage";
 import hassCallApi, { hassCallApiRaw } from "../util/hass-call-api";
 import { callWS, setDebugConnection } from "../util/websocket";
 import type { HassBaseEl } from "./hass-base-mixin";
+
+// ponytail: the backend does not register a devices panel yet, so the
+// frontend adds one until it does
+const DEVICES_PANEL: PanelInfo = {
+  component_name: "devices",
+  url_path: "devices",
+  title: "devices",
+  icon: "mdi:devices",
+  config: null,
+  require_admin: true,
+};
 
 export const connectionMixin = <T extends Constructor<HassBaseEl>>(
   superClass: T
@@ -346,7 +358,13 @@ export const connectionMixin = <T extends Constructor<HassBaseEl>>(
       });
       subscribeConfig(conn, (config) => this._updateHass({ config }));
       subscribeServices(conn, (services) => this._updateHass({ services }));
-      subscribePanels(conn, (panels) => this._updateHass({ panels }));
+      subscribePanels(conn, (panels) =>
+        this._updateHass({
+          panels: panels.devices
+            ? panels
+            : { ...panels, devices: DEVICES_PANEL },
+        })
+      );
       // Catch errors to userData and systemData subscription (e.g. if the
       // backend isn't up to date) and set to null so frontend can continue
       subscribeFrontendUserData(conn, "core", ({ value: userData }) =>

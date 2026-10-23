@@ -26,6 +26,8 @@ export interface HomeDashboardStrategyConfig {
   hide_welcome_message?: boolean;
   hide_suggested_entities?: boolean;
   shortcuts?: ShortcutItem[];
+  /** Area views show one device card per device instead of entity tiles. */
+  device_cards?: boolean;
 }
 
 @customElement("home-dashboard-strategy")
@@ -73,6 +75,7 @@ export class HomeDashboardStrategy extends ReactiveElement {
           type: "home-area",
           area: area.area_id,
           home_panel: config.home_panel,
+          device_cards: config.device_cards,
         } satisfies HomeAreaViewStrategyConfig,
       };
     });

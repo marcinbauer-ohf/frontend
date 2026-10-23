@@ -50,6 +50,8 @@ export interface HomeAreaViewStrategyConfig {
   type: "home-area";
   area?: string;
   home_panel?: boolean;
+  /** Every device as a device card, instead of its entities as tiles. */
+  device_cards?: boolean;
 }
 
 @customElement("home-area-view-strategy")
@@ -137,7 +139,7 @@ export class HomeAreaViewStrategy extends ReactiveElement {
       media_players: mediaPlayers,
     } = entitiesBySummary;
 
-    if (light.length > 0) {
+    if (!config.device_cards && light.length > 0) {
       const anyOnCondition = {
         condition: "or" as const,
         conditions: light.map((entityId) => ({
@@ -200,7 +202,7 @@ export class HomeAreaViewStrategy extends ReactiveElement {
       });
     }
 
-    if (climate.length > 0) {
+    if (!config.device_cards && climate.length > 0) {
       sections.push({
         type: "grid",
         cards: [
@@ -220,7 +222,7 @@ export class HomeAreaViewStrategy extends ReactiveElement {
       });
     }
 
-    if (security.length > 0) {
+    if (!config.device_cards && security.length > 0) {
       sections.push({
         type: "grid",
         cards: [
@@ -240,7 +242,7 @@ export class HomeAreaViewStrategy extends ReactiveElement {
       });
     }
 
-    if (mediaPlayers.length > 0) {
+    if (!config.device_cards && mediaPlayers.length > 0) {
       sections.push({
         type: "grid",
         cards: [
@@ -260,7 +262,10 @@ export class HomeAreaViewStrategy extends ReactiveElement {
 
     const deviceSections: LovelaceSectionRawConfig[] = [];
     const { maintenance, ...partialEntitiesBySummary } = entitiesBySummary;
-    const summaryEntities = Object.values(partialEntitiesBySummary).flat();
+    // With device cards, the summary entities stay with their devices too
+    const summaryEntities = config.device_cards
+      ? maintenance
+      : Object.values(partialEntitiesBySummary).flat();
 
     // Scenes section
     const sceneFilter = generateEntityFilter(

@@ -281,7 +281,7 @@ export class ZHADeviceSummaryCard extends LitElement {
       await this._api.callService("zha", "remove", {
         ieee: this.device!.ieee,
       });
-      navigate("/config/devices", { replace: true });
+      navigate("/devices", { replace: true });
     } finally {
       this._processingRemove = false;
     }

@@ -94,7 +94,7 @@ const NAVIGATION_ACTIONS: {
 }[] = [
   {
     value: "navigate-devices",
-    path: "/config/devices/dashboard",
+    path: "/devices",
     icon: mdiDevices,
     countKey: "devices",
   },

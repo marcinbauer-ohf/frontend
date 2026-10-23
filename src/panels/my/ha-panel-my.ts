@@ -308,7 +308,7 @@ export const getMyRedirects = (): Redirects => ({
     redirect: "/config/zeroconf",
   },
   devices: {
-    redirect: "/config/devices/dashboard",
+    redirect: "/devices",
   },
   entities: {
     redirect: "/config/entities",

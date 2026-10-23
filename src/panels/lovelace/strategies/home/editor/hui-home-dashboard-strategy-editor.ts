@@ -1,10 +1,14 @@
 import { html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
+import "../../../../../components/ha-form/ha-form";
+import type { SchemaUnion } from "../../../../../components/ha-form/types";
 import { fireEvent } from "../../../../../common/dom/fire_event";
 import "../../../../../components/entity/ha-entities-picker";
 import type { HomeAssistant } from "../../../../../types";
 import type { LovelaceStrategyEditor } from "../../types";
 import type { HomeDashboardStrategyConfig } from "../home-dashboard-strategy";
+
+const SCHEMA = [{ name: "device_cards", selector: { boolean: {} } }] as const;
 
 @customElement("hui-home-dashboard-strategy-editor")
 export class HuiHomeDashboardStrategyEditor
@@ -38,7 +42,31 @@ export class HuiHomeDashboardStrategyEditor
         @value-changed=${this._valueChanged}
       >
       </ha-entities-picker>
+      <ha-form
+        .hass=${this.hass}
+        .data=${this._config}
+        .schema=${SCHEMA}
+        .computeLabel=${this._computeLabel}
+        @value-changed=${this._formChanged}
+      ></ha-form>
     `;
+  }
+
+  private _computeLabel = (schema: SchemaUnion<typeof SCHEMA>) =>
+    this.hass!.localize(
+      `ui.panel.lovelace.editor.strategy.home.${schema.name}`
+    );
+
+  private _formChanged(ev: CustomEvent): void {
+    ev.stopPropagation();
+    const config: HomeDashboardStrategyConfig = {
+      ...this._config!,
+      ...ev.detail.value,
+    };
+    if (!config.device_cards) {
+      delete config.device_cards;
+    }
+    fireEvent(this, "config-changed", { config });
   }
 
   private _valueChanged(ev: CustomEvent): void {

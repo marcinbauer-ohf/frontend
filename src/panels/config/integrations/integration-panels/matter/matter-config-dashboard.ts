@@ -178,7 +178,7 @@ export class MatterConfigDashboard extends LitElement {
             )}
           >
             <ha-list-item-button
-              href=${`/config/devices/dashboard?historyBack=1&config_entry=${this._configEntry?.entry_id}`}
+              href=${`/devices?historyBack=1&config_entry=${this._configEntry?.entry_id}`}
             >
               <ha-svg-icon slot="start" .path=${mdiDevices}></ha-svg-icon>
               <div slot="headline">

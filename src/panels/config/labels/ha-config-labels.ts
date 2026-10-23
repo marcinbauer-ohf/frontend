@@ -468,7 +468,7 @@ export class HaConfigLabels extends LitElement {
         this._navigateConfig("/config/entities");
         break;
       case "navigate-devices":
-        this._navigateConfig("/config/devices/dashboard");
+        this._navigateConfig("/devices");
         break;
       case "navigate-automations":
         this._navigateConfig("/config/automation/dashboard");

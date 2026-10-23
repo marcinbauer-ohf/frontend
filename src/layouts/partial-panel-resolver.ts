@@ -35,6 +35,7 @@ const COMPONENTS = {
   },
   config: { load: () => import("../panels/config/ha-panel-config") },
   custom: { load: () => import("../panels/custom/ha-panel-custom") },
+  devices: { load: () => import("../panels/devices/ha-panel-devices") },
   lovelace: {
     load: () => import("../panels/lovelace/ha-panel-lovelace"),
     waitForReady: true,

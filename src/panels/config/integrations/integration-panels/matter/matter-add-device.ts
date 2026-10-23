@@ -11,7 +11,7 @@ export class MatterAddDevice extends HTMLElement {
   async connectedCallback() {
     // Navigation closes open dialogs, so wait for it before showing the
     // dialog. This element is detached by then, open it from the app root.
-    await navigate("/config/devices/dashboard", {
+    await navigate("/devices", {
       replace: true,
     });
     showMatterAddDeviceDialog(document.querySelector("home-assistant") ?? this);

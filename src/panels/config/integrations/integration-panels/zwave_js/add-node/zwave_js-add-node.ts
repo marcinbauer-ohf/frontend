@@ -15,12 +15,9 @@ export class DialogZWaveJSAddNode extends HTMLElement {
   }
 
   private async _openDialog() {
-    await navigate(
-      `/config/devices/dashboard?config_entry=${this.configEntryId}`,
-      {
-        replace: true,
-      }
-    );
+    await navigate(`/devices?config_entry=${this.configEntryId}`, {
+      replace: true,
+    });
 
     showZWaveJSAddNodeDialog(this, {
       entry_id: this.configEntryId,
