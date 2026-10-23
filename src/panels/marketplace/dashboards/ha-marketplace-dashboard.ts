@@ -30,8 +30,8 @@ import { QueryParamsController } from "../../../common/controllers/query-params-
 import { navigate } from "../../../common/navigate";
 import { formatNumber } from "../../../common/number/format_number";
 import {
-  createMarketplaceFilterQueryString,
   marketplaceFilterQueryParamConfig,
+  sortedMarketplaceFilterQueryString,
 } from "../../../common/url/marketplace-query-params";
 import { shallowEqual } from "../../../common/util/shallow-equal";
 import type {
@@ -339,7 +339,6 @@ export class HaMarketplaceDashboard extends LitElement {
     if (this.tab === "discover") {
       return html`<hass-tabs-subpage
         .tabs=${tabs}
-        .localizeFunc=${this._i18n.localize}
         .narrow=${this.narrow}
         .route=${this.route}
         back-path="/config"
@@ -373,7 +372,6 @@ export class HaMarketplaceDashboard extends LitElement {
           { number: repositories.length }
         )}
         .isWide=${this.isWide}
-        .localizeFunc=${this._i18n.localize}
         .narrow=${this.narrow}
         .route=${this.route}
         back-path="/config"
@@ -424,9 +422,9 @@ export class HaMarketplaceDashboard extends LitElement {
             ? nothing
             : html`<div class="empty" slot="empty">
                 <ha-svg-icon .path=${mdiStore}></ha-svg-icon>
-                <h1>
+                <h2>
                   ${this._i18n.localize("ui.panel.marketplace.dashboard.empty_header")}
-                </h1>
+                </h2>
                 <p>
                   ${this._i18n.localize("ui.panel.marketplace.dashboard.empty_text")}
                 </p>
@@ -1008,8 +1006,8 @@ export class HaMarketplaceDashboard extends LitElement {
   // URL holds is the user's, so what a link applied isn't stored.
   private _isUserChange(filters: RepositoryFilters): boolean {
     return (
-      createMarketplaceFilterQueryString(filtersOfTab(filters, this.tab)) !==
-      createMarketplaceFilterQueryString(filtersOfTab(this._filters, this.tab))
+      sortedMarketplaceFilterQueryString(filtersOfTab(filters, this.tab)) !==
+      sortedMarketplaceFilterQueryString(filtersOfTab(this._filters, this.tab))
     );
   }
 
@@ -1100,8 +1098,14 @@ export class HaMarketplaceDashboard extends LitElement {
         .empty ha-button {
           --mdc-icon-size: 24px;
         }
-        .empty h1 {
+        .empty h2 {
+          margin-block: var(--ha-space-5);
+          font-family: var(--ha-font-family-heading);
           font-size: var(--ha-font-size-3xl);
+          font-weight: var(--ha-font-weight-normal);
+          line-height: var(--ha-line-height-condensed);
+          white-space: normal;
+          overflow: visible;
         }
       `,
     ];

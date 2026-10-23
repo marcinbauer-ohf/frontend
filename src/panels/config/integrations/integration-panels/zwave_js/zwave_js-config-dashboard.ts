@@ -326,7 +326,7 @@ class ZWaveJSConfigDashboard extends LitElement {
             )}
           >
             <ha-list-item-button
-              href=${`/config/devices/dashboard?historyBack=1&config_entry=${this.configEntryId}`}
+              href=${`/config/devices/dashboard?historyBack=1&config_entry=${this.configEntryId}&status=disabled`}
             >
               <ha-svg-icon slot="start" .path=${mdiDevices}></ha-svg-icon>
               <div slot="headline">
@@ -628,7 +628,7 @@ class ZWaveJSConfigDashboard extends LitElement {
       } else {
         stateTextExtra = html`
           <br />
-          <a href="/config/logs?filter=zwave_js"
+          <a href="/config/logs?search=zwave_js"
             >${this.hass.localize(
               "ui.panel.config.integrations.config_entry.check_the_logs"
             )}</a

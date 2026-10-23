@@ -240,6 +240,7 @@
         "count_media_playing": "{count} {count, plural,\n one {playing}\n other {playing}\n}",
         "count_maintenance_low_battery_issues": "{count} {count, plural,\n one {low battery}\n other {low batteries}\n}",
         "count_maintenance_issues_unavailable_battery_entities": "{count} {count, plural,\n one {unavailable device}\n other {unavailable devices}\n}",
+        "count_maintenance_problem_issues": "{count} {count, plural,\n one {problem}\n other {problems}\n}",
         "all_maintenance_good": "All good",
         "count_persons_home": "{count} {count, plural,\n one {person}\n other {people}\n} home",
         "nobody_home": "No one home"
@@ -509,6 +510,7 @@
       "skip": "Skip",
       "menu": "Menu",
       "overflow_menu": "Overflow menu",
+      "overflow_menu_for": "Actions for {name}",
       "help": "Help",
       "successfully_saved": "Successfully saved",
       "successfully_deleted": "Successfully deleted",
@@ -866,9 +868,9 @@
       },
       "target-picker": {
         "add_target": "Add target",
-        "exclude_target": "Exclude",
+        "exclude_target": "Exclude target",
         "remove_exclusion": "Remove exclusion",
-        "removes_count": "Removes {count} {count, plural,\n one {entity}\n other {entities}\n}",
+        "excluded_count": "{count} excluded",
         "excluded_by": "Excluded by",
         "exclusions": "Exclusions",
         "exclusions_no_effect": "Exclusions with no effect",
@@ -891,8 +893,6 @@
         "devices_count": "{count} {count, plural,\n one {device}\n other {devices}\n}",
         "entities_count": "{count} {count, plural,\n one {entity}\n other {entities}\n}",
         "entities_count_filtered": "{count}/{total} {total, plural,\n one {entity}\n other {entities}\n}",
-        "entities_count_excluded": "{count} {count, plural,\n one {entity}\n other {entities}\n} ({excluded} excluded)",
-        "entities_count_filtered_excluded": "{count}/{total} {total, plural,\n one {entity}\n other {entities}\n} ({excluded} excluded)",
         "target_details": "Target details",
         "no_targets": "No targets",
         "no_target_found": "No target found for {term}",
@@ -1205,9 +1205,14 @@
         }
       },
       "grid-size-picker": {
-        "reset_default": "Reset to default size",
-        "columns": "Number of columns",
-        "rows": "Number of rows"
+        "columns": "Width",
+        "rows": "Height",
+        "columns_value": "{count, plural, one {# column} other {# columns}}",
+        "rows_value": "{count, plural, one {# row} other {# rows}}",
+        "full_width": "Full width",
+        "fit_content": "Fit content",
+        "enter_precise_mode": "Enter precise mode",
+        "exit_precise_mode": "Exit precise mode"
       },
       "relative_time": {
         "never": "Never"
@@ -1301,7 +1306,9 @@
       "web-rtc-player": {
         "not_supported": "WebRTC is not supported in this browser.",
         "start_failed": "Failed to start the WebRTC stream: {message}",
-        "connect_failed": "Failed to connect the WebRTC stream: {message}"
+        "connect_failed": "Failed to connect the WebRTC stream: {message}",
+        "microphone_failed": "Could not access the microphone: {message}",
+        "microphone_connect_failed": "Could not connect the microphone to the camera: {message}"
       },
       "siren": {
         "more_controls": "More controls",
@@ -2079,7 +2086,22 @@
         },
         "camera": {
           "download_snapshot": "Download snapshot",
-          "failed_to_download": "Failed to download snapshot. Please check the logs for more information."
+          "failed_to_download": "Failed to download snapshot. Please check the logs for more information.",
+          "start_talking": "Start talking",
+          "stop_talking": "Stop talking",
+          "microphone_not_secure": "[%key:ui::components::secure_connection_required::microphone%]",
+          "microphone_webrtc_only": "Talking to this camera is only possible when the stream uses WebRTC.",
+          "microphone_denied": "Microphone access was denied. Allow it in your browser settings to talk to this camera.",
+          "app_microphone_error": {
+            "microphone_denied": "Microphone access is needed to talk to the camera. You can allow it in your device settings.",
+            "server_unavailable": "Unable to connect to Home Assistant.",
+            "signaling_failed": "The camera could not start the microphone stream.",
+            "connection_failed": "Unable to connect the microphone to the camera.",
+            "timeout": "The camera took too long to respond.",
+            "interrupted": "The microphone stream was stopped.",
+            "unsupported_stream_type": "This version of the Home Assistant app doesn't support talking to cameras. Update the app and try again.",
+            "unknown": "Home Assistant app error: {message}"
+          }
         },
         "timer": {
           "edit_mode": "Edit presets",
@@ -5662,7 +5684,6 @@
               "template": "Template",
               "device_replaced": "Replaced device",
               "device_replaced_description": "This device was replaced by one or more new devices. Update this automation to use them.",
-              "count_excluded": "({count}, {excluded} excluded)",
               "excluded": "Excluded from the target",
               "types": {
                 "entity": "[%key:ui::components::target-picker::type::entities%]",
@@ -6550,6 +6571,7 @@
               "evaluated_not_triggered": "Evaluated a change at {time}",
               "not_triggered": "Did not trigger at {time}. Select the trigger step details to see why.",
               "disabled": "(disabled)",
+              "show_more_items": "Show {count} more {count, plural,\n one {item}\n other {items}\n}",
               "triggered_by": "{triggeredBy, select, \n alias {{alias} triggered}\n other {Triggered} \n} {triggeredPath, select, \n trigger {by the {trigger}}\n other {manually} \n} at {time}",
               "path_error": "Unable to extract path {path}. Download trace and report as bug.",
               "not_all_entries_are_related_automation_note": "Not all shown activity might be related to this automation.",
@@ -7412,28 +7434,35 @@
             "setup_capability_bluetooth_short": "Extend Bluetooth range",
             "setup_capability_bluetooth_description": "Add nearby Bluetooth devices into Home Assistant. Adding multiple Bluetooth proxies allows for better connectivity with devices across your home.",
             "setup_capability_audio_title": "Stream audio via Sendspin",
-            "setup_capability_audio_short": "Synchronized multi-room sound with Music Assistant",
-            "setup_capability_audio_description": "Turn the speaker on this device into a synchronized, multi-room player with Music Assistant, a free media library manager that works with Home Assistant. Stream your library, Spotify, and dozens of other sources in sync across every room.",
+            "setup_capability_audio_short": "Synchronized multi-room audio",
+            "setup_capability_audio_description": "Set up Sendspin and Music Assistant to turn this device into a synchronized music player. Music Assistant manages your audio library and uses the Sendspin streaming protocol to keep audio in sync across smart speakers in your home. Without this setup, Home Assistant can still play audio on this device, but not in sync with other speakers.",
             "setup_capability_connectivity_title": "Connect a Z-Wave adapter",
             "setup_capability_connectivity_short": "Network connectivity for ZWA-2",
             "setup_capability_connectivity_description": "Plug a Connect ZWA-2 into the USB port to enable Z-Wave connectivity over Ethernet or Wi-Fi. Get your antenna in an optimal location for better device responsiveness.",
             "setup_capability_serial_title": "Control a device over serial",
             "setup_capability_serial_short": "AV receivers, amplifiers, and more",
-            "setup_capability_serial_description": "Add serial devices into Home Assistant, allowing for control of A/V receivers and multi-zone amplifiers.",
+            "setup_capability_serial_description": "Add AV receivers, TVs, heating systems, home batteries, and other serial devices to Home Assistant. Make sure there is a serial integration for the device you want to connect.",
             "setup_bluetooth_turn_on": "Turn on",
             "setup_bluetooth_turn_off": "Turn off",
             "setup_audio_music_assistant": "Music Assistant",
             "setup_audio_byline": "By the Open Home Foundation",
             "setup_audio_offer_title": "Enhance your music experience",
-            "setup_audio_offer_body": "Music Assistant is a free media library manager that turns the speaker on this device into a synchronized, multi-room player. Sendspin streams through it.",
+            "setup_audio_offer_body": "To get started, install Music Assistant. This free media library manager brings together music from local files, Spotify, Tidal, and more. It uses the Sendspin streaming protocol to play your music in sync on this device and other speakers around your home.",
             "setup_audio_skip": "Skip for now",
-            "setup_enable_stream_audio": "Enable stream audio",
+            "setup_synchronized_audio": "Set up synchronized audio",
             "setup_audio_sendspin": "Sendspin",
             "setup_enabling_sendspin": "Enabling Sendspin",
             "setup_audio_benefit_multiroom": "Synchronized multi-room playback",
+            "setup_audio_benefit_mix_and_match": "Mix and match smart speakers",
             "setup_audio_benefit_lossless": "Lossless, high-resolution audio",
-            "setup_audio_benefit_album_art": "Album art on every screen",
             "setup_install_music_assistant": "Install Music Assistant",
+            "setup_manage_sendspin": "Manage Sendspin",
+            "setup_protect_title": "Protect this speaker",
+            "setup_protect_heading": "Require a pairing code to play audio",
+            "setup_protect_body": "Without a pairing code, anyone on your network can stream to this speaker. Require one so only people you share it with can play audio here.",
+            "setup_protect_require_pairing_code": "Require a pairing code to play",
+            "setup_protect_require_pairing_code_description": "Guests enter a code before they can stream",
+            "setup_finish": "Finish",
             "setup_error_capabilities": "Couldn't load device capabilities",
             "setup_error_defer": "Couldn't save setup for later",
             "setup_error_zwave": "Z-Wave setup for this device isn't available right now. Try again in a moment.",
@@ -9728,6 +9757,7 @@
           },
           "caption": "LoRaWAN",
           "description": "Devices across your LoRaWAN connections",
+          "icon": "[%key:ui::panel::config::devices::data_table::icon%]",
           "device": "Device",
           "connection": "Connection",
           "dev_eui": "DevEUI",
@@ -10203,7 +10233,12 @@
             },
             "show_icon_and_title": "Show icon and title",
             "subview": "Subview",
-            "max_columns": "Max number of sections wide",
+            "max_columns": "Max sections side by side",
+            "max_columns_helper": "Smaller screens fit fewer side by side, and phones stack them one under the other.",
+            "max_columns_option": "{count} {count, plural,\n one {section}\n other {sections}\n}",
+            "max_columns_option_default": "{count} sections (default)",
+            "max_columns_custom_option": "Custom",
+            "max_columns_custom": "Number of sections",
             "section_specifics": "Sections view specific settings",
             "dense_section_placement": "Dense section placement",
             "dense_section_placement_helper": "Will try to fill gaps with sections that fit the gap. This may make section placement less predictable.",
@@ -10300,12 +10335,12 @@
             "tab_layout": "Layout",
             "paste_condition": "Paste condition",
             "layout": {
+              "recommended_size": "Use recommended size",
+              "size": "{width} × {height}",
               "full_width": "Full width",
-              "full_width_helper": "Take up the full width of the section whatever its size",
-              "auto_height": "Auto height",
-              "auto_height_helper": "Adjust the card height based on its content",
-              "precise_mode": "Precise mode",
-              "precise_mode_helper": "Change the card width with more precision",
+              "full_width_helper": "Always fill the section, whatever its width",
+              "fit_content": "Fit height to content",
+              "fit_content_helper": "Make the card as tall as its content",
               "no_grid_support": "This card does not fully support resizing yet and may not display correctly with custom sizes."
             }
           },
@@ -10328,6 +10363,8 @@
             "delete": "[%key:ui::panel::lovelace::editor::edit_card::delete%]",
             "copy": "[%key:ui::panel::lovelace::editor::edit_card::copy%]",
             "cut": "[%key:ui::panel::lovelace::editor::edit_card::cut%]",
+            "copied_to_clipboard": "Badge copied to clipboard",
+            "cut_to_clipboard": "Badge cut to clipboard",
             "duplicate": "[%key:ui::panel::lovelace::editor::edit_card::duplicate%]",
             "tab_config": "[%key:ui::panel::lovelace::editor::edit_card::tab_config%]",
             "tab_visibility": "[%key:ui::panel::lovelace::editor::edit_card::tab_visibility%]"
@@ -11416,8 +11453,6 @@
             "generic": {
               "manual": "Manual",
               "manual_description": "Need to add a community badge or just want to manually write the YAML?",
-              "paste": "Paste from clipboard",
-              "paste_description": "Paste a {type} badge from the clipboard",
               "suggested_badges": "Suggested badges",
               "other_badges": "Other badges",
               "custom_badges": "Community badges"
@@ -11912,6 +11947,7 @@
             "suggestions_title": "Suggestions",
             "community_title": "Community",
             "not_found": "Can't find the card you want?",
+            "paste_card": "Paste card",
             "suggestions": {
               "periods": {
                 "last_24h": "Last 24 hours",
@@ -11935,7 +11971,8 @@
             "content_empty_title": "[%key:ui::panel::lovelace::editor::cardpicker::content_empty_title%]",
             "content_empty_description": "Or browse all badge types.",
             "browse_badges": "Browse all badges",
-            "not_found": "Can't find the badge you want?"
+            "not_found": "Can't find the badge you want?",
+            "paste_badge": "Paste badge"
           },
           "header-footer": {
             "header": "Header",
