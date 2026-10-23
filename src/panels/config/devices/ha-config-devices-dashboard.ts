@@ -1668,6 +1668,12 @@ ${rejected
         hass-tabs-subpage-data-table.cards {
           --data-table-background-color: transparent;
           --data-table-border-width: 0;
+          /* At most four columns: a card is never narrower than a quarter
+             of the row, less its share of the gaps */
+          --ha-data-table-card-min-width: max(
+            280px,
+            calc(25% - var(--ha-space-3))
+          );
         }
         .clear {
           color: var(--primary-color);
