@@ -1670,7 +1670,7 @@
         "revert_error": "Failed to revert the configuration: {error}"
       },
       "quick-bar": {
-        "ask_assist": "Ask Assist: {query}",
+        "ask_assist": "Ask: {query}",
         "commands_title": "Commands",
         "navigate_title": "Navigate",
         "commands": {
@@ -1779,7 +1779,7 @@
         "nothing_found": "Nothing found!"
       },
       "voice_command": {
-        "title": "Assist",
+        "title": "Assistant",
         "did_not_hear": "Home Assistant did not hear anything",
         "did_not_understand": "Didn't quite get that",
         "found": "I found the following for you:",
@@ -1828,9 +1828,9 @@
         "microphone_in_use": "Your microphone could not be started. It may be in use by another app.",
         "microphone_unknown": "Your microphone could not be started.",
         "error_playing_audio": "The response could not be played",
-        "error_starting_pipeline": "Assist could not start",
-        "unknown_error_load_assist": "Loading the Assist pipeline failed",
-        "not_found_error_load_assist": "Cannot find the Assist pipeline",
+        "error_starting_pipeline": "The assistant could not start",
+        "unknown_error_load_assist": "Loading the voice profile failed",
+        "not_found_error_load_assist": "Cannot find the voice profile",
         "show_details": "Show details",
         "permission": {
           "title": "Allow this action?",
@@ -2765,8 +2765,8 @@
           "search_in_table": "to search in tables"
         },
         "assist": {
-          "title": "Assist",
-          "open_assist": "open Assist dialog"
+          "title": "Assistant",
+          "open_assist": "open the assistant"
         },
         "automation_script": {
           "title": "Automations / Scripts",
@@ -10138,8 +10138,8 @@
           "configure_ui": "Edit dashboard",
           "help": "Help",
           "search_entities": "Search entities",
-          "assist": "Assist",
-          "assist_tooltip": "Assist",
+          "assist": "Ask",
+          "assist_tooltip": "Ask the assistant",
           "search_home_assistant": "Search Home Assistant",
           "reload_resources": "Reload resources",
           "exit_edit_mode": "Done",
@@ -10511,7 +10511,7 @@
               "more-info": "More info",
               "toggle": "Toggle",
               "navigate": "Navigate",
-              "assist": "Assist",
+              "assist": "Open assistant",
               "url": "URL",
               "none": "Nothing"
             }
@@ -13007,7 +13007,7 @@
       "key_c_tip": "Press {keyboard_shortcut} 'c' on any page to open the command dialog",
       "key_e_tip": "Press {keyboard_shortcut} 'e' on any page to open the entity search dialog",
       "key_m_tip": "Press {keyboard_shortcut} 'm' on any page to get the My Home Assistant link",
-      "key_a_tip": "Press {keyboard_shortcut} 'a' on any page to open the Assist dialog",
+      "key_a_tip": "Press {keyboard_shortcut} 'a' on any page to open the assistant",
       "key_shortcut_quick_search": "Press {keyboard_shortcut} ''{modifier}+k'' on any page to open quick search"
     }
   },
