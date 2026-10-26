@@ -16,6 +16,7 @@ import "../../../../../components/list/ha-list-selectable";
 import type { TriggerCondition } from "../../../../../data/automation";
 import {
   automationTriggerContext,
+  isGeneratedTriggerId,
   type AutomationTriggerContext,
   type TriggerIdOption,
 } from "../../trigger/automation-trigger-id";
@@ -78,6 +79,7 @@ export class HaTriggerCondition extends LitElement {
               <ha-button
                 slot="action"
                 size="s"
+                variant="warning"
                 appearance="filled"
                 .disabled=${this.disabled}
                 @click=${this._fixDuplicateIds}
@@ -117,10 +119,23 @@ export class HaTriggerCondition extends LitElement {
                 )}
               </span>
               ${
-                option.duplicate
-                  ? html`<span slot="end" class="duplicate-trigger-badge">
-                      <ha-svg-icon .path=${mdiAlert}></ha-svg-icon>
-                      <span class="duplicate-trigger-id">${option.id}</span>
+                option.duplicate ||
+                (!option.draft && !isGeneratedTriggerId(option.id))
+                  ? html`<span
+                      slot="supporting-text"
+                      class="trigger-id ${option.duplicate ? "duplicate" : ""}"
+                    >
+                      ${
+                        option.duplicate
+                          ? html`<ha-svg-icon
+                              .path=${mdiAlert}
+                              .label=${this.hass.localize(
+                                "ui.panel.config.automation.editor.conditions.type.trigger.duplicate_id"
+                              )}
+                            ></ha-svg-icon>`
+                          : nothing
+                      }
+                      <span class="trigger-id-text">${option.id}</span>
                     </span>`
                   : nothing
               }
@@ -231,8 +246,7 @@ export class HaTriggerCondition extends LitElement {
         --mdc-icon-size: 20px;
         color: var(--ha-color-on-neutral-quiet);
       }
-      .missing-trigger-badge,
-      .duplicate-trigger-badge {
+      .missing-trigger-badge {
         display: inline-flex;
         align-items: center;
         gap: var(--ha-space-1);
@@ -243,18 +257,32 @@ export class HaTriggerCondition extends LitElement {
         line-height: 18px;
       }
       .missing-trigger-badge ha-svg-icon,
-      .duplicate-trigger-badge ha-svg-icon {
+      .trigger-id ha-svg-icon {
         --mdc-icon-size: 18px;
         flex-shrink: 0;
       }
       .missing-trigger-id,
-      .duplicate-trigger-id {
+      .trigger-id-text {
         font-family: var(--ha-font-family-code);
         font-size: var(--ha-font-size-s);
-        max-width: 120px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+      .missing-trigger-id {
+        max-width: 120px;
+      }
+      .trigger-id {
+        display: flex;
+        align-items: center;
+        gap: var(--ha-space-1);
+        color: var(--ha-color-text-secondary);
+      }
+      .trigger-id-text {
+        min-width: 0;
+      }
+      .trigger-id.duplicate {
+        color: var(--ha-color-on-warning-quiet);
       }
     `,
   ];
