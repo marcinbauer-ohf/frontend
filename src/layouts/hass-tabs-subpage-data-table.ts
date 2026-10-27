@@ -37,6 +37,7 @@ import type {
 import { showDataTableSettingsDialog } from "../components/data-table/show-dialog-data-table-settings";
 import "../components/ha-adaptive-dialog";
 import "../components/ha-button";
+import "../components/ha-card";
 import "../components/ha-dialog-footer";
 import "../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../components/ha-dropdown";
@@ -616,60 +617,62 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
                       `
                     : ""
                 }
-                <ha-data-table
-                  .narrow=${this.narrow}
-                  .columns=${this.columns}
-                  .data=${this.data}
-                  .loading=${this.loading}
-                  .noDataText=${this.noDataText}
-                  .loadError=${this.loadError}
-                  .filter=${this.filter}
-                  .selectable=${this._selectMode}
-                  .id=${this.id}
-                  .clickable=${this.clickable}
-                  .appendRow=${this.appendRow}
-                  .sortColumn=${this._sortColumn}
-                  .sortDirection=${this._sortDirection}
-                  .groupColumn=${this._groupColumn}
-                  .groupOrder=${this.groupOrder}
-                  .initialCollapsedGroups=${this.initialCollapsedGroups}
-                  .columnOrder=${this.columnOrder}
-                  .hiddenColumns=${this.hiddenColumns}
-                  .renderCard=${this.renderCard}
-                >
-                  ${
-                    !this.narrow
-                      ? html`
-                          <div slot="header">
-                            <slot name="top-header"></slot>
-                            <slot name="header">
-                              <div class="table-header">
-                                ${
-                                  this.hasFilters && !this.showFilters
-                                    ? html`${filterButton}`
-                                    : nothing
-                                }${selectModeBtn}${searchBar}${groupByMenu}${sortByMenu}${settingsButton}
-                              </div>
-                            </slot>
-                          </div>
-                        `
-                      : html`
-                          <div slot="header">
-                            <slot name="top-header"></slot>
-                          </div>
-                          <div slot="header-row" class="narrow-header-row">
-                            ${
-                              this.hasFilters && !this.showFilters
-                                ? html`${filterButton}`
-                                : nothing
-                            }
-                            ${selectModeBtn}
-                            <div class="flex"></div>
-                            ${groupByMenu}${sortByMenu}${settingsButton}
-                          </div>
-                        `
-                  }
-                </ha-data-table>`
+                <ha-card class="table-card">
+                  <ha-data-table
+                    .narrow=${this.narrow}
+                    .columns=${this.columns}
+                    .data=${this.data}
+                    .loading=${this.loading}
+                    .noDataText=${this.noDataText}
+                    .loadError=${this.loadError}
+                    .filter=${this.filter}
+                    .selectable=${this._selectMode}
+                    .id=${this.id}
+                    .clickable=${this.clickable}
+                    .appendRow=${this.appendRow}
+                    .sortColumn=${this._sortColumn}
+                    .sortDirection=${this._sortDirection}
+                    .groupColumn=${this._groupColumn}
+                    .groupOrder=${this.groupOrder}
+                    .initialCollapsedGroups=${this.initialCollapsedGroups}
+                    .columnOrder=${this.columnOrder}
+                    .hiddenColumns=${this.hiddenColumns}
+                    .renderCard=${this.renderCard}
+                  >
+                    ${
+                      !this.narrow
+                        ? html`
+                            <div slot="header">
+                              <slot name="top-header"></slot>
+                              <slot name="header">
+                                <div class="table-header">
+                                  ${
+                                    this.hasFilters && !this.showFilters
+                                      ? html`${filterButton}`
+                                      : nothing
+                                  }${selectModeBtn}${searchBar}${groupByMenu}${sortByMenu}${settingsButton}
+                                </div>
+                              </slot>
+                            </div>
+                          `
+                        : html`
+                            <div slot="header">
+                              <slot name="top-header"></slot>
+                            </div>
+                            <div slot="header-row" class="narrow-header-row">
+                              ${
+                                this.hasFilters && !this.showFilters
+                                  ? html`${filterButton}`
+                                  : nothing
+                              }
+                              ${selectModeBtn}
+                              <div class="flex"></div>
+                              ${groupByMenu}${sortByMenu}${settingsButton}
+                            </div>
+                          `
+                    }
+                  </ha-data-table>
+                </ha-card>`
         }
         <div slot="fab"><slot name="fab"></slot></div>
       </hass-tabs-subpage>
@@ -947,7 +950,29 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
     :host([narrow]) ha-data-table {
       --data-table-inset-left: var(--safe-area-inset-left, 0px);
     }
-    :host(:not([narrow])) ha-data-table,
+    .table-card {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      margin: var(--ha-space-4);
+    }
+    :host([narrow]) .table-card {
+      margin: var(--ha-space-2);
+    }
+    .table-card ha-data-table {
+      flex: 1;
+      min-height: 0;
+    }
+    :host(:not([narrow])) .table-card {
+      height: calc(
+        100vh -
+          1px - var(--header-height, 0px) - var(
+            --safe-area-inset-top,
+            0px
+          ) - var(--safe-area-inset-bottom, 0px) - var(--ha-space-4) *
+          2
+      );
+    }
     .pane {
       height: calc(
         100vh -

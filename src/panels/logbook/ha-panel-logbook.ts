@@ -62,6 +62,7 @@ import { filterLogbookCompatibleEntities } from "../../data/logbook";
 import { resolveEntityIDs } from "../../data/selector";
 import { haStyle } from "../../resources/styles";
 import type { HomeAssistant } from "../../types";
+import "../../components/ha-card";
 import "./ha-logbook";
 import { showAlertDialog } from "../../dialogs/generic/show-dialog-box";
 import { csvDownload, csvSafeString } from "../../util/csv";
@@ -242,39 +243,41 @@ export class HaPanelLogbook extends LitElement {
                 ></ha-date-range-nav>
               </div>
 
-              <ha-logbook
-                .hass=${this.hass}
-                .time=${this._time}
-                .entityIds=${this._shownEntityIds}
-                .causeFilter=${this._shownCauses}
-                .narrow=${this.narrow}
-                show-cause
-                virtualize
-              >
-                ${
-                  sourceCount > 0
-                    ? html`<ha-empty-state
-                        slot="empty"
-                        .icon=${mdiTextBoxOutline}
-                        .heading=${this.hass.localize(
-                          "ui.panel.logbook.no_results_title"
-                        )}
-                        .description=${this.hass.localize(
-                          "ui.panel.logbook.no_results"
-                        )}
-                      >
-                        <ha-button
-                          appearance="plain"
-                          @click=${this._openSources}
-                        >
-                          ${this.hass.localize(
-                            "ui.panel.logbook.change_sources"
+              <ha-card class="list">
+                <ha-logbook
+                  .hass=${this.hass}
+                  .time=${this._time}
+                  .entityIds=${this._shownEntityIds}
+                  .causeFilter=${this._shownCauses}
+                  .narrow=${this.narrow}
+                  show-cause
+                  virtualize
+                >
+                  ${
+                    sourceCount > 0
+                      ? html`<ha-empty-state
+                          slot="empty"
+                          .icon=${mdiTextBoxOutline}
+                          .heading=${this.hass.localize(
+                            "ui.panel.logbook.no_results_title"
                           )}
-                        </ha-button>
-                      </ha-empty-state>`
-                    : nothing
-                }
-              </ha-logbook>
+                          .description=${this.hass.localize(
+                            "ui.panel.logbook.no_results"
+                          )}
+                        >
+                          <ha-button
+                            appearance="plain"
+                            @click=${this._openSources}
+                          >
+                            ${this.hass.localize(
+                              "ui.panel.logbook.change_sources"
+                            )}
+                          </ha-button>
+                        </ha-empty-state>`
+                      : nothing
+                  }
+                </ha-logbook>
+              </ha-card>
             </div>
           </div>
         </div>
@@ -719,6 +722,19 @@ export class HaPanelLogbook extends LitElement {
 
         .toolbar > * {
           flex-shrink: 0;
+        }
+
+        .list {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          min-height: 0;
+          overflow: hidden;
+          margin: var(--ha-space-4);
+        }
+
+        :host([narrow]) .list {
+          margin: var(--ha-space-2);
         }
 
         ha-logbook {
