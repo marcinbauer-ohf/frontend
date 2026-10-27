@@ -1,16 +1,19 @@
+import { mdiDotsVertical, mdiPlus } from "@mdi/js";
 import type { TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
-import { classMap } from "lit/directives/class-map";
 import { repeat } from "lit/directives/repeat";
 import { until } from "lit/directives/until";
 import "../../../../components/ha-button";
-import "../../../../components/ha-card";
 import "../../../../components/ha-icon";
-import "../../../../components/ha-list";
-import "../../../../components/ha-list-item";
+import "../../../../components/ha-svg-icon";
+import "../../../../components/item/ha-list-item-base";
+import "../../../../components/item/ha-list-item-button";
+import "../../../../components/ha-dropdown";
+import "../../../../components/ha-dropdown-item";
+import "../../../../components/ha-icon-button";
+import "../../../../components/list/ha-grouped-list";
 import { computeEntityEntryName } from "../../../../common/entity/compute_entity_name_display";
-import type { EntityRegistryEntry } from "../../../../data/entity/entity_registry";
 import { entryIcon } from "../../../../data/icons";
 import { showMoreInfoDialog } from "../../../../dialogs/more-info/show-ha-more-info-dialog";
 import type { HomeAssistant } from "../../../../types";
@@ -38,17 +41,16 @@ export class HaDeviceEntitiesCard extends LitElement {
 
   protected render(): TemplateResult {
     if (!this.entities.length) {
-      return html`
-        <ha-card outlined .header=${this.header}>
-          <div class="empty card-content">
-            ${this.hass.localize("ui.panel.config.devices.entities.none")}
-          </div>
-        </ha-card>
-      `;
+      return html`<ha-grouped-list .header=${this.header}
+        >${this._renderMenu(false)}
+        <ha-list-item-base
+          .headline=${this.hass.localize("ui.panel.config.devices.entities.none")}
+        ></ha-list-item-base>
+      </ha-grouped-list>`;
     }
 
-    const enabledEntities: EntityRegistryEntry[] = [];
-    const disabledEntities: EntityRegistryEntry[] = [];
+    const enabledEntities: EntityRegistryStateEntry[] = [];
+    const disabledEntities: EntityRegistryStateEntry[] = [];
 
     this.entities.forEach((entry) => {
       if (entry.disabled_by) {
@@ -59,82 +61,68 @@ export class HaDeviceEntitiesCard extends LitElement {
     });
 
     // Main entities (those without their own name, shown as the device name)
-    // are listed first, separated from the additional entities by a divider.
-    const mainEntities: EntityRegistryStateEntry[] = [];
-    const additionalEntities: EntityRegistryStateEntry[] = [];
-    enabledEntities.forEach((entry) => {
-      if (computeEntityEntryName(entry)) {
-        additionalEntities.push(entry);
-      } else {
-        mainEntities.push(entry);
-      }
-    });
+    // are listed first.
+    const mainEntities = enabledEntities.filter(
+      (entry) => !computeEntityEntryName(entry)
+    );
+    const additionalEntities = enabledEntities.filter((entry) =>
+      computeEntityEntryName(entry)
+    );
 
     return html`
-      <ha-card outlined .header=${this.header}>
+      <ha-grouped-list .header=${this.header}
+        >${this._renderMenu(enabledEntities.length > 0)}
+        ${this._renderEntities(mainEntities)}
+        ${this._renderEntities(additionalEntities)}
         ${
-          enabledEntities.length
-            ? html`
-                <div id="entities" class="move-up">
-                  <ha-list>
-                    ${this._renderEntities(mainEntities)}
-                    ${
-                      mainEntities.length && additionalEntities.length
-                        ? html`<div class="divider" role="separator"></div>`
-                        : nothing
-                    }
-                    ${this._renderEntities(additionalEntities)}
-                  </ha-list>
-                </div>
-              `
+          this.showHidden
+            ? disabledEntities.map((entry) =>
+                this._renderUnavailableEntity(entry)
+              )
             : nothing
         }
         ${
           disabledEntities.length
-            ? html`<div
-                class=${classMap({ "move-up": !enabledEntities.length })}
-              >
-                ${
-                  !this.showHidden
-                    ? html`
-                        <button
-                          class="show-more"
-                          @click=${this._toggleShowHidden}
-                        >
-                          ${this.hass.localize(
-                            "ui.panel.config.devices.entities.disabled_entities",
-                            { count: disabledEntities.length }
-                          )}
-                        </button>
-                      `
-                    : html`
-                        <ha-list>
-                          ${disabledEntities.map((entry) =>
-                            this._renderUnavailableEntity(entry)
-                          )}
-                        </ha-list>
-                        <button
-                          class="show-more"
-                          @click=${this._toggleShowHidden}
-                        >
-                          ${this.hass.localize(
-                            "ui.panel.config.devices.entities.show_less"
-                          )}
-                        </button>
-                      `
+            ? html`<ha-list-item-button
+                class="show-more"
+                .headline=${
+                  this.showHidden
+                    ? this.hass.localize(
+                        "ui.panel.config.devices.entities.show_less"
+                      )
+                    : this.hass.localize(
+                        "ui.panel.config.devices.entities.disabled_entities",
+                        { count: disabledEntities.length }
+                      )
                 }
-              </div>`
+                @click=${this._toggleShowHidden}
+              ></ha-list-item-button>`
             : nothing
         }
-        <div class="card-actions">
-          <ha-button appearance="plain" @click=${this._addToLovelaceView}>
+      </ha-grouped-list>
+    `;
+  }
+
+  private _renderMenu(canAdd: boolean) {
+    return canAdd
+      ? html`<ha-dropdown
+          slot="header-action"
+          placement="bottom-end"
+          @wa-select=${this._addToLovelaceView}
+        >
+          <ha-icon-button
+            slot="trigger"
+            .label=${this.hass.localize("ui.common.menu")}
+            .path=${mdiDotsVertical}
+          ></ha-icon-button>
+          <ha-dropdown-item value="add_to_dashboard">
+            <ha-svg-icon slot="icon" .path=${mdiPlus}></ha-svg-icon>
             ${this.hass.localize(
               "ui.panel.config.devices.entities.add_entities_lovelace"
             )}
-          </ha-button>
-        </div>
-      </ha-card>
-    `;
+          </ha-dropdown-item>
+        </ha-dropdown>`
+      : nothing;
   }
 
   private _toggleShowHidden() {
@@ -159,7 +147,7 @@ export class HaDeviceEntitiesCard extends LitElement {
         "ui.panel.config.devices.entities.hidden"
       )})`;
     }
-    return html`<div>
+    return html`<div class="entity" role="listitem">
       ${entityRowElement(entry.entity_id, name, this.hass)}
     </div>`;
   }
@@ -167,26 +155,25 @@ export class HaDeviceEntitiesCard extends LitElement {
   private _renderUnavailableEntity(
     entry: EntityRegistryStateEntry
   ): TemplateResult {
-    const name = entry.stateName || this.deviceName;
-
-    const icon = until(entryIcon(this.hass, entry));
-
     return html`
-      <ha-list-item
-        graphic="icon"
+      <ha-list-item-button
         class="disabled-entry"
+        .headline=${entry.stateName || this.deviceName}
         .entry=${entry}
         @click=${this._openEditEntry}
       >
-        <ha-icon slot="graphic" .icon=${icon}></ha-icon>
-        <div class="name">${name}</div>
-      </ha-list-item>
+        <ha-icon
+          slot="start"
+          .icon=${until(entryIcon(this.hass, entry))}
+        ></ha-icon>
+      </ha-list-item-button>
     `;
   }
 
-  private _openEditEntry(ev: Event): void {
-    const entry = (ev.currentTarget! as any).entry;
-    showMoreInfoDialog(this, { entityId: entry.entity_id });
+  private _openEditEntry(
+    ev: Event & { currentTarget: { entry: EntityRegistryStateEntry } }
+  ): void {
+    showMoreInfoDialog(this, { entityId: ev.currentTarget.entry.entity_id });
   }
 
   private _addToLovelaceView(): void {
@@ -214,77 +201,21 @@ export class HaDeviceEntitiesCard extends LitElement {
     :host {
       display: block;
     }
-    ha-icon {
-      margin-left: -8px;
+    ha-grouped-list::part(base) {
+      background-color: var(--card-background-color);
     }
-    .entity-id {
-      color: var(--secondary-text-color);
+    ha-icon-button {
+      --ha-icon-button-size: 32px;
+      --mdc-icon-size: 20px;
     }
-    .buttons {
-      text-align: right;
-      margin: 0 0 0 8px;
+    .entity {
+      padding: var(--ha-space-2) var(--ha-space-3);
     }
     .disabled-entry {
       color: var(--secondary-text-color);
     }
-    .divider {
-      height: 1px;
-      background-color: var(--divider-color);
-      margin: var(--ha-space-2) var(--ha-space-4);
-    }
-    .move-up {
-      margin-top: -13px;
-    }
-    .move-up:has(> ha-list) {
-      margin-top: -24px;
-    }
-    :not(.move-up) > ha-list {
-      margin-top: -24px;
-    }
-    ha-list + button.show-more,
-    .move-up + :not(:has(ha-list)) > button.show-more {
-      margin-top: -12px;
-    }
-    #entities > ha-list {
-      margin: 0 16px 0 8px;
-    }
-    #entities > ha-list > ha-list-item {
-      padding: 0 16px 0 12px;
-    }
-    .name {
-      font-size: var(--ha-font-size-m);
-    }
-    .name:dir(rtl) {
-      margin-inline-start: 8px;
-    }
-    .empty {
-      text-align: center;
-    }
-    button.show-more {
+    .show-more {
       color: var(--primary-color);
-      text-align: left;
-      cursor: pointer;
-      background: none;
-      border-width: initial;
-      border-style: none;
-      border-color: initial;
-      border-image: initial;
-      padding: 16px;
-      font: inherit;
-    }
-    button.show-more:focus {
-      outline: none;
-      text-decoration: underline;
-    }
-    ha-list > * {
-      margin: 8px 0px;
-    }
-    ha-list-item {
-      height: 40px;
-      --mdc-ripple-color: transparent;
-    }
-    .card-actions {
-      padding: 4px 16px 4px 4px;
     }
   `;
 }

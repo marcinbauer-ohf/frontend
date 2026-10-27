@@ -1,9 +1,15 @@
 import { startOfYesterday } from "date-fns";
 import "@home-assistant/webawesome/dist/components/divider/divider";
 import {
+  mdiCog,
+  mdiDelete,
   mdiDotsVertical,
+  mdiDownload,
+  mdiInformation,
+  mdiInformationOutline,
+  mdiMicrophone,
+  mdiOpenInNew,
   mdiPalette,
-  mdiPencil,
   mdiPlus,
   mdiRestore,
   mdiRobot,
@@ -12,7 +18,6 @@ import {
   mdiTextureBox,
   mdiTools,
 } from "@mdi/js";
-import type { HassEntity } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -20,6 +25,7 @@ import { ifDefined } from "lit/directives/if-defined";
 import memoizeOne from "memoize-one";
 import { consume } from "../../../common/decorators/consume";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
+import { ASSIST_ENTITIES, SENSOR_ENTITIES } from "../../../common/const";
 import type { HASSDomCurrentTargetEvent } from "../../../common/dom/fire_event";
 import { computeDeviceNameDisplay } from "../../../common/entity/compute_device_name";
 import { computeDomain } from "../../../common/entity/compute_domain";
@@ -28,11 +34,7 @@ import { computeStateDomain } from "../../../common/entity/compute_state_domain"
 import { getDeviceArea } from "../../../common/entity/context/get_device_context";
 import { navigate } from "../../../common/navigate";
 import { stringCompare } from "../../../common/string/compare";
-import { slugify } from "../../../common/string/slugify";
-import { computeRTL } from "../../../common/util/compute_rtl";
 import { groupBy } from "../../../common/util/group-by";
-import { createColumnsController } from "../../../common/util/responsive-columns";
-import "../../../components/entity/ha-battery-icon";
 import "../../../components/ha-alert";
 import "../../../components/ha-button";
 import "../../../components/ha-dropdown";
@@ -47,7 +49,19 @@ import "../../../components/item/ha-list-item-button";
 import "../../../components/list/ha-list-nav";
 import "../../../components/ha-spinner";
 import "../../../components/ha-svg-icon";
+import "../../../components/ha-area-picker";
+import "../../../components/ha-labels-picker";
+import "../../../components/ha-related-items";
+import "../../../components/ha-side-pane";
+import "../../../components/ha-switch";
+import type { HaSwitch } from "../../../components/ha-switch";
+import "../../../components/input/ha-input";
+import type { HaInput } from "../../../components/input/ha-input";
 import "../../../components/ha-tooltip";
+import "../../../components/item/ha-list-item-value";
+import "../../../components/list/ha-grouped-list";
+import { assistSatelliteSupportsSetupFlow } from "../../../data/assist_satellite";
+import { getSignedPath } from "../../../data/auth";
 import type {
   ConfigEntry,
   DisableConfigEntryResult,
@@ -57,14 +71,20 @@ import {
   sortConfigEntries,
 } from "../../../data/config_entries";
 import { fireRelatedContext, fullEntitiesContext } from "../../../data/context";
+import type {
+  DeviceRegistryEntry,
+  DeviceRegistryEntryMutableParams,
+} from "../../../data/device/device_registry";
 import {
-  DEVICE_ENTITY_CATEGORIES,
-  computeDeviceEntityCategory,
-  type DeviceEntityCategory,
-} from "../../../data/device/device_entity_category";
-import type { DeviceRegistryEntry } from "../../../data/device/device_registry";
-import { updateDeviceRegistryEntry } from "../../../data/device/device_registry";
-
+  removeDeviceFromRegistry,
+  updateDeviceRegistryEntry,
+} from "../../../data/device/device_registry";
+import type { DiagnosticInfo } from "../../../data/diagnostics";
+import {
+  fetchDiagnosticHandler,
+  getConfigEntryDiagnosticsDownloadUrl,
+  getDeviceDiagnosticsDownloadUrl,
+} from "../../../data/diagnostics";
 import type { EntityRegistryEntry } from "../../../data/entity/entity_registry";
 import {
   findBatteryChargingEntity,
@@ -80,36 +100,49 @@ import {
   showAlertDialog,
   showConfirmationDialog,
 } from "../../../dialogs/generic/show-dialog-box";
+import { showVoiceAssistantSetupDialog } from "../../../dialogs/voice-assistant-setup/show-voice-assistant-setup-dialog";
 import "../../../layouts/hass-error-screen";
 import "../../../layouts/hass-subpage";
 import { haStyle } from "../../../resources/styles";
 import type { HomeAssistant } from "../../../types";
 import { isHelperDomain } from "../helpers/const";
-
+import {
+  isHomeAssistantUrl,
+  sanitizeLinkUrl,
+} from "../../../common/url/sanitize-http-url";
 import { createSearchParam } from "../../../common/url/search-params";
 import { brandsUrl } from "../../../util/brands-url";
-import { getWsErrorMessage } from "../../../util/ws-error";
+import { fileDownload } from "../../../util/file_download";
+import { isWsErrorCode, getWsErrorMessage } from "../../../util/ws-error";
 import "../../logbook/ha-logbook";
 import "./device-detail/ha-device-child-devices-card";
 import "./device-detail/ha-device-entities-card";
 import "./device-detail/ha-device-info-card";
 import type { ESPHomeSetupController } from "./device-detail/integration-elements/esphome/esphome-setup-controller";
 import "./device-detail/ha-device-linked-devices-card";
+import "./device-detail/ha-device-overview";
 import "./device-detail/ha-device-via-devices-card";
-import type { DeviceAction, DeviceAlert } from "./device-detail/device-actions";
-import {
-  DEVICE_ALERTS_INTERVAL,
-  deviceDeleteActions,
-  fetchDeviceActions,
-  fetchDeviceAlerts,
-  fetchDeviceDiagnosticActions,
-  showDeviceAddTo,
-  updateDeviceWithSideEffects,
-} from "./device-detail/device-actions";
-import {
-  loadDeviceRegistryDetailDialog,
-  showDeviceRegistryDetailDialog,
-} from "./device-registry-detail/show-dialog-device-registry-detail";
+import { showDeviceAddToDialog } from "./device-detail/show-dialog-device-add-to";
+
+// What the related card lists; the rest of the page and the info pane show
+// the device's entities, area, integrations and connected devices
+const RELATED_SECTIONS = [
+  "group",
+  "scene",
+  "automation",
+  "automation_blueprint",
+  "script",
+  "script_blueprint",
+] as const;
+
+const RELATED_EXCLUDE: (keyof RelatedResult)[] = [
+  "entity",
+  "device",
+  "area",
+  "floor",
+  "integration",
+  "config_entry",
+];
 
 type DeviceQuickLinkKey =
   "entities" | "helpers" | "automations" | "scenes" | "scripts";
@@ -156,9 +189,22 @@ export interface EntityRegistryStateEntry extends EntityRegistryEntry {
   stateName?: string | null;
 }
 
-export type { DeviceAction, DeviceAlert } from "./device-detail/device-actions";
+export interface DeviceAction {
+  href?: string;
+  target?: string;
+  action?: (ev: Event) => void;
+  label: string;
+  icon?: string;
+  trailingIcon?: string;
+  classes?: string;
+}
 
-const MAX_COLUMNS = 3;
+export interface DeviceAlert {
+  level: "warning" | "error" | "info";
+  text: string;
+}
+
+const DEVICE_ALERTS_INTERVAL = 30000;
 
 @customElement("ha-config-device-page")
 export class HaConfigDevicePage extends LitElement {
@@ -196,7 +242,8 @@ export class HaConfigDevicePage extends LitElement {
 
   private _logbookTime = { recent: 86400 };
 
-  private _columnsController = createColumnsController(this, MAX_COLUMNS);
+  // Open beside the content on a wide screen until toggled
+  @state() private _infoOpen?: boolean;
 
   private _integrations = memoizeOne(
     (
@@ -241,27 +288,6 @@ export class HaConfigDevicePage extends LitElement {
         )
   );
 
-  private _getEntitiesSorted = (entities: HassEntity[]) =>
-    entities.sort((ent1, ent2) =>
-      stringCompare(
-        this.hass.formatEntityName(ent1) || `zzz${ent1.entity_id}`,
-        this.hass.formatEntityName(ent2) || `zzz${ent2.entity_id}`,
-        this.hass.locale.language
-      )
-    );
-
-  private _getRelated = memoizeOne((related?: RelatedResult) => ({
-    automation: this._getEntitiesSorted(
-      (related?.automation ?? []).map((entityId) => this.hass.states[entityId])
-    ),
-    scene: this._getEntitiesSorted(
-      (related?.scene ?? []).map((entityId) => this.hass.states[entityId])
-    ),
-    script: this._getEntitiesSorted(
-      (related?.script ?? []).map((entityId) => this.hass.states[entityId])
-    ),
-  }));
-
   private _getQuickLinkCounts = memoizeOne(
     (entities: EntityRegistryEntry[], related?: RelatedResult) => ({
       entities: entities.length,
@@ -283,11 +309,44 @@ export class HaConfigDevicePage extends LitElement {
 
   private _entitiesByCategory = memoizeOne(
     (entities: EntityRegistryEntry[]) => {
-      const result = groupBy(entities, computeDeviceEntityCategory) as Record<
-        DeviceEntityCategory,
+      const result = groupBy(entities, (entry) => {
+        const domain = computeDomain(entry.entity_id);
+
+        if (ASSIST_ENTITIES.includes(domain)) {
+          return "assist";
+        }
+
+        if (domain === "event" || domain === "notify") {
+          return domain;
+        }
+
+        if (entry.entity_category) {
+          return entry.entity_category;
+        }
+
+        if (SENSOR_ENTITIES.includes(domain)) {
+          return "sensor";
+        }
+
+        return "control";
+      }) as Record<
+        | "control"
+        | "event"
+        | "sensor"
+        | "assist"
+        | "notify"
+        | NonNullable<EntityRegistryEntry["entity_category"]>,
         EntityRegistryStateEntry[]
       >;
-      for (const key of DEVICE_ENTITY_CATEGORIES) {
+      for (const key of [
+        "assist",
+        "config",
+        "control",
+        "diagnostic",
+        "event",
+        "notify",
+        "sensor",
+      ]) {
         if (!(key in result)) {
           result[key] = [];
         }
@@ -322,11 +381,6 @@ export class HaConfigDevicePage extends LitElement {
     if (changedProps.has("deviceId") || changedProps.has("entries")) {
       this._fetchData();
     }
-  }
-
-  protected firstUpdated(changedProps: PropertyValues<this>) {
-    super.firstUpdated(changedProps);
-    loadDeviceRegistryDetailDialog();
   }
 
   protected updated(changedProps: PropertyValues<this>) {
@@ -386,48 +440,18 @@ export class HaConfigDevicePage extends LitElement {
       ? this.hass.states[batteryEntity.entity_id]
       : undefined;
     const batteryDomain = battery ? computeStateDomain(battery) : undefined;
+    const area = getDeviceArea(device, this.hass.areas, this.hass.devices);
+    // A battery level, or a low battery state
+    const shownBattery =
+      battery &&
+      (batteryDomain === "binary_sensor" ||
+        !Number.isNaN(Number(battery.state)))
+        ? battery
+        : undefined;
 
     const batteryChargingState = batteryChargingEntity
       ? this.hass.states[batteryChargingEntity.entity_id]
       : undefined;
-    const area = getDeviceArea(device, this.hass.areas, this.hass.devices);
-
-    const deviceInfo: TemplateResult[] = integrations.length
-      ? [
-          html`<ha-list-nav slot="actions">
-            ${integrations.map(
-              (integration) =>
-                html`<ha-list-item-button
-                  href=${`/config/integrations/integration/${integration.domain}#config_entry=${integration.entry_id}`}
-                  .headline=${domainToName(
-                    this.hass.localize,
-                    integration.domain
-                  )}
-                >
-                  <img
-                    slot="start"
-                    alt=${domainToName(this.hass.localize, integration.domain)}
-                    src=${brandsUrl(
-                      {
-                        domain: integration.domain,
-                        type: "icon",
-                        darkOptimized: this.hass.themes?.darkMode,
-                      },
-                      this.hass.auth.data.hassUrl
-                    )}
-                    crossorigin="anonymous"
-                    referrerpolicy="no-referrer"
-                    width="24"
-                    height="24"
-                    @error=${this._onImageError}
-                    @load=${this._onImageLoad}
-                  />
-                  <ha-icon-next slot="end"></ha-icon-next>
-                </ha-list-item-button>`
-            )}
-          </ha-list-nav>`,
-        ]
-      : [];
 
     const actions = [...(this._deviceActions || [])];
     if (Array.isArray(this._diagnosticDownloadLinks)) {
@@ -450,37 +474,8 @@ export class HaConfigDevicePage extends LitElement {
 
     const firstDeviceAction = actions.shift();
 
-    if (device.disabled_by) {
-      deviceInfo.push(html`
-        <ha-alert alert-type="warning">
-          ${this.hass.localize("ui.panel.config.devices.enabled_cause", {
-            type: this.hass.localize(
-              `ui.panel.config.devices.type.${device.entry_type || "device"}`
-            ),
-            cause: this.hass.localize(
-              `ui.panel.config.devices.disabled_by.${device.disabled_by}`
-            ),
-          })}
-        </ha-alert>
-        ${
-          device.disabled_by === "user"
-            ? html`
-                <div class="card-actions" slot="actions">
-                  <ha-button
-                    variant="warning"
-                    size="s"
-                    @click=${this._enableDevice}
-                  >
-                    ${this.hass.localize("ui.common.enable")}
-                  </ha-button>
-                </div>
-              `
-            : ""
-        }
-      `);
-    }
-
-    this._renderIntegrationInfo(device, integrations, deviceInfo);
+    const integrationInfo: TemplateResult[] = [];
+    this._renderIntegrationInfo(device, integrations, integrationInfo);
 
     const add_prompt = device.disabled_by
       ? this.hass.localize("ui.panel.config.devices.add_prompt_disabled")
@@ -494,7 +489,7 @@ export class HaConfigDevicePage extends LitElement {
       isComponentLoaded(this.hass.config, "script") ||
       hasSceneSupport
         ? html`
-            <ha-card outlined>
+            <ha-card outlined class="related-card">
               <h1 class="card-header">
                 ${this.hass.localize(
                   "ui.panel.config.devices.automation.related_heading"
@@ -502,6 +497,7 @@ export class HaConfigDevicePage extends LitElement {
                 <ha-button
                   appearance="filled"
                   variant="brand"
+                  size="s"
                   @click=${this._showAddToDialog}
                   .disabled=${device.disabled_by}
                 >
@@ -518,154 +514,15 @@ export class HaConfigDevicePage extends LitElement {
                         <ha-spinner></ha-spinner>
                       </div>
                     `
-                  : this._related.automation?.length ||
-                      this._related.script?.length ||
-                      this._related.scene?.length
-                    ? html`
-                        ${
-                          isComponentLoaded(this.hass.config, "automation") &&
-                          this._related.automation?.length
-                            ? html`
-                                <h3 class="section-header">
-                                  ${this.hass.localize(
-                                    "ui.panel.config.devices.automation.automations_heading"
-                                  )}
-                                </h3>
-                                <ha-list-nav
-                                  .ariaLabel=${this.hass.localize(
-                                    "ui.panel.config.devices.automation.automations_heading"
-                                  )}
-                                >
-                                  ${this._getRelated(
-                                    this._related
-                                  ).automation.map((automation) =>
-                                    automation
-                                      ? html`<ha-list-item-button
-                                          .headline=${this.hass.formatEntityName(automation)}
-                                          .href=${
-                                            automation.attributes.id
-                                              ? `/config/automation/edit/${encodeURIComponent(automation.attributes.id)}`
-                                              : `/config/automation/show/${automation.entity_id}`
-                                          }
-                                        >
-                                          <ha-icon-next
-                                            slot="end"
-                                          ></ha-icon-next>
-                                        </ha-list-item-button>`
-                                      : nothing
-                                  )}
-                                </ha-list-nav>
-                              `
-                            : nothing
-                        }
-                        ${
-                          isComponentLoaded(this.hass.config, "script") &&
-                          this._related.script?.length
-                            ? html`
-                                <h3 class="section-header">
-                                  ${this.hass.localize(
-                                    "ui.panel.config.devices.script.scripts_heading"
-                                  )}
-                                </h3>
-                                <ha-list-nav
-                                  .ariaLabel=${this.hass.localize(
-                                    "ui.panel.config.devices.script.scripts_heading"
-                                  )}
-                                >
-                                  ${this._getRelated(this._related).script.map(
-                                    (script) => {
-                                      if (!script) {
-                                        return nothing;
-                                      }
-                                      const entry = this._entityReg.find(
-                                        (e) => e.entity_id === script.entity_id
-                                      );
-                                      const url = entry
-                                        ? `/config/script/edit/${entry.unique_id}`
-                                        : `/config/script/show/${script.entity_id}`;
-                                      return html`
-                                        <ha-list-item-button
-                                          .headline=${this.hass.formatEntityName(script)}
-                                          .href=${url}
-                                        >
-                                          <ha-icon-next
-                                            slot="end"
-                                          ></ha-icon-next>
-                                        </ha-list-item-button>
-                                      `;
-                                    }
-                                  )}
-                                </ha-list-nav>
-                              `
-                            : nothing
-                        }
-                        ${
-                          hasSceneSupport && this._related.scene?.length
-                            ? html`
-                                <h3 class="section-header">
-                                  ${this.hass.localize(
-                                    "ui.panel.config.devices.scene.scenes_heading"
-                                  )}
-                                </h3>
-                                <ha-list-nav
-                                  .ariaLabel=${this.hass.localize(
-                                    "ui.panel.config.devices.scene.scenes_heading"
-                                  )}
-                                >
-                                  ${this._getRelated(this._related).scene.map(
-                                    (scene) => {
-                                      if (!scene) {
-                                        return nothing;
-                                      }
-
-                                      const sceneId = `scene-${slugify(
-                                        scene.entity_id
-                                      )}`;
-
-                                      return scene.attributes.id
-                                        ? html`
-                                            <ha-list-item-button
-                                              .headline=${this.hass.formatEntityName(scene)}
-                                              .href=${`/config/scene/edit/${scene.attributes.id}`}
-                                            >
-                                              <ha-icon-next
-                                                slot="end"
-                                              ></ha-icon-next>
-                                            </ha-list-item-button>
-                                          `
-                                        : html`
-                                            <ha-list-item-base
-                                              id=${sceneId}
-                                              .headline=${this.hass.formatEntityName(scene)}
-                                            >
-                                              <ha-icon-next
-                                                slot="end"
-                                              ></ha-icon-next>
-                                            </ha-list-item-base>
-                                            <ha-tooltip
-                                              .for=${sceneId}
-                                              placement=${
-                                                computeRTL(
-                                                  this.hass.language,
-                                                  this.hass.translationMetadata
-                                                    .translations
-                                                )
-                                                  ? "left"
-                                                  : "right"
-                                              }
-                                            >
-                                              ${this.hass.localize(
-                                                "ui.panel.config.devices.cant_edit"
-                                              )}
-                                            </ha-tooltip>
-                                          `;
-                                    }
-                                  )}
-                                </ha-list-nav>
-                              `
-                            : nothing
-                        }
-                      `
+                  : RELATED_SECTIONS.some(
+                        (section) => this._related![section]?.length
+                      )
+                    ? html`<ha-related-items
+                        .hass=${this.hass}
+                        .itemType=${"device"}
+                        .itemId=${this.deviceId}
+                        .exclude=${RELATED_EXCLUDE}
+                      ></ha-related-items>`
                     : html`
                         <div class="card-content">
                           ${this.hass.localize(
@@ -689,148 +546,18 @@ export class HaConfigDevicePage extends LitElement {
           `
         : "";
 
-    const infoColumn = html`
-      ${
-        this._deviceAlerts?.length
-          ? html`
-              <div>
-                ${this._deviceAlerts.map(
-                  (alert) => html`
-                    <ha-alert .alertType=${alert.level}>
-                      ${alert.text}
-                    </ha-alert>
-                  `
-                )}
-              </div>
-            `
-          : ""
-      }
-      <ha-device-info-card .hass=${this.hass} .device=${device}>
-        ${deviceInfo}
-        ${
-          firstDeviceAction || actions.length
-            ? html`
-                <div class="card-actions" slot="actions">
-                  <ha-button
-                    href=${ifDefined(firstDeviceAction!.href)}
-                    rel=${ifDefined(
-                      firstDeviceAction!.target ? "noreferrer" : undefined
-                    )}
-                    appearance="plain"
-                    target=${ifDefined(firstDeviceAction!.target)}
-                    class=${ifDefined(firstDeviceAction!.classes)}
-                    .variant=${
-                      firstDeviceAction!.classes?.includes("warning")
-                        ? "danger"
-                        : "brand"
-                    }
-                    .action=${firstDeviceAction!.action}
-                    @click=${this._deviceActionClicked}
-                  >
-                    ${firstDeviceAction!.label}
-                    ${
-                      firstDeviceAction!.icon
-                        ? html`
-                            <ha-svg-icon
-                              class=${ifDefined(firstDeviceAction!.classes)}
-                              .path=${firstDeviceAction!.icon}
-                              slot="start"
-                            ></ha-svg-icon>
-                          `
-                        : nothing
-                    }
-                    ${
-                      firstDeviceAction!.trailingIcon
-                        ? html`
-                            <ha-svg-icon
-                              .path=${firstDeviceAction!.trailingIcon}
-                              slot="end"
-                            ></ha-svg-icon>
-                          `
-                        : nothing
-                    }
-                  </ha-button>
-
-                  ${
-                    actions.length
-                      ? html`
-                          <ha-dropdown
-                            @wa-select=${this._deviceActionSelected}
-                            placement="bottom-end"
-                          >
-                            <ha-icon-button
-                              slot="trigger"
-                              .label=${this.hass.localize("ui.common.menu")}
-                              .path=${mdiDotsVertical}
-                            ></ha-icon-button>
-                            ${actions.map((deviceAction, idx) => {
-                              const dropdownItem = html`<ha-dropdown-item
-                                .value=${idx}
-                                .data=${deviceAction}
-                                .variant=${
-                                  deviceAction.classes?.includes("warning")
-                                    ? "danger"
-                                    : "default"
-                                }
-                              >
-                                ${
-                                  deviceAction.icon
-                                    ? html`
-                                        <ha-svg-icon
-                                          .path=${deviceAction.icon}
-                                          slot="icon"
-                                        ></ha-svg-icon>
-                                      `
-                                    : ""
-                                }
-                                ${deviceAction.label}
-                                ${
-                                  deviceAction.trailingIcon
-                                    ? html`
-                                        <ha-svg-icon
-                                          slot="details"
-                                          .path=${deviceAction.trailingIcon}
-                                        ></ha-svg-icon>
-                                      `
-                                    : ""
-                                }
-                              </ha-dropdown-item>`;
-                              return deviceAction.href
-                                ? html`<a
-                                    href=${deviceAction.href}
-                                    target=${ifDefined(deviceAction.target)}
-                                    rel=${ifDefined(
-                                      deviceAction.target
-                                        ? "noreferrer"
-                                        : undefined
-                                    )}
-                                    >${dropdownItem}
-                                  </a>`
-                                : dropdownItem;
-                            })}
-                          </ha-dropdown>
-                        `
-                      : ""
-                  }
-                </div>
-              `
-            : ""
-        }
-      </ha-device-info-card>
-      ${this._esphomeSetup?.renderReminder() ?? nothing}
-      <ha-device-child-devices-card
-        .hass=${this.hass}
-        .deviceId=${this.deviceId}
-      ></ha-device-child-devices-card>
-      <ha-device-linked-devices-card
-        .hass=${this.hass}
-        .deviceId=${this.deviceId}
-        .entries=${this.entries}
-      ></ha-device-linked-devices-card>
-    `;
-
-    const entitiesColumn = html`
-      ${DEVICE_ENTITY_CATEGORIES.map((category) =>
+    const entitiesCard = html`<div class="entities">
+      ${(
+        [
+          "control",
+          "sensor",
+          "notify",
+          "event",
+          "assist",
+          "config",
+          "diagnostic",
+        ] as const
+      ).map((category) =>
         // Make sure we render controls if no other cards will be rendered
         entitiesByCategory[category].length > 0 ||
         (entities.length === 0 && category === "control")
@@ -848,11 +575,7 @@ export class HaConfigDevicePage extends LitElement {
             `
           : ""
       )}
-      <ha-device-via-devices-card
-        .hass=${this.hass}
-        .deviceId=${this.deviceId}
-      ></ha-device-via-devices-card>
-    `;
+    </div>`;
 
     const logbookColumn = isComponentLoaded(this.hass.config, "logbook")
       ? html`
@@ -887,78 +610,190 @@ export class HaConfigDevicePage extends LitElement {
         `
       : nothing;
 
-    const columns =
-      this._columnsController.value ?? (this.narrow ? 1 : MAX_COLUMNS);
-
-    const columnContents =
-      columns >= 3
-        ? [[infoColumn, relatedCard], [entitiesColumn], [logbookColumn]]
-        : columns === 2
-          ? [[infoColumn, relatedCard, logbookColumn], [entitiesColumn]]
-          : [[infoColumn, entitiesColumn, relatedCard, logbookColumn]];
-
-    return html`<hass-subpage
-      .hass=${this.hass}
-      .narrow=${this.narrow}
-      back-path="/devices"
-      .header=${deviceName}
-    >
-      <ha-tooltip for="edit-settings-button" slot="toolbar-icon">
-        ${this.hass.localize("ui.panel.config.devices.edit_settings")}
-      </ha-tooltip>
-      <ha-icon-button
-        id="edit-settings-button"
-        slot="toolbar-icon"
-        .path=${mdiPencil}
-        @click=${this._showSettings}
-        hide-title
-        .label=${this.hass.localize("ui.panel.config.devices.edit_settings")}
-      ></ha-icon-button>
-      <ha-dropdown
-        slot="toolbar-icon"
-        @wa-select=${this._handleToolbarMenuAction}
-      >
-        <ha-icon-button
-          slot="trigger"
-          .label=${this.hass.localize("ui.common.menu")}
-          .path=${mdiDotsVertical}
-        ></ha-icon-button>
-
-        ${NAVIGATION_ACTIONS.filter(
-          (action) => quickLinkCounts[action.countKey]
-        ).map(
-          (action) => html`
-            <ha-dropdown-item value=${action.value}>
-              <ha-svg-icon slot="icon" .path=${action.icon}></ha-svg-icon>
-              ${this.hass.localize(
-                `ui.panel.config.devices.quick_links.${action.countKey}`,
-                { count: quickLinkCounts[action.countKey] }
+    const typeKey = device.entry_type || "device";
+    const infoOpen = this._infoOpen ?? !this.narrow;
+    const infoPane = infoOpen
+      ? html`<ha-side-pane
+          slot="side-pane"
+          .narrow=${this.narrow}
+          .animateIn=${this._infoOpen === true}
+          .heading=${this.hass.localize("ui.panel.config.devices.device_info", {
+            type: this.hass.localize(
+              `ui.panel.config.devices.type.${typeKey}_heading`
+            ),
+          })}
+          @side-pane-closed=${this._closeInfo}
+        >
+          ${
+            actions.length
+              ? html`<ha-dropdown
+                  slot="actions"
+                  placement="bottom-end"
+                  @wa-select=${this._deviceActionSelected}
+                >
+                  <ha-icon-button
+                    slot="trigger"
+                    .label=${this.hass.localize("ui.common.menu")}
+                    .path=${mdiDotsVertical}
+                  ></ha-icon-button>
+                  ${actions.map((deviceAction, idx) => {
+                    const dropdownItem = html`<ha-dropdown-item
+                      .value=${idx}
+                      .data=${deviceAction}
+                      .variant=${
+                        deviceAction.classes?.includes("warning")
+                          ? "danger"
+                          : "default"
+                      }
+                    >
+                      ${
+                        deviceAction.icon
+                          ? html`<ha-svg-icon
+                              .path=${deviceAction.icon}
+                              slot="icon"
+                            ></ha-svg-icon>`
+                          : nothing
+                      }
+                      ${deviceAction.label}
+                      ${
+                        deviceAction.trailingIcon
+                          ? html`<ha-svg-icon
+                              slot="details"
+                              .path=${deviceAction.trailingIcon}
+                            ></ha-svg-icon>`
+                          : nothing
+                      }
+                    </ha-dropdown-item>`;
+                    return deviceAction.href
+                      ? html`<a
+                          href=${deviceAction.href}
+                          target=${ifDefined(deviceAction.target)}
+                          rel=${ifDefined(
+                            deviceAction.target ? "noreferrer" : undefined
+                          )}
+                          >${dropdownItem}</a
+                        >`
+                      : dropdownItem;
+                  })}
+                </ha-dropdown>`
+              : nothing
+          }
+          ${
+            integrations.length
+              ? html`<img
+                  class="brand-logo"
+                  alt=${domainToName(this.hass.localize, integrations[0].domain)}
+                  src=${brandsUrl(
+                    {
+                      domain: integrations[0].domain,
+                      type: "logo",
+                      darkOptimized: this.hass.themes?.darkMode,
+                    },
+                    this.hass.auth.data.hassUrl
+                  )}
+                  crossorigin="anonymous"
+                  referrerpolicy="no-referrer"
+                  @load=${this._onImageLoad}
+                  @error=${this._onImageError}
+                />`
+              : nothing
+          }
+          ${this._deviceAlerts?.map(
+            (alert) =>
+              html`<ha-alert .alertType=${alert.level}>${alert.text}</ha-alert>`
+          )}
+          ${
+            device.disabled_by
+              ? html`<ha-alert alert-type="warning">
+                  ${this.hass.localize(
+                    "ui.panel.config.devices.enabled_cause",
+                    {
+                      type: this.hass.localize(
+                        `ui.panel.config.devices.type.${typeKey}`
+                      ),
+                      cause: this.hass.localize(
+                        `ui.panel.config.devices.disabled_by.${device.disabled_by}`
+                      ),
+                    }
+                  )}
+                  ${
+                    device.disabled_by === "user"
+                      ? html`<ha-button
+                          slot="action"
+                          variant="warning"
+                          size="s"
+                          @click=${this._enableDevice}
+                        >
+                          ${this.hass.localize("ui.common.enable")}
+                        </ha-button>`
+                      : nothing
+                  }
+                </ha-alert>`
+              : nothing
+          }
+          <ha-input
+            .label=${this.hass.localize("ui.dialogs.device-registry-detail.name")}
+            .value=${device.name_by_user ?? ""}
+            .placeholder=${device.name || ""}
+            @change=${this._nameChanged}
+          ></ha-input>
+          <ha-area-picker
+            .value=${device.area_id ?? undefined}
+            @value-changed=${this._areaChanged}
+          ></ha-area-picker>
+          <ha-labels-picker
+            .hass=${this.hass}
+            .value=${device.labels}
+            @value-changed=${this._labelsChanged}
+          ></ha-labels-picker>
+          <ha-grouped-list>
+            <ha-list-item-base
+              .headline=${this.hass.localize(
+                "ui.dialogs.device-registry-detail.enabled_label",
+                {
+                  type: this.hass.localize(
+                    `ui.dialogs.device-registry-detail.type.${typeKey}`
+                  ),
+                }
               )}
-              <ha-icon-next slot="details"></ha-icon-next>
-            </ha-dropdown-item>
-          `
-        )}
-        ${
-          NAVIGATION_ACTIONS.some((action) => quickLinkCounts[action.countKey])
-            ? html`<wa-divider></wa-divider>`
-            : nothing
-        }
-
-        <ha-dropdown-item value="reset_entity_ids">
-          <ha-svg-icon slot="icon" .path=${mdiRestore}></ha-svg-icon>
-          ${this.hass.localize("ui.panel.config.devices.restore_entity_ids")}
-        </ha-dropdown-item>
-      </ha-dropdown>
-
-      <div class="container" ${this._columnsController.target()}>
-        <div class="header fullwidth">
+              .supportingText=${this.hass.localize(
+                "ui.dialogs.device-registry-detail.enabled_description"
+              )}
+            >
+              <ha-switch
+                slot="end"
+                .checked=${!device.disabled_by}
+                .disabled=${
+                  device.disabled_by === "config_entry" ||
+                  device.disabled_by === "device"
+                }
+                @change=${this._enabledChanged}
+              ></ha-switch>
+            </ha-list-item-base>
+          </ha-grouped-list>
+          <ha-device-info-card
+            .hass=${this.hass}
+            .device=${device}
+            .battery=${shownBattery}
+            .batteryCharging=${batteryChargingState}
+          >
+            ${integrationInfo}
+          </ha-device-info-card>
           ${
             area
-              ? html`<div class="header-name">
-                  <ha-button
+              ? html`<ha-grouped-list
+                  .header=${this.hass.localize(
+                    "ui.panel.config.devices.info_pane.area"
+                  )}
+                >
+                  <ha-list-item-button
                     href="/config/areas/area/${area.area_id}"
-                    size="s"
-                    appearance="plain"
+                    .headline=${area.name}
+                    .supportingText=${
+                      area.floor_id
+                        ? this.hass.floors[area.floor_id]?.name
+                        : undefined
+                    }
                   >
                     ${
                       area.icon
@@ -971,66 +806,187 @@ export class HaConfigDevicePage extends LitElement {
                             .path=${mdiTextureBox}
                           ></ha-svg-icon>`
                     }
-                    ${this.hass.localize(
-                      "ui.panel.config.integrations.config_entry.area",
-                      { area: area.name || "Unnamed Area" }
-                    )}
-                  </ha-button>
-                </div>`
-              : ""
+                    <ha-icon-next slot="end"></ha-icon-next>
+                  </ha-list-item-button>
+                </ha-grouped-list>`
+              : nothing
           }
-          <div class="header-right">
-            ${
-              battery &&
-              (batteryDomain === "binary_sensor" ||
-                !Number.isNaN(Number(battery.state)))
-                ? html`
-                    <div class="battery">
-                      ${
-                        batteryDomain === "sensor"
-                          ? this.hass.formatEntityState(battery)
-                          : nothing
-                      }
-                      <ha-battery-icon
-                        .batteryStateObj=${battery}
-                        .batteryChargingStateObj=${batteryChargingState}
-                      ></ha-battery-icon>
-                    </div>
-                  `
-                : ""
-            }
-            ${
-              integrations.length
-                ? html`
-                    <img
-                      alt=${domainToName(
-                        this.hass.localize,
-                        integrations[0].domain
-                      )}
-                      src=${brandsUrl(
-                        {
-                          domain: integrations[0].domain,
-                          type: "logo",
-                          darkOptimized: this.hass.themes?.darkMode,
-                        },
-                        this.hass.auth.data.hassUrl
-                      )}
-                      crossorigin="anonymous"
-                      referrerpolicy="no-referrer"
-                      @load=${this._onImageLoad}
-                      @error=${this._onImageError}
-                    />
-                  `
-                : ""
-            }
-          </div>
+          ${
+            integrations.length
+              ? html`<ha-grouped-list
+                  .header=${this.hass.localize(
+                    "ui.panel.config.devices.info_pane.integrations"
+                  )}
+                >
+                  ${integrations.map(
+                    (integration) =>
+                      html`<ha-list-item-button
+                        href=${`/config/integrations/integration/${integration.domain}#config_entry=${integration.entry_id}`}
+                        .headline=${domainToName(
+                          this.hass.localize,
+                          integration.domain
+                        )}
+                        .supportingText=${integration.title}
+                      >
+                        <img
+                          slot="start"
+                          alt=${domainToName(
+                            this.hass.localize,
+                            integration.domain
+                          )}
+                          src=${brandsUrl(
+                            {
+                              domain: integration.domain,
+                              type: "icon",
+                              darkOptimized: this.hass.themes?.darkMode,
+                            },
+                            this.hass.auth.data.hassUrl
+                          )}
+                          crossorigin="anonymous"
+                          referrerpolicy="no-referrer"
+                          width="24"
+                          height="24"
+                          @error=${this._onImageError}
+                          @load=${this._onImageLoad}
+                        />
+                        <ha-icon-next slot="end"></ha-icon-next>
+                      </ha-list-item-button>`
+                  )}
+                </ha-grouped-list>`
+              : nothing
+          }
+          ${
+            firstDeviceAction
+              ? html`<ha-button
+                  class="primary-action"
+                  href=${ifDefined(firstDeviceAction.href)}
+                  rel=${ifDefined(
+                    firstDeviceAction.target ? "noreferrer" : undefined
+                  )}
+                  target=${ifDefined(firstDeviceAction.target)}
+                  appearance="filled"
+                  .variant=${
+                    firstDeviceAction.classes?.includes("warning")
+                      ? "danger"
+                      : "brand"
+                  }
+                  .action=${firstDeviceAction.action}
+                  @click=${this._deviceActionClicked}
+                >
+                  ${
+                    firstDeviceAction.icon
+                      ? html`<ha-svg-icon
+                          .path=${firstDeviceAction.icon}
+                          slot="start"
+                        ></ha-svg-icon>`
+                      : nothing
+                  }
+                  ${firstDeviceAction.label}
+                  ${
+                    firstDeviceAction.trailingIcon
+                      ? html`<ha-svg-icon
+                          .path=${firstDeviceAction.trailingIcon}
+                          slot="end"
+                        ></ha-svg-icon>`
+                      : nothing
+                  }
+                </ha-button>`
+              : nothing
+          }
+          ${this._esphomeSetup?.renderReminder() ?? nothing}
+        </ha-side-pane>`
+      : nothing;
+
+    return html`<hass-subpage
+      .hass=${this.hass}
+      .narrow=${this.narrow}
+      back-path="/config/devices/dashboard"
+    >
+      <div slot="header" class="header-content">
+        <div class="header-title">
+          <span class="title">
+            <p class="main">${deviceName}</p>
+          </span>
         </div>
-        ${this._esphomeSetup?.renderBanner(deviceName) ?? nothing}
-        ${columnContents.map(
-          (contents) => html`<div class="column">${contents}</div>`
+      </div>
+      <ha-icon-button
+        slot="toolbar-icon"
+        .label=${this.hass.localize("ui.panel.config.devices.info_pane.show", {
+          type: this.hass.localize(`ui.panel.config.devices.type.${typeKey}`),
+        })}
+        .path=${infoOpen ? mdiInformation : mdiInformationOutline}
+        aria-pressed=${infoOpen}
+        @click=${this._toggleInfo}
+      ></ha-icon-button>
+      <ha-dropdown
+        slot="toolbar-icon"
+        @wa-select=${this._handleToolbarMenuAction}
+      >
+        <ha-icon-button
+          slot="trigger"
+          .label=${this.hass.localize("ui.common.menu")}
+          .path=${mdiDotsVertical}
+        ></ha-icon-button>
+
+        ${NAVIGATION_ACTIONS.map(
+          (action) => html`
+            <ha-dropdown-item value=${action.value}>
+              <ha-svg-icon slot="icon" .path=${action.icon}></ha-svg-icon>
+              ${this.hass.localize(
+                `ui.panel.config.devices.quick_links.${action.countKey}`,
+                { count: quickLinkCounts[action.countKey] }
+              )}
+              <ha-icon-next slot="details"></ha-icon-next>
+            </ha-dropdown-item>
+          `
         )}
+
+        <wa-divider></wa-divider>
+
+        <ha-dropdown-item value="reset_entity_ids">
+          <ha-svg-icon slot="icon" .path=${mdiRestore}></ha-svg-icon>
+          ${this.hass.localize("ui.panel.config.devices.restore_entity_ids")}
+        </ha-dropdown-item>
+      </ha-dropdown>
+      ${infoPane}
+
+      <div class="container">
+        <div class="columns">
+          <ha-device-overview
+            class="overview"
+            .hass=${this.hass}
+            .entities=${entities}
+            .domain=${integrations[0]?.domain}
+          ></ha-device-overview>
+          <div class="main">
+            ${this._esphomeSetup?.renderBanner(deviceName) ?? nothing}
+            ${entitiesCard}
+            <ha-device-via-devices-card
+              .hass=${this.hass}
+              .deviceId=${this.deviceId}
+            ></ha-device-via-devices-card>
+            <ha-device-child-devices-card
+              .hass=${this.hass}
+              .deviceId=${this.deviceId}
+            ></ha-device-child-devices-card>
+            <ha-device-linked-devices-card
+              .hass=${this.hass}
+              .deviceId=${this.deviceId}
+              .entries=${this.entries}
+            ></ha-device-linked-devices-card>
+          </div>
+          <div class="activity">${relatedCard} ${logbookColumn}</div>
+        </div>
       </div>
     </hass-subpage>`;
+  }
+
+  private _toggleInfo() {
+    this._infoOpen = !(this._infoOpen ?? !this.narrow);
+  }
+
+  private _closeInfo() {
+    this._infoOpen = false;
   }
 
   private _fetchData() {
@@ -1072,73 +1028,303 @@ export class HaConfigDevicePage extends LitElement {
 
   private async _getDiagnosticButtons(): Promise<void> {
     const deviceId = this.deviceId;
-    const device = this.hass.devices[deviceId];
+    if (!isComponentLoaded(this.hass.config, "diagnostics")) {
+      return;
+    }
+
+    const device = this.hass.devices[this.deviceId];
+
     if (!device) {
       return;
     }
-    const actions = await fetchDeviceDiagnosticActions(
-      this.hass,
-      device,
-      this.entries
+
+    let links = await Promise.all(
+      this._integrations(device, this.entries, this.manifests).map(
+        async (entry): Promise<boolean | { link: string; domain: string }> => {
+          if (entry.state !== "loaded") {
+            return false;
+          }
+          let info: DiagnosticInfo;
+          try {
+            info = await fetchDiagnosticHandler(this.hass, entry.domain);
+          } catch (err: unknown) {
+            if (isWsErrorCode(err, "not_found")) {
+              return false;
+            }
+            throw err;
+          }
+
+          if (!info.handlers.device && !info.handlers.config_entry) {
+            return false;
+          }
+          return {
+            link: info.handlers.device
+              ? getDeviceDiagnosticsDownloadUrl(entry.entry_id, this.deviceId)
+              : getConfigEntryDiagnosticsDownloadUrl(entry.entry_id),
+            domain: entry.domain,
+          };
+        }
+      )
     );
-    if (this.deviceId === deviceId && actions.length > 0) {
-      this._diagnosticDownloadLinks = actions;
+
+    links = links.filter(Boolean);
+
+    if (this.deviceId !== deviceId) {
+      // abort if the device has changed
+      return;
+    }
+    if (links.length > 0) {
+      this._diagnosticDownloadLinks = (
+        links as { link: string; domain: string }[]
+      ).map((link) => ({
+        icon: mdiDownload,
+        action: () => this._signUrl(link.link),
+        label:
+          links.length > 1
+            ? this.hass.localize(
+                `ui.panel.config.devices.download_diagnostics_integration`,
+                {
+                  integration: domainToName(this.hass.localize, link.domain),
+                }
+              )
+            : this.hass.localize(
+                `ui.panel.config.devices.download_diagnostics`
+              ),
+      }));
     }
   }
 
   private _getDeleteActions() {
+    const deviceId = this.deviceId;
     const device = this.hass.devices[this.deviceId];
+
     if (!device) {
       return;
     }
-    const actions = deviceDeleteActions(this, this.hass, device, this.entries);
-    if (actions.length > 0) {
-      this._deleteButtons = actions;
+
+    const buttons: DeviceAction[] = [];
+    this._integrations(device, this.entries, this.manifests).forEach(
+      (entry) => {
+        if (entry.state !== "loaded" || !entry.supports_remove_device) {
+          return;
+        }
+        buttons.push({
+          action: async () => {
+            const confirmed = await showConfirmationDialog(this, {
+              text:
+                this._integrations(device, this.entries, this.manifests)
+                  .length > 1
+                  ? this.hass.localize(
+                      `ui.panel.config.devices.confirm_delete_integration`,
+                      {
+                        integration: domainToName(
+                          this.hass.localize,
+                          entry.domain
+                        ),
+                      }
+                    )
+                  : this.hass.localize(
+                      `ui.panel.config.devices.confirm_delete`
+                    ),
+              confirmText: this.hass.localize("ui.common.delete"),
+              dismissText: this.hass.localize("ui.common.cancel"),
+              destructive: true,
+            });
+
+            if (!confirmed) {
+              return;
+            }
+
+            try {
+              await removeDeviceFromRegistry(this.hass, this.deviceId);
+            } catch (err: unknown) {
+              showAlertDialog(this, {
+                title: this.hass.localize(
+                  "ui.panel.config.devices.error_delete"
+                ),
+                text:
+                  getWsErrorMessage(err) ??
+                  this.hass.localize("ui.common.unknown_error"),
+              });
+            }
+          },
+          classes: "warning",
+          icon: mdiDelete,
+          label:
+            this._integrations(device, this.entries, this.manifests).length > 1
+              ? this.hass.localize(
+                  `ui.panel.config.devices.delete_device_integration`,
+                  {
+                    integration: domainToName(this.hass.localize, entry.domain),
+                  }
+                )
+              : this.hass.localize(`ui.panel.config.devices.delete_device`),
+        });
+      }
+    );
+
+    if (this.deviceId !== deviceId) {
+      // abort if the device has changed
+      return;
+    }
+
+    if (buttons.length > 0) {
+      this._deleteButtons = buttons;
     }
   }
 
   private async _getDeviceActions() {
     const deviceId = this.deviceId;
-    const device = this.hass.devices[deviceId];
+    const device = this.hass.devices[this.deviceId];
+
     if (!device) {
       return;
     }
-    const entityIds = this._entities(
-      deviceId,
+
+    const deviceActions: DeviceAction[] = [];
+
+    const configurationUrlIsHomeAssistant = isHomeAssistantUrl(
+      device.configuration_url
+    );
+
+    const configurationUrl = sanitizeLinkUrl(device.configuration_url);
+
+    if (configurationUrl) {
+      deviceActions.push({
+        href: configurationUrl,
+        target: configurationUrlIsHomeAssistant ? undefined : "_blank",
+        icon: mdiCog,
+        label: this.hass.localize(
+          "ui.panel.config.devices.open_configuration_url"
+        ),
+        trailingIcon: mdiOpenInNew,
+      });
+    }
+
+    const entities = this._entities(
+      this.deviceId,
       this._entityReg,
       this.hass.devices
-    ).map((entity) => entity.entity_id);
+    );
 
-    const actions = await fetchDeviceActions(
-      this,
-      this.hass,
+    const assistSatellite = entities.find(
+      (ent) => computeDomain(ent.entity_id) === "assist_satellite"
+    );
+
+    const domains = this._integrations(
       device,
       this.entries,
-      entityIds,
-      (late) => {
-        // Drop them if the device has changed while they were asked for.
-        if (this.deviceId === deviceId) {
-          this._deviceActions = [...late, ...(this._deviceActions || [])];
-        }
-      }
-    );
-    if (this.deviceId === deviceId) {
-      this._deviceActions = actions;
+      this.manifests
+    ).map((int) => int.domain);
+
+    if (
+      !domains.includes("voip") &&
+      assistSatellite &&
+      assistSatelliteSupportsSetupFlow(
+        this.hass.states[assistSatellite.entity_id]
+      )
+    ) {
+      deviceActions.push({
+        action: this._voiceAssistantSetup,
+        label: this.hass.localize(
+          "ui.panel.config.devices.set_up_voice_assistant"
+        ),
+        icon: mdiMicrophone,
+      });
     }
+
+    if (domains.includes("mqtt")) {
+      const mqtt =
+        await import("./device-detail/integration-elements/mqtt/device-actions");
+      const actions = mqtt.getMQTTDeviceActions(this, device);
+      deviceActions.push(...actions);
+    }
+    if (domains.includes("zha")) {
+      const zha =
+        await import("./device-detail/integration-elements/zha/device-actions");
+      const actions = await zha.getZHADeviceActions(this, this.hass, device);
+      deviceActions.push(...actions);
+    }
+    if (domains.includes("zwave_js")) {
+      const zwave =
+        await import("./device-detail/integration-elements/zwave_js/device-actions");
+      const actions = await zwave.getZwaveDeviceActions(
+        this,
+        this.hass,
+        device
+      );
+      deviceActions.push(...actions);
+    }
+    if (domains.includes("esphome")) {
+      const esphome =
+        await import("./device-detail/integration-elements/esphome/device-actions");
+      const actions = await esphome.getESPHomeDeviceActions(
+        this,
+        this.hass,
+        device
+      );
+      deviceActions.push(...actions);
+    }
+    if (domains.includes("matter")) {
+      const matter =
+        await import("./device-detail/integration-elements/matter/device-actions");
+      const defaultActions = matter.getMatterDeviceDefaultActions(
+        this,
+        this.hass,
+        device
+      );
+      deviceActions.push(...defaultActions);
+
+      // load matter device actions async to avoid an UI with 0 actions when the matter integration needs very long to get node diagnostics
+      matter.getMatterDeviceActions(this, this.hass, device).then((actions) => {
+        if (this.deviceId !== deviceId) {
+          // abort if the device has changed
+          return;
+        }
+        this._deviceActions = [...actions, ...(this._deviceActions || [])];
+      });
+    }
+
+    if (this.deviceId !== deviceId) {
+      // abort if the device has changed
+      return;
+    }
+
+    this._deviceActions = deviceActions;
   }
 
   private async _getDeviceAlerts() {
     const deviceId = this.deviceId;
-    const device = this.hass.devices[deviceId];
+
+    const device = this.hass.devices[this.deviceId];
+
     if (!device) {
       return;
     }
-    const alerts = await fetchDeviceAlerts(this.hass, device, this.entries);
+
+    const deviceAlerts: DeviceAlert[] = [];
+
+    const domains = this._integrations(
+      device,
+      this.entries,
+      this.manifests
+    ).map((int) => int.domain);
+
+    if (domains.includes("zwave_js")) {
+      const zwave =
+        await import("./device-detail/integration-elements/zwave_js/device-alerts");
+
+      const alerts = await zwave.getZwaveDeviceAlerts(this.hass, device);
+      deviceAlerts.push(...alerts);
+    }
+
     if (this.deviceId !== deviceId) {
+      // abort if the device has changed
       return;
     }
-    this._deviceAlerts = alerts;
-    if (alerts.length) {
+
+    this._deviceAlerts = deviceAlerts;
+    if (deviceAlerts.length) {
       this._deviceAlertsActionsTimeout = window.setTimeout(() => {
         this._getDeviceAlerts();
         this._getDeviceActions();
@@ -1171,9 +1357,24 @@ export class HaConfigDevicePage extends LitElement {
 
   private _showAddToDialog() {
     const device = this.hass.devices[this.deviceId];
-    if (device) {
-      showDeviceAddTo(this, this.hass, device, this._entityReg);
-    }
+    if (!device) return;
+    const entityIds = this._entities(
+      this.deviceId,
+      this._entityReg,
+      this.hass.devices
+    ).map((entity) => entity.entity_id);
+    const sceneEntityIds = filterAddToSceneEntityIds(
+      entityIds,
+      this._entityReg,
+      this.hass.states
+    );
+    showDeviceAddToDialog(this, {
+      device,
+      entityIds: sceneEntityIds,
+      canCreateScene:
+        isComponentLoaded(this.hass.config, "scene") &&
+        sceneEntityIds.length > 0,
+    });
   }
 
   private _renderIntegrationInfo(
@@ -1182,22 +1383,6 @@ export class HaConfigDevicePage extends LitElement {
     deviceInfo: TemplateResult[]
   ) {
     const domains = integrations.map((int) => int.domain);
-    if (
-      this.hass.user?.is_admin &&
-      this.manifests.some(
-        (manifest) =>
-          domains.includes(manifest.domain) &&
-          manifest.dependencies?.includes("lorawan")
-      )
-    ) {
-      import("./device-detail/integration-elements/lorawan/ha-device-info-lorawan");
-      deviceInfo.push(
-        html`<ha-device-info-lorawan
-          .hass=${this.hass}
-          .device=${device}
-        ></ha-device-info-lorawan>`
-      );
-    }
     if (domains.includes("zha")) {
       import("./device-detail/integration-elements/zha/ha-device-info-zha");
       deviceInfo.push(html`
@@ -1248,102 +1433,113 @@ export class HaConfigDevicePage extends LitElement {
     regenerateEntityIds(this, this.hass, entities);
   };
 
-  private _showSettings = async () => {
-    const device = this.hass.devices[this.deviceId];
-    showDeviceRegistryDetailDialog(this, {
-      device,
-      updateEntry: async (updates) => {
-        const disabled =
-          updates.disabled_by === "user" && device.disabled_by !== "user";
-
-        if (disabled) {
-          for (const cnfg_entry of device.config_entries) {
-            if (
-              !Object.values(this.hass.devices).some(
-                (dvc) =>
-                  dvc.id !== device.id &&
-                  dvc.config_entries.includes(cnfg_entry)
-              )
-            ) {
-              const config_entry = this.entries.find(
-                (entry) => entry.entry_id === cnfg_entry
-              );
-              if (
-                config_entry &&
-                !config_entry.disabled_by &&
-                // eslint-disable-next-line no-await-in-loop
-                (await showConfirmationDialog(this, {
-                  title: this.hass.localize(
-                    "ui.panel.config.devices.confirm_disable_config_entry_title"
-                  ),
-                  text: this.hass.localize(
-                    "ui.panel.config.devices.confirm_disable_config_entry_message",
-                    { name: config_entry.title }
-                  ),
-                  destructive: true,
-                  confirmText: this.hass.localize("ui.common.yes"),
-                  dismissText: this.hass.localize("ui.common.no"),
-                }))
-              ) {
-                let result: DisableConfigEntryResult;
-                try {
-                  // eslint-disable-next-line no-await-in-loop
-                  result = await disableConfigEntry(this.hass, cnfg_entry);
-                } catch (err: unknown) {
-                  showAlertDialog(this, {
-                    title: this.hass.localize(
-                      "ui.panel.config.integrations.config_entry.disable_error"
-                    ),
-                    text:
-                      getWsErrorMessage(err) ??
-                      this.hass.localize("ui.common.unknown_error"),
-                  });
-                  return;
-                }
-                if (result.require_restart) {
-                  showAlertDialog(this, {
-                    text: this.hass.localize(
-                      "ui.panel.config.integrations.config_entry.disable_restart_confirm"
-                    ),
-                  });
-                }
-                delete updates.disabled_by;
-              }
-            }
-          }
-        } else if (
-          updates.disabled_by !== null &&
-          updates.disabled_by !== "user"
-        ) {
-          delete updates.disabled_by;
-        }
-        try {
-          await updateDeviceWithSideEffects(
-            this,
-            this.hass,
-            device,
-            this.entries,
-            this._entityReg,
-            updates
-          );
-        } catch (err: unknown) {
-          showAlertDialog(this, {
-            title: this.hass.localize(
-              "ui.panel.config.devices.update_device_error"
-            ),
-            text:
-              getWsErrorMessage(err) ??
-              this.hass.localize("ui.common.unknown_error"),
-          });
-        }
-      },
+  private _nameChanged(ev: Event) {
+    this._updateDevice({
+      name_by_user: (ev.target as HaInput).value?.trim() || null,
     });
-  };
+  }
+
+  private _areaChanged(ev: CustomEvent<{ value?: string }>) {
+    this._updateDevice({ area_id: ev.detail.value || null });
+  }
+
+  private _labelsChanged(ev: CustomEvent<{ value: string[] }>) {
+    this._updateDevice({ labels: ev.detail.value });
+  }
+
+  private _enabledChanged(ev: Event) {
+    this._updateDevice({
+      disabled_by: (ev.target as HaSwitch).checked ? null : "user",
+    });
+  }
+
+  private async _updateDevice(
+    updates: Partial<DeviceRegistryEntryMutableParams>
+  ) {
+    const device = this.hass.devices[this.deviceId];
+    const disabled =
+      updates.disabled_by === "user" && device.disabled_by !== "user";
+
+    if (disabled) {
+      for (const cnfg_entry of device.config_entries) {
+        if (
+          !Object.values(this.hass.devices).some(
+            (dvc) =>
+              dvc.id !== device.id && dvc.config_entries.includes(cnfg_entry)
+          )
+        ) {
+          const config_entry = this.entries.find(
+            (entry) => entry.entry_id === cnfg_entry
+          );
+          if (
+            config_entry &&
+            !config_entry.disabled_by &&
+            // eslint-disable-next-line no-await-in-loop
+            (await showConfirmationDialog(this, {
+              title: this.hass.localize(
+                "ui.panel.config.devices.confirm_disable_config_entry_title"
+              ),
+              text: this.hass.localize(
+                "ui.panel.config.devices.confirm_disable_config_entry_message",
+                { name: config_entry.title }
+              ),
+              destructive: true,
+              confirmText: this.hass.localize("ui.common.yes"),
+              dismissText: this.hass.localize("ui.common.no"),
+            }))
+          ) {
+            let result: DisableConfigEntryResult;
+            try {
+              // eslint-disable-next-line no-await-in-loop
+              result = await disableConfigEntry(this.hass, cnfg_entry);
+            } catch (err: unknown) {
+              showAlertDialog(this, {
+                title: this.hass.localize(
+                  "ui.panel.config.integrations.config_entry.disable_error"
+                ),
+                text:
+                  getWsErrorMessage(err) ??
+                  this.hass.localize("ui.common.unknown_error"),
+              });
+              return;
+            }
+            if (result.require_restart) {
+              showAlertDialog(this, {
+                text: this.hass.localize(
+                  "ui.panel.config.integrations.config_entry.disable_restart_confirm"
+                ),
+              });
+            }
+            delete updates.disabled_by;
+          }
+        }
+      }
+    } else if (updates.disabled_by !== null && updates.disabled_by !== "user") {
+      delete updates.disabled_by;
+    }
+    try {
+      await updateDeviceRegistryEntry(this.hass, this.deviceId, updates);
+    } catch (err: unknown) {
+      showAlertDialog(this, {
+        title: this.hass.localize(
+          "ui.panel.config.devices.update_device_error"
+        ),
+        text:
+          getWsErrorMessage(err) ??
+          this.hass.localize("ui.common.unknown_error"),
+      });
+    }
+  }
 
   private async _enableDevice(): Promise<void> {
     await updateDeviceRegistryEntry(this.hass, this.deviceId, {
       disabled_by: null,
     });
+  }
+
+  private async _signUrl(link: string) {
+    const signedUrl = await getSignedPath(this.hass, link);
+    fileDownload(signedUrl.path);
   }
 
   private _deviceActionSelected(
@@ -1369,33 +1565,88 @@ export class HaConfigDevicePage extends LitElement {
     ev.currentTarget.action(ev);
   }
 
+  private _voiceAssistantSetup = () => {
+    showVoiceAssistantSetupDialog(this, {
+      deviceId: this.deviceId,
+    });
+  };
+
   static get styles(): CSSResultGroup {
     return [
       haStyle,
       css`
+        /* hass-subpage fills this height, and the side pane fills it */
         :host {
           display: block;
+          height: 100%;
+          /* Cards and grouped lists are rounded like the side pane */
+          --ha-card-border-radius: var(
+            --ha-dialog-border-radius,
+            var(--ha-border-radius-2xl)
+          );
+          /* The side pane stands further from the content than the
+             columns do from each other: 32px with their own 16px padding,
+             against 16px between them */
+          --ha-side-pane-content-space: calc(
+            var(--ha-side-pane-width, 360px) + var(--ha-space-8)
+          );
+          /* Card headers read like the side pane's heading */
+          --ha-card-header-font-size: var(--ha-font-size-xl);
+          --ha-card-header-font-weight: var(--ha-font-weight-medium);
+          --ha-card-header-letter-spacing: normal;
+          /* As tall as the side pane's heading bar: ha-dialog-header pads
+             its 48px title area by 10px, 68px in all, with the 24px title
+             in the middle */
+          --ha-card-header-padding: 22px var(--ha-space-4);
         }
+        /* Entities on the start side, related and activity on the end
+           side once the content is wide enough; one column below that. The
+           device's info is in the side pane. */
         .container {
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--ha-space-4);
-          margin: auto;
-          max-width: 1280px;
-          box-sizing: border-box;
-          padding: var(--ha-space-2) var(--ha-space-4);
-          margin-top: var(--ha-space-8);
-          margin-bottom: var(--ha-space-8);
+          container-type: inline-size;
         }
-        :host([narrow]) .container {
-          margin-top: 0;
+        .columns {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-4);
+          margin: 0 auto;
+          /* The width of most config pages, as ha-config-section */
+          max-width: 1040px;
+          box-sizing: border-box;
+          padding: var(--ha-space-4) var(--ha-space-4) var(--ha-space-8);
+        }
+        .overview {
+          grid-column: 1 / -1;
+          min-width: 0;
         }
 
+        .main,
+        .activity {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-6);
+          min-width: 0;
+        }
+        .activity {
+          gap: var(--ha-space-4);
+        }
+        @container (min-width: 840px) {
+          .columns {
+            display: grid;
+            grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+            align-items: start;
+          }
+        }
+
+        /* Headers with a button: the same 68px bar, the button centred in
+           it like the side pane's actions */
         .card-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding-bottom: var(--ha-space-3);
+          box-sizing: border-box;
+          min-height: 68px;
+          padding-block: 10px;
         }
 
         .card-header ha-button {
@@ -1405,91 +1656,79 @@ export class HaConfigDevicePage extends LitElement {
           direction: var(--direction);
         }
 
-        .section-header {
-          font-size: var(--ha-font-size-s);
-          font-weight: 500;
-          color: var(--secondary-text-color);
-          margin: 0;
-          padding: var(--ha-space-2) var(--ha-space-4) 0;
-        }
-
-        .device-info {
-          padding: var(--ha-space-4);
-        }
-
         h1 {
           margin: 0;
           font-family: var(--ha-font-family-body);
           -webkit-font-smoothing: var(--ha-font-smoothing);
           -moz-osx-font-smoothing: var(--ha-moz-osx-font-smoothing);
-          font-size: var(--ha-font-size-2xl);
-          font-weight: var(--ha-font-weight-normal);
+          font-size: var(--ha-card-header-font-size);
+          font-weight: var(--ha-card-header-font-weight);
+          letter-spacing: var(--ha-card-header-letter-spacing);
           line-height: var(--ha-line-height-condensed);
-          opacity: var(--dark-primary-opacity);
         }
 
-        .header {
+        .entities {
           display: flex;
-          justify-content: space-between;
+          flex-direction: column;
+          gap: var(--ha-space-4);
         }
 
-        .header-name {
+        /* Lists inside a card keep the default rounding */
+        .related-card ha-related-items {
+          padding: var(--ha-space-2) var(--ha-space-4) var(--ha-space-4);
+          --ha-card-border-radius: var(--ha-border-radius-lg);
+        }
+
+        ha-side-pane .brand-logo {
+          align-self: flex-start;
+          max-width: 100%;
+          height: 32px;
+          margin-bottom: var(--ha-space-1);
+        }
+
+        ha-side-pane .primary-action {
+          align-self: flex-start;
+        }
+
+        /* The more info dialog's title: ha-dialog-header's title box, and
+           the dialog's name inside it */
+        .header-content {
           display: flex;
-          align-items: center;
-          direction: var(--direction);
-        }
-
-        .header-name ha-icon,
-        .header-name ha-svg-icon {
-          --mdc-icon-size: 18px;
-        }
-
-        .column,
-        .fullwidth {
+          flex-direction: column;
+          justify-content: center;
+          min-height: var(--ha-space-12);
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
           box-sizing: border-box;
         }
-        .column {
-          flex: 1 1 0;
+
+        .header-title {
+          font-size: var(--ha-font-size-xl);
+          line-height: var(--ha-line-height-condensed);
+          font-weight: var(--ha-font-weight-medium);
+          color: var(--primary-text-color);
+        }
+
+        .title {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .title p {
+          margin: 0;
           min-width: 0;
-        }
-        .fullwidth {
           width: 100%;
-          flex-grow: 1;
+          text-overflow: ellipsis;
+          overflow: hidden;
         }
 
-        .header-right {
-          align-self: center;
-        }
-
-        .header-right img {
-          height: 30px;
-        }
-
-        .header-right {
-          display: flex;
-        }
-
-        .header-right:first-child {
-          width: 100%;
-          justify-content: flex-end;
-        }
-
-        .header-right > *:not(:first-child) {
-          margin-left: var(--ha-space-4);
-          margin-inline-start: var(--ha-space-4);
-          margin-inline-end: initial;
-          direction: var(--direction);
-        }
-
-        .battery {
-          align-self: center;
-          align-items: center;
-          display: flex;
-          white-space: nowrap;
-        }
-
-        .column > *:not(:first-child) {
-          margin-top: var(--ha-space-4);
+        .title .main {
+          color: var(--primary-text-color);
+          font-size: var(--ha-font-size-xl);
+          line-height: var(--ha-line-height-condensed);
         }
 
         a {
@@ -1519,13 +1758,6 @@ export class HaConfigDevicePage extends LitElement {
           color: var(--secondary-text-color);
           --mdc-icon-size: 24px;
           display: block;
-        }
-
-        ha-card:has(ha-logbook) .card-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: var(--ha-space-4) var(--ha-space-4) 0;
         }
 
         ha-card:has(ha-logbook) .card-header a {
@@ -1558,14 +1790,6 @@ export class HaConfigDevicePage extends LitElement {
         .card-content.loading {
           display: flex;
           justify-content: center;
-        }
-
-        .card-actions {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: var(--ha-space-1) var(--ha-space-4) var(--ha-space-1)
-            var(--ha-space-1);
         }
       `,
     ];

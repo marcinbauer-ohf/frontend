@@ -7330,6 +7330,26 @@
           "device_info_heading": "Device info",
           "service_info_heading": "Service info",
           "edit_settings": "Edit settings",
+          "device_info": "{type} info",
+          "overview": {
+            "online": "Online",
+            "offline": "Offline",
+            "update_available": "Update available"
+          },
+          "info_pane": {
+            "show": "Show {type} info",
+            "model": "Model",
+            "manufacturer": "Manufacturer",
+            "firmware": "Firmware",
+            "version": "Version",
+            "hardware": "Hardware",
+            "serial_number": "Serial number",
+            "connected_via": "Connected via",
+            "part_of": "Part of",
+            "area": "Area",
+            "battery": "Battery",
+            "integrations": "Integrations"
+          },
           "restore_entity_ids": "Recreate entity IDs",
           "quick_links": {
             "entities": "[%key:ui::panel::config::common::quick_links::entities%]",

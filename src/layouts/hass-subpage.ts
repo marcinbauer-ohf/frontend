@@ -64,10 +64,23 @@ class HassSubpage extends LitElement {
       >
         <slot></slot>
       </div>
+      <div id="side-pane">
+        <slot name="side-pane" @slotchange=${this._sidePaneChanged}></slot>
+      </div>
       <div id="fab">
         <slot name="fab"></slot>
       </div>
     `;
+  }
+
+  // The content makes room for a side pane beside it while the page fills
+  // that slot
+  private _sidePaneChanged(ev: Event) {
+    this.toggleAttribute(
+      "has-side-pane",
+      (ev.target as HTMLSlotElement).assignedElements({ flatten: true })
+        .length > 0
+    );
   }
 
   @eventOptions({ passive: true })
@@ -175,6 +188,46 @@ class HassSubpage extends LitElement {
               )
           );
           margin-left: var(--safe-area-inset-left);
+        }
+
+        /* A side pane fills the height beside the content on a wide screen;
+           on a phone it is a bottom sheet of its own. */
+        #side-pane {
+          display: none;
+        }
+        :host([has-side-pane]:not([narrow])) #side-pane {
+          display: flex;
+          position: absolute;
+          top: calc(
+            var(--header-height, 0px) + var(--safe-area-inset-top, 0px)
+          );
+          bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom, 0px));
+          inset-inline-end: calc(
+            var(--ha-space-4) + var(--safe-area-inset-right, 0px)
+          );
+          width: var(--ha-side-pane-width, 360px);
+          padding-top: var(--ha-space-4);
+          box-sizing: border-box;
+          z-index: 2;
+        }
+        :host([has-side-pane][narrow]) #side-pane {
+          display: block;
+          position: relative;
+          z-index: 3;
+        }
+        :host([has-side-pane]:not([narrow])) .content {
+          width: calc(
+            100% - var(
+                --ha-side-pane-content-space,
+                calc(var(--ha-side-pane-width, 360px) + var(--ha-space-4))
+              ) - var(--safe-area-inset-right, 0px)
+          );
+        }
+        :host([has-side-pane]:not([narrow])) #fab {
+          inset-inline-end: calc(
+            var(--ha-side-pane-width, 360px) + var(--ha-space-8) +
+              var(--safe-area-inset-right, 0px)
+          );
         }
 
         #fab {
