@@ -25,7 +25,10 @@ import {
   subMonths,
 } from "date-fns";
 import type { ContextType } from "@lit/context";
-import type { HassConfig } from "home-assistant-js-websocket";
+import type {
+  HassConfig,
+  UnsubscribeFunc,
+} from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -92,6 +95,8 @@ const RANGE_KEYS: DateRange[] = [
   "now-12m",
 ];
 
+const SINGLE_DAY_RANGE_KEYS: DateRange[] = ["today", "yesterday"];
+
 interface OverflowMenuItem {
   path: string;
   label: string;
@@ -103,11 +108,24 @@ interface OverflowMenuItem {
 
 type VerticalOpeningDirection = "up" | "down";
 
+// Lets the selector drive a period other than the energy collection's.
+// Compare, download and the remembered default preset are energy only.
+export interface PeriodSelectorSource {
+  subscribe(callback: (start: Date, end?: Date) => void): UnsubscribeFunc;
+  setPeriod(start: Date, end: Date): void;
+}
+
 type OpeningDirection = "right" | "left" | "center" | "inline";
 
 @customElement("hui-energy-period-selector")
 export class HuiEnergyPeriodSelector extends LitElement {
   @property({ attribute: "collection-key" }) public collectionKey?: string;
+
+  @property({ attribute: false }) public source?: PeriodSelectorSource;
+
+  // Only whole single days: a one day calendar and single day presets
+  @property({ type: Boolean, attribute: "single-day" }) public singleDay =
+    false;
 
   @property({ type: Boolean, reflect: true }) public narrow?: boolean;
 
@@ -155,9 +173,12 @@ export class HuiEnergyPeriodSelector extends LitElement {
   private _resizeObserver?: ResizeObserver;
 
   private _energyCollection = new EnergyCollectionController(this, {
-    config: () => ({ collection_key: this.collectionKey }),
+    config: () =>
+      this.source ? undefined : { collection_key: this.collectionKey },
     onData: (data) => this._updateDates(data),
   });
+
+  private _unsubSource?: UnsubscribeFunc;
 
   private _measure() {
     this.narrow = this.offsetWidth < 425;
@@ -177,13 +198,24 @@ export class HuiEnergyPeriodSelector extends LitElement {
     this._attachObserver();
   }
 
+  private _subscribeSource() {
+    this._unsubSource?.();
+    this._unsubSource = this.source?.subscribe((start, end) => {
+      this._startDate = start;
+      this._endDate = end || endOfToday();
+    });
+  }
+
   public connectedCallback(): void {
     super.connectedCallback();
     this.updateComplete.then(() => this._attachObserver());
+    this._subscribeSource();
   }
 
   public disconnectedCallback(): void {
     super.disconnectedCallback();
+    this._unsubSource?.();
+    this._unsubSource = undefined;
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
     }
@@ -191,6 +223,9 @@ export class HuiEnergyPeriodSelector extends LitElement {
 
   public willUpdate(changedProps: PropertyValues) {
     super.willUpdate(changedProps);
+    if (changedProps.has("source") && this.isConnected) {
+      this._subscribeSource();
+    }
     if (!this.hasUpdated) {
       this._measure();
     }
@@ -198,7 +233,7 @@ export class HuiEnergyPeriodSelector extends LitElement {
     if (changedProps.has("_i18n") || changedProps.has("_hassConfig")) {
       // pre defined date ranges
       this._ranges = {};
-      RANGE_KEYS.forEach((key) => {
+      this._rangeKeys().forEach((key) => {
         this._ranges[
           this._i18n.localize(`ui.components.date-range-picker.ranges.${key}`)
         ] = calcDateRange(this._i18n.locale, this._hassConfig, key);
@@ -269,6 +304,7 @@ export class HuiEnergyPeriodSelector extends LitElement {
         path: this._compare ? mdiCheckboxOutline : mdiCheckboxBlankOutline,
         disabled: !this.allowCompare,
         alwaysCollapse: true,
+        hidden: !!this.source,
         label: this._i18n.localize(
           "ui.panel.lovelace.components.energy_period_selector.compare"
         ),
@@ -277,6 +313,7 @@ export class HuiEnergyPeriodSelector extends LitElement {
       {
         path: mdiDownload,
         alwaysCollapse: true,
+        hidden: !!this.source,
         label: this._i18n.localize(
           "ui.panel.lovelace.components.energy_period_selector.download_data"
         ),
@@ -298,6 +335,7 @@ export class HuiEnergyPeriodSelector extends LitElement {
               .startDate=${this._startDate}
               .endDate=${this._endDate || new Date()}
               .ranges=${this._ranges}
+              .singleDay=${this.singleDay}
               @value-changed=${this._dateRangeChanged}
               @preset-selected=${this._presetSelected}
               @toggle=${this._handleDatepickerToggle}
@@ -411,7 +449,8 @@ export class HuiEnergyPeriodSelector extends LitElement {
                     ></ha-icon-button>`
               )}
               ${
-                this._collapseButtons || buttons.some((x) => x.alwaysCollapse)
+                this._collapseButtons ||
+                buttons.some((x) => x.alwaysCollapse && !x.hidden)
                   ? html`<ha-dropdown
                       @wa-show=${this._handleIconOverflowMenuOpened}
                       @click=${stopPropagation}
@@ -444,6 +483,10 @@ export class HuiEnergyPeriodSelector extends LitElement {
         </div>
       </div>
     `;
+  }
+
+  private _rangeKeys(): DateRange[] {
+    return this.singleDay ? SINGLE_DAY_RANGE_KEYS : RANGE_KEYS;
   }
 
   private _simpleRange = memoizeOne(
@@ -533,6 +576,10 @@ export class HuiEnergyPeriodSelector extends LitElement {
   }
 
   private _updateCollectionPeriod() {
+    if (this.source) {
+      this.source.setPeriod(this._startDate!, this._endDate!);
+      return;
+    }
     const energyCollection = this._energyCollection.collection;
     if (!energyCollection) return;
     energyCollection.setPeriod(this._startDate!, this._endDate!);
@@ -558,9 +605,12 @@ export class HuiEnergyPeriodSelector extends LitElement {
   }
 
   private _presetSelected(ev) {
+    if (this.source) {
+      return;
+    }
     localStorage.setItem(
       getEnergyDefaultPeriodStorageKey(this._ui.panelUrl, this.collectionKey),
-      RANGE_KEYS[ev.detail.index]
+      this._rangeKeys()[ev.detail.index]
     );
   }
 
@@ -689,6 +739,9 @@ export class HuiEnergyPeriodSelector extends LitElement {
     }
 
     this._updateCollectionPeriod();
+    if (this.source) {
+      return;
+    }
 
     // "yesterday" is the only preset whose range never includes today, making
     // it the only remembered default that keeps reopening in the past.
