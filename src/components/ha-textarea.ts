@@ -228,28 +228,8 @@ export class HaTextArea extends WaInputMixin(LitElement) {
         padding-top: var(--ha-space-3);
       }
 
-      wa-textarea::part(base)::after {
-        content: "";
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background-color: var(--ha-color-border-neutral-loud);
-        transition:
-          height var(--wa-transition-normal) ease-in-out,
-          background-color var(--wa-transition-normal) ease-in-out;
-      }
-
-      :host(:focus-within) wa-textarea::part(base)::after,
-      :host([focused]) wa-textarea::part(base)::after {
-        height: 2px;
-        background-color: var(--primary-color);
-      }
-
-      :host(:focus-within) wa-textarea.invalid::part(base)::after,
-      wa-textarea.invalid:not([disabled])::part(base)::after {
-        background-color: var(--ha-color-border-danger-normal);
+      :host([focused]) wa-textarea::part(base) {
+        outline: 2px solid var(--primary-color);
       }
 
       /* Textarea element styling */
