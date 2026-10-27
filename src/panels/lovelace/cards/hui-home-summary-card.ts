@@ -323,13 +323,13 @@ export class HuiHomeSummaryCard extends LitElement implements LovelaceCard {
           entityId.startsWith("automation.")
         );
         if (!automations.length) {
-          return this.hass.localize("ui.card.home-summary.no_automations");
+          return localize("ui.card.home-summary.no_automations");
         }
-        return this.hass.localize(
+        return localize(
           "ui.card.home-summary.count_automations_enabled",
           {
             count: automations.filter(
-              (entityId) => this.hass!.states[entityId].state === "on"
+              (entityId) => states![entityId].state === "on"
             ).length,
           }
         );
