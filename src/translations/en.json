@@ -2896,7 +2896,10 @@
       },
       "home": {
         "editor": {
-          "title": "Edit Overview page",
+          "title": "Edit home",
+          "home": "Home",
+          "home_name": "Name",
+          "floors_and_areas": "Floors and areas",
           "description": "Configure your Overview page display preferences.",
           "personalize": "Personalize",
           "personalize_description": "Customize the top of your Overview page.",

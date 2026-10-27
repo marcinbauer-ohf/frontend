@@ -148,6 +148,13 @@ class HUIRoot extends LitElement {
 
   @property({ type: Boolean, attribute: "no-edit" }) public noEdit = false;
 
+  /**
+   * Panel-driven editing (the home panel edits itself, not the Lovelace
+   * config): frames the canvas and makes room for a pane in the `side-pane`
+   * slot, without the rest of the editor chrome.
+   */
+  @property({ type: Boolean, reflect: true }) public editing = false;
+
   @property({ attribute: false }) public backButton = false;
 
   @property({ attribute: false }) public backPath?: string;
@@ -559,6 +566,7 @@ class HUIRoot extends LitElement {
       <div
         class=${classMap({
           "edit-mode": this._editMode,
+          framed: this.editing,
           narrow: this.narrow,
         })}
       >
@@ -653,6 +661,7 @@ class HUIRoot extends LitElement {
           <hui-view-background .hass=${this.hass} .background=${background}>
           </hui-view-background>
         </hui-view-container>
+        <div id="side-pane"><slot name="side-pane"></slot></div>
       </div>
     `;
   }
@@ -1569,6 +1578,72 @@ class HUIRoot extends LitElement {
               calc(var(--tab-bar-height, 56px) - 2px) +
               var(--safe-area-inset-top, 0px)
           );
+        }
+        /* Panel-driven editing: the canvas gets an edge so it is clear what
+           the pane beside it acts on, and the content steps in to sit inside
+           that edge and clear of the pane. */
+        .framed hui-view-container {
+          --hui-side-pane-space: calc(
+            var(--ha-side-pane-width, 360px) + var(--ha-space-4) * 2
+          );
+          padding-inline-start: var(--ha-space-4);
+          padding-inline-end: calc(
+            var(--view-container-inset-right) + var(--hui-side-pane-space)
+          );
+          padding-bottom: calc(
+            var(--view-container-inset-bottom) + var(--ha-space-8)
+          );
+        }
+        .framed hui-view-background {
+          position: fixed;
+          top: calc(
+            var(--header-height, 56px) + var(--safe-area-inset-top, 0px) +
+              var(--ha-space-2)
+          );
+          bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom, 0px));
+          inset-inline-start: calc(
+            var(--ha-sidebar-width, 0px) + var(--ha-space-2)
+          );
+          inset-inline-end: calc(
+            var(--safe-area-inset-right, 0px) +
+              var(--hui-side-pane-space) - var(--ha-space-2)
+          );
+          width: auto;
+          height: auto;
+          border: 2px solid var(--primary-color);
+          border-radius: var(--ha-border-radius-xl);
+          box-sizing: border-box;
+        }
+        #side-pane {
+          display: none;
+        }
+        .framed #side-pane {
+          display: flex;
+          position: fixed;
+          z-index: 3;
+          top: calc(
+            var(--header-height, 56px) + var(--safe-area-inset-top, 0px) +
+              var(--ha-space-2)
+          );
+          bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom, 0px));
+          inset-inline-end: calc(
+            var(--ha-space-4) + var(--safe-area-inset-right, 0px)
+          );
+          width: var(--ha-side-pane-width, 360px);
+        }
+        /* On a phone the pane is a bottom sheet of its own, so the canvas only
+           keeps a slim edge. */
+        .narrow.framed hui-view-container {
+          --hui-side-pane-space: 0px;
+          padding-inline-end: var(--view-container-inset-right);
+        }
+        .narrow.framed hui-view-background {
+          inset-inline: var(--ha-space-2);
+        }
+        .narrow.framed #side-pane {
+          display: block;
+          position: static;
+          width: auto;
         }
         .hide-tab {
           display: none;

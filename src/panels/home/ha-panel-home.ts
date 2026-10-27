@@ -22,7 +22,12 @@ import {
 import type { LovelaceDashboardStrategyConfig } from "../../data/lovelace/config/types";
 import { SubscribeMixin } from "../../mixins/subscribe-mixin";
 import { mdiHomeAssistant } from "../../resources/home-assistant-logo-svg";
-import type { HomeAssistant, PanelInfo, Route } from "../../types";
+import type {
+  HomeAssistant,
+  PanelInfo,
+  Route,
+  ValueChangedEvent,
+} from "../../types";
 import { showToast } from "../../util/toast";
 import { showAreaRegistryDetailDialog } from "../config/areas/show-dialog-area-registry-detail";
 import { showDeviceRegistryDetailDialog } from "../config/devices/device-registry-detail/show-dialog-device-registry-detail";
@@ -34,7 +39,7 @@ import {
   generateLovelaceDashboardStrategy,
 } from "../lovelace/strategies/get-strategy";
 import type { Lovelace } from "../lovelace/types";
-import { showEditHomeDialog } from "./dialogs/show-dialog-edit-home";
+import "./components/home-editor-pane";
 import { showNewOverviewDialog } from "./dialogs/show-dialog-new-overview";
 import { hasLegacyOverviewPanel } from "../../data/panel";
 
@@ -55,6 +60,8 @@ class PanelHome extends SubscribeMixin(LitElement) {
   @state() private _securityConfig: SecurityFrontendSystemData = {};
 
   @state() private _extraActionItems?: ExtraActionItem[];
+
+  @state() private _editing = false;
 
   @query(".banner") private _banner?: HTMLElement;
 
@@ -237,6 +244,12 @@ class PanelHome extends SubscribeMixin(LitElement) {
   private _updateExtraActionItems() {
     const path = this.route?.path?.split("/")[1];
 
+    // The pane's close button is the way out of editing
+    if (this._editing) {
+      this._extraActionItems = undefined;
+      return;
+    }
+
     if (path?.startsWith("areas-")) {
       this._extraActionItems = [
         {
@@ -250,7 +263,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
         {
           icon: mdiPencil,
           labelKey: "ui.panel.lovelace.menu.edit_overview",
-          action: this._editHome,
+          action: this._startEditing,
         },
       ];
     } else {
@@ -258,14 +271,21 @@ class PanelHome extends SubscribeMixin(LitElement) {
     }
   }
 
-  private _editHome = () => {
-    showEditHomeDialog(this, {
-      config: this._config ?? {},
-      saveConfig: async (config) => {
-        await this._saveConfig(config);
-      },
-    });
+  private _startEditing = async () => {
+    // The pane opens the floor and area dialogs, which live in the config panel
+    await this.hass.loadFragmentTranslation("config");
+    this._editing = true;
+    this._updateExtraActionItems();
   };
+
+  private _stopEditing = () => {
+    this._editing = false;
+    this._updateExtraActionItems();
+  };
+
+  private _editorChanged(ev: ValueChangedEvent<HomeFrontendSystemData>) {
+    this._saveConfig(ev.detail.value);
+  }
 
   private _editArea = async () => {
     const path = this.route?.path?.split("/")[1];
@@ -341,10 +361,24 @@ class PanelHome extends SubscribeMixin(LitElement) {
         .route=${this.route}
         .panel=${this.panel}
         no-edit
+        .editing=${this._editing}
         .extraActionItems=${this._extraActionItems}
         @ll-custom=${this._handleLLCustomEvent}
         style=${huiRootStyle}
-      ></hui-root>
+      >
+        ${
+          this._editing
+            ? html`<home-editor-pane
+                slot="side-pane"
+                .hass=${this.hass}
+                .config=${this._config ?? {}}
+                .narrow=${this.narrow}
+                @value-changed=${this._editorChanged}
+                @side-pane-closed=${this._stopEditing}
+              ></home-editor-pane>`
+            : nothing
+        }
+      </hui-root>
     `;
   }
 
@@ -447,9 +481,6 @@ class PanelHome extends SubscribeMixin(LitElement) {
       });
       return;
     }
-    showToast(this, {
-      message: this.hass.localize("ui.common.successfully_saved"),
-    });
     this._setLovelace();
   }
 
