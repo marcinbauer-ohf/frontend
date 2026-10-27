@@ -8,6 +8,7 @@ import type { HaSwitch } from "../../components/ha-switch";
 import "../../components/item/ha-row-item";
 import { forwardHaptic } from "../../data/haptics";
 import type { HomeAssistant } from "../../types";
+import { wrapSupportingText } from "./profile-page-styles";
 
 @customElement("ha-set-vibrate-row")
 class HaSetVibrateRow extends LitElement {
@@ -20,7 +21,7 @@ class HaSetVibrateRow extends LitElement {
           >${this.hass.localize("ui.panel.profile.vibrate.header")}</span
         >
         <span slot="supporting-text"
-          >${this.hass.localize("ui.panel.profile.vibrate.description")}</span
+          >${this.hass.localize("ui.panel.profile.vibrate.description")}<br />${this.hass.localize("ui.panel.profile.device_only")}</span
         >
         <ha-switch
           slot="end"
@@ -41,6 +42,8 @@ class HaSetVibrateRow extends LitElement {
     });
     forwardHaptic(this, "light");
   }
+
+  static styles = wrapSupportingText;
 }
 
 declare global {

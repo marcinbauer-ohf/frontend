@@ -9,6 +9,7 @@ import {
   documentationUrl,
   SECURE_CONNECTION_DOCUMENTATION_PATH,
 } from "../../util/documentation-url";
+import { wrapSupportingText } from "./profile-page-styles";
 
 @customElement("ha-push-notifications-row")
 class HaPushNotificationsRow extends LitElement {
@@ -56,7 +57,7 @@ class HaPushNotificationsRow extends LitElement {
             >${this.hass.localize(
               "ui.panel.profile.push_notifications.link_promo"
             )}</a
-          ></span
+          ><br />${this.hass.localize("ui.panel.profile.device_only")}</span
         >
         <ha-push-notifications-toggle
           slot="end"
@@ -67,11 +68,14 @@ class HaPushNotificationsRow extends LitElement {
     `;
   }
 
-  static styles = css`
-    a {
-      color: var(--primary-color);
-    }
-  `;
+  static styles = [
+    wrapSupportingText,
+    css`
+      a {
+        color: var(--primary-color);
+      }
+    `,
+  ];
 }
 
 declare global {

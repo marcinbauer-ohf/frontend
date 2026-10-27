@@ -7,6 +7,7 @@ import "../../components/ha-switch";
 import type { HaSwitch } from "../../components/ha-switch";
 import "../../components/item/ha-row-item";
 import type { HomeAssistant } from "../../types";
+import { wrapSupportingText } from "./profile-page-styles";
 
 @customElement("ha-force-narrow-row")
 class HaForcedNarrowRow extends LitElement {
@@ -21,7 +22,7 @@ class HaForcedNarrowRow extends LitElement {
         <span slot="supporting-text"
           >${this.hass.localize(
             "ui.panel.profile.force_narrow.description"
-          )}</span
+          )}<br />${this.hass.localize("ui.panel.profile.device_only")}</span
         >
         <ha-switch
           slot="end"
@@ -41,6 +42,8 @@ class HaForcedNarrowRow extends LitElement {
       dock: newValue ? "always_hidden" : "auto",
     });
   }
+
+  static styles = wrapSupportingText;
 }
 
 declare global {

@@ -13,22 +13,22 @@ import { customElement, property } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { relativeTime } from "../../common/datetime/relative_time";
 import { fireEvent } from "../../common/dom/fire_event";
-import "../../components/ha-button";
-import "../../components/ha-card";
 import "../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
 import "../../components/ha-dropdown-item";
 import "../../components/ha-icon-button";
+import "../../components/ha-svg-icon";
 import "../../components/item/ha-list-item-base";
-import "../../components/list/ha-list-base";
+import "../../components/item/ha-list-item-button";
+import "../../components/list/ha-grouped-list";
 import { deleteAllRefreshTokens } from "../../data/auth";
 import type { RefreshToken } from "../../data/refresh_token";
 import {
   showAlertDialog,
   showConfirmationDialog,
 } from "../../dialogs/generic/show-dialog-box";
-import { haStyle } from "../../resources/styles";
 import type { HomeAssistant } from "../../types";
+import { profilePageStyles } from "./profile-page-styles";
 
 // Client ID used by iOS app
 const iOSclientId = "https://home-assistant.io/iOS";
@@ -75,148 +75,156 @@ class HaRefreshTokens extends LitElement {
       ? this._refreshTokens(this.refreshTokens)
       : [];
     return html`
-      <ha-card
-        .header=${this.hass.localize("ui.panel.profile.refresh_tokens.header")}
-      >
-        <div class="card-content">
-          ${this.hass.localize("ui.panel.profile.refresh_tokens.description")}
-          <ha-list-base>
-            ${
-              refreshTokens.length
-                ? refreshTokens.map(
-                    (token) => html`
-                      <ha-list-item-base>
+      <ha-grouped-list>
+        ${
+          refreshTokens.length
+            ? refreshTokens.map(
+                (token) => html`
+                  <ha-list-item-base>
+                    <ha-svg-icon
+                      slot="start"
+                      .path=${
+                        token.client_id === iOSclientId
+                          ? mdiApple
+                          : token.client_id === androidClientId
+                            ? mdiAndroid
+                            : mdiWeb
+                      }
+                    ></ha-svg-icon>
+                    <span slot="headline" class="primary">
+                      ${this._formatTokenName(token)}
+                    </span>
+                    <div slot="supporting-text">
+                      ${this.hass.localize(
+                        "ui.panel.profile.refresh_tokens.created_at",
+                        {
+                          date: relativeTime(
+                            new Date(token.created_at),
+                            this.hass.locale
+                          ),
+                        }
+                      )}
+                    </div>
+                    <div slot="supporting-text">
+                      ${
+                        token.is_current
+                          ? html`
+                              <span class="current-session">
+                                <span class="dot"></span>
+                                ${this.hass.localize(
+                                  "ui.panel.profile.refresh_tokens.current_session"
+                                )}
+                              </span>
+                            `
+                          : token.last_used_at
+                            ? this.hass.localize(
+                                "ui.panel.profile.refresh_tokens.last_used",
+                                {
+                                  date: relativeTime(
+                                    new Date(token.last_used_at),
+                                    this.hass.locale
+                                  ),
+                                  location: token.last_used_ip,
+                                }
+                              )
+                            : this.hass.localize(
+                                "ui.panel.profile.refresh_tokens.not_used"
+                              )
+                      }
+                    </div>
+                    <div slot="supporting-text">
+                      ${
+                        token.expire_at
+                          ? this.hass.localize(
+                              "ui.panel.profile.refresh_tokens.expires_in",
+                              {
+                                date: relativeTime(
+                                  new Date(token.expire_at),
+                                  this.hass.locale
+                                ),
+                              }
+                            )
+                          : this.hass.localize(
+                              "ui.panel.profile.refresh_tokens.never_expires"
+                            )
+                      }
+                    </div>
+                    <ha-dropdown
+                      slot="end"
+                      @wa-select=${this._handleDropdownSelect}
+                    >
+                      <ha-icon-button
+                        slot="trigger"
+                        .label=${this.hass.localize("ui.common.menu")}
+                        .path=${mdiDotsVertical}
+                      ></ha-icon-button>
+                      <ha-dropdown-item
+                        .token=${token}
+                        .action=${"toggle_expiration"}
+                      >
                         <ha-svg-icon
-                          slot="start"
+                          slot="icon"
                           .path=${
-                            token.client_id === iOSclientId
-                              ? mdiApple
-                              : token.client_id === androidClientId
-                                ? mdiAndroid
-                                : mdiWeb
+                            token.expire_at
+                              ? mdiClockRemoveOutline
+                              : mdiClockCheckOutline
                           }
                         ></ha-svg-icon>
-                        <span slot="headline" class="primary">
-                          ${this._formatTokenName(token)}
-                        </span>
-                        <div slot="supporting-text">
-                          ${this.hass.localize(
-                            "ui.panel.profile.refresh_tokens.created_at",
-                            {
-                              date: relativeTime(
-                                new Date(token.created_at),
-                                this.hass.locale
-                              ),
-                            }
-                          )}
-                        </div>
-                        <div slot="supporting-text">
-                          ${
-                            token.is_current
-                              ? html`
-                                  <span class="current-session">
-                                    <span class="dot"></span>
-                                    ${this.hass.localize(
-                                      "ui.panel.profile.refresh_tokens.current_session"
-                                    )}
-                                  </span>
-                                `
-                              : token.last_used_at
-                                ? this.hass.localize(
-                                    "ui.panel.profile.refresh_tokens.last_used",
-                                    {
-                                      date: relativeTime(
-                                        new Date(token.last_used_at),
-                                        this.hass.locale
-                                      ),
-                                      location: token.last_used_ip,
-                                    }
-                                  )
-                                : this.hass.localize(
-                                    "ui.panel.profile.refresh_tokens.not_used"
-                                  )
-                          }
-                        </div>
-                        <div slot="supporting-text">
-                          ${
-                            token.expire_at
-                              ? this.hass.localize(
-                                  "ui.panel.profile.refresh_tokens.expires_in",
-                                  {
-                                    date: relativeTime(
-                                      new Date(token.expire_at),
-                                      this.hass.locale
-                                    ),
-                                  }
-                                )
-                              : this.hass.localize(
-                                  "ui.panel.profile.refresh_tokens.never_expires"
-                                )
-                          }
-                        </div>
-                        <ha-dropdown
-                          slot="end"
-                          @wa-select=${this._handleDropdownSelect}
-                        >
-                          <ha-icon-button
-                            slot="trigger"
-                            .label=${this.hass.localize("ui.common.menu")}
-                            .path=${mdiDotsVertical}
-                          ></ha-icon-button>
-                          <ha-dropdown-item
-                            .token=${token}
-                            .action=${"toggle_expiration"}
-                          >
-                            <ha-svg-icon
-                              slot="icon"
-                              .path=${
-                                token.expire_at
-                                  ? mdiClockRemoveOutline
-                                  : mdiClockCheckOutline
-                              }
-                            ></ha-svg-icon>
-                            ${
-                              token.expire_at
-                                ? this.hass.localize(
-                                    "ui.panel.profile.refresh_tokens.disable_token_expiration"
-                                  )
-                                : this.hass.localize(
-                                    "ui.panel.profile.refresh_tokens.enable_token_expiration"
-                                  )
-                            }
-                          </ha-dropdown-item>
-                          <ha-dropdown-item
-                            .token=${token}
-                            .action=${"delete_token"}
-                            variant="danger"
-                            .disabled=${token.is_current}
-                          >
-                            <ha-svg-icon
-                              slot="icon"
-                              .path=${mdiDelete}
-                            ></ha-svg-icon>
-                            ${this.hass.localize("ui.common.delete")}
-                          </ha-dropdown-item>
-                        </ha-dropdown>
-                      </ha-list-item-base>
-                    `
-                  )
-                : nothing
-            }
-          </ha-list-base>
-        </div>
-        <div class="card-actions">
-          <ha-button
-            variant="danger"
-            appearance="filled"
-            @click=${this._deleteAllTokens}
-          >
-            ${this.hass.localize(
-              "ui.panel.profile.refresh_tokens.delete_all_tokens"
-            )}
-          </ha-button>
-        </div>
-      </ha-card>
+                        ${
+                          token.expire_at
+                            ? this.hass.localize(
+                                "ui.panel.profile.refresh_tokens.disable_token_expiration"
+                              )
+                            : this.hass.localize(
+                                "ui.panel.profile.refresh_tokens.enable_token_expiration"
+                              )
+                        }
+                      </ha-dropdown-item>
+                      <ha-dropdown-item
+                        .token=${token}
+                        .action=${"delete_token"}
+                        variant="danger"
+                        .disabled=${token.is_current}
+                      >
+                        <ha-svg-icon
+                          slot="icon"
+                          .path=${mdiDelete}
+                        ></ha-svg-icon>
+                        ${this.hass.localize("ui.common.delete")}
+                      </ha-dropdown-item>
+                    </ha-dropdown>
+                  </ha-list-item-base>
+                `
+              )
+            : html`<ha-list-item-base>
+                <span slot="headline">
+                  ${this.hass.localize(
+                    "ui.panel.profile.refresh_tokens.empty_state"
+                  )}
+                </span>
+              </ha-list-item-base>`
+        }
+      </ha-grouped-list>
+      <p class="footer">
+        ${this.hass.localize("ui.panel.profile.refresh_tokens.description")}
+      </p>
+      ${
+        refreshTokens.length
+          ? html`<ha-grouped-list>
+              <ha-list-item-button
+                class="danger"
+                @click=${this._deleteAllTokens}
+              >
+                <ha-svg-icon slot="start" .path=${mdiDelete}></ha-svg-icon>
+                <span slot="headline">
+                  ${this.hass.localize(
+                    "ui.panel.profile.refresh_tokens.delete_all_tokens"
+                  )}
+                </span>
+              </ha-list-item-button>
+            </ha-grouped-list>`
+          : nothing
+      }
     `;
   }
 
@@ -335,10 +343,12 @@ class HaRefreshTokens extends LitElement {
 
   static get styles(): CSSResultGroup {
     return [
-      haStyle,
+      profilePageStyles,
       css`
-        ha-list-item-base {
-          --ha-row-item-padding-inline: 0;
+        :host {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-6);
         }
         [slot="supporting-text"] {
           white-space: normal;
@@ -346,17 +356,17 @@ class HaRefreshTokens extends LitElement {
         ha-icon-button {
           color: var(--primary-text-color);
         }
-        ha-list-item-base .dot {
+        .dot {
           display: inline-block;
-          width: 8px;
-          height: 8px;
+          width: var(--ha-space-2);
+          height: var(--ha-space-2);
           background-color: var(--success-color);
           border-radius: var(--ha-border-radius-circle);
-          margin-right: 6px;
+          margin-inline-end: var(--ha-space-2);
         }
-        .card-actions {
-          display: flex;
-          justify-content: flex-end;
+        .danger {
+          color: var(--error-color);
+          --ha-ripple-color: var(--error-color);
         }
       `,
     ];

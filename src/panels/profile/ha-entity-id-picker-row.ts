@@ -8,6 +8,7 @@ import "../../components/item/ha-row-item";
 import type { CoreFrontendUserData } from "../../data/frontend";
 import { saveFrontendUserData } from "../../data/frontend";
 import type { HomeAssistant } from "../../types";
+import { wrapSupportingText } from "./profile-page-styles";
 
 @customElement("ha-entity-id-picker-row")
 class EntityIdPickerRow extends LitElement {
@@ -57,15 +58,18 @@ class EntityIdPickerRow extends LitElement {
     }
   }
 
-  static styles = css`
-    a {
-      color: var(--primary-color);
-    }
-    ha-alert {
-      margin: 0 16px;
-      display: block;
-    }
-  `;
+  static styles = [
+    wrapSupportingText,
+    css`
+      a {
+        color: var(--primary-color);
+      }
+      ha-alert {
+        margin: 0 16px;
+        display: block;
+      }
+    `,
+  ];
 }
 
 declare global {

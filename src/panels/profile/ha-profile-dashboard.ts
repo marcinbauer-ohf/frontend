@@ -1,4 +1,12 @@
-import { mdiCellphone, mdiEarth, mdiLock, mdiMonitor, mdiTune } from "@mdi/js";
+import {
+  mdiBell,
+  mdiCog,
+  mdiEarth,
+  mdiLock,
+  mdiLogout,
+  mdiPalette,
+  mdiViewDashboard,
+} from "@mdi/js";
 import type { CSSResultGroup, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
@@ -6,16 +14,24 @@ import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import { fireEvent } from "../../common/dom/fire_event";
 import "../../components/ha-button";
 import "../../components/ha-card";
-import "../../components/ha-config-navigation-list";
+import "../../components/ha-icon-next";
+import "../../components/ha-svg-icon";
+import "../../components/item/ha-list-item-button";
+import "../../components/list/ha-grouped-list";
 import "../../components/user/ha-user-badge";
-import "./ha-pick-theme-row";
-import { isExternal } from "../../data/external";
+import { getDefaultPanel, getPanelTitle } from "../../data/panel";
 import { showConfirmationDialog } from "../../dialogs/generic/show-dialog-box";
 import "../../layouts/hass-subpage";
 import type { PageNavigation } from "../../layouts/hass-tabs-subpage";
 import { haStyle } from "../../resources/styles";
 import type { HomeAssistant, Route } from "../../types";
+import { showPushSetting, showVibrateSetting } from "./notification-settings";
+import { profilePageStyles } from "./profile-page-styles";
 import { showEditProfileDialog } from "./show-dialog-edit-profile";
+
+interface ProfilePage extends PageNavigation {
+  value?: string;
+}
 
 @customElement("ha-profile-dashboard")
 class HaProfileDashboard extends LitElement {
@@ -26,32 +42,47 @@ class HaProfileDashboard extends LitElement {
   @property({ attribute: false }) public route!: Route;
 
   protected render(): TemplateResult {
-    const pages: PageNavigation[] = [
+    const pages: ProfilePage[] = [
+      {
+        path: "/profile/appearance",
+        name: this.hass.localize("ui.panel.profile.appearance_header"),
+        value: this._appearanceValue(),
+        iconPath: mdiPalette,
+      },
       {
         path: "/profile/preferences",
         name: this.hass.localize("ui.panel.profile.user_preferences_header"),
         description: this.hass.localize(
           "ui.panel.profile.user_preferences_description"
         ),
-        iconPath: mdiTune,
+        value: getPanelTitle(this.hass, getDefaultPanel(this.hass)),
+        iconPath: mdiViewDashboard,
       },
+      ...(showPushSetting(this.hass) || showVibrateSetting()
+        ? [
+            {
+              path: "/profile/notifications",
+              name: this.hass.localize("ui.panel.profile.notifications_header"),
+              description: this.hass.localize(
+                "ui.panel.profile.notifications_description"
+              ),
+              iconPath: mdiBell,
+            },
+          ]
+        : []),
       {
         path: "/profile/localization",
         name: this.hass.localize("ui.panel.profile.localization_header"),
-        description: this.hass.localize(
-          "ui.panel.profile.localization_description"
-        ),
+        value:
+          this.hass.translationMetadata.translations[this.hass.locale.language]
+            ?.nativeName ?? this.hass.locale.language,
         iconPath: mdiEarth,
       },
       {
-        path: "/profile/browser",
-        name: this.hass.localize(
-          isExternal
-            ? "ui.panel.profile.mobile_app_settings"
-            : "ui.panel.profile.browser_settings"
-        ),
-        description: this.hass.localize("ui.panel.profile.browser_description"),
-        iconPath: isExternal ? mdiCellphone : mdiMonitor,
+        path: "/profile/general",
+        name: this.hass.localize("ui.panel.profile.general_header"),
+        description: this.hass.localize("ui.panel.profile.general_description"),
+        iconPath: mdiCog,
       },
       {
         path: "/profile/security",
@@ -80,9 +111,7 @@ class HaProfileDashboard extends LitElement {
                   ${
                     this.hass.user!.is_owner
                       ? html`<br /><small
-                            >${this.hass.localize(
-                              "ui.panel.profile.is_owner"
-                            )}</small
+                            >${this.hass.localize("ui.panel.profile.owner")}</small
                           >`
                       : ""
                   }
@@ -100,35 +129,76 @@ class HaProfileDashboard extends LitElement {
                         </ha-button>`
                       : nothing
                   }
-                  <ha-button
-                    variant="danger"
-                    appearance="plain"
-                    @click=${this._handleLogOut}
-                  >
-                    ${this.hass.localize("ui.panel.profile.logout")}
-                  </ha-button>
                 </div>
               </div>
             </div>
           </ha-card>
-          <ha-card
-            .header=${this.hass.localize("ui.panel.profile.themes.header")}
-          >
-            <ha-pick-theme-row
-              .narrow=${this.narrow}
-              .hass=${this.hass}
-            ></ha-pick-theme-row>
-          </ha-card>
-          <ha-card outlined>
-            <ha-config-navigation-list
-              .pages=${pages}
-              has-secondary
-              .label=${this.hass.localize("panel.profile")}
-            ></ha-config-navigation-list>
-          </ha-card>
+          <ha-grouped-list>
+            ${pages.map(
+              (page) => html`
+                <ha-list-item-button .href=${page.path}>
+                  <ha-svg-icon
+                    slot="start"
+                    .path=${page.iconPath}
+                  ></ha-svg-icon>
+                  <span slot="headline">${page.name}</span>
+                  ${
+                    this.narrow
+                      ? html`<span slot="supporting-text"
+                          >${page.value ?? page.description}</span
+                        >`
+                      : html`${
+                          page.description
+                            ? html`<span slot="supporting-text"
+                                >${page.description}</span
+                              >`
+                            : nothing
+                        }
+                        ${
+                          page.value
+                            ? html`<span slot="end" class="value"
+                                >${page.value}</span
+                              >`
+                            : nothing
+                        }`
+                  }
+                  <ha-icon-next slot="end"></ha-icon-next>
+                </ha-list-item-button>
+              `
+            )}
+          </ha-grouped-list>
+          <ha-grouped-list>
+            <ha-list-item-button class="logout" @click=${this._handleLogOut}>
+              <ha-svg-icon slot="start" .path=${mdiLogout}></ha-svg-icon>
+              <span slot="headline"
+                >${this.hass.localize("ui.panel.profile.logout")}</span
+              >
+            </ha-list-item-button>
+          </ha-grouped-list>
         </div>
       </hass-subpage>
     `;
+  }
+
+  // Theme name, plus the light/dark mode when the theme supports it.
+  private _appearanceValue(): string {
+    const selected = this.hass.selectedTheme;
+    const themeName = selected?.theme || this.hass.themes.default_theme;
+    const theme = themeName === "default" ? "Home Assistant" : themeName;
+    const modes = this.hass.themes.themes[themeName]?.modes;
+    if (themeName !== "default" && !(modes?.light && modes?.dark)) {
+      return theme;
+    }
+    const mode =
+      selected?.dark === undefined
+        ? "system"
+        : selected.dark
+          ? "dark"
+          : "light";
+    return this.hass.localize("ui.panel.profile.appearance_value", {
+      theme,
+      mode: this.hass.localize(`ui.panel.profile.themes.dark_mode.${mode}`),
+    });
   }
 
   private _handleEditProfile() {
@@ -148,23 +218,25 @@ class HaProfileDashboard extends LitElement {
   static get styles(): CSSResultGroup {
     return [
       haStyle,
+      profilePageStyles,
       css`
-        :host {
-          user-select: initial;
+        ha-list-item-button ha-svg-icon {
+          padding: var(--ha-space-2);
+          color: var(--secondary-text-color);
         }
 
-        .container {
-          padding: var(--ha-space-2) var(--ha-space-4)
-            calc(var(--ha-space-4) + var(--safe-area-inset-bottom));
+        ha-icon-next,
+        .value {
+          color: var(--secondary-text-color);
         }
 
-        ha-card {
-          margin: 0 auto var(--ha-space-4);
-          max-width: 600px;
+        .value {
+          margin-inline-end: var(--ha-space-1);
         }
 
-        ha-card[outlined] {
-          overflow: hidden;
+        .logout,
+        .logout ha-svg-icon {
+          color: var(--error-color);
         }
 
         .heading {
