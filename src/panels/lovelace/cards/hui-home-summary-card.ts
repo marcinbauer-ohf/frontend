@@ -325,14 +325,11 @@ export class HuiHomeSummaryCard extends LitElement implements LovelaceCard {
         if (!automations.length) {
           return localize("ui.card.home-summary.no_automations");
         }
-        return localize(
-          "ui.card.home-summary.count_automations_enabled",
-          {
-            count: automations.filter(
-              (entityId) => states![entityId].state === "on"
-            ).length,
-          }
-        );
+        return localize("ui.card.home-summary.count_automations_enabled", {
+          count: automations.filter(
+            (entityId) => states[entityId].state === "on"
+          ).length,
+        });
       }
       case "maintenance": {
         const maintenanceFilters = HOME_SUMMARIES_FILTERS.maintenance.map(
