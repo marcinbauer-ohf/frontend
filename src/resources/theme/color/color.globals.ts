@@ -44,7 +44,9 @@ export const colorStyles = css`
 
     /* backgrounds */
     --card-background-color: #ffffff;
-    --primary-background-color: #fafafa;
+    /* One step below the card and chrome surface, so a borderless card still
+       reads as a card */
+    --primary-background-color: var(--ha-color-surface-low);
     --secondary-background-color: #e5e5e5;
     --clear-background-color: #ffffff;
 
@@ -296,7 +298,7 @@ export const colorStyles = css`
     --mdc-theme-error: var(--error-color);
     --app-header-text-color: var(--sidebar-text-color);
     --app-header-background-color: var(--sidebar-background-color);
-    --app-header-border-bottom: 1px solid var(--divider-color);
+    --app-header-border-bottom: none;
     --app-theme-color: var(--app-header-background-color);
     --mdc-checkbox-unchecked-color: rgba(var(--rgb-primary-text-color), 0.54);
     --mdc-checkbox-disabled-color: var(--disabled-text-color);
@@ -340,7 +342,7 @@ export const colorStyles = css`
 
 export const darkColorStyles = css`
   html {
-    --primary-background-color: #111111;
+    --primary-background-color: var(--ha-color-surface-low);
     --card-background-color: #1c1c1c;
     --secondary-background-color: #282828;
     --clear-background-color: #111111;

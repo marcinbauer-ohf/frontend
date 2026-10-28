@@ -62,6 +62,9 @@ export class HaSidePane extends LitElement {
    */
   @property({ type: Boolean }) public modal = false;
 
+  /** Hide the close button, for a pane that is dismissed from elsewhere. */
+  @property({ type: Boolean, attribute: "no-close" }) public noClose = false;
+
   /**
    * On a wide screen, slides in from the end edge when added, for a pane the
    * user just opened. The content beside it takes its new width at once, so
@@ -100,12 +103,14 @@ export class HaSidePane extends LitElement {
                 .label=${localize?.("ui.common.back") ?? ""}
                 @click=${this._back}
               ></ha-icon-button>`
-            : html`<ha-icon-button
-                slot="navigationIcon"
-                .path=${mdiClose}
-                .label=${localize?.("ui.common.close") ?? ""}
-                @click=${this._close}
-              ></ha-icon-button>`
+            : this.noClose
+              ? nothing
+              : html`<ha-icon-button
+                  slot="navigationIcon"
+                  .path=${mdiClose}
+                  .label=${localize?.("ui.common.close") ?? ""}
+                  @click=${this._close}
+                ></ha-icon-button>`
         }
         <span slot="title">${this.heading}</span>
         ${

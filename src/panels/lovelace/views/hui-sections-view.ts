@@ -561,6 +561,7 @@ export class SectionsView extends LitElement implements LovelaceViewElement {
       padding: 0 var(--column-gap);
       box-sizing: content-box;
       margin: 0 auto;
+      margin-inline-start: var(--ha-view-sections-margin-inline-start, auto);
       max-width: calc(
         var(--column-count) * var(--column-max-width) +
           (var(--column-count) - 1) * var(--column-gap)

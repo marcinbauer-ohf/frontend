@@ -829,10 +829,11 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       );
     }
 
-    /* Unavailable */
+    /* Unavailable: a warning border, as the integration card draws an entry
+       that failed, so a grid of devices and a grid of integrations read the
+       same way. */
     ha-card.unavailable {
-      box-shadow: inset 0 0 0 2px
-        color-mix(in srgb, var(--warning-color) 40%, transparent);
+      --ha-card-border-color: var(--warning-color);
     }
     ha-card.unavailable .primary {
       background-color: color-mix(
@@ -909,9 +910,14 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
       color: color-mix(in srgb, var(--warning-color) 70%, transparent);
     }
 
+    /* In the top right corner, like the integration card's status, rather
+       than centred on the hero's row. */
     .alert {
       flex: none;
       color: var(--warning-color);
+    }
+    .hero .alert {
+      align-self: flex-start;
     }
     .alert.disconnected,
     .alert.unknown {

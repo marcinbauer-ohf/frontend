@@ -521,6 +521,7 @@
       "update": "Update",
       "hide": "Hide",
       "close": "Close",
+      "done": "Done",
       "dismiss_alert": "Dismiss alert",
       "clear": "Clear",
       "leave": "Leave",
@@ -2900,6 +2901,8 @@
           "home": "Home",
           "home_name": "Name",
           "floors_and_areas": "Floors and areas",
+          "floors_and_areas_count": "{floors} {floors, plural,\n  one {floor}\n  other {floors}\n}, {areas} {areas, plural,\n  one {area}\n  other {areas}\n}",
+          "favorites_count": "{count} {count, plural,\n  one {entity}\n  other {entities}\n}",
           "description": "Configure your Overview page display preferences.",
           "personalize": "Personalize",
           "personalize_description": "Customize the top of your Overview page.",
@@ -2945,7 +2948,7 @@
           "title": "Edit security and safety page",
           "description": "Configure your security and safety display preferences.",
           "favorite_entities": "[%key:ui::panel::lovelace::editor::strategy::home::favorite_entities%]",
-          "favorite_entities_description": "Pin entities to the top of the page.",
+          "favorite_entities_description": "Pin devices to the top of the page.",
           "add_favorite_entity": "[%key:ui::panel::lovelace::editor::strategy::home::add_favorite_entity%]",
           "active_alert_entities": "Active alert entities",
           "active_alert_entities_description": "Display any entities that require attention.",
@@ -7792,6 +7795,8 @@
             "entries_system": "[%key:ui::panel::config::integrations::integration_page::entries%]",
             "entries_virtual": "[%key:ui::panel::config::integrations::integration_page::entries%]",
             "entries_entity": "[%key:ui::panel::config::integrations::integration_page::entries%]",
+            "info": "Integration info",
+            "show_info": "Show integration info",
             "no_entries": "No entries",
             "yaml_entry": "This integration was not set up via the UI, you have either set it up in YAML or it is a dependency set up by another integration. If you want to configure it, you will need to do so in your configuration.yaml file.",
             "attention_entries": "Needs attention",
@@ -12058,7 +12063,7 @@
               "use_large_card": "Use large card"
             },
             "home": {
-              "favorite_entities": "Favorite entities",
+              "favorite_entities": "Favorite devices",
               "add_favorite_entity": "Add favorite",
               "device_cards": "Show devices as device cards"
             }

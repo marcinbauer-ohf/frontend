@@ -186,6 +186,16 @@ class HUIRoot extends LitElement {
   );
 
   private _renderActionItems(): TemplateResult {
+    if (this.editing) {
+      return html`<ha-button
+        appearance="filled"
+        class="done"
+        @click=${this._sidePaneDone}
+      >
+        ${this.hass.localize("ui.common.done")}
+      </ha-button>`;
+    }
+
     const result: TemplateResult[] = [];
 
     if (this._editMode) {
@@ -298,6 +308,19 @@ class HUIRoot extends LitElement {
         ],
       },
       {
+        icon: mdiCommentProcessingOutline,
+        key: "ui.panel.lovelace.menu.assist_tooltip",
+        buttonAction: this._showVoiceCommandDialog,
+        overflowAction: this._showVoiceCommandDialog,
+        suffix:
+          this.hass.enableShortcuts && !isMobileClient ? "(A)" : undefined,
+        visible:
+          !this._editMode &&
+          this.narrow &&
+          this._conversation(this.hass.config.components),
+        overflow: true,
+      },
+      {
         icon: mdiMagnify,
         key: "ui.panel.lovelace.menu.search_home_assistant",
         buttonAction: this._showQuickBar,
@@ -306,19 +329,8 @@ class HUIRoot extends LitElement {
           this.hass.enableShortcuts && !isMobileClient
             ? `(${ctrlOrCmdLabel(this.hass.localize)} + K)`
             : undefined,
-        visible: !this._editMode && !this.hass.kioskMode,
-        overflow: this.narrow,
-      },
-      {
-        icon: mdiCommentProcessingOutline,
-        key: "ui.panel.lovelace.menu.assist_tooltip",
-        buttonAction: this._showVoiceCommandDialog,
-        overflowAction: this._showVoiceCommandDialog,
-        suffix:
-          this.hass.enableShortcuts && !isMobileClient ? "(A)" : undefined,
-        visible:
-          !this._editMode && this._conversation(this.hass.config.components),
-        overflow: this.narrow,
+        visible: !this._editMode && !this.hass.kioskMode && this.narrow,
+        overflow: true,
       },
       {
         icon: mdiRefresh,
@@ -381,6 +393,7 @@ class HUIRoot extends LitElement {
       (i) => i.visible && (!i.overflow || overflowCanPromote)
     );
 
+    const grouped: TemplateResult[] = [];
     buttonItems.forEach((item, index) => {
       const label = [this.hass!.localize(item.key), item.suffix].join(" ");
       const button = item.subItems
@@ -395,6 +408,7 @@ class HUIRoot extends LitElement {
                 .path=${item.icon}
                 slot="trigger"
                 .label=${label}
+                class=${classMap({ primary: item.icon === mdiPlus })}
                 hide-title
               ></ha-icon-button>
               ${item.subItems
@@ -426,8 +440,15 @@ class HUIRoot extends LitElement {
               ${label}
             </ha-tooltip>
           `;
-      result.push(button);
+      if (!this.narrow && (item.icon === mdiPlus || item.icon === mdiPencil)) {
+        grouped.push(button);
+      } else {
+        result.push(button);
+      }
     });
+    if (grouped.length) {
+      result.push(html`<div class="group">${grouped}</div>`);
+    }
 
     if (overflowItems.length && !overflowCanPromote) {
       result.push(html`
@@ -453,6 +474,27 @@ class HUIRoot extends LitElement {
       `);
     }
     return html`${result}`;
+  }
+
+  private _renderSearch() {
+    if (this.narrow || this.hass.kioskMode) {
+      return nothing;
+    }
+    const hint =
+      this.hass.enableShortcuts && !isMobileClient
+        ? `${ctrlOrCmdLabel(this.hass.localize)} + K`
+        : undefined;
+    return html`
+      <button class="search" @click=${this._showQuickBar}>
+        <ha-svg-icon .path=${mdiMagnify}></ha-svg-icon>
+        <span class="search-label"
+          >${this.hass.localize(
+            "ui.panel.lovelace.menu.search_home_assistant"
+          )}</span
+        >
+        ${hint ? html`<span class="search-hint">${hint}</span>` : nothing}
+      </button>
+    `;
   }
 
   protected render(): TemplateResult {
@@ -626,6 +668,7 @@ class HUIRoot extends LitElement {
                                 </div>
                               `
                       }
+                      ${this._renderSearch()}
                       <div class="action-items">
                         ${this._renderActionItems()}
                       </div>
@@ -665,6 +708,10 @@ class HUIRoot extends LitElement {
       </div>
     `;
   }
+
+  private _sidePaneDone = () => {
+    fireEvent(this, "side-pane-closed");
+  };
 
   private _handleWindowScroll = () => {
     this.toggleAttribute("scrolled", window.scrollY !== 0);
@@ -1400,7 +1447,7 @@ class HUIRoot extends LitElement {
             calc(4px + var(--safe-area-inset-left, 0px));
         }
         .main-title {
-          margin-inline-start: var(--ha-space-6);
+          margin-inline-start: var(--ha-space-5);
           line-height: var(--ha-line-height-normal);
           flex-grow: 1;
           text-overflow: ellipsis;
@@ -1415,6 +1462,55 @@ class HUIRoot extends LitElement {
           white-space: nowrap;
           display: flex;
           align-items: center;
+          gap: var(--ha-space-2);
+        }
+        /* Desktop: the title and the actions take equal room on each side so
+           the search sits in the middle, and the plus and edit buttons share
+           one rounded surface. */
+        .toolbar:has(.search) > .main-title,
+        .toolbar:has(.search) > ha-tab-group,
+        .search ~ .action-items {
+          flex: 1 1 0;
+        }
+        .search ~ .action-items {
+          justify-content: flex-end;
+        }
+        .search {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+          width: min(480px, 40vw);
+          height: 40px;
+          padding: 0 var(--ha-space-3);
+          border: none;
+          border-radius: var(--ha-border-radius-pill);
+          background: var(--ha-color-fill-neutral-quiet-resting);
+          color: var(--secondary-text-color);
+          font: inherit;
+          font-size: var(--ha-font-size-m);
+          cursor: pointer;
+        }
+        .search:hover {
+          background: var(--ha-color-fill-neutral-quiet-hover);
+        }
+        .search-label {
+          flex: 1;
+          text-align: start;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .search-hint {
+          font-size: var(--ha-font-size-s);
+          opacity: 0.7;
+        }
+        .group {
+          display: flex;
+          align-items: center;
+          border-radius: var(--ha-border-radius-pill);
+          background: var(--ha-color-fill-neutral-quiet-resting);
+        }
+        ha-icon-button.primary {
+          color: var(--ha-color-on-primary-normal);
         }
         .edit-mode .action-items ha-icon-button[disabled] {
           --ha-color-on-disabled-quiet: color-mix(
@@ -1579,39 +1675,35 @@ class HUIRoot extends LitElement {
               var(--safe-area-inset-top, 0px)
           );
         }
-        /* Panel-driven editing: the canvas gets an edge so it is clear what
-           the pane beside it acts on, and the content steps in to sit inside
-           that edge and clear of the pane. */
+        /* Panel-driven editing: the canvas gives up its end side to the
+           pane, which sits on the chrome beside it the way the sidebar does,
+           rather than floating over the content. The chrome colour is
+           painted around the canvas from behind the content, so the canvas
+           keeps its rounded corner where it meets the pane. */
         .framed hui-view-container {
           --hui-side-pane-space: calc(
-            var(--ha-side-pane-width, 360px) + var(--ha-space-4) * 2
+            var(--ha-side-pane-width, 360px) +
+              var(--ha-panel-frame-gutter, var(--ha-space-2))
           );
-          padding-inline-start: var(--ha-space-4);
           padding-inline-end: calc(
             var(--view-container-inset-right) + var(--hui-side-pane-space)
-          );
-          padding-bottom: calc(
-            var(--view-container-inset-bottom) + var(--ha-space-8)
           );
         }
         .framed hui-view-background {
           position: fixed;
           top: calc(
-            var(--header-height, 56px) + var(--safe-area-inset-top, 0px) +
-              var(--ha-space-2)
+            var(--header-height, 56px) + var(--safe-area-inset-top, 0px)
           );
-          bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom, 0px));
-          inset-inline-start: calc(
-            var(--ha-sidebar-width, 0px) + var(--ha-space-2)
-          );
+          bottom: var(--safe-area-inset-bottom, 0px);
+          inset-inline-start: var(--ha-sidebar-width, 0px);
           inset-inline-end: calc(
-            var(--safe-area-inset-right, 0px) +
-              var(--hui-side-pane-space) - var(--ha-space-2)
+            var(--safe-area-inset-right, 0px) + var(--hui-side-pane-space)
           );
           width: auto;
           height: auto;
           border: 2px solid var(--primary-color);
           border-radius: var(--ha-border-radius-xl);
+          box-shadow: 0 0 0 100vmax var(--app-header-background-color);
           box-sizing: border-box;
         }
         #side-pane {
@@ -1623,22 +1715,25 @@ class HUIRoot extends LitElement {
           z-index: 3;
           top: calc(
             var(--header-height, 56px) + var(--safe-area-inset-top, 0px) +
-              var(--ha-space-2)
+              var(--ha-panel-frame-gutter, var(--ha-space-2))
           );
-          bottom: calc(var(--ha-space-4) + var(--safe-area-inset-bottom, 0px));
-          inset-inline-end: calc(
-            var(--ha-space-4) + var(--safe-area-inset-right, 0px)
-          );
+          bottom: var(--safe-area-inset-bottom, 0px);
+          inset-inline-end: var(--safe-area-inset-right, 0px);
           width: var(--ha-side-pane-width, 360px);
         }
-        /* On a phone the pane is a bottom sheet of its own, so the canvas only
-           keeps a slim edge. */
+        /* On a phone the pane is a bottom sheet of its own, so the canvas
+           stays as it is. */
         .narrow.framed hui-view-container {
           --hui-side-pane-space: 0px;
           padding-inline-end: var(--view-container-inset-right);
         }
         .narrow.framed hui-view-background {
-          inset-inline: var(--ha-space-2);
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          border-radius: 0;
+          box-shadow: none;
         }
         .narrow.framed #side-pane {
           display: block;

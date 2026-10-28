@@ -9,9 +9,10 @@ import {
 } from "@mdi/js";
 import "@home-assistant/webawesome/dist/components/divider/divider";
 import { css, html, LitElement, nothing } from "lit";
-import { customElement, property } from "lit/decorators";
+import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { getAreasFloorHierarchy } from "../../../common/areas/areas-floor-hierarchy";
+import type { LocalizeKeys } from "../../../common/translations/localize";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { stopPropagation } from "../../../common/dom/stop_propagation";
 import "../../../components/entity/ha-favorites-editor";
@@ -19,16 +20,17 @@ import "../../../components/ha-button";
 import "../../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
-import "../../../components/ha-expansion-panel";
 import "../../../components/ha-floor-icon";
-import "../../../components/ha-form/ha-form";
-import type { HaFormSchema } from "../../../components/ha-form/types";
 import "../../../components/ha-icon";
 import "../../../components/ha-icon-button";
+import "../../../components/ha-icon-next";
 import "../../../components/ha-side-pane";
 import "../../../components/ha-svg-icon";
+import "../../../components/ha-switch";
+import type { HaSwitch } from "../../../components/ha-switch";
 import "../../../components/input/ha-input";
 import type { HaInput } from "../../../components/input/ha-input";
+import "../../../components/item/ha-list-item-base";
 import "../../../components/item/ha-list-item-button";
 import "../../../components/list/ha-grouped-list";
 import type { AreaRegistryEntry } from "../../../data/area/area_registry";
@@ -57,8 +59,20 @@ import "./home-shortcuts-editor";
 // toggle would do nothing.
 const SUGGESTED_ENTITIES_CAP = 8;
 
+/** The pane's root, or one of the sections it drills into. */
+type EditorView = "home" | "favorites" | "areas" | "summaries";
+
+const VIEW_TITLE: Record<EditorView, LocalizeKeys> = {
+  home: "ui.panel.home.editor.title",
+  favorites: "ui.panel.lovelace.editor.strategy.home.favorite_entities",
+  areas: "ui.panel.home.editor.floors_and_areas",
+  summaries: "ui.panel.home.editor.summaries",
+};
+
 /**
- * The home page's editor: a side pane beside the framed overview. Every
+ * The home page's editor: a side pane beside the framed overview. The root
+ * lists the settings and the sections, and a section opens in place with a
+ * back button, like a settings app, so no one level is too long. Every
  * change applies at once; the page saves preferences through `value-changed`
  * and the registries save themselves.
  */
@@ -70,95 +84,132 @@ export class HomeEditorPane extends LitElement {
 
   @property({ type: Boolean }) public narrow = false;
 
+  @state() private _view: EditorView = "home";
+
   private _hierarchy = memoizeOne(
     (floors: HomeAssistant["floors"], areas: HomeAssistant["areas"]) =>
       getAreasFloorHierarchy(Object.values(floors), Object.values(areas))
   );
 
-  private _toggleSchema = memoizeOne(
-    (suggestionsDisabled: boolean) =>
-      [
-        { name: "show_welcome_message", selector: { boolean: {} } },
-        {
-          name: "show_suggested_entities",
-          selector: { boolean: {} },
-          disabled: suggestionsDisabled,
-        },
-      ] as HaFormSchema[]
-  );
-
   protected render() {
-    const favorites = this.config.favorite_entities ?? [];
-    const suggestionsDisabled = favorites.length >= SUGGESTED_ENTITIES_CAP;
     const localize = this.hass.localize;
-
     return html`
       <ha-side-pane
-        .heading=${localize("ui.panel.home.editor.title")}
+        .heading=${localize(VIEW_TITLE[this._view])}
         .narrow=${this.narrow}
+        .back=${this._view !== "home"}
+        no-close
         animate-in
+        @side-pane-back=${this._showHome}
         @value-changed=${stopPropagation}
       >
-        <ha-expansion-panel
-          expanded
-          left-chevron
-          .header=${localize("ui.panel.home.editor.home")}
-        >
-          <ha-input
-            .label=${localize("ui.panel.home.editor.home_name")}
-            .value=${this.hass.config.location_name}
-            @change=${this._nameChanged}
-          ></ha-input>
-          <ha-form
-            .hass=${this.hass}
-            .data=${{
-              show_welcome_message: !this.config.hide_welcome_message,
-              show_suggested_entities: !this.config.hide_suggested_entities,
-            }}
-            .schema=${this._toggleSchema(suggestionsDisabled)}
-            .computeLabel=${this._computeToggleLabel}
-            .computeHelper=${this._computeToggleHelper}
-            @value-changed=${this._togglesChanged}
-          ></ha-form>
-        </ha-expansion-panel>
-
-        <ha-expansion-panel
-          expanded
-          left-chevron
-          .header=${localize(
-            "ui.panel.lovelace.editor.strategy.home.favorite_entities"
-          )}
-        >
-          <ha-favorites-editor
-            .favorites=${favorites}
-            .addButtonLabel=${localize(
-              "ui.panel.lovelace.editor.strategy.home.add_favorite_entity"
-            )}
-            @value-changed=${this._favoritesChanged}
-          ></ha-favorites-editor>
-        </ha-expansion-panel>
-
-        <ha-expansion-panel
-          expanded
-          left-chevron
-          .header=${localize("ui.panel.home.editor.floors_and_areas")}
-        >
-          ${this._renderFloors()}
-        </ha-expansion-panel>
-
-        <ha-expansion-panel
-          left-chevron
-          .header=${localize("ui.panel.home.editor.summaries")}
-          .secondary=${localize("ui.panel.home.editor.summaries_description")}
-        >
-          <home-shortcuts-editor
-            .hass=${this.hass}
-            .shortcuts=${this.config.shortcuts ?? []}
-            @value-changed=${this._shortcutsChanged}
-          ></home-shortcuts-editor>
-        </ha-expansion-panel>
+        ${this._renderView()}
       </ha-side-pane>
     `;
+  }
+
+  private _renderView() {
+    const favorites = this.config.favorite_entities ?? [];
+    switch (this._view) {
+      case "favorites":
+        return html`<ha-favorites-editor
+          .favorites=${favorites}
+          .addButtonLabel=${this.hass.localize(
+            "ui.panel.lovelace.editor.strategy.home.add_favorite_entity"
+          )}
+          @value-changed=${this._favoritesChanged}
+        ></ha-favorites-editor>`;
+      case "areas":
+        return this._renderFloors();
+      case "summaries":
+        return html`<home-shortcuts-editor
+          .hass=${this.hass}
+          .shortcuts=${this.config.shortcuts ?? []}
+          @value-changed=${this._shortcutsChanged}
+        ></home-shortcuts-editor>`;
+      default:
+        return this._renderHome(favorites);
+    }
+  }
+
+  private _renderHome(favorites: string[]) {
+    const localize = this.hass.localize;
+    const suggestionsDisabled = favorites.length >= SUGGESTED_ENTITIES_CAP;
+    const hierarchy = this._hierarchy(this.hass.floors, this.hass.areas);
+    return html`
+      <ha-input
+        .label=${localize("ui.panel.home.editor.home_name")}
+        .value=${this.hass.config.location_name}
+        @change=${this._nameChanged}
+      ></ha-input>
+      <ha-grouped-list>
+        <ha-list-item-base
+          .headline=${localize("ui.panel.home.editor.welcome_message")}
+          .supportingText=${localize(
+            "ui.panel.home.editor.welcome_message_helper"
+          )}
+        >
+          <ha-switch
+            slot="end"
+            .checked=${!this.config.hide_welcome_message}
+            @change=${this._welcomeChanged}
+          ></ha-switch>
+        </ha-list-item-base>
+        <ha-list-item-base
+          .headline=${localize("ui.panel.home.editor.suggested_entities")}
+          .supportingText=${localize(
+            suggestionsDisabled
+              ? "ui.panel.home.editor.suggested_entities_disabled_description"
+              : "ui.panel.home.editor.suggested_entities_description"
+          )}
+        >
+          <ha-switch
+            slot="end"
+            .checked=${!this.config.hide_suggested_entities}
+            .disabled=${suggestionsDisabled}
+            @change=${this._suggestedChanged}
+          ></ha-switch>
+        </ha-list-item-base>
+      </ha-grouped-list>
+      <ha-grouped-list>
+        ${this._renderSectionRow(
+          "favorites",
+          localize("ui.panel.home.editor.favorites_count", {
+            count: favorites.length,
+          })
+        )}
+        ${this._renderSectionRow(
+          "areas",
+          localize("ui.panel.home.editor.floors_and_areas_count", {
+            floors: hierarchy.floors.length,
+            areas: Object.keys(this.hass.areas).length,
+          })
+        )}
+        ${this._renderSectionRow(
+          "summaries",
+          localize("ui.panel.home.editor.summaries_description")
+        )}
+      </ha-grouped-list>
+    `;
+  }
+
+  private _renderSectionRow(view: EditorView, supportingText: string) {
+    return html`<ha-list-item-button
+      .view=${view}
+      .headline=${this.hass.localize(VIEW_TITLE[view])}
+      .supportingText=${supportingText}
+      @click=${this._showSection}
+    >
+      <ha-icon-next slot="end"></ha-icon-next>
+    </ha-list-item-button>`;
+  }
+
+  private _showSection(ev: Event) {
+    this._view = (ev.currentTarget as any).view as EditorView;
+  }
+
+  private _showHome() {
+    this._view = "home";
   }
 
   // Floors are the groups and areas their rows, the way the target picker
@@ -251,26 +302,6 @@ export class HomeEditorPane extends LitElement {
     </ha-list-item-button>`;
   }
 
-  private _computeToggleLabel = (schema: HaFormSchema): string =>
-    this.hass.localize(
-      schema.name === "show_welcome_message"
-        ? "ui.panel.home.editor.welcome_message"
-        : "ui.panel.home.editor.suggested_entities"
-    );
-
-  private _computeToggleHelper = (schema: HaFormSchema): string => {
-    if (schema.name === "show_welcome_message") {
-      return this.hass.localize("ui.panel.home.editor.welcome_message_helper");
-    }
-    const favoritesFull =
-      (this.config.favorite_entities?.length ?? 0) >= SUGGESTED_ENTITIES_CAP;
-    return this.hass.localize(
-      favoritesFull
-        ? "ui.panel.home.editor.suggested_entities_disabled_description"
-        : "ui.panel.home.editor.suggested_entities_description"
-    );
-  };
-
   // Inner editors' value-changed events stop at the pane; the host's own
   // event carries the whole config to the page.
   private _save(config: HomeFrontendSystemData) {
@@ -284,17 +315,17 @@ export class HomeEditorPane extends LitElement {
     }
   }
 
-  private _togglesChanged(
-    ev: ValueChangedEvent<{
-      show_welcome_message: boolean;
-      show_suggested_entities: boolean;
-    }>
-  ) {
-    const { show_welcome_message, show_suggested_entities } = ev.detail.value;
+  private _welcomeChanged(ev: Event) {
     this._save({
       ...this.config,
-      hide_welcome_message: !show_welcome_message,
-      hide_suggested_entities: !show_suggested_entities,
+      hide_welcome_message: !(ev.target as HaSwitch).checked,
+    });
+  }
+
+  private _suggestedChanged(ev: Event) {
+    this._save({
+      ...this.config,
+      hide_suggested_entities: !(ev.target as HaSwitch).checked,
     });
   }
 
@@ -409,18 +440,6 @@ export class HomeEditorPane extends LitElement {
     :host {
       display: contents;
     }
-    ha-expansion-panel {
-      --expansion-panel-content-padding: var(--ha-space-2) 0 var(--ha-space-3);
-    }
-    /* Same quiet group heading as the target picker's lists */
-    ha-expansion-panel::part(summary) {
-      background-color: var(--ha-color-surface-low);
-      border-radius: var(--ha-border-radius-md);
-      padding: var(--ha-space-1) var(--ha-space-2);
-      font-weight: var(--ha-font-weight-bold);
-      color: var(--secondary-text-color);
-      min-height: unset;
-    }
     ha-input {
       display: block;
       margin-bottom: var(--ha-space-3);
@@ -428,6 +447,9 @@ export class HomeEditorPane extends LitElement {
     ha-grouped-list {
       display: block;
       margin-bottom: var(--ha-space-3);
+    }
+    ha-list-item-button ha-icon-next {
+      color: var(--secondary-text-color);
     }
     ha-list-item-button.add {
       color: var(--primary-color);

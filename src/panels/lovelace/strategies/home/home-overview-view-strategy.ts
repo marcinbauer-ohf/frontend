@@ -12,6 +12,7 @@ import type { AreaRegistryEntry } from "../../../../data/area/area_registry";
 import type { EnergyPreferences } from "../../../../data/energy";
 import { getEnergyPreferences } from "../../../../data/energy";
 import type { SecurityAlertEntityConfig } from "../../../../data/frontend";
+import type { LovelaceBadgeConfig } from "../../../../data/lovelace/config/badge";
 import type { LovelaceCardConfig } from "../../../../data/lovelace/config/card";
 import type {
   LovelaceSectionConfig,
@@ -42,10 +43,7 @@ import {
   filterSecurityAlertEntities,
   resolveSecurityAlertSeverity,
 } from "../../../security/strategies/security-alerts";
-import {
-  LARGE_SCREEN_CONDITION,
-  SMALL_SCREEN_CONDITION,
-} from "../helpers/view-columns-conditions";
+import { LARGE_SCREEN_CONDITION } from "../helpers/view-columns-conditions";
 import type { LovelaceStrategyDependency } from "../types";
 import type { CommonControlsSectionStrategyConfig } from "../usage_prediction/common-controls-section-strategy";
 import { generateLovelaceSectionStrategy } from "../get-strategy";
@@ -505,14 +503,16 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
           : undefined,
       weather: () =>
         weatherEntity
-          ? ({
-              type: "tile",
+          ? {
+              type: "entity",
               entity: weatherEntity,
               name: hass.localize(
                 "ui.panel.lovelace.strategy.home.summary_list.weather"
               ),
+              show_name: true,
+              show_state: true,
               state_content: ["temperature", "state"],
-            } satisfies TileCardConfig)
+            }
           : undefined,
       energy: () =>
         hasEnergy
@@ -529,8 +529,7 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
           : undefined,
     };
 
-    // Build summary cards (used in both mobile section and sidebar)
-    const summaryCards: LovelaceCardConfig[] = [
+    const attentionCards: LovelaceCardConfig[] = [
       // Repairs card - only visible to admins, hides when empty
       {
         type: "repairs",
@@ -556,6 +555,7 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
       } satisfies DiscoveredDevicesCardConfig,
     ];
 
+    const summaryCards: LovelaceCardConfig[] = [];
     for (const item of resolveShortcutItems(config.shortcuts)) {
       if (item.type === "summary") {
         if (item.hidden) continue;
@@ -572,85 +572,46 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
       }
     }
 
-    const hasVisibleSummaryCards = summaryCards.some(
-      (card) => !("hide_empty" in card && card.hide_empty)
-    );
+    const hasVisibleSummaryCards = summaryCards.length > 0;
 
-    // Build summary cards for sidebar (full width: columns 12)
-    const sidebarSummaryCards = summaryCards.map((card) => ({
-      ...card,
-      grid_options: { columns: 12 },
-    }));
-
-    // Build summary cards for mobile section (half width: columns 6)
-    const mobileSummaryCards = [
-      ...summaryCards.map((card) => ({
-        ...card,
-        grid_options: { columns: 6 },
-      })),
-    ];
-
-    const summaryHeadingCard: LovelaceCardConfig = {
-      type: "heading",
-      heading: hass.localize("ui.panel.lovelace.strategy.home.summaries"),
-      heading_style: "title",
-    };
-
-    const alertsCard: HomeSummaryCard | undefined = alertSeverityEntities.length
-      ? ({
-          type: "home-summary",
-          summary: "alerts",
-          alert_entities: alertSeverityEntities,
-          tap_action: {
-            action: "navigate",
-            navigation_path: "/security?historyBack=1",
-          },
-          visibility: [
-            {
-              condition: "or",
-              conditions: alertActiveConditions,
+    const alertsBadge: LovelaceBadgeConfig | undefined =
+      alertSeverityEntities.length
+        ? {
+            type: "home-summary",
+            summary: "alerts",
+            alert_entities: alertSeverityEntities,
+            tap_action: {
+              action: "navigate",
+              navigation_path: "/security?historyBack=1",
             },
-          ],
-        } satisfies HomeSummaryCard)
-      : undefined;
-
-    const mobileAlertsSection: LovelaceSectionConfig | undefined = alertsCard
-      ? {
-          type: "grid",
-          column_span: maxColumns,
-          visibility: [SMALL_SCREEN_CONDITION],
-          cards: [{ ...alertsCard, grid_options: { columns: 6 } }],
-        }
-      : undefined;
-
-    // Mobile summary section (visible on small screens only)
-    const mobileSummarySection: LovelaceSectionConfig | undefined =
-      mobileSummaryCards.length > 0
-        ? {
-            type: "grid",
-            column_span: maxColumns,
-            visibility: [SMALL_SCREEN_CONDITION],
-            cards: [summaryHeadingCard, ...mobileSummaryCards],
-          }
-        : undefined;
-
-    // Sidebar section
-    const sidebarSection: LovelaceSectionConfig | undefined =
-      sidebarSummaryCards.length > 0 || alertsCard
-        ? {
-            type: "grid",
-            cards: [
+            visibility: [
               {
-                ...summaryHeadingCard,
-                grid_options: { rows: "auto" }, // Compact style
+                condition: "or",
+                conditions: alertActiveConditions,
               },
-              ...(alertsCard
-                ? [{ ...alertsCard, grid_options: { columns: 12 } }]
-                : []),
-              ...sidebarSummaryCards,
             ],
           }
         : undefined;
+
+    // The summaries are badges at the top of the page; the admin attention
+    // cards stay cards in a first section that hides when they are empty.
+    const badges: LovelaceBadgeConfig[] = [
+      ...(alertsBadge ? [alertsBadge] : []),
+      ...summaryCards.map((card) =>
+        card.type === "shortcut"
+          ? { ...card, text: card.label, label: undefined }
+          : card
+      ),
+    ];
+
+    const attentionSection: LovelaceSectionConfig = {
+      type: "grid",
+      column_span: maxColumns,
+      cards: attentionCards.map((card) => ({
+        ...card,
+        grid_options: { columns: 6 },
+      })),
+    };
 
     const emptyStateCard = {
       type: "empty-state",
@@ -695,7 +656,7 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
     // No sections, show empty state
     if (
       floorsSections.length === 0 &&
-      !alertsCard &&
+      !alertsBadge &&
       !favoritesSection &&
       !hasVisibleSummaryCards
     ) {
@@ -736,9 +697,8 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
     const sections = (
       [
         emptyStateSection,
-        mobileAlertsSection,
+        attentionSection,
         favoritesSection,
-        mobileSummarySection,
         ...floorsSections,
       ] satisfies (LovelaceSectionRawConfig | undefined)[]
     ).filter(Boolean) as LovelaceSectionRawConfig[];
@@ -746,23 +706,18 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
     return {
       type: "sections",
       max_columns: maxColumns,
+      badges,
       sections: sections,
-      ...(!config.hide_welcome_message && {
-        header: {
-          layout: "responsive",
+      header: {
+        layout: "start",
+        ...(!config.hide_welcome_message && {
           card: {
             type: "markdown",
             text_only: true,
             content: `## ${hass.localize("ui.panel.lovelace.strategy.home.welcome_user", { user: "{{ user }}" })}`,
           } satisfies MarkdownCardConfig,
-        },
-      }),
-      ...(sidebarSection && {
-        sidebar: {
-          sections: [sidebarSection],
-          visibility: [LARGE_SCREEN_CONDITION],
-        },
-      }),
+        }),
+      },
     };
   }
 }

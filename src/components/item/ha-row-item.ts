@@ -186,9 +186,6 @@ export class HaRowItem extends LitElement {
     .supporting {
       color: var(--secondary-text-color);
       font-size: var(--ha-font-size-s);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
   `;
 }

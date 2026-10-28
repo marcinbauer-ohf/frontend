@@ -54,7 +54,7 @@ export const configEntryNeedsAttention = (entry: ConfigEntry): boolean =>
  * one of its entries needs attention.
  */
 export const computeIntegrationCardState = (
-  entries: ConfigEntry[]
+  entries: Pick<ConfigEntry, "state">[]
 ): ConfigEntry["state"] => {
   for (const cardState of CARD_STATE_PRIORITY) {
     if (entries.some((entry) => entry.state === cardState)) {

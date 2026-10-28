@@ -676,14 +676,12 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           box-sizing: border-box;
           display: flex;
           padding: 0 var(--ha-space-1);
-          border-bottom: 1px solid transparent;
           white-space: nowrap;
           font-weight: var(--ha-font-weight-normal);
           color: var(
             --sidebar-menu-button-text-color,
             var(--primary-text-color)
           );
-          border-bottom: 1px solid var(--divider-color);
           background-color: var(
             --sidebar-menu-button-background-color,
             inherit
@@ -776,7 +774,7 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
 
         ha-list-item-button {
           flex-shrink: 0;
-          margin: 0 var(--ha-space-1) var(--ha-space-1);
+          margin: 0 var(--ha-space-1) var(--ha-space-2);
           border-radius: var(--ha-border-radius-sm);
           --ha-row-item-min-height: var(--ha-space-10);
           --ha-row-item-padding-block: 0;

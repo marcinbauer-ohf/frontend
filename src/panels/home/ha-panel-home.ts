@@ -364,6 +364,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
         .editing=${this._editing}
         .extraActionItems=${this._extraActionItems}
         @ll-custom=${this._handleLLCustomEvent}
+        @side-pane-closed=${this._stopEditing}
         style=${huiRootStyle}
       >
         ${
@@ -374,7 +375,6 @@ class PanelHome extends SubscribeMixin(LitElement) {
                 .config=${this._config ?? {}}
                 .narrow=${this.narrow}
                 @value-changed=${this._editorChanged}
-                @side-pane-closed=${this._stopEditing}
               ></home-editor-pane>`
             : nothing
         }
@@ -487,6 +487,8 @@ class PanelHome extends SubscribeMixin(LitElement) {
   static readonly styles: CSSResultGroup = css`
     :host {
       display: block;
+      /* The home content starts at the toolbar title, not centered */
+      --ha-view-sections-margin-inline-start: 0;
     }
     .banner {
       display: flex;

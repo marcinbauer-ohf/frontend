@@ -62,13 +62,13 @@ import type { HomeSummaryCard } from "./types";
 
 @customElement("hui-home-summary-card")
 export class HuiHomeSummaryCard extends LitElement implements LovelaceCard {
-  @state() private _config?: HomeSummaryCard;
+  @state() protected _config?: HomeSummaryCard;
 
   @state() private _energyData?: EnergyData;
 
   @state()
   @consume({ context: internationalizationContext, subscribe: true })
-  private _i18n!: HomeAssistantInternationalization;
+  protected _i18n!: HomeAssistantInternationalization;
 
   @state()
   @consume({ context: registriesContext, subscribe: true })
@@ -88,7 +88,7 @@ export class HuiHomeSummaryCard extends LitElement implements LovelaceCard {
     },
     watch: ["_config", "_registries", "_i18n", "_energyData"],
   })
-  private _summaryState?: string;
+  protected _summaryState?: string;
 
   constructor() {
     super();
@@ -136,14 +136,14 @@ export class HuiHomeSummaryCard extends LitElement implements LovelaceCard {
     };
   }
 
-  private _handleAction(ev: ActionHandlerEvent) {
+  protected _handleAction(ev: ActionHandlerEvent) {
     fireEvent(this, "hass-action", {
       config: this._config!,
       action: ev.detail.action,
     });
   }
 
-  private get _hasCardAction() {
+  protected get _hasCardAction() {
     return (
       hasAction(this._config?.tap_action) ||
       hasAction(this._config?.hold_action) ||
