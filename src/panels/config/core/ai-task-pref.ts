@@ -7,14 +7,14 @@ import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import type { HASSDomCurrentTargetEvent } from "../../../common/dom/fire_event";
 import { computeDomain } from "../../../common/entity/compute_domain";
 import { supportsFeature } from "../../../common/entity/supports-feature";
-import "../../../components/buttons/ha-progress-button";
-import type { HaProgressButton } from "../../../components/buttons/ha-progress-button";
 import "../../../components/entity/ha-entity-picker";
 import type { HaEntityPicker } from "../../../components/entity/ha-entity-picker";
 import "../../../components/ha-card";
 import "../../../components/ha-icon-button";
-import "../../../components/ha-settings-row";
+import "../../../components/ha-svg-icon";
 import "../../../components/ha-switch";
+import "../../../components/item/ha-list-item-base";
+import "../../../components/list/ha-list-base";
 import type { HaSwitch } from "../../../components/ha-switch";
 import {
   AITaskEntityFeature,
@@ -27,6 +27,7 @@ import {
   fetchEntityConfigFlow,
   showEntityConfigFlow,
 } from "../../../dialogs/config-flow/entity-config-flow";
+import { showAlertDialog } from "../../../dialogs/generic/show-dialog-box";
 import type { HomeAssistant, ValueChangedEvent } from "../../../types";
 import { documentationUrl } from "../../../util/documentation-url";
 
@@ -64,7 +65,10 @@ export class AITaskPref extends LitElement {
 
   protected firstUpdated(changedProps: PropertyValues<this>) {
     super.firstUpdated(changedProps);
-    if (!this.hass || !isComponentLoaded(this.hass.config, "ai_task")) {
+    if (!this.hass) {
+      return;
+    }
+    if (!isComponentLoaded(this.hass.config, "ai_task")) {
       return;
     }
     fetchAITaskPreferences(this.hass).then((prefs) => {
@@ -77,12 +81,22 @@ export class AITaskPref extends LitElement {
 
   protected render() {
     const prefs = { ...this._prefs, ...this._pendingPrefs };
-    const disabled =
-      this._saving ||
-      (this._prefs === undefined &&
-        isComponentLoaded(this.hass.config, "ai_task"));
+    const enabled = prefs.enabled !== false;
     return html`
       <ha-card outlined>
+        <h1 class="card-header">
+          <span class="header-icon">
+            <ha-svg-icon .path=${mdiStarFourPoints}></ha-svg-icon>
+          </span>
+          ${this.hass.localize("ui.panel.config.ai_task.header")}
+          <ha-switch
+            class="header-switch"
+            aria-label=${this.hass.localize("ui.panel.config.ai_task.header")}
+            .checked=${enabled}
+            .disabled=${this._prefs === undefined}
+            @change=${this._enabledChanged}
+          ></ha-switch>
+        </h1>
         <div class="card-content">
           <p>
             ${this.hass!.localize("ui.panel.config.ai_task.description", {
@@ -97,102 +111,58 @@ export class AITaskPref extends LitElement {
               >${this.hass.localize("ui.panel.config.common.learn_more")}</a
             >
           </p>
-          <ha-settings-row .narrow=${this.narrow}>
-            <span slot="heading">
-              ${this.hass.localize("ui.panel.config.ai_task.enable_suggestions")}
-            </span>
-            <ha-switch
-              .checked=${prefs.enabled !== false}
-              .disabled=${this._prefs === undefined}
-              @change=${this._enabledChanged}
-            ></ha-switch>
-          </ha-settings-row>
-          ${
-            prefs.enabled === false
-              ? nothing
-              : this._renderPreferences(prefs, disabled)
-          }
         </div>
-        ${
-          prefs.enabled === false
-            ? nothing
-            : html`<div class="card-actions">
-                <ha-progress-button
-                  .disabled=${disabled}
-                  @click=${this._update}
-                >
-                  ${this.hass!.localize("ui.common.save")}
-                </ha-progress-button>
-              </div>`
-        }
+        ${enabled ? this._renderPreferences() : nothing}
       </ha-card>
     `;
   }
 
-  private _renderPreferences(
-    prefs: Partial<AITaskPreferences>,
-    disabled: boolean
-  ) {
+  private _renderPreferences() {
     return html`
-      <ha-settings-row .narrow=${this.narrow}>
-        <span slot="heading">
-          ${this.hass!.localize("ui.panel.config.ai_task.gen_data_header")}
-        </span>
-        <span slot="description">
-          ${this.hass!.localize("ui.panel.config.ai_task.gen_data_description")}
-        </span>
-        ${this._renderPicker(
-          "gen_data_entity_id",
-          filterGenData,
-          this.hass.localize("ui.panel.config.ai_task.gen_data_header"),
-          this.hass.localize("ui.panel.config.ai_task.gen_data_settings")
-        )}
-      </ha-settings-row>
-      <ha-settings-row .narrow=${this.narrow}>
-        <span slot="heading">
-          ${this.hass!.localize("ui.panel.config.ai_task.gen_image_header")}
-        </span>
-        <span slot="description">
-          ${this.hass!.localize("ui.panel.config.ai_task.gen_image_description")}
-        </span>
-        ${this._renderPicker(
-          "gen_image_entity_id",
-          filterGenImage,
-          this.hass.localize("ui.panel.config.ai_task.gen_image_header"),
-          this.hass.localize("ui.panel.config.ai_task.gen_image_settings")
-        )}
-      </ha-settings-row>
-      <ha-settings-row .narrow=${this.narrow}>
-        <span slot="heading">
-          ${this.hass.localize("ui.panel.config.ai_task.evaluate_header")}
-        </span>
-        <span slot="description">
-          ${this.hass.localize("ui.panel.config.ai_task.evaluate_description")}
-        </span>
-        ${this._renderPicker(
-          "evaluate_entity_id",
-          filterEvaluate,
-          this.hass.localize("ui.panel.config.ai_task.evaluate_header"),
-          this.hass.localize("ui.panel.config.ai_task.evaluate_settings")
-        )}
-      </ha-settings-row>
-      <ha-switch
-        class="automatic-evaluation"
-        .checked=${prefs.allow_automatic_evaluation ?? false}
-        .disabled=${disabled || !prefs.evaluate_entity_id}
-        @change=${this._handleAutomaticEvaluationChange}
-      >
-        <span class="automatic-evaluation-heading">
-          ${this.hass.localize(
-            "ui.panel.config.ai_task.allow_automatic_evaluation"
+      <ha-list-base>
+        <ha-list-item-base>
+          <span slot="headline">
+            ${this.hass.localize("ui.panel.config.ai_task.gen_data_header")}
+          </span>
+          <span slot="supporting-text">
+            ${this.hass.localize("ui.panel.config.ai_task.gen_data_description")}
+          </span>
+          ${this._renderPicker(
+            "gen_data_entity_id",
+            filterGenData,
+            this.hass.localize("ui.panel.config.ai_task.gen_data_header"),
+            this.hass.localize("ui.panel.config.ai_task.gen_data_settings")
           )}
-        </span>
-        <span class="automatic-evaluation-description">
-          ${this.hass.localize(
-            "ui.panel.config.ai_task.allow_automatic_evaluation_description"
+        </ha-list-item-base>
+        <ha-list-item-base>
+          <span slot="headline">
+            ${this.hass.localize("ui.panel.config.ai_task.gen_image_header")}
+          </span>
+          <span slot="supporting-text">
+            ${this.hass.localize("ui.panel.config.ai_task.gen_image_description")}
+          </span>
+          ${this._renderPicker(
+            "gen_image_entity_id",
+            filterGenImage,
+            this.hass.localize("ui.panel.config.ai_task.gen_image_header"),
+            this.hass.localize("ui.panel.config.ai_task.gen_image_settings")
           )}
-        </span>
-      </ha-switch>
+        </ha-list-item-base>
+        <ha-list-item-base>
+          <span slot="headline">
+            ${this.hass.localize("ui.panel.config.ai_task.evaluate_header")}
+          </span>
+          <span slot="supporting-text">
+            ${this.hass.localize("ui.panel.config.ai_task.evaluate_description")}
+          </span>
+          ${this._renderPicker(
+            "evaluate_entity_id",
+            filterEvaluate,
+            this.hass.localize("ui.panel.config.ai_task.evaluate_header"),
+            this.hass.localize("ui.panel.config.ai_task.evaluate_settings")
+          )}
+        </ha-list-item-base>
+      </ha-list-base>
     `;
   }
 
@@ -204,7 +174,7 @@ export class AITaskPref extends LitElement {
   ) {
     const configFlow = this._configFlows[key];
     return html`
-      <div class="picker">
+      <div slot="end" class="picker">
         <ha-entity-picker
           data-name=${key}
           .ariaLabel=${label}
@@ -262,14 +232,9 @@ export class AITaskPref extends LitElement {
   ) {
     const key = ev.currentTarget.dataset.name as EntityPreferenceKey;
     const value = ev.detail.value || null;
-    this._pendingPrefs = {
-      ...this._pendingPrefs,
-      [key]: value,
-      ...(key === "evaluate_entity_id" && !value
-        ? { allow_automatic_evaluation: false }
-        : {}),
-    };
+    this._pendingPrefs = { ...this._pendingPrefs, [key]: value };
     this._updateConfigFlow(key);
+    this._save();
   }
 
   private _openConfigFlow(ev: HASSDomCurrentTargetEvent<HTMLElement>) {
@@ -295,61 +260,75 @@ export class AITaskPref extends LitElement {
     }
   }
 
-  private _handleAutomaticEvaluationChange(
-    ev: HASSDomCurrentTargetEvent<HaSwitch>
-  ) {
-    this._pendingPrefs = {
-      ...this._pendingPrefs,
-      allow_automatic_evaluation: ev.currentTarget.checked,
-    };
-  }
-
-  private async _update(ev: HASSDomCurrentTargetEvent<HaProgressButton>) {
-    const button = ev.currentTarget;
+  private async _save() {
     if (this._saving) {
       return;
     }
-    button.progress = true;
     this._saving = true;
-
     try {
-      this._prefs = await saveAITaskPreferences(this.hass, this._pendingPrefs);
+      // Changes made while a save is in flight are picked up by the next loop.
+      while (Object.keys(this._pendingPrefs).length) {
+        const pending = this._pendingPrefs;
+        // eslint-disable-next-line no-await-in-loop
+        this._prefs = await saveAITaskPreferences(this.hass, pending);
+        this._pendingPrefs = Object.fromEntries(
+          Object.entries(this._pendingPrefs).filter(
+            ([key, value]) => pending[key] !== value
+          )
+        );
+      }
+    } catch (err: any) {
       this._pendingPrefs = {};
-      button.actionSuccess();
-    } catch {
-      button.actionError();
+      showAlertDialog(this, {
+        title: this.hass.localize("ui.panel.config.ai_task.save_error"),
+        text: err?.message,
+      });
     } finally {
-      button.progress = false;
       this._saving = false;
     }
   }
 
   static styles = css`
+    .card-content p {
+      color: var(--secondary-text-color);
+      font-size: var(--ha-font-size-m);
+      line-height: var(--ha-line-height-normal);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+    }
+    .header-icon {
+      display: flex;
+      color: var(--ha-color-primary-60, var(--primary-color));
+      margin-inline-end: var(--ha-space-4);
+    }
+    .header-icon ha-svg-icon {
+      --mdc-icon-size: 28px;
+    }
     a {
       color: var(--primary-color);
     }
-    ha-settings-row {
-      padding: 0;
+    ha-list-base {
+      --ha-row-item-padding-inline: var(--ha-space-4);
+      padding-bottom: var(--ha-space-2);
+      border-top: var(--ha-border-width-sm) solid var(--divider-color);
     }
-    .card-actions {
-      text-align: right;
+    ha-list-base > * + * {
+      border-top: var(--ha-border-width-sm) solid var(--divider-color);
     }
-    ha-switch.automatic-evaluation {
-      display: block;
-      margin-block-start: var(--ha-space-4);
+    ha-list-item-base::part(end) {
+      flex: 0 1 50%;
+      min-width: 0;
     }
-    ha-switch.automatic-evaluation::part(base) {
-      height: auto;
-      flex-direction: row-reverse;
+    :host([narrow]) ha-list-item-base::part(base) {
+      flex-wrap: wrap;
     }
-    ha-switch.automatic-evaluation::part(label) {
-      flex: 1;
-      margin-inline-start: 0;
-      margin-inline-end: var(--ha-space-4);
+    :host([narrow]) ha-list-item-base::part(end) {
+      flex-basis: 100%;
     }
-    .automatic-evaluation-heading,
-    .automatic-evaluation-description {
-      display: block;
+    .header-switch {
+      margin-inline-start: auto;
     }
     .automatic-evaluation-description {
       margin-block-start: var(--ha-space-1);
@@ -360,12 +339,8 @@ export class AITaskPref extends LitElement {
     .picker {
       display: flex;
       align-items: center;
-      flex: 1;
-      min-width: 0;
-      margin-inline-start: var(--ha-space-4);
-    }
-    :host([narrow]) .picker {
-      margin-inline-start: 0;
+      gap: var(--ha-space-2);
+      width: 100%;
     }
     .picker ha-entity-picker {
       flex: 1;

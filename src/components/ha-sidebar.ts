@@ -15,6 +15,8 @@ import { fireEvent } from "../common/dom/fire_event";
 import { stringCompare } from "../common/string/compare";
 import { computeRTL } from "../common/util/compute_rtl";
 import { throttle } from "../common/util/throttle";
+import { storage } from "../common/decorators/storage";
+import { ASSISTANT_ENABLED_KEY } from "../data/assistant_mock";
 import { subscribeFrontendUserData } from "../data/frontend";
 import type { ActionHandlerEvent } from "../data/lovelace/action_handler";
 import {
@@ -47,6 +49,7 @@ import "./list/ha-list-nav";
 import "./user/ha-user-badge";
 
 const SORT_VALUE_URL_PATHS = {
+  assistant: 0,
   energy: 1,
   map: 2,
   logbook: 3,
@@ -182,6 +185,9 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
 
   @state() private _hiddenPanels?: string[];
 
+  @storage({ key: ASSISTANT_ENABLED_KEY, state: true, subscribe: true })
+  private _assistantEnabled = true;
+
   private _unsubPersistentNotifications: UnsubscribeFunc | undefined;
 
   @query(".before-spacer") private _scrollableList?: HTMLDivElement;
@@ -248,6 +254,7 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
       changedProps.has("_issuesCount") ||
       changedProps.has("_notifications") ||
       changedProps.has("_hiddenPanels") ||
+      changedProps.has("_assistantEnabled") ||
       changedProps.has("_panelOrder") ||
       changedProps.has("_contentScrolled") ||
       changedProps.has("_contentScrollable")
@@ -396,7 +403,9 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
       this.hass.panels,
       defaultPanel,
       this._panelOrder,
-      this._hiddenPanels,
+      this._assistantEnabled
+        ? this._hiddenPanels
+        : [...this._hiddenPanels, "assistant"],
       this.hass.locale
     );
 

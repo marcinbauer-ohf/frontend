@@ -24,6 +24,9 @@ const PANEL_READY_TIMEOUT = 2000;
 const DASHBOARD_READY_TIMEOUT = 5000;
 const COMPONENTS = {
   app: { load: () => import("../panels/app/ha-panel-app") },
+  assistant: {
+    load: () => import("../panels/assistant/ha-panel-assistant"),
+  },
   energy: {
     load: () => import("../panels/energy/ha-panel-energy"),
     waitForReady: true,

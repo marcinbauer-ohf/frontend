@@ -46,6 +46,7 @@ import {
   showConfirmationDialog,
 } from "../../dialogs/generic/show-dialog-box";
 import { showVoiceCommandDialog } from "../../dialogs/voice-command-dialog/show-ha-voice-command-dialog";
+import { isAssistantEnabled } from "../../data/assistant_mock";
 import { haStyle } from "../../resources/styles";
 import type { HomeAssistant } from "../../types";
 import "../lovelace/cards/hui-card";
@@ -259,12 +260,18 @@ class PanelTodo extends LitElement {
                 </ha-dropdown-item>`
               : nothing
           }
-          <wa-divider></wa-divider>
-          <ha-dropdown-item value="assist">
-            <ha-svg-icon .path=${mdiCommentProcessingOutline} slot="icon">
-            </ha-svg-icon>
-            ${this.hass.localize("ui.panel.todo.assist")}
-          </ha-dropdown-item>
+          ${
+            isAssistantEnabled()
+              ? html`<wa-divider></wa-divider>
+                  <ha-dropdown-item value="assist">
+                    <ha-svg-icon
+                      .path=${mdiCommentProcessingOutline}
+                      slot="icon"
+                    ></ha-svg-icon>
+                    ${this.hass.localize("ui.panel.todo.assist")}
+                  </ha-dropdown-item>`
+              : nothing
+          }
           ${
             entityRegistryEntry?.platform === "local_todo"
               ? html` <wa-divider></wa-divider>

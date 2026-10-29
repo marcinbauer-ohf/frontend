@@ -11,7 +11,6 @@ import {
 import type { PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
-import memoizeOne from "memoize-one";
 import { storage } from "../../../common/decorators/storage";
 import { stopPropagation } from "../../../common/dom/stop_propagation";
 import { computeDomain } from "../../../common/entity/compute_domain";
@@ -30,8 +29,6 @@ import "../../../components/item/ha-list-item-base";
 import "../../../components/item/ha-list-item-button";
 import "../../../components/list/ha-grouped-list";
 import "../../../components/list/ha-list-base";
-import "../../../components/ha-switch";
-import type { HaSwitch } from "../../../components/ha-switch";
 import type { AssistPipeline } from "../../../data/assist_pipeline";
 import {
   createAssistPipeline,
@@ -41,11 +38,6 @@ import {
   updateAssistPipeline,
 } from "../../../data/assist_pipeline";
 import type { CloudStatus } from "../../../data/cloud";
-import type { ExposeEntitySettings } from "../../../data/expose";
-import {
-  getExposeNewEntities,
-  setExposeNewEntities,
-} from "../../../data/expose";
 import {
   showAlertDialog,
   showConfirmationDialog,
@@ -60,18 +52,11 @@ export class AssistPref extends LitElement {
 
   @property({ attribute: false }) public cloudStatus?: CloudStatus;
 
-  @property({ attribute: false }) public exposedEntities?: Record<
-    string,
-    ExposeEntitySettings
-  >;
-
   @state() private _pipelines: AssistPipeline[] = [];
 
   @state() private _preferred: string | null = null;
 
   @state() private _pipelineEntitiesCount = 0;
-
-  @state() private _exposeNew?: boolean;
 
   @state()
   @storage({
@@ -81,23 +66,12 @@ export class AssistPref extends LitElement {
   })
   private _agentsIntroDismissed = false;
 
-  private _exposedEntitiesCount = memoizeOne(
-    (exposedEntities: Record<string, ExposeEntitySettings>) =>
-      Object.entries(exposedEntities).filter(
-        ([entityId, expose]) =>
-          expose.conversation && entityId in this.hass.states
-      ).length
-  );
-
   protected firstUpdated(changedProps: PropertyValues<this>) {
     super.firstUpdated(changedProps);
 
     listAssistPipelines(this.hass).then((pipelines) => {
       this._pipelines = pipelines.pipelines;
       this._preferred = pipelines.preferred_pipeline;
-    });
-    getExposeNewEntities(this.hass, "conversation").then((value) => {
-      this._exposeNew = value.expose_new;
     });
     this._pipelineEntitiesCount = Object.values(this.hass.entities).filter(
       (entity) =>
@@ -117,6 +91,11 @@ export class AssistPref extends LitElement {
             <span class="title"
               >${this.hass.localize(
                 "ui.panel.config.voice_assistants.assistants.pipeline.header"
+              )}</span
+            >
+            <span class="subtitle"
+              >${this.hass.localize(
+                "ui.panel.config.voice_assistants.assistants.pipeline.subtitle"
               )}</span
             >
           </span>
@@ -157,12 +136,7 @@ export class AssistPref extends LitElement {
             `
           : nothing
       }
-      <ha-grouped-list
-        class="agents"
-        .header=${this.hass.localize(
-          "ui.panel.config.voice_assistants.assistants.pipeline.agents"
-        )}
-      >
+      <ha-grouped-list class="agents">
         ${
           this._pipelines.length === 0
             ? html`<ha-list-item-base class="empty">
@@ -267,44 +241,6 @@ export class AssistPref extends LitElement {
         <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
       </ha-button>
       <ha-list-base class="devices">
-        <ha-list-item-base>
-          <span slot="headline">
-            ${this.hass.localize(
-              "ui.panel.config.voice_assistants.assistants.pipeline.expose_new_entities"
-            )}
-          </span>
-          <span slot="supporting-text">
-            ${this.hass.localize(
-              "ui.panel.config.voice_assistants.assistants.pipeline.expose_new_entities_info"
-            )}
-          </span>
-          <ha-switch
-            slot="end"
-            .checked=${this._exposeNew}
-            .disabled=${this._exposeNew === undefined}
-            @change=${this._exposeNewToggleChanged}
-          ></ha-switch>
-        </ha-list-item-base>
-        <ha-list-item-button
-          href="/config/voice-assistants/expose?assistants=conversation&historyBack"
-        >
-          <span slot="headline">
-            ${this.hass.localize(
-              "ui.panel.config.voice_assistants.assistants.general.accessible_entities"
-            )}
-          </span>
-          <span slot="supporting-text">
-            ${this.hass.localize(
-              "ui.panel.config.voice_assistants.assistants.general.accessible_entities_count",
-              {
-                number: this.exposedEntities
-                  ? this._exposedEntitiesCount(this.exposedEntities)
-                  : 0,
-              }
-            )}
-          </span>
-          <ha-icon-next slot="end"></ha-icon-next>
-        </ha-list-item-button>
         ${
           this._pipelineEntitiesCount > 0
             ? html`
@@ -329,19 +265,6 @@ export class AssistPref extends LitElement {
         }
       </ha-list-base>
     `;
-  }
-
-  private async _exposeNewToggleChanged(ev: Event) {
-    const toggle = ev.target as HaSwitch;
-    if (this._exposeNew === undefined || this._exposeNew === toggle.checked) {
-      return;
-    }
-    try {
-      await setExposeNewEntities(this.hass, "conversation", toggle.checked);
-      this._exposeNew = toggle.checked;
-    } catch (_err: any) {
-      toggle.checked = !toggle.checked;
-    }
   }
 
   private _dismissAgentsIntro() {
@@ -519,6 +442,12 @@ export class AssistPref extends LitElement {
       min-width: 0;
     }
     .card-header .title {
+      line-height: var(--ha-line-height-condensed);
+    }
+    .card-header .subtitle {
+      color: var(--secondary-text-color);
+      font-size: var(--ha-font-size-m);
+      font-weight: var(--ha-font-weight-normal);
       line-height: var(--ha-line-height-condensed);
     }
     .intro {

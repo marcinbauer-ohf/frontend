@@ -92,3 +92,34 @@ export const conversationMatchesSearch = (
     message.text.toLowerCase().includes(needle)
   );
 };
+
+/**
+ * Store the open chat's messages under `id` (a new id when undefined). Returns
+ * the updated list and the id used, or undefined when there is nothing to keep.
+ */
+export const storeConversation = (
+  conversations: StoredAssistConversation[],
+  id: string | undefined,
+  pipelineId: string | undefined,
+  messages: StoredAssistMessage[],
+  conversationId: string | null
+): { conversations: StoredAssistConversation[]; id: string } | undefined => {
+  if (!conversationHasUserContent(messages)) {
+    return undefined;
+  }
+  const storeId = id ?? createConversationId();
+  const existing = conversations.find((item) => item.id === storeId);
+  const now = Date.now();
+  return {
+    id: storeId,
+    conversations: upsertConversation(conversations, {
+      id: storeId,
+      title: deriveConversationTitle(messages) || existing?.title || "",
+      created: existing?.created ?? now,
+      updated: now,
+      pipeline_id: pipelineId,
+      conversation_id: conversationId,
+      messages,
+    }),
+  };
+};

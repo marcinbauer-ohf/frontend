@@ -73,6 +73,7 @@ import {
 } from "../../dialogs/generic/show-dialog-box";
 import { showQuickBar } from "../../dialogs/quick-bar/show-dialog-quick-bar";
 import { showVoiceCommandDialog } from "../../dialogs/voice-command-dialog/show-ha-voice-command-dialog";
+import { isAssistantEnabled } from "../../data/assistant_mock";
 import { haStyle } from "../../resources/styles";
 import { handleBackClick } from "../../layouts/back-navigation";
 import { ChildPanelReady } from "../../layouts/panel-ready";
@@ -309,7 +310,9 @@ class HUIRoot extends LitElement {
         suffix:
           this.hass.enableShortcuts && !isMobileClient ? "(A)" : undefined,
         visible:
-          !this._editMode && this._conversation(this.hass.config.components),
+          !this._editMode &&
+          this._conversation(this.hass.config.components) &&
+          isAssistantEnabled(),
         overflow: this.narrow,
       },
       {

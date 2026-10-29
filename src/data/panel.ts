@@ -6,6 +6,7 @@ import {
   mdiFormatListBulletedType,
   mdiLightningBolt,
   mdiMap,
+  mdiMessageStarOutline,
   mdiPlayBoxMultiple,
 } from "@mdi/js";
 import type { LocalizeKeys } from "../common/translations/localize";
@@ -166,6 +167,10 @@ export const getPanelIcon = (panel: PanelInfo): string | undefined => {
 // Built-in panels render their stock icon from a bundled path, so the sidebar
 // does not wait for the icon set to load.
 const BUILT_IN_PANEL_ICONS: Record<string, { icon?: string; path: string }> = {
+  assistant: {
+    icon: "mdi:message-star-outline",
+    path: mdiMessageStarOutline,
+  },
   calendar: { icon: "mdi:calendar", path: mdiCalendar },
   energy: { icon: "mdi:lightning-bolt", path: mdiLightningBolt },
   history: { icon: "mdi:chart-box", path: mdiChartBox },

@@ -10,11 +10,12 @@ import {
   mdiDatabase,
   mdiDevices,
   mdiFlask,
-  mdiForumOutline,
+  mdiMicrophone,
   mdiHammer,
   mdiInformationOutline,
   mdiLabel,
   mdiLightningBolt,
+  mdiMessageStarOutline,
   mdiMapMarkerRadius,
   mdiMemory,
   mdiNetwork,
@@ -125,10 +126,11 @@ export const configSections: Record<string, PageNavigation[]> = {
   ],
   dashboard_2: [
     {
-      path: "/config/voice-assistants",
-      translationKey: "voice_assistants",
-      iconPath: mdiForumOutline,
+      path: "/config/assistants",
+      translationKey: "assistants",
+      iconPath: mdiMessageStarOutline,
       iconColor: "#3263C3",
+      core: true,
       adminOnly: true,
     },
     {
@@ -391,7 +393,7 @@ export const configSections: Record<string, PageNavigation[]> = {
     {
       path: "/config/voice-assistants",
       translationKey: "ui.panel.config.dashboard.voice_assistants.main",
-      iconPath: mdiForumOutline,
+      iconPath: mdiMicrophone,
       iconColor: "#3263C3",
       adminOnly: true,
     },

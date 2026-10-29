@@ -1,4 +1,5 @@
 import { fireEvent } from "../../common/dom/fire_event";
+import { isAssistantEnabled } from "../../data/assistant_mock";
 import type { HomeAssistant } from "../../types";
 import { closeDialog } from "../make-dialog-manager";
 
@@ -18,6 +19,9 @@ export const showVoiceCommandDialog = (
   hass: HomeAssistant,
   dialogParams: VoiceCommandDialogParams
 ): void => {
+  if (!isAssistantEnabled()) {
+    return;
+  }
   if (hass.auth.external?.config.hasAssist) {
     hass.auth.external!.fireMessage({
       type: "assist/show",

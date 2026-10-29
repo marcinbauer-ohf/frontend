@@ -65,6 +65,7 @@ import { showConfirmationDialog } from "../generic/show-dialog-box";
 import "../restart/automation-restart-status";
 import { showShortcutsDialog } from "../shortcuts/show-shortcuts-dialog";
 import { showVoiceCommandDialog } from "../voice-command-dialog/show-ha-voice-command-dialog";
+import { isAssistantEnabled } from "../../data/assistant_mock";
 import {
   effectiveQuickBarMode,
   type QuickBarParams,
@@ -469,6 +470,7 @@ export class QuickBar extends LitElement {
         prompt &&
         (!section || section === "command") &&
         isComponentLoaded(this.hass.config, "conversation") &&
+        isAssistantEnabled() &&
         !this.hass.auth.external?.config.hasAssist
           ? ({
               id: "ask-assist",

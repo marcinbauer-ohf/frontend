@@ -237,6 +237,7 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
                     aria-label=${this.ariaLabel || this.label || "Select option"}
                   >
                     ${this._renderComboBox(true)}
+                    <slot name="footer"></slot>
                   </ha-bottom-sheet>
                 `
               : html`
@@ -261,6 +262,7 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
                     aria-label=${this.ariaLabel || this.label || "Select option"}
                   >
                     ${this._renderComboBox()}
+                    <slot name="footer"></slot>
                   </wa-popover>
                 `
             : nothing
@@ -404,6 +406,11 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
   private _setValue(value: string | undefined) {
     this.value = value;
     fireEvent(this, "value-changed", { value });
+  }
+
+  /** Close the dropdown, for example after an action in the footer slot. */
+  public close() {
+    this._pickerWrapperOpen = false;
   }
 
   public async open(

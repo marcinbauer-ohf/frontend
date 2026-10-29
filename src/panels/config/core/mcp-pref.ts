@@ -1,16 +1,18 @@
-import { mdiCog, mdiContentCopy, mdiDotsVertical } from "@mdi/js";
+import { mdiCog, mdiContentCopy } from "@mdi/js";
 import type { TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
+import type { HASSDomCurrentTargetEvent } from "../../../common/dom/fire_event";
 import { copyToClipboard } from "../../../common/util/copy-clipboard";
 import "../../../components/ha-alert";
-import "../../../components/ha-button";
+import "../../../components/ha-switch";
+import type { HaSwitch } from "../../../components/ha-switch";
 import "../../../components/ha-card";
-import "../../../components/ha-dropdown";
-import "../../../components/ha-dropdown-item";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-spinner";
+import "../../../components/item/ha-list-item-base";
+import "../../../components/list/ha-list-base";
 import type { ConfigEntry } from "../../../data/config_entries";
 import {
   deleteConfigEntry,
@@ -76,27 +78,13 @@ export class MCPPref extends LitElement {
             crossorigin="anonymous"
             referrerpolicy="no-referrer"
           />${this.hass.localize("ui.panel.config.mcp.header")}
-          ${
-            enabled
-              ? html`
-                  <div class="header-actions">
-                    <ha-dropdown>
-                      <ha-icon-button
-                        slot="trigger"
-                        .label=${this.hass.localize("ui.common.menu")}
-                        .path=${mdiDotsVertical}
-                      ></ha-icon-button>
-                      <ha-dropdown-item
-                        variant="danger"
-                        @click=${this._disable}
-                      >
-                        ${this.hass.localize("ui.panel.config.mcp.disable")}
-                      </ha-dropdown-item>
-                    </ha-dropdown>
-                  </div>
-                `
-              : nothing
-          }
+          <ha-switch
+            class="header-switch"
+            aria-label=${this.hass.localize("ui.panel.config.mcp.header")}
+            .checked=${!!enabled}
+            .disabled=${this._entry === undefined || this._enabling}
+            @change=${this._enabledChanged}
+          ></ha-switch>
         </h1>
         <div class="card-content">
           <p>
@@ -135,70 +123,58 @@ export class MCPPref extends LitElement {
                 `
               : nothing
           }
-          ${enabled ? this._renderEnabled() : nothing}
         </div>
-        ${
-          this._entry === null || this._entry?.disabled_by
-            ? html`
-                <div class="card-actions centered">
-                  <ha-button
-                    appearance="filled"
-                    .loading=${this._enabling}
-                    .disabled=${this._enabling}
-                    @click=${this._enable}
-                  >
-                    ${this.hass.localize("ui.panel.config.mcp.enable")}
-                  </ha-button>
-                </div>
-              `
-            : nothing
-        }
+        ${enabled ? this._renderEnabled() : nothing}
       </ha-card>
     `;
   }
 
   private _renderEnabled() {
     return html`
-      ${this._renderUrlRow(
-        this.hass.localize("ui.panel.config.mcp.your_api_header"),
-        this._mcpPath(),
-        html`<ha-icon-button
-          .label=${this.hass.localize("ui.panel.config.mcp.configure")}
-          .path=${mdiCog}
-          @click=${this._configure}
-        ></ha-icon-button>`
-      )}
+      <ha-list-base>
+        ${this._renderApiItem(
+          this.hass.localize("ui.panel.config.mcp.your_api_header"),
+          this._mcpPath(),
+          html`<ha-icon-button
+            slot="end"
+            .label=${this.hass.localize("ui.panel.config.mcp.configure")}
+            .path=${mdiCog}
+            @click=${this._configure}
+          ></ha-icon-button>`
+        )}
+      </ha-list-base>
       ${
         this._apis?.length
           ? html`
-              <p class="section">
+              <div class="subheader" id="apis-header">
                 ${this.hass.localize("ui.panel.config.mcp.apis_header")}
-              </p>
-              ${this._sortedApis(this._apis, this.hass.locale.language).map(
-                (api) => this._renderUrlRow(api.name, this._mcpPath(api.id))
-              )}
+              </div>
+              <ha-list-base aria-labelledby="apis-header">
+                ${this._sortedApis(this._apis, this.hass.locale.language).map(
+                  (api) => this._renderApiItem(api.name, this._mcpPath(api.id))
+                )}
+              </ha-list-base>
             `
           : nothing
       }
     `;
   }
 
-  private _renderUrlRow(name: string, path: string, action?: TemplateResult) {
+  private _renderApiItem(name: string, path: string, action?: TemplateResult) {
     // Only the path is shown, so screenshots do not reveal the host
     return html`
-      <div class="url-row">
-        <div class="url-info">
-          <span class="name">${name}</span>
-          <span class="url">…${path}</span>
-        </div>
-        ${action}
+      <ha-list-item-base>
+        <span slot="headline">${name}</span>
+        <span slot="supporting-text" class="url">…${path}</span>
+        ${action ?? nothing}
         <ha-icon-button
+          slot="end"
           .label=${this.hass.localize("ui.panel.config.mcp.copy_url")}
           .path=${mdiContentCopy}
           data-url=${this.hass.hassUrl(path)}
           @click=${this._copyUrl}
         ></ha-icon-button>
-      </div>
+      </ha-list-item-base>
     `;
   }
 
@@ -284,7 +260,18 @@ export class MCPPref extends LitElement {
     });
   }
 
-  private async _disable() {
+  private async _enabledChanged(ev: HASSDomCurrentTargetEvent<HaSwitch>) {
+    const toggle = ev.currentTarget;
+    if (!toggle.checked) {
+      // Put the switch back if the confirmation is cancelled or fails.
+      toggle.checked = !(await this._disable());
+      return;
+    }
+    await this._enable();
+    toggle.checked = !!this._entry && !this._entry.disabled_by;
+  }
+
+  private async _disable(): Promise<boolean> {
     const confirmed = await showConfirmationDialog(this, {
       title: this.hass.localize("ui.panel.config.mcp.disable_confirm_title"),
       text: this.hass.localize("ui.panel.config.mcp.disable_confirm_text"),
@@ -292,7 +279,7 @@ export class MCPPref extends LitElement {
       destructive: true,
     });
     if (!confirmed) {
-      return;
+      return false;
     }
     try {
       await deleteConfigEntry(this.hass, this._entry!.entry_id);
@@ -301,10 +288,11 @@ export class MCPPref extends LitElement {
         title: this.hass.localize("ui.panel.config.mcp.error_delete_entry"),
         text: err?.message,
       });
-      return;
+      return false;
     }
     this._entry = null;
     this._apis = undefined;
+    return true;
   }
 
   private async _copyUrl(ev: Event) {
@@ -316,9 +304,17 @@ export class MCPPref extends LitElement {
   }
 
   static styles = css`
+    .card-content p {
+      color: var(--secondary-text-color);
+      font-size: var(--ha-font-size-m);
+      line-height: var(--ha-line-height-normal);
+    }
     .card-header {
       display: flex;
       align-items: center;
+    }
+    .header-switch {
+      margin-inline-start: auto;
     }
     .card-header img {
       max-width: 28px;
@@ -326,51 +322,37 @@ export class MCPPref extends LitElement {
       margin-inline-end: 16px;
       margin-inline-start: initial;
     }
-    .header-actions {
-      display: flex;
-      align-items: center;
-      margin-inline-start: auto;
-    }
     a {
       color: var(--primary-color);
     }
-    .url-row {
-      display: flex;
-      align-items: center;
-      gap: var(--ha-space-2);
-      border: 1px solid var(--divider-color);
-      border-radius: var(--ha-border-radius-lg);
-      padding: var(--ha-space-2) var(--ha-space-2) var(--ha-space-2)
-        var(--ha-space-4);
+    ha-list-base {
+      --ha-row-item-padding-inline: var(--ha-space-4);
     }
-    .url-row + .url-row {
-      margin-top: var(--ha-space-2);
+    ha-list-base > * + * {
+      border-top: var(--ha-border-width-sm) solid var(--divider-color);
     }
-    .url-info {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-width: 0;
+    .card-content + ha-list-base {
+      border-top: var(--ha-border-width-sm) solid var(--divider-color);
+    }
+    ha-list-base:last-child {
+      padding-bottom: var(--ha-space-2);
+    }
+    .subheader {
+      border-top: var(--ha-border-width-sm) solid var(--divider-color);
+      padding: var(--ha-space-4) var(--ha-space-4) 0;
+      font-size: var(--ha-font-size-m);
+      font-weight: var(--ha-font-weight-medium);
+      color: var(--secondary-text-color);
     }
     .url {
       color: var(--secondary-text-color);
       font-size: var(--ha-font-size-s);
       word-break: break-all;
     }
-    .section {
-      margin: var(--ha-space-4) 0 var(--ha-space-2);
-    }
     .loading {
       display: flex;
       justify-content: center;
       padding: var(--ha-space-6) 0;
-    }
-    .card-actions.centered {
-      display: flex;
-      justify-content: center;
-      border-top: none;
-      padding-top: 0;
-      padding-bottom: 16px;
     }
   `;
 }

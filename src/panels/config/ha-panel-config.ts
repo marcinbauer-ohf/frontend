@@ -187,6 +187,10 @@ class HaPanelConfig extends HassRouterPage {
         tag: "ha-config-section-ai",
         load: () => import("./core/ha-config-section-ai"),
       },
+      assistants: {
+        tag: "ha-config-section-assistants",
+        load: () => import("./core/ha-config-section-assistants"),
+      },
       "entity-id-format": {
         tag: "ha-config-section-entity-id-format",
         load: () => import("./core/ha-config-section-entity-id-format"),

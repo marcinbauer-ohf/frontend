@@ -21,7 +21,7 @@ const NONE = "__NONE_OPTION__";
 
 const ADD_INTEGRATION = "__ADD_INTEGRATION__";
 
-const HOME_ASSISTANT_AGENT = "conversation.home_assistant";
+export const HOME_ASSISTANT_AGENT = "conversation.home_assistant";
 
 @customElement("ha-conversation-agent-picker")
 export class HaConversationAgentPicker extends LitElement {
@@ -36,6 +36,10 @@ export class HaConversationAgentPicker extends LitElement {
   @property({ type: Boolean, reflect: true }) public disabled = false;
 
   @property({ type: Boolean }) public required = false;
+
+  /** Leave out the built-in agent, to pick only AI models. */
+  @property({ type: Boolean, attribute: "exclude-built-in" })
+  public excludeBuiltIn = false;
 
   @state() _agents?: Agent[];
 
@@ -148,7 +152,9 @@ export class HaConversationAgentPicker extends LitElement {
       this.hass.config.country || undefined
     );
 
-    this._agents = agents;
+    this._agents = this.excludeBuiltIn
+      ? agents.filter((agent) => agent.id !== HOME_ASSISTANT_AGENT)
+      : agents;
 
     if (!this.value && this.required) {
       let defaultValue: string | undefined;
@@ -187,7 +193,7 @@ export class HaConversationAgentPicker extends LitElement {
       return;
     }
 
-    const selectedAgent = agents.find((agent) => agent.id === this.value);
+    const selectedAgent = this._agents.find((agent) => agent.id === this.value);
 
     fireEvent(this, "supported-languages-changed", {
       value: selectedAgent?.supported_languages,

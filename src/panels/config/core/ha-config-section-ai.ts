@@ -1,9 +1,9 @@
 import { css, html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators";
 import "../../../layouts/hass-subpage";
+import type { HomeAssistant } from "../../../types";
 import "./ai-task-pref";
 import "./mcp-pref";
-import type { HomeAssistant } from "../../../types";
 
 @customElement("ha-config-section-ai")
 class HaConfigSectionAI extends LitElement {
@@ -33,17 +33,11 @@ class HaConfigSectionAI extends LitElement {
   static styles = css`
     .content {
       padding: var(--ha-space-7) var(--ha-space-5) var(--ha-space-6);
-      max-width: 1040px;
-      margin: 0 auto;
     }
-    ai-task-pref,
-    mcp-pref {
-      max-width: 800px;
-      margin: 0 auto;
+    .content > * {
       display: block;
-    }
-    mcp-pref {
-      margin-top: var(--ha-space-6);
+      max-width: 600px;
+      margin: 0 auto var(--ha-space-6);
     }
   `;
 }

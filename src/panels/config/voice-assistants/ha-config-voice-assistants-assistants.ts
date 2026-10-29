@@ -2,17 +2,10 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import type { CloudStatus } from "../../../data/cloud";
-import type { ExposeEntitySettings } from "../../../data/expose";
-
-import "../../../layouts/hass-loading-screen";
-import "../../../layouts/hass-tabs-subpage";
-import type { HomeAssistant, Route } from "../../../types";
+import "../../../layouts/hass-subpage";
+import type { HomeAssistant } from "../../../types";
 import "./assist-current-device-pref";
 import "./assist-pref";
-import "./cloud-alexa-pref";
-import "./cloud-discover";
-import "./cloud-google-pref";
-import { voiceAssistantTabs } from "./ha-config-voice-assistants";
 
 @customElement("ha-config-voice-assistants-assistants")
 export class HaConfigVoiceAssistantsAssistants extends LitElement {
@@ -20,90 +13,51 @@ export class HaConfigVoiceAssistantsAssistants extends LitElement {
 
   @property({ attribute: false }) public cloudStatus?: CloudStatus;
 
-  @property({ attribute: false }) public exposedEntities?: Record<
-    string,
-    ExposeEntitySettings
-  >;
-
-  @property({ attribute: "is-wide", type: Boolean }) public isWide = false;
-
   @property({ type: Boolean }) public narrow = false;
 
-  @property({ attribute: false }) public route!: Route;
-
-  private _searchParms = new URLSearchParams(window.location.search);
+  private _historyBack = new URLSearchParams(window.location.search).has(
+    "historyBack"
+  );
 
   protected render() {
-    if (!this.hass) {
-      return html`<hass-loading-screen></hass-loading-screen>`;
-    }
-
     return html`
-      <hass-tabs-subpage
+      <hass-subpage
         .hass=${this.hass}
-        .backPath=${
-          this._searchParms.has("historyBack") ? undefined : "/config"
-        }
-        .route=${this.route}
-        .tabs=${[voiceAssistantTabs[0]]}
+        .narrow=${this.narrow}
+        .backPath=${this._historyBack ? undefined : "/config/assistants"}
+        .header=${this.hass.localize(
+          "ui.panel.config.voice_assistants.assistants.caption"
+        )}
       >
         <div class="content">
           ${
             isComponentLoaded(this.hass.config, "assist_pipeline")
-              ? html`
-                  <assist-pref
-                    .hass=${this.hass}
-                    .cloudStatus=${this.cloudStatus}
-                    .exposedEntities=${this.exposedEntities}
-                  ></assist-pref>
-                `
+              ? html`<assist-pref
+                  .hass=${this.hass}
+                  .cloudStatus=${this.cloudStatus}
+                ></assist-pref>`
               : nothing
           }
           ${
             this.hass.auth.external?.config.hasAssistSettings
-              ? html`
-                  <assist-current-device-pref
-                    .hass=${this.hass}
-                  ></assist-current-device-pref>
-                `
+              ? html`<assist-current-device-pref
+                  .hass=${this.hass}
+                ></assist-current-device-pref>`
               : nothing
           }
-          ${
-            this.cloudStatus?.logged_in
-              ? html`
-                  <cloud-alexa-pref
-                    .hass=${this.hass}
-                    .exposedEntities=${this.exposedEntities}
-                    .cloudStatus=${this.cloudStatus}
-                  ></cloud-alexa-pref>
-                  <cloud-google-pref
-                    .hass=${this.hass}
-                    .exposedEntities=${this.exposedEntities}
-                    .cloudStatus=${this.cloudStatus}
-                  ></cloud-google-pref>
-                `
-              : html`<cloud-discover .hass=${this.hass}></cloud-discover>`
-          }
         </div>
-      </hass-tabs-subpage>
+      </hass-subpage>
     `;
   }
 
   static styles = css`
     .content {
-      padding: 28px 20px 0;
-      max-width: 1040px;
-      margin: 0 auto;
+      padding: var(--ha-space-7) var(--ha-space-5) var(--ha-space-6);
     }
     .content > * {
       display: block;
-      margin: auto;
-      max-width: 800px;
-      margin-bottom: 24px;
-    }
-    a {
-      text-decoration: none;
-      color: inherit;
+      max-width: 600px;
+      margin: 0 auto var(--ha-space-6);
     }
   `;
 }

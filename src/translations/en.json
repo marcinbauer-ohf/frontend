@@ -2,6 +2,7 @@
   "panel": {
     "demo": "Demo",
     "apps": "Apps",
+    "assistant": "Assistant",
     "energy": "Energy",
     "calendar": "Calendar",
     "config": "Settings",
@@ -1814,6 +1815,7 @@
         "send_text": "Send text",
         "start_listening": "Start listening",
         "new_conversation": "New conversation",
+        "open_in_full": "Open in full page",
         "open_settings": "Settings",
         "history": {
           "title": "Past conversations",
@@ -3000,8 +3002,12 @@
             "secondary": "Communication protocols and radios for your devices"
           },
           "voice_assistants": {
-            "main": "Voice assistants",
-            "secondary": "Manage your voice assistants"
+            "main": "Voice",
+            "secondary": "Manage your voice assistant"
+          },
+          "assistants": {
+            "main": "[%key:ui::panel::config::assistants::caption%]",
+            "secondary": "Chat, voice, and other voice assistants"
           },
           "ai": {
             "main": "[%key:ui::panel::config::ai::caption%]",
@@ -3208,6 +3214,7 @@
         "ai_task": {
           "header": "AI suggestions",
           "enable_suggestions": "Enable AI suggestions",
+          "save_error": "Failed to save AI suggestions settings",
           "add_integration": "Add AI integration",
           "description": "Home Assistant can use generative AI to help you with tasks. Look for the button with the {button} icon throughout Home Assistant to get suggestions. Select an AI task entity to use this feature.",
           "gen_data_header": "Data generation tasks",
@@ -3218,14 +3225,12 @@
           "gen_image_settings": "Image generation settings",
           "evaluate_header": "Decisions",
           "evaluate_description": "Evaluate questions.",
-          "evaluate_settings": "Decision settings",
-          "allow_automatic_evaluation": "Use decisions in Home Assistant features",
-          "allow_automatic_evaluation_description": "Allow Home Assistant to automatically use the selected decision model to improve built-in features."
+          "evaluate_settings": "Decision settings"
         },
         "mcp": {
           "header": "Model Context Protocol",
           "description": "Add one of the URLs below to your AI agent. See the {documentation_link} for agent-specific instructions.",
-          "description_disabled": "See the {documentation_link} to learn how to connect your AI agent to Home Assistant.",
+          "description_disabled": "Connect an AI app you already use, like Claude or ChatGPT, to Home Assistant. It can then check what is happening in your home and control your devices, but only the ones you share with it. You sign in with your Home Assistant account, and apps that run in the cloud need remote access, like Home Assistant Cloud. See the {documentation_link} to set up your app.",
           "documentation": "documentation",
           "enable": "[%key:ui::common::enable%]",
           "disable": "[%key:ui::common::disable%]",
@@ -5233,18 +5238,19 @@
         },
         "voice_assistants": {
           "assistants": {
-            "caption": "Voice assistants",
+            "caption": "Voice",
             "general": {
               "accessible_entities": "Shared entities",
               "accessible_entities_count": "{number} {number, plural,\n  one {entity}\n  other {entities}\n}"
             },
             "pipeline": {
               "link_learn_how_it_works": "[%key:ui::panel::config::cloud::account::remote::link_learn_how_it_works%]",
-              "header": "Home Assistant Voice",
-              "intro": "Home Assistant Voice is the built-in voice assistant that lets you talk to your home.",
+              "header": "Voice",
+              "subtitle": "Home Assistant",
+              "intro": "Voice is the built-in assistant that lets you talk to your home.",
               "agents": "Voice profiles",
               "agents_intro_title": "Meet voice profiles",
-              "agents_intro": "Home Assistant Voice supports multiple voice profiles. Each profile has its own conversation agent, voice, and language. Pick one for each voice device.",
+              "agents_intro": "Voice supports multiple voice profiles. Each profile has its own conversation agent, voice, and language. Pick one for each voice device.",
               "no_agents": "You don’t have any voice profiles yet",
               "add_assistant": "Create voice profile",
               "expose_new_entities": "Share new devices automatically",
@@ -9420,9 +9426,175 @@
           "intro": "Share anonymized information from your installation to help make Home Assistant better and help us convince manufacturers to add local control and privacy-focused features.",
           "download_device_info": "Preview device analytics"
         },
+        "assistants": {
+          "caption": "Assistants",
+          "other_voice_assistants": "Other voice assistants",
+          "other_voice_assistants_description": "Amazon Alexa and Google Assistant"
+        },
         "ai": {
           "caption": "AI",
-          "description": "Configure AI suggestions, task preferences, and the Model Context Protocol server"
+          "description": "Choose models for AI suggestions and connect other AI apps",
+          "assistant": {
+            "header": "Assistant",
+            "about": "Say what you want in plain language, by chat or by voice. Home Assistant does a lot on its own, and more with voice hardware or an AI model.",
+            "permissions": {
+              "header": "Permissions",
+              "description": "Choose who can use the assistant, and how much",
+              "intro": "Choose how much of the assistant each person can use in the chat. Administrators always have full access. Voice devices can't tell who is speaking, so they follow the settings on this page instead.",
+              "admin": "Administrator",
+              "access": "Access",
+              "levels": {
+                "off": "No access",
+                "built_in": "Built-in commands only",
+                "full": "Built-in commands and AI model"
+              }
+            },
+            "intro_dialog": {
+              "title": "Meet your assistant",
+              "what": "Say what you want in plain language, by chat or by voice, and the assistant works out the rest.",
+              "built_in_header": "Built in, local, and private",
+              "ai_header": "Needs an AI model",
+              "control": {
+                "title": "Control your devices",
+                "example": "\"Turn off the kitchen lights\""
+              },
+              "ask": {
+                "title": "Ask about your home",
+                "example": "\"Is the garage door open?\""
+              },
+              "lists": {
+                "title": "Keep your lists",
+                "example": "\"Add milk to the shopping list\""
+              },
+              "help": {
+                "title": "Get help with Home Assistant",
+                "example": "\"How do I add a Zigbee device?\""
+              },
+              "build": {
+                "title": "Build automations",
+                "example": "\"Turn on the porch light at sunset\""
+              },
+              "explain": {
+                "title": "Explain what happened",
+                "example": "\"Why didn't the heating turn on?\""
+              },
+              "not_now": "Not now",
+              "turn_on": "Turn on assistant"
+            },
+            "intro_disabled": "The assistant is off, so the chat is hidden everywhere. Voice devices still handle built-in commands.",
+            "built_in_dialog": {
+              "show": "Show built-in commands",
+              "title": "Built-in commands",
+              "intro": "These work right away, on your own Home Assistant, without an AI model or internet. You can ask for one device, a whole area, or a floor.",
+              "groups": {
+                "control": "Control",
+                "ask": "Ask",
+                "media": "Media",
+                "lists": "Lists",
+                "voice_devices": "On voice devices"
+              },
+              "items": {
+                "on_off": {
+                  "title": "Turn things on and off",
+                  "example": "\"Turn off the kitchen lights\""
+                },
+                "lights": {
+                  "title": "Brightness and color",
+                  "example": "\"Set the bedroom lights to 50%\""
+                },
+                "climate": {
+                  "title": "Temperature",
+                  "example": "\"Set the living room to 21 degrees\""
+                },
+                "covers": {
+                  "title": "Covers and blinds",
+                  "example": "\"Open the blinds halfway\""
+                },
+                "locks": {
+                  "title": "Locks",
+                  "example": "\"Lock the front door\""
+                },
+                "scenes": {
+                  "title": "Scenes and scripts",
+                  "example": "\"Activate movie time\""
+                },
+                "state": {
+                  "title": "Check a device",
+                  "example": "\"Is the garage door open?\""
+                },
+                "across": {
+                  "title": "Check several devices",
+                  "example": "\"Which lights are on?\""
+                },
+                "weather": {
+                  "title": "Weather",
+                  "example": "\"What's the weather like?\""
+                },
+                "time": {
+                  "title": "Time and date",
+                  "example": "\"What time is it?\""
+                },
+                "playback": {
+                  "title": "Playback",
+                  "example": "\"Pause the music\""
+                },
+                "volume": {
+                  "title": "Volume",
+                  "example": "\"Turn the volume up\""
+                },
+                "add": {
+                  "title": "Add items",
+                  "example": "\"Add milk to the shopping list\""
+                },
+                "complete": {
+                  "title": "Check off items",
+                  "example": "\"Check off milk on the shopping list\""
+                },
+                "timers": {
+                  "title": "Timers",
+                  "example": "\"Set a pasta timer for 10 minutes\""
+                },
+                "broadcast": {
+                  "title": "Announcements",
+                  "example": "\"Broadcast that dinner is ready\""
+                }
+              },
+              "note": "You can also add your own sentences that run automations."
+            },
+            "capabilities_header": "Capabilities",
+            "sharing_header": "Sharing",
+            "built_in_header": "Built-in commands",
+            "built_in_description": "Control your devices and answer questions about your home, right here. Always on.",
+            "ai_header": "AI features",
+            "ai_description": "Explain what happened, build automations, and get help, using an AI model. Built-in commands still answer first.",
+            "model_header": "Model",
+            "model_description": "Runs on your own hardware or with a cloud provider",
+            "voice_header": "Voice",
+            "voice_description": "Voice profiles and voice devices",
+            "memory_header": "Memory",
+            "memory_description": "{count, plural,\n  =0 {Nothing remembered yet}\n  one {Remembers # thing}\n  other {Remembers # things}\n}",
+            "memory_intro": "The assistant remembers what you tell it, so you don't have to repeat yourself. Remove anything that's wrong or that you don't want it to keep.",
+            "memory_empty": "Nothing remembered yet",
+            "memory_forget": "Forget",
+            "memory_forget_all": "Forget everything",
+            "memory_forget_all_title": "Forget everything?",
+            "memory_forget_all_text": "The assistant will no longer know anything it learned from your conversations. This can't be undone.",
+            "skills_header": "Skills",
+            "skills_description": "{count, plural,\n  =0 {No skills yet}\n  one {# skill}\n  other {# skills}\n}",
+            "skills_intro": "Skills teach the assistant how to handle specific requests. It reads each description to decide when to use a skill, then follows its instructions.",
+            "skills_empty": "No skills yet",
+            "skills_add": "Add skill",
+            "skills_edit": "Edit skill",
+            "skill_name": "Name",
+            "skill_description": "Description",
+            "skill_description_helper": "When should the assistant use this skill?",
+            "skill_instructions": "Instructions",
+            "personality_header": "Personality",
+            "personality_default": "Helpful, clear, and brief",
+            "personality_dialog_text": "Tell the assistant how to talk to you. It follows these instructions in every conversation.",
+            "personality_input": "Instructions",
+            "personality_placeholder": "For example: Keep answers short and use a friendly tone."
+          }
         },
         "entity_id_format": {
           "caption": "Entity ID format",

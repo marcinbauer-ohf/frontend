@@ -1,4 +1,4 @@
-import { mdiDevices, mdiForumOutline } from "@mdi/js";
+import { mdiDevices } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { consume } from "../../../common/decorators/consume";
@@ -11,11 +11,6 @@ import { HassRouterPage } from "../../../layouts/hass-router-page";
 import type { HomeAssistant } from "../../../types";
 
 export const voiceAssistantTabs = [
-  {
-    path: "/config/voice-assistants/assistants",
-    translationKey: "ui.panel.config.voice_assistants.assistants.caption",
-    iconPath: mdiForumOutline,
-  },
   {
     path: "/config/voice-assistants/expose",
     translationKey: "ui.panel.config.voice_assistants.expose.caption",
@@ -61,7 +56,6 @@ class HaConfigVoiceAssistants extends HassRouterPage {
       assistants: {
         tag: "ha-config-voice-assistants-assistants",
         load: () => import("./ha-config-voice-assistants-assistants"),
-        cache: true,
       },
       expose: {
         tag: "ha-config-voice-assistants-expose",

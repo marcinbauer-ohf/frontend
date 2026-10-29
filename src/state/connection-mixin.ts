@@ -346,7 +346,22 @@ export const connectionMixin = <T extends Constructor<HassBaseEl>>(
       });
       subscribeConfig(conn, (config) => this._updateHass({ config }));
       subscribeServices(conn, (services) => this._updateHass({ services }));
-      subscribePanels(conn, (panels) => this._updateHass({ panels }));
+      // ponytail: frontend-only mock of the assistant panel. Core should
+      // register it as a built-in panel (from conversation) instead.
+      subscribePanels(conn, (panels) =>
+        this._updateHass({
+          panels: {
+            ...panels,
+            assistant: {
+              component_name: "assistant",
+              url_path: "assistant",
+              title: "assistant",
+              icon: "mdi:message-star-outline",
+              config: null,
+            },
+          },
+        })
+      );
       // Catch errors to userData and systemData subscription (e.g. if the
       // backend isn't up to date) and set to null so frontend can continue
       subscribeFrontendUserData(conn, "core", ({ value: userData }) =>

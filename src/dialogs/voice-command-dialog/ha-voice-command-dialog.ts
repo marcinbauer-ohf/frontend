@@ -1,4 +1,5 @@
 import {
+  mdiArrowExpand,
   mdiArrowLeft,
   mdiClose,
   mdiMenu,
@@ -9,6 +10,7 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { storage } from "../../common/decorators/storage";
 import { fireEvent } from "../../common/dom/fire_event";
+import { navigate } from "../../common/navigate";
 import "../../components/ha-adaptive-side-dialog";
 import "../../components/ha-alert";
 import "../../components/ha-assist-chat";
@@ -23,11 +25,8 @@ import {
   listAssistPipelines,
 } from "../../data/assist_pipeline";
 import {
-  conversationHasUserContent,
-  createConversationId,
-  deriveConversationTitle,
   removeConversation,
-  upsertConversation,
+  storeConversation,
   type StoredAssistConversation,
 } from "../../data/assist_conversation_history";
 import { haStyleDialog } from "../../resources/styles";
@@ -156,6 +155,17 @@ export class HaVoiceCommandDialog extends LitElement {
             .path=${mdiMessagePlusOutline}
             @click=${this._newConversation}
           ></ha-icon-button>
+          ${
+            this.hass.panels.assistant
+              ? html`<ha-icon-button
+                  .label=${this.hass.localize(
+                    "ui.dialogs.voice_command.open_in_full"
+                  )}
+                  .path=${mdiArrowExpand}
+                  @click=${this._openInFull}
+                ></ha-icon-button>`
+              : nothing
+          }
           <ha-icon-button
             data-dialog="close"
             .label=${this.hass.localize("ui.common.close")}
@@ -246,26 +256,24 @@ export class HaVoiceCommandDialog extends LitElement {
     if (!chat) {
       return;
     }
-    const messages = chat.getStoredMessages();
-    if (!conversationHasUserContent(messages)) {
-      return;
-    }
-    const id = this._currentConversationStoreId ?? createConversationId();
-    const existing = this._conversations.find(
-      (conversation) => conversation.id === id
+    const stored = storeConversation(
+      this._conversations,
+      this._currentConversationStoreId,
+      this._pipelineId,
+      chat.getStoredMessages(),
+      chat.conversationId
     );
-    const now = Date.now();
-    const conversation: StoredAssistConversation = {
-      id,
-      title: deriveConversationTitle(messages) || existing?.title || "",
-      created: existing?.created ?? now,
-      updated: now,
-      pipeline_id: this._pipelineId,
-      conversation_id: chat.conversationId,
-      messages,
-    };
-    this._conversations = upsertConversation(this._conversations, conversation);
-    this._currentConversationStoreId = id;
+    if (stored) {
+      this._conversations = stored.conversations;
+      this._currentConversationStoreId = stored.id;
+    }
+  }
+
+  private _openInFull() {
+    this._saveCurrentConversation();
+    const id = this._currentConversationStoreId;
+    this.closeDialog();
+    navigate(id ? `/assistant?conversation=${id}` : "/assistant");
   }
 
   private async _handleSelectConversation(
