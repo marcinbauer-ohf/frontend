@@ -56,11 +56,12 @@ export const findElementGroupKey = (
 /**
  * Elements that lead their category, in the order they take there.
  *
- * This is not a popularity ranking — it is the primary operation of a domain
- * put first: you turn a light on far more often than you toggle it, and the
- * alphabet has no opinion about that. Only entries a category actually
- * contains matter; everything unlisted keeps its alphabetical place behind
- * them. Keep it short. A long list is one that goes stale.
+ * Only elements Home Assistant ships with: the caller checks that the element
+ * comes from a built-in integration, so a custom integration's own "turn_on"
+ * is never pushed up by this list. Matched on the whole element ("sun.sunset")
+ * or on the operation alone ("light.turn_on" by "turn_on").
+ *
+ * ponytail: placeholder list, to be replaced by the reviewed one.
  */
 const LEADING_ELEMENTS = [
   "turn_on",
@@ -78,11 +79,6 @@ const LEADING_ELEMENTS = [
   "set_cover_position",
 ];
 
-/**
- * Matched on the whole element ("sun.sunset") or on the operation alone
- * ("light.turn_on" by "turn_on"), so one entry covers every domain that
- * shares a verb.
- */
 const leadingRank = (key: string): number => {
   const value = isDynamic(key) ? getValueFromDynamic(key) : key;
 
@@ -98,9 +94,37 @@ const leadingRank = (key: string): number => {
   return operation === -1 ? LEADING_ELEMENTS.length : operation;
 };
 
-/** Common elements first, then by name. */
+/** Whether an element is on the list above, built-in or not. */
+export const isLeadingElement = (key: string) =>
+  leadingRank(key) < LEADING_ELEMENTS.length;
+
+/** How the second column orders a category's elements. */
+export type ElementSort = "suggested" | "name";
+
+/**
+ * "suggested": the suggested elements first, the listed ones leading them,
+ * then everything else A-Z. Which elements are suggested is the caller's to
+ * say; by default all are, which leaves the list's order then A-Z. Anything
+ * but "name" counts as "suggested", so a sort saved under an older name lands
+ * on the default.
+ */
 export const compareElements =
-  (language: string) =>
-  (a: { key: string; name: string }, b: { key: string; name: string }) =>
-    leadingRank(a.key) - leadingRank(b.key) ||
-    stringCompare(a.name, b.name, language);
+  (
+    sort: ElementSort,
+    language: string,
+    suggested: (key: string) => boolean = () => true,
+    builtIn: (key: string) => boolean = () => true
+  ) =>
+  (a: { key: string; name: string }, b: { key: string; name: string }) => {
+    if (sort === "name") {
+      return stringCompare(a.name, b.name, language);
+    }
+    const aSuggested = suggested(a.key);
+    const bSuggested = suggested(b.key);
+    if (aSuggested !== bSuggested) {
+      return aSuggested ? -1 : 1;
+    }
+    const rank = (key: string) =>
+      aSuggested && builtIn(key) ? leadingRank(key) : LEADING_ELEMENTS.length;
+    return rank(a.key) - rank(b.key) || stringCompare(a.name, b.name, language);
+  };

@@ -1,4 +1,5 @@
-import { mdiPlus } from "@mdi/js";
+import "@home-assistant/webawesome/dist/components/divider/divider";
+import { mdiMenuDown, mdiPlus } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
@@ -7,6 +8,8 @@ import { repeat } from "lit/directives/repeat";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import "../../../../components/ha-button";
+import "../../../../components/ha-dropdown";
+import "../../../../components/ha-dropdown-item";
 import "../../../../components/ha-empty-state";
 import "../../../../components/ha-expansion-panel";
 import "../../../../components/ha-spinner";
@@ -21,6 +24,7 @@ import type {
   AddAutomationElementListItem,
   AddAutomationElementSection,
 } from "../add-automation-element-dialog";
+import type { ElementSort } from "./element-group";
 import { getTargetIcon } from "../target/get_target_icon";
 
 type Target = [string, string | undefined, string | undefined];
@@ -35,6 +39,7 @@ export class HaAutomationAddItems extends LitElement {
    * The order the list is in. Unset leaves the list alone and renders no
    * control.
    */
+  @property({ attribute: false }) public sort?: ElementSort;
 
   /** Names the whole list, in the row above the ground its sections sit on. */
   @property() public heading?: string;
@@ -104,13 +109,21 @@ export class HaAutomationAddItems extends LitElement {
   protected render() {
     // Stays up through a load: it is the row that would flash otherwise.
     const showHeader =
-      this.heading && (this.items?.length || this.loading) && !this.error;
+      (this.heading || this.sort) &&
+      (this.items?.length || this.loading) &&
+      !this.error;
 
     return html`
       ${
         // Above the ground the cards sit on, not on it: the heading names the
-        // whole list, so it belongs to no section that scrolls past.
-        showHeader ? html`<div class="header">${this.heading}</div>` : nothing
+        // whole list and the control orders the whole list, so neither
+        // belongs to any section that scrolls past.
+        showHeader
+          ? html`<div class="header">
+              ${this.heading}
+              ${this.sort ? this._renderSort(this.sort) : nothing}
+            </div>`
+          : nothing
       }
       <div
         class=${classMap({
@@ -148,7 +161,8 @@ export class HaAutomationAddItems extends LitElement {
                 : repeat(
                     this.items,
                     (_, index) => `item-group-${index}`,
-                    (itemGroup) => this._renderItemList(itemGroup)
+                    (itemGroup, index) =>
+                      this._renderItemList(itemGroup, index > 0)
                   )
         }
       </div>
@@ -191,14 +205,25 @@ export class HaAutomationAddItems extends LitElement {
       : new Set(this.items!.map((section) => section.title));
   }
 
-  private _renderItemList({ title, items }: AddAutomationElementSection) {
+  private _renderItemList(
+    { title, items }: AddAutomationElementSection,
+    afterAnother = false
+  ) {
     if (!items || !items.length) {
       return nothing;
     }
 
     if (!this.collapsible) {
+      // An untitled section that follows another is the same list carrying
+      // on in a second part, so a line marks where the first part ends.
       return html`
-        ${title ? html`<div class="items-title">${title}</div>` : nothing}
+        ${
+          title
+            ? html`<div class="items-title">${title}</div>`
+            : afterAnother
+              ? html`<wa-divider></wa-divider>`
+              : nothing
+        }
         ${this._renderItems(items)}
       `;
     }
@@ -292,6 +317,33 @@ export class HaAutomationAddItems extends LitElement {
     </div>`;
   });
 
+  private _renderSort(sort: ElementSort) {
+    const label = (value: ElementSort) =>
+      this.hass.localize(
+        `ui.panel.config.automation.editor.sort.${value}` as const
+      );
+
+    return html`
+      <ha-dropdown class="sort" @wa-select=${this._sortSelected}>
+        <ha-button slot="trigger" appearance="plain" variant="neutral" size="s">
+          ${label(sort)}
+          <ha-svg-icon slot="end" .path=${mdiMenuDown}></ha-svg-icon>
+        </ha-button>
+        ${(["suggested", "name"] as const).map(
+          (value) => html`
+            <ha-dropdown-item .value=${value} .selected=${value === sort}>
+              ${label(value)}
+            </ha-dropdown-item>
+          `
+        )}
+      </ha-dropdown>
+    `;
+  }
+
+  private _sortSelected(ev: CustomEvent<{ item: { value: ElementSort } }>) {
+    fireEvent(this, "element-sort-changed", { sort: ev.detail.item.value });
+  }
+
   private _selected(ev) {
     const item = ev.currentTarget;
     fireEvent(this, "value-changed", {
@@ -333,6 +385,8 @@ export class HaAutomationAddItems extends LitElement {
            titles sit on one line across the gap. */
         padding: var(--ha-space-2) var(--ha-space-2) var(--ha-space-2)
           var(--ha-space-3);
+        /* The same whole-pixel line box the sort button gets, so the row is
+           one band whether or not the button is there. */
         line-height: var(--ha-space-6);
         font-weight: var(--ha-font-weight-medium);
         color: var(--secondary-text-color);
@@ -368,8 +422,11 @@ export class HaAutomationAddItems extends LitElement {
         z-index: 2;
       }
       /* The last card scrolls clear of the button rather than under it. */
+      /* Grouped, the ground belongs to each open section rather than the
+         whole list: the gray says which cards a heading owns. */
       .items.with-toggle-all {
         padding-bottom: var(--ha-space-12);
+        background-color: transparent;
       }
 
       .items.blank {
@@ -420,6 +477,11 @@ export class HaAutomationAddItems extends LitElement {
         padding: 0 var(--ha-space-2);
         padding-bottom: max(var(--safe-area-inset-bottom), var(--ha-space-3));
       }
+      /* Inset like the cards, and the gap they keep below it too. */
+      .items > wa-divider {
+        --spacing: 0;
+        margin: 0 var(--ha-space-2) var(--ha-space-3);
+      }
       /* A list with no heading over it opens the ground itself, so it takes
          the gap a heading would have left above the first card. */
       .items > ha-list-base:first-child {
@@ -448,6 +510,18 @@ export class HaAutomationAddItems extends LitElement {
         flex-wrap: wrap;
       }
 
+      ha-dropdown.sort ha-button {
+        /* The heading's line box exactly, so the two sit on one line. */
+        --ha-button-height: var(--ha-space-6);
+        --wa-form-control-padding-inline: var(--ha-space-2);
+        font-size: var(--ha-font-size-s);
+      }
+
+      /* The default 24px would dwarf the 12px label beside it. */
+      ha-dropdown.sort ha-button ha-svg-icon {
+        --mdc-icon-size: 16px;
+      }
+
       .items ha-expansion-panel {
         --expansion-panel-content-padding: 0;
       }
@@ -456,6 +530,17 @@ export class HaAutomationAddItems extends LitElement {
         position: sticky;
         top: 0;
         z-index: 1;
+        /* The dialog's own surface, so cards scroll out of sight under it. */
+        background-color: var(
+          --ha-dialog-surface-background,
+          var(--card-background-color, var(--ha-color-surface-default))
+        );
+      }
+      /* Only an open section's cards sit on the gray, not its heading. */
+      .items ha-expansion-panel ha-list-base {
+        margin: 0 var(--ha-space-2) var(--ha-space-2);
+        padding: var(--ha-space-2);
+        border-radius: var(--ha-border-radius-xl);
         background-color: var(--ha-color-surface-low);
       }
       /* The same 40px band and weight the "by type" column's headings have,
@@ -476,6 +561,9 @@ export class HaAutomationAddItems extends LitElement {
       .items ha-expansion-panel:not([expanded])::part(top) {
         margin: 0 var(--ha-space-2);
         border-bottom: 1px solid var(--ha-color-border-neutral-quiet);
+        /* Square, so the rule runs straight: the panel's own rounded corners
+           bend its ends up into what reads as a shadow. */
+        border-radius: 0;
       }
       .items ha-expansion-panel:not([expanded])::part(summary) {
         /* Keeps the text where it sits when open, minus the margin above. */
@@ -554,5 +642,8 @@ export class HaAutomationAddItems extends LitElement {
 declare global {
   interface HTMLElementTagNameMap {
     "ha-automation-add-items": HaAutomationAddItems;
+  }
+  interface HASSDomEvents {
+    "element-sort-changed": { sort: ElementSort };
   }
 }

@@ -10,7 +10,10 @@ import memoizeOne from "memoize-one";
 import { consume } from "../../../common/decorators/consume";
 import { ensureArray } from "../../../common/array/ensure-array";
 import { storage } from "../../../common/decorators/storage";
-import type { HASSDomTargetEvent } from "../../../common/dom/fire_event";
+import type {
+  HASSDomEvent,
+  HASSDomTargetEvent,
+} from "../../../common/dom/fire_event";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { mainWindow } from "../../../common/dom/get_main_window";
 import { computeAreaName } from "../../../common/entity/compute_area_name";
@@ -99,6 +102,7 @@ import {
   fetchIntegrationManifests,
 } from "../../../data/integration";
 import type { LabelRegistryEntry } from "../../../data/label/label_registry";
+import type { TargetSelector } from "../../../data/selector";
 import { filterSelectorEntities } from "../../../data/selector";
 import {
   TARGET_SEPARATOR,
@@ -123,9 +127,11 @@ import { showToast } from "../../../util/toast";
 import "./add-automation-element/ha-automation-add-element-paste";
 import "./add-automation-element/ha-automation-add-from-target";
 import "./add-automation-element/ha-automation-add-items";
+import type { ElementSort } from "./add-automation-element/element-group";
 import {
   compareElements,
   findElementGroupKey,
+  isLeadingElement,
 } from "./add-automation-element/element-group";
 import "./add-automation-element/ha-automation-add-search";
 import type { AddAutomationElementDialogParams } from "./show-add-automation-element-dialog";
@@ -274,6 +280,10 @@ class DialogAddAutomationElement
   @state() private _loadItemsError = false;
 
   @state() private _openedFromQuery = false;
+
+  @state()
+  @storage({ key: "automation-element-sort", state: true, subscribe: false })
+  private _sort: ElementSort = "suggested";
 
   @state()
   @storage({ key: "automation-recent-targets", state: true, subscribe: false })
@@ -859,6 +869,8 @@ class DialogAddAutomationElement
                 <ha-automation-add-items
                   .hass=${this.hass}
                   .items=${this._getItems()}
+                  .sort=${this._sortable ? this._sort : undefined}
+                  @element-sort-changed=${this._sortChanged}
                   .loading=${
                     this._tab === "targets" &&
                     !this._selectedGroup &&
@@ -1115,6 +1127,11 @@ class DialogAddAutomationElement
    * The "by type" and target lists are headed by the element type; search
    * results and blocks are not.
    */
+  /** Only the "by type" list can be ordered; the target list is common first. */
+  private get _sortable() {
+    return !this._filter && this._tab === "groups" && !!this._selectedGroup;
+  }
+
   private get _showItemsHeading() {
     return (
       !this._filter &&
@@ -1170,16 +1187,29 @@ class DialogAddAutomationElement
             this._tab === "targets" &&
             this._selectedTarget &&
             this._targetItems
-          ? this._sortTargetItems(this._targetItems, this.hass.locale.language)
+          ? this._sortTargetItems(
+              this._targetItems,
+              this.hass.locale.language,
+              this._manifests
+            )
           : undefined;
 
   /**
    * The target list arrives grouped by domain and alphabetical within each;
-   * every group puts its common elements first, like the "by type" list.
+   * every group gets the suggested order the "by type" list starts with.
    */
   private _sortTargetItems = memoizeOne(
-    (sections: AddAutomationElementSection[], language: string) => {
-      const compare = compareElements(language);
+    (
+      sections: AddAutomationElementSection[],
+      language: string,
+      _manifests?: DomainManifestLookup
+    ) => {
+      const compare = compareElements(
+        "suggested",
+        language,
+        undefined,
+        this._isBuiltInElement
+      );
       return sections.map((section) => ({
         ...section,
         items: [...section.items].sort(compare),
@@ -1189,7 +1219,14 @@ class DialogAddAutomationElement
 
   private _getGroupSections(group: string) {
     const type = this._params!.type;
-    const items = this._getGroupItems(
+    const unmatched = this._unmatchedElements(
+      type,
+      this._triggerDescriptions,
+      this._conditionDescriptions,
+      this.hass.services,
+      this.hass.entities
+    );
+    const { items, suggested } = this._getGroupItems(
       type,
       group,
       this._selectedCollectionIndex ?? 0,
@@ -1198,12 +1235,20 @@ class DialogAddAutomationElement
       this._triggerDescriptions,
       this._conditionDescriptions,
       this._manifests,
-      this._systemDomains?.byEntityDomain
+      this._systemDomains?.byEntityDomain,
+      this._sort,
+      unmatched
     );
 
     // One list, no heading of its own: the column names it above the ground
-    // the cards sit on. "Common first" is an order, not a second category,
-    // and cutting the list in two under a heading of its own said otherwise.
+    // the cards sit on. "Suggested first" splits it with a divider below the
+    // suggested elements; with none, or nothing after them, there is no line.
+    if (suggested > 0 && suggested < items.length) {
+      return [
+        { title: "", items: items.slice(0, suggested) },
+        { title: "", items: items.slice(suggested) },
+      ];
+    }
     return [{ title: "", items }];
   }
 
@@ -1507,63 +1552,183 @@ class DialogAddAutomationElement
       triggerDescriptions: TriggerDescriptions,
       conditionDescriptions: ConditionDescriptions,
       manifests?: DomainManifestLookup,
-      systemDomainsByEntityDomain?: Map<string, Set<string>>
-    ): AddAutomationElementListItem[] => {
-      if (type === "trigger" && isDynamic(group)) {
-        return this._triggers(
+      systemDomainsByEntityDomain?: Map<string, Set<string>>,
+      sort: ElementSort = "suggested",
+      unmatched: Set<string> = new Set()
+    ): { items: AddAutomationElementListItem[]; suggested: number } => {
+      // Copied: the dynamic lists are memoized and must not be sorted in place.
+      const result = [
+        ...this._buildGroupItems(
+          type,
+          group,
+          collectionIndex,
           localize,
+          services,
           triggerDescriptions,
-          systemDomainsByEntityDomain,
-          group
-        );
-      }
-      if (type === "condition" && isDynamic(group)) {
-        return this._conditions(
-          localize,
           conditionDescriptions,
           manifests,
-          systemDomainsByEntityDomain,
-          group
+          systemDomainsByEntityDomain
+        ),
+      ];
+      if (sort === "name") {
+        return {
+          items: result.sort(compareElements(sort, this.hass.locale.language)),
+          suggested: 0,
+        };
+      }
+
+      const applies = (key: string) =>
+        !unmatched.has(isDynamic(key) ? getValueFromDynamic(key) : key);
+      // In a category that mixes device types (Air quality: gas, carbon
+      // monoxide, ...), what matches this home's devices is a suggestion of
+      // its own. Where everything matches (Light), only the list suggests.
+      const mixed = result.some((item) => !applies(item.key));
+      const isSuggested = (key: string) =>
+        applies(key) &&
+        (mixed || (this._isBuiltInElement(key) && isLeadingElement(key)));
+
+      return {
+        items: result.sort(
+          compareElements(
+            sort,
+            this.hass.locale.language,
+            isSuggested,
+            this._isBuiltInElement
+          )
+        ),
+        suggested: result.filter((item) => isSuggested(item.key)).length,
+      };
+    }
+  );
+
+  /**
+   * Whether an element ships with Home Assistant: the core ones carry no
+   * domain ("state", "time"), the rest come from an integration whose manifest
+   * says it is built in. Only those can be led by the suggested list.
+   */
+  private _isBuiltInElement = (key: string): boolean => {
+    const value = isDynamic(key) ? getValueFromDynamic(key) : key;
+    return (
+      !value.includes(".") ||
+      !!this._manifests?.[computeDomain(value)]?.is_built_in
+    );
+  };
+
+  private _buildGroupItems(
+    type: AddAutomationElementDialogParams["type"],
+    group: string,
+    collectionIndex: number,
+    localize: LocalizeFunc,
+    services: HomeAssistant["services"],
+    triggerDescriptions: TriggerDescriptions,
+    conditionDescriptions: ConditionDescriptions,
+    manifests?: DomainManifestLookup,
+    systemDomainsByEntityDomain?: Map<string, Set<string>>
+  ): AddAutomationElementListItem[] {
+    if (type === "trigger" && isDynamic(group)) {
+      return this._triggers(
+        localize,
+        triggerDescriptions,
+        systemDomainsByEntityDomain,
+        group
+      );
+    }
+    if (type === "condition" && isDynamic(group)) {
+      return this._conditions(
+        localize,
+        conditionDescriptions,
+        manifests,
+        systemDomainsByEntityDomain,
+        group
+      );
+    }
+    if (type === "action" && isDynamic(group)) {
+      return this._services(localize, services, manifests, group);
+    }
+
+    const groupDef = this._groupDef(type, group, collectionIndex);
+
+    let result: AddAutomationElementListItem[];
+
+    const descriptions =
+      type === "condition" ? conditionDescriptions : triggerDescriptions;
+
+    if (groupDef?.domains && !groupDef.members) {
+      // Curated group whose items come solely from backend domains (e.g. Sun).
+      result = this._getDomainElementItems(
+        type,
+        groupDef.domains,
+        localize,
+        descriptions
+      );
+    } else {
+      const groups = this._getGroups(type, group, collectionIndex);
+      result = Object.entries(groups).map(([key, options]) =>
+        this._convertToItem(key, options, type, localize)
+      );
+      if (groupDef?.domains) {
+        // Curated group with both static members and backend domains (Time).
+        result.push(
+          ...this._getDomainElementItems(
+            type,
+            groupDef.domains,
+            localize,
+            descriptions
+          )
         );
       }
-      if (type === "action" && isDynamic(group)) {
-        return this._services(localize, services, manifests, group);
-      }
+    }
 
-      const groupDef = this._groupDef(type, group, collectionIndex);
+    return result;
+  }
 
-      let result: AddAutomationElementListItem[];
-
-      const descriptions =
-        type === "condition" ? conditionDescriptions : triggerDescriptions;
-
-      if (groupDef?.domains && !groupDef.members) {
-        // Curated group whose items come solely from backend domains (e.g. Sun).
-        result = this._getDomainElementItems(
-          type,
-          groupDef.domains,
-          localize,
-          descriptions
-        );
-      } else {
-        const groups = this._getGroups(type, group, collectionIndex);
-        result = Object.entries(groups).map(([key, options]) =>
-          this._convertToItem(key, options, type, localize)
-        );
-        if (groupDef?.domains) {
-          // Curated group with both static members and backend domains (Time).
-          result.push(
-            ...this._getDomainElementItems(
-              type,
-              groupDef.domains,
-              localize,
-              descriptions
+  /**
+   * Elements whose description names the entities they work on, when none of
+   * this home's entities is one of them: a gas trigger in a home with only a
+   * carbon monoxide sensor. Keyed on the entity registry rather than on the
+   * states, so a state update doesn't re-sort the list under the cursor.
+   */
+  private _unmatchedElements = memoizeOne(
+    (
+      type: AddAutomationElementDialogParams["type"],
+      triggerDescriptions: TriggerDescriptions,
+      conditionDescriptions: ConditionDescriptions,
+      services: HomeAssistant["services"],
+      _entities: HomeAssistant["entities"]
+    ): Set<string> => {
+      const targets: [string, TargetSelector["target"] | undefined][] =
+        type === "action"
+          ? Object.entries(services).flatMap(([domain, domainServices]) =>
+              Object.entries(domainServices).map(
+                ([service, description]) =>
+                  [
+                    `${domain}.${service}`,
+                    description.target as TargetSelector["target"],
+                  ] as [string, TargetSelector["target"] | undefined]
+              )
             )
-          );
+          : Object.entries(
+              (type === "trigger"
+                ? triggerDescriptions
+                : conditionDescriptions) ?? {}
+            ).map(([key, description]) => [key, description.target]);
+
+      const states = Object.values(this.hass.states);
+      const unmatched = new Set<string>();
+      for (const [key, target] of targets) {
+        const filters = (ensureArray(target?.entity) ?? []).flatMap((filter) =>
+          ensureArray(filter)
+        );
+        if (
+          filters.length &&
+          !states.some((entity) =>
+            filters.some((filter) => filterSelectorEntities(filter, entity))
+          )
+        ) {
+          unmatched.add(key);
         }
       }
-
-      return result.sort(compareElements(this.hass.locale.language));
+      return unmatched;
     }
   );
 
@@ -2170,6 +2335,10 @@ class DialogAddAutomationElement
     this._rememberSelection(key);
     this._params!.add(key);
     this.closeDialog();
+  };
+
+  private _sortChanged = (ev: HASSDomEvent<{ sort: ElementSort }>) => {
+    this._sort = ev.detail.sort;
   };
 
   private _groupSelected(ev) {

@@ -30,12 +30,7 @@ export class HaAutomationAddElementPaste extends LitElement {
       return nothing;
     }
 
-    return html`<ha-button
-      appearance="filled"
-      variant="neutral"
-      size="s"
-      @click=${this._paste}
-    >
+    return html`<ha-button appearance="filled" size="s" @click=${this._paste}>
       <ha-svg-icon slot="start" .path=${mdiContentPaste}></ha-svg-icon>
       ${this._i18n.localize(
         `ui.panel.config.automation.editor.${this.automationElementType}s.paste_element`

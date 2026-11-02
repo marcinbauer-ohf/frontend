@@ -5426,6 +5426,10 @@
             "unassigned": "Unassigned",
             "time_sun": "Time and sun",
             "recently_used": "Recently used",
+            "sort": {
+              "suggested": "Suggested first",
+              "name": "Name (A-Z)"
+            },
             "blocks": "Blocks",
             "tabs": {
               "target": "By target",
