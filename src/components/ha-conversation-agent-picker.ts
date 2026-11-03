@@ -4,6 +4,7 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { fireEvent } from "../common/dom/fire_event";
 import { debounce } from "../common/util/debounce";
+import { HOME_ASSISTANT_AGENT } from "../data/assistant_status";
 import type { Agent } from "../data/conversation";
 import { listAgents } from "../data/conversation";
 import type { EntityConfigFlow } from "../dialogs/config-flow/entity-config-flow";
@@ -20,8 +21,6 @@ import type { HaSelectOption, HaSelectSelectEvent } from "./ha-select";
 const NONE = "__NONE_OPTION__";
 
 const ADD_INTEGRATION = "__ADD_INTEGRATION__";
-
-export const HOME_ASSISTANT_AGENT = "conversation.home_assistant";
 
 @customElement("ha-conversation-agent-picker")
 export class HaConversationAgentPicker extends LitElement {

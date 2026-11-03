@@ -1,3 +1,4 @@
+import type { ContextType } from "@lit/context";
 import {
   mdiAlertCircle,
   mdiChevronDown,
@@ -20,6 +21,7 @@ import { keyed } from "lit/directives/keyed";
 import { consume } from "../common/decorators/consume";
 import { consumeLocalize } from "../common/decorators/consume-context-entry";
 import { fireEvent } from "../common/dom/fire_event";
+import { formatListWithAnds } from "../common/string/format-list";
 import type {
   LocalizeFunc,
   LocalizeKeys,
@@ -36,13 +38,18 @@ import {
   type AssistPipeline,
   type PipelineRunEvent,
 } from "../data/assist_pipeline";
+import { assistantCloudServices } from "../data/assistant_status";
 import type { LovelaceCardConfig } from "../data/lovelace/config/card";
 import "../panels/lovelace/cards/hui-card";
 import {
   configContext,
   connectionContext,
+  entitiesContext,
+  internationalizationContext,
+  manifestsContext,
   statesContext,
 } from "../data/context";
+import type { DomainManifestLookup } from "../data/integration";
 import { showAlertDialog } from "../dialogs/generic/show-dialog-box";
 import { assistCasitaIcon } from "../resources/assist-casita-icon";
 import { haStyleScrollbar } from "../resources/styles";
@@ -286,6 +293,18 @@ export class HaAssistChat extends LitElement {
   @state()
   @consume({ context: connectionContext, subscribe: true })
   private _connection!: HomeAssistantConnection;
+
+  @state()
+  @consume({ context: entitiesContext, subscribe: true })
+  private _entities!: HomeAssistant["entities"];
+
+  @state()
+  @consume({ context: manifestsContext, subscribe: true })
+  private _manifests?: DomainManifestLookup;
+
+  @state()
+  @consume({ context: internationalizationContext, subscribe: true })
+  private _i18n!: ContextType<typeof internationalizationContext>;
 
   private _conversationId: string | null = null;
 
@@ -700,8 +719,37 @@ ${JSON.stringify(toolCall.result, null, 2)}</pre>
             </div>
           </div>
         </div>
+        ${this._renderPrivacy()}
       </div>
     `;
+  }
+
+  // Says up front whether what you type here leaves the house.
+  private _renderPrivacy() {
+    if (!this.pipeline || !this._entities) {
+      return nothing;
+    }
+    const cloud = assistantCloudServices(
+      this.pipeline,
+      this._entities,
+      this._manifests
+    );
+    return html`<p class="privacy">
+      ${
+        cloud.length
+          ? this._localize("ui.dialogs.voice_command.privacy_cloud", {
+              services: formatListWithAnds(
+                this._i18n.locale,
+                cloud.map((service) =>
+                  this._localize(
+                    `ui.panel.config.ai.assistant.status.service_${service.part}`
+                  )
+                )
+              ),
+            })
+          : this._localize("ui.dialogs.voice_command.privacy_local")
+      }
+    </p>`;
   }
 
   private async _scrollMessagesBottom() {
@@ -1698,6 +1746,13 @@ ${request || this._localize("ui.dialogs.voice_command.permission.no_details")}</
           margin: 0;
           font-size: var(--ha-font-size-2xl);
           color: var(--secondary-text-color);
+        }
+        .privacy {
+          margin: 0;
+          text-align: center;
+          color: var(--secondary-text-color);
+          font-size: var(--ha-font-size-s);
+          line-height: var(--ha-line-height-condensed);
         }
         .composer-wrapper {
           display: flex;

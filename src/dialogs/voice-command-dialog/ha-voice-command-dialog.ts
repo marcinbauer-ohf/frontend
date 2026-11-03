@@ -24,6 +24,7 @@ import {
   getAssistPipeline,
   listAssistPipelines,
 } from "../../data/assist_pipeline";
+import { ASSISTANT_ENABLED_KEY } from "../../data/assistant_mock";
 import {
   removeConversation,
   storeConversation,
@@ -62,6 +63,10 @@ export class HaVoiceCommandDialog extends LitElement {
   private _conversations: StoredAssistConversation[] = [];
 
   @state() private _pipeline?: AssistPipeline;
+
+  // Turning the assistant off closes the chat, in this tab and others.
+  @storage({ key: ASSISTANT_ENABLED_KEY, state: true, subscribe: true })
+  private _assistantEnabled = true;
 
   @state() private _pipelines?: AssistPipeline[];
 
@@ -225,6 +230,9 @@ export class HaVoiceCommandDialog extends LitElement {
   }
 
   protected willUpdate(changedProperties: PropertyValues): void {
+    if (changedProperties.has("_assistantEnabled") && !this._assistantEnabled) {
+      this.closeDialog();
+    }
     if (
       changedProperties.has("_pipelineId") ||
       (changedProperties.has("_open") &&

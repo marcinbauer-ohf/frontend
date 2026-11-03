@@ -2,8 +2,10 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { fireEvent } from "../../../common/dom/fire_event";
 import "../../../components/ha-adaptive-dialog";
-import "../../../components/item/ha-list-item-base";
+import "../../../components/ha-icon-next";
+import "../../../components/item/ha-list-item-button";
 import "../../../components/list/ha-grouped-list";
+import { showVoiceCommandDialog } from "../../../dialogs/voice-command-dialog/show-ha-voice-command-dialog";
 import type { HomeAssistant } from "../../../types";
 
 // What Home Assistant's built-in intents understand, without an AI model.
@@ -66,7 +68,7 @@ class DialogAssistantBuiltIn extends LitElement {
               >
                 ${group.items.map(
                   (item: BuiltInItem) => html`
-                    <ha-list-item-base>
+                    <ha-list-item-button .item=${item} @click=${this._try}>
                       <span slot="headline">
                         ${this.hass.localize(
                           `ui.panel.config.ai.assistant.built_in_dialog.items.${item}.title`
@@ -77,7 +79,8 @@ class DialogAssistantBuiltIn extends LitElement {
                           `ui.panel.config.ai.assistant.built_in_dialog.items.${item}.example`
                         )}
                       </span>
-                    </ha-list-item-base>
+                      <ha-icon-next slot="end"></ha-icon-next>
+                    </ha-list-item-button>
                   `
                 )}
               </ha-grouped-list>
@@ -91,6 +94,21 @@ class DialogAssistantBuiltIn extends LitElement {
         </div>
       </ha-adaptive-dialog>
     `;
+  }
+
+  // Opens the chat with the example typed in, ready to send or edit.
+  private _try(ev: Event) {
+    const item = (ev.currentTarget as HTMLElement & { item: BuiltInItem }).item;
+    const prompt = this.hass
+      .localize(
+        `ui.panel.config.ai.assistant.built_in_dialog.items.${item}.example`
+      )
+      .replace(/^"|"$/g, "");
+    this.closeDialog();
+    showVoiceCommandDialog(this, this.hass, {
+      pipeline_id: "preferred",
+      prompt,
+    });
   }
 
   static styles = css`

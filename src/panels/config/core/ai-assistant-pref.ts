@@ -1,21 +1,26 @@
-import { mdiInformationOutline, mdiMessageStarOutline } from "@mdi/js";
+import {
+  mdiAlert,
+  mdiCheckCircle,
+  mdiMessageStarOutline,
+  mdiMinusCircleOutline,
+} from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
+import { consume } from "../../../common/decorators/consume";
 import { storage } from "../../../common/decorators/storage";
 import type { HASSDomCurrentTargetEvent } from "../../../common/dom/fire_event";
-import "../../../components/ha-alert";
 import "../../../components/ha-card";
-import { HOME_ASSISTANT_AGENT } from "../../../components/ha-conversation-agent-picker";
+import "../../../components/ha-conversation-agent-picker";
 import "../../../components/ha-svg-icon";
 import "../../../components/ha-switch";
 import type { HaSwitch } from "../../../components/ha-switch";
 import "../../../components/ha-icon-next";
 import "../../../components/item/ha-list-item-base";
 import "../../../components/item/ha-list-item-button";
-import "../../../components/ha-icon-button";
+import "../../../components/list/ha-grouped-list";
 import "../../../components/list/ha-list-base";
 import type { AssistPipeline } from "../../../data/assist_pipeline";
 import {
@@ -31,11 +36,19 @@ import {
   SAMPLE_MEMORIES,
   SAMPLE_SKILLS,
 } from "../../../data/assistant_mock";
+import {
+  assistantCloudServices,
+  engineDomain,
+  HOME_ASSISTANT_AGENT,
+} from "../../../data/assistant_status";
+import { manifestsContext } from "../../../data/context";
 import type { ExposeEntitySettings } from "../../../data/expose";
 import {
   getExposeNewEntities,
   setExposeNewEntities,
 } from "../../../data/expose";
+import type { DomainManifestLookup } from "../../../data/integration";
+import { domainToName } from "../../../data/integration";
 import { showPromptDialog } from "../../../dialogs/generic/show-dialog-box";
 import { showAssistantIntroDialog } from "./show-dialog-assistant-intro";
 import { showAssistantBuiltInDialog } from "./show-dialog-assistant-built-in";
@@ -85,6 +98,10 @@ export class AIAssistantPref extends LitElement {
   private _aiModel?: string;
 
   @state() private _exposeNew?: boolean;
+
+  @state()
+  @consume({ context: manifestsContext, subscribe: true })
+  private _manifests?: DomainManifestLookup;
 
   private _exposedCount = memoizeOne(
     (exposedEntities: Record<string, ExposeEntitySettings>) =>
@@ -152,7 +169,8 @@ export class AIAssistantPref extends LitElement {
     const pipeline = this._chatPipeline;
     const aiOn = this._aiOn();
     return html`
-      <h2 class="subheader" id="capabilities-header">
+      ${pipeline ? this._renderStatus(pipeline, aiOn) : nothing}
+      <h2 class="subheader section" id="capabilities-header">
         ${this.hass.localize("ui.panel.config.ai.assistant.capabilities_header")}
       </h2>
       <ha-list-base class="capabilities" aria-labelledby="capabilities-header">
@@ -229,6 +247,94 @@ export class AIAssistantPref extends LitElement {
     `;
   }
 
+  // A checklist to scan: what the assistant can do, and whether anything
+  // leaves the house.
+  private _renderStatus(pipeline: AssistPipeline, aiOn: boolean) {
+    const localize = this.hass.localize;
+    const name = (domain: string) =>
+      domainToName(localize, domain, this._manifests?.[domain]);
+    const cloud = assistantCloudServices(
+      pipeline,
+      this.hass.entities,
+      this._manifests
+    );
+    const engine = pipeline.conversation_engine;
+    const exposed = this.exposedEntities
+      ? this._exposedCount(this.exposedEntities)
+      : 0;
+    const voiceOn = !!(pipeline.stt_engine && pipeline.tts_engine);
+    // [checked, label, value, warn]: warn marks a "no" that deserves a
+    // warning, not just a minus.
+    const items: [boolean, string, string, boolean?][] = [
+      [
+        !cloud.length,
+        localize("ui.panel.config.ai.assistant.status.privacy_header"),
+        localize(
+          cloud.length
+            ? "ui.panel.config.ai.assistant.status.privacy_online"
+            : "ui.panel.config.ai.assistant.status.privacy_local"
+        ),
+        true,
+      ],
+      [
+        aiOn && engine !== HOME_ASSISTANT_AGENT,
+        localize("ui.panel.config.ai.assistant.ai_header"),
+        !aiOn
+          ? localize("ui.panel.config.ai.assistant.status.off")
+          : engine === HOME_ASSISTANT_AGENT
+            ? localize("ui.panel.config.ai.assistant.status.no_model")
+            : name(engineDomain(this.hass.entities, engine)),
+      ],
+      [
+        aiOn && this._memories.length > 0,
+        localize("ui.panel.config.ai.assistant.memory_header"),
+        aiOn
+          ? localize("ui.panel.config.ai.assistant.status.memory_count", {
+              count: this._memories.length,
+            })
+          : localize("ui.panel.config.ai.assistant.status.off"),
+      ],
+      [
+        voiceOn,
+        localize("ui.panel.config.ai.assistant.voice_header"),
+        localize(
+          voiceOn
+            ? "ui.panel.config.ai.assistant.status.set_up"
+            : "ui.panel.config.ai.assistant.status.not_set_up"
+        ),
+      ],
+      [
+        exposed > 0,
+        localize(
+          "ui.panel.config.voice_assistants.assistants.general.accessible_entities"
+        ),
+        localize(
+          "ui.panel.config.voice_assistants.assistants.general.accessible_entities_count",
+          { number: exposed }
+        ),
+      ],
+    ];
+    return html`
+      <ha-grouped-list class="status">
+        ${items.map(
+          ([yes, label, value, warn]) => html`
+            <ha-list-item-base>
+              <ha-svg-icon
+                slot="start"
+                class=${yes ? "yes" : warn ? "warn" : "no"}
+                .path=${
+                  yes ? mdiCheckCircle : warn ? mdiAlert : mdiMinusCircleOutline
+                }
+              ></ha-svg-icon>
+              <span slot="headline">${label}</span>
+              <span slot="end" class="value">${value}</span>
+            </ha-list-item-base>
+          `
+        )}
+      </ha-grouped-list>
+    `;
+  }
+
   private _showBuiltIn() {
     showAssistantBuiltInDialog(this);
   }
@@ -246,7 +352,7 @@ export class AIAssistantPref extends LitElement {
   // first. Core should hold this as the assistant's own setting (vision 2.1).
   private _renderCapabilities(pipeline: AssistPipeline, aiOn: boolean) {
     return html`
-      <ha-list-item-base>
+      <ha-list-item-button @click=${this._showBuiltIn}>
         <span slot="headline">
           ${this.hass.localize("ui.panel.config.ai.assistant.built_in_header")}
         </span>
@@ -255,15 +361,8 @@ export class AIAssistantPref extends LitElement {
             "ui.panel.config.ai.assistant.built_in_description"
           )}
         </span>
-        <ha-icon-button
-          slot="end"
-          .label=${this.hass.localize(
-            "ui.panel.config.ai.assistant.built_in_dialog.show"
-          )}
-          .path=${mdiInformationOutline}
-          @click=${this._showBuiltIn}
-        ></ha-icon-button>
-      </ha-list-item-base>
+        <ha-icon-next slot="end"></ha-icon-next>
+      </ha-list-item-button>
       <ha-list-item-base>
         <span slot="headline">
           ${this.hass.localize("ui.panel.config.ai.assistant.ai_header")}
@@ -369,9 +468,6 @@ export class AIAssistantPref extends LitElement {
     return html`
       <div class="card-content">
         <p>${this.hass.localize("ui.panel.config.ai.assistant.about")}</p>
-        <ha-alert alert-type="info">
-          ${this.hass.localize("ui.panel.config.ai.assistant.intro_disabled")}
-        </ha-alert>
       </div>
     `;
   }
@@ -513,6 +609,22 @@ export class AIAssistantPref extends LitElement {
       font-weight: var(--ha-font-weight-medium);
       line-height: var(--ha-line-height-condensed);
       color: var(--secondary-text-color);
+    }
+    .status {
+      margin: 0 var(--ha-space-4);
+    }
+    .status ha-svg-icon.yes {
+      color: var(--ha-color-on-success-normal, var(--success-color));
+    }
+    .status ha-svg-icon.warn {
+      color: var(--ha-color-on-warning-normal, var(--warning-color));
+    }
+    .status ha-svg-icon.no {
+      color: var(--secondary-text-color);
+    }
+    .status .value {
+      color: var(--secondary-text-color);
+      text-align: end;
     }
     .sharing {
       padding-bottom: var(--ha-space-2);

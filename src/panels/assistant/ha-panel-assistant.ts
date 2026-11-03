@@ -14,6 +14,7 @@ import "../../components/ha-spinner";
 import "../../components/ha-two-pane-top-app-bar-fixed";
 import type { AssistPipeline } from "../../data/assist_pipeline";
 import { getAssistPipeline } from "../../data/assist_pipeline";
+import { ASSISTANT_ENABLED_KEY } from "../../data/assistant_mock";
 import {
   removeConversation,
   storeConversation,
@@ -36,6 +37,10 @@ class HaPanelAssistant extends LitElement {
   })
   private _conversations: StoredAssistConversation[] = [];
 
+  // Turning the assistant off leaves this page, in this tab and others.
+  @storage({ key: ASSISTANT_ENABLED_KEY, state: true, subscribe: true })
+  private _assistantEnabled = true;
+
   @state() private _pipeline?: AssistPipeline;
 
   @state() private _error = false;
@@ -49,6 +54,13 @@ class HaPanelAssistant extends LitElement {
   protected firstUpdated(changedProps: PropertyValues<this>) {
     super.firstUpdated(changedProps);
     this._load();
+  }
+
+  protected willUpdate(changedProps: PropertyValues<this>) {
+    super.willUpdate(changedProps);
+    if (!this._assistantEnabled) {
+      navigate("/", { replace: true });
+    }
   }
 
   public disconnectedCallback() {

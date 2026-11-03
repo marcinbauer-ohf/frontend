@@ -12,34 +12,23 @@ import { fireEvent } from "../../../common/dom/fire_event";
 import "../../../components/ha-button";
 import "../../../components/ha-adaptive-dialog";
 import "../../../components/ha-dialog-footer";
+import "../../../components/ha-label";
 import "../../../components/ha-svg-icon";
 import "../../../components/item/ha-list-item-base";
-import "../../../components/list/ha-grouped-list";
+import "../../../components/list/ha-list-base";
 import { assistCasitaIcon } from "../../../resources/assist-casita-icon";
 import type { HomeAssistant } from "../../../types";
 import type { AssistantIntroDialogParams } from "./show-dialog-assistant-intro";
 
-// What the assistant does on its own, and what an AI model adds.
-const GROUPS = [
-  {
-    key: "built_in",
-    items: [
-      { key: "control", icon: mdiLightbulbOnOutline },
-      { key: "ask", icon: mdiChatQuestionOutline },
-      { key: "lists", icon: mdiFormatListChecks },
-    ],
-  },
-  {
-    key: "ai",
-    items: [
-      { key: "help", icon: mdiBookOpenVariantOutline },
-      { key: "build", icon: mdiRobotOutline },
-      { key: "explain", icon: mdiHistory },
-    ],
-  },
+// What works right away through built-in intents, then what needs a model.
+const ITEMS = [
+  { key: "control", icon: mdiLightbulbOnOutline, needsAi: false },
+  { key: "ask", icon: mdiChatQuestionOutline, needsAi: false },
+  { key: "lists", icon: mdiFormatListChecks, needsAi: false },
+  { key: "help", icon: mdiBookOpenVariantOutline, needsAi: true },
+  { key: "build", icon: mdiRobotOutline, needsAi: true },
+  { key: "explain", icon: mdiHistory, needsAi: true },
 ] as const;
-
-type IntroItem = (typeof GROUPS)[number]["items"][number];
 
 @customElement("dialog-assistant-intro")
 class DialogAssistantIntro extends LitElement {
@@ -87,37 +76,12 @@ class DialogAssistantIntro extends LitElement {
               "ui.panel.config.ai.assistant.intro_dialog.what"
             )}
           </p>
-          ${GROUPS.map(
-            (group) => html`
-              <ha-grouped-list
-                class=${group.key}
-                .header=${this.hass.localize(
-                  `ui.panel.config.ai.assistant.intro_dialog.${group.key}_header`
-                )}
-              >
-                ${group.items.map(
-                  (item: IntroItem) => html`
-                    <ha-list-item-base>
-                      <ha-svg-icon
-                        slot="start"
-                        .path=${item.icon}
-                      ></ha-svg-icon>
-                      <span slot="headline">
-                        ${this.hass.localize(
-                          `ui.panel.config.ai.assistant.intro_dialog.${item.key}.title`
-                        )}
-                      </span>
-                      <span slot="supporting-text">
-                        ${this.hass.localize(
-                          `ui.panel.config.ai.assistant.intro_dialog.${item.key}.example`
-                        )}
-                      </span>
-                    </ha-list-item-base>
-                  `
-                )}
-              </ha-grouped-list>
-            `
-          )}
+          <ha-list-base>
+            ${ITEMS.filter((item) => !item.needsAi).map((item) =>
+              this._renderItem(item)
+            )}
+          </ha-list-base>
+          ${this._renderAi()}
         </div>
         <ha-dialog-footer slot="footer">
           <ha-button
@@ -136,6 +100,48 @@ class DialogAssistantIntro extends LitElement {
           </ha-button>
         </ha-dialog-footer>
       </ha-adaptive-dialog>
+    `;
+  }
+
+  // AI features stay small: they only work once a model is added.
+  private _renderAi() {
+    return html`<div class="ai">
+      <p id="needs-ai">
+        ${this.hass.localize(
+          "ui.panel.config.ai.assistant.intro_dialog.needs_ai"
+        )}
+      </p>
+      <ul class="chips" aria-labelledby="needs-ai">
+        ${ITEMS.filter((item) => item.needsAi).map(
+          (item) =>
+            html`<li>
+              <ha-label>
+                <ha-svg-icon slot="icon" .path=${item.icon}></ha-svg-icon>
+                ${this.hass.localize(
+                  `ui.panel.config.ai.assistant.intro_dialog.${item.key}.title`
+                )}
+              </ha-label>
+            </li>`
+        )}
+      </ul>
+    </div>`;
+  }
+
+  private _renderItem(item: (typeof ITEMS)[number]) {
+    return html`
+      <ha-list-item-base>
+        <ha-svg-icon slot="start" .path=${item.icon}></ha-svg-icon>
+        <span slot="headline">
+          ${this.hass.localize(
+            `ui.panel.config.ai.assistant.intro_dialog.${item.key}.title`
+          )}
+        </span>
+        <span slot="supporting-text">
+          ${this.hass.localize(
+            `ui.panel.config.ai.assistant.intro_dialog.${item.key}.example`
+          )}
+        </span>
+      </ha-list-item-base>
     `;
   }
 
@@ -179,7 +185,6 @@ class DialogAssistantIntro extends LitElement {
     .text {
       display: flex;
       flex-direction: column;
-      gap: var(--ha-space-5);
       padding: 0 var(--ha-space-6) var(--ha-space-2);
     }
     .text p {
@@ -188,12 +193,27 @@ class DialogAssistantIntro extends LitElement {
       font-size: var(--ha-font-size-m);
       line-height: var(--ha-line-height-normal);
     }
-    ha-grouped-list ha-svg-icon {
+    ha-list-base {
+      --ha-row-item-padding-inline: 0;
+    }
+    ha-list-item-base ha-svg-icon {
+      --mdc-icon-size: 32px;
       color: var(--ha-color-primary-60, var(--primary-color));
     }
-    /* Not set up yet: grey icons, so it doesn't read as included. */
-    ha-grouped-list.ai ha-svg-icon {
-      color: var(--secondary-text-color);
+    ul.chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--ha-space-2);
+      margin: var(--ha-space-2) 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    ha-label {
+      --mdc-icon-size: 16px;
+    }
+    /* Set apart from the built-in rows: these need a model first. */
+    .ai {
+      margin-top: var(--ha-space-6);
     }
   `;
 }

@@ -241,28 +241,20 @@ export class AssistPref extends LitElement {
         <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
       </ha-button>
       <ha-list-base class="devices">
-        ${
-          this._pipelineEntitiesCount > 0
-            ? html`
-                <ha-list-item-button
-                  href="/config/voice-assistants/assist/devices"
-                >
-                  <span slot="headline">
-                    ${this.hass.localize(
-                      "ui.panel.config.voice_assistants.assistants.pipeline.assist_devices"
-                    )}
-                  </span>
-                  <span slot="supporting-text">
-                    ${this.hass.localize(
-                      "ui.panel.config.voice_assistants.assistants.pipeline.assist_devices_count",
-                      { number: this._pipelineEntitiesCount }
-                    )}
-                  </span>
-                  <ha-icon-next slot="end"></ha-icon-next>
-                </ha-list-item-button>
-              `
-            : ""
-        }
+        <ha-list-item-button href="/config/voice-assistants/assist/devices">
+          <span slot="headline">
+            ${this.hass.localize(
+              "ui.panel.config.voice_assistants.assistants.pipeline.assist_devices"
+            )}
+          </span>
+          <span slot="supporting-text">
+            ${this.hass.localize(
+              "ui.panel.config.voice_assistants.assistants.pipeline.assist_devices_count",
+              { number: this._pipelineEntitiesCount }
+            )}
+          </span>
+          <ha-icon-next slot="end"></ha-icon-next>
+        </ha-list-item-button>
       </ha-list-base>
     `;
   }

@@ -1901,7 +1901,9 @@
             "summary": "Set the unit system to metric and the time zone to Europe/Amsterdam.",
             "link": "Open general settings"
           }
-        }
+        },
+        "privacy_local": "Private. Runs on your own hardware.",
+        "privacy_cloud": "Shares data with online services for {services}."
       },
       "generic": {
         "default_confirmation_title": "Are you sure?"
@@ -9452,8 +9454,6 @@
             "intro_dialog": {
               "title": "Meet your assistant",
               "what": "Say what you want in plain language, by chat or by voice, and the assistant works out the rest.",
-              "built_in_header": "Built in, local, and private",
-              "ai_header": "Needs an AI model",
               "control": {
                 "title": "Control your devices",
                 "example": "\"Turn off the kitchen lights\""
@@ -9478,12 +9478,11 @@
                 "title": "Explain what happened",
                 "example": "\"Why didn't the heating turn on?\""
               },
+              "needs_ai": "Add an AI model, running on your own hardware or from a cloud provider, and the assistant can do more:",
               "not_now": "Not now",
               "turn_on": "Turn on assistant"
             },
-            "intro_disabled": "The assistant is off, so the chat is hidden everywhere. Voice devices still handle built-in commands.",
             "built_in_dialog": {
-              "show": "Show built-in commands",
               "title": "Built-in commands",
               "intro": "These work right away, on your own Home Assistant, without an AI model or internet. You can ask for one device, a whole area, or a floor.",
               "groups": {
@@ -9561,7 +9560,7 @@
               },
               "note": "You can also add your own sentences that run automations."
             },
-            "capabilities_header": "Capabilities",
+            "capabilities_header": "Configuration",
             "sharing_header": "Sharing",
             "built_in_header": "Built-in commands",
             "built_in_description": "Control your devices and answer questions about your home, right here. Always on.",
@@ -9593,7 +9592,20 @@
             "personality_default": "Helpful, clear, and brief",
             "personality_dialog_text": "Tell the assistant how to talk to you. It follows these instructions in every conversation.",
             "personality_input": "Instructions",
-            "personality_placeholder": "For example: Keep answers short and use a friendly tone."
+            "personality_placeholder": "For example: Keep answers short and use a friendly tone.",
+            "status": {
+              "privacy_header": "Privacy",
+              "privacy_local": "Local only",
+              "privacy_online": "Uses online services",
+              "service_ai": "AI features",
+              "service_stt": "speech-to-text",
+              "service_tts": "text-to-speech",
+              "off": "Off",
+              "no_model": "No model",
+              "memory_count": "{count, plural,\n  =0 {Nothing yet}\n  one {# thing}\n  other {# things}\n}",
+              "set_up": "Set up",
+              "not_set_up": "Not set up"
+            }
           }
         },
         "entity_id_format": {
@@ -12918,12 +12930,12 @@
         "load_failed": "The Marketplace could not load its data: {error}",
         "warning": {
           "title": "Before you install from the Marketplace",
-          "intro": "Marketplace items are made by community contributors and are not reviewed by the Home\u00a0Assistant project. Treat them like plugins for any other software.",
+          "intro": "Marketplace items are made by community contributors and are not reviewed by the Home Assistant project. Treat them like plugins for any other software.",
           "risks_title": "Anything you install can",
           "risks": {
             "internet": "Connect to the internet",
             "data": "Share your data with others",
-            "stability": "Slow down or crash Home\u00a0Assistant"
+            "stability": "Slow down or crash Home Assistant"
           },
           "mindful_title": "So be mindful",
           "mindful": {
