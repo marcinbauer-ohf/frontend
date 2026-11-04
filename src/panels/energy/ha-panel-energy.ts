@@ -1,5 +1,5 @@
 import type { CSSResultGroup, PropertyValues } from "lit";
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { navigate } from "../../common/navigate";
 import { sanitizeNavigationPath } from "../../common/url/sanitize-navigation-path";
@@ -15,6 +15,8 @@ import { generateLovelaceDashboardStrategy } from "../lovelace/strategies/get-st
 import "../lovelace/hui-root";
 import type { Lovelace } from "../lovelace/types";
 import { DEFAULT_POWER_COLLECTION_KEY } from "../../data/energy";
+import type { EnergyEditorView } from "./energy-editor-pane";
+import "./energy-editor-pane";
 
 @customElement("ha-panel-energy")
 class PanelEnergy extends LitElement {
@@ -37,6 +39,8 @@ class PanelEnergy extends LitElement {
 
   @state()
   private _error?: string;
+
+  @state() private _editing?: EnergyEditorView;
 
   public willUpdate(changedProps: PropertyValues<this>) {
     super.willUpdate(changedProps);
@@ -125,7 +129,7 @@ class PanelEnergy extends LitElement {
       enableFullEditMode: () => undefined,
       saveConfig: async () => undefined,
       deleteConfig: async () => undefined,
-      setEditMode: () => this._navigateConfig(),
+      setEditMode: (editMode) => this._setEditing(editMode),
       showToast: () => undefined,
     };
   }
@@ -162,14 +166,32 @@ class PanelEnergy extends LitElement {
         .backPath=${
           sanitizeNavigationPath(this._searchParms.get("backPath")) || "/"
         }
+        .editing=${Boolean(this._editing)}
         @reload-energy-panel=${this._reloadConfig}
+        @side-pane-closed=${this._stopEditing}
       >
+        ${
+          this._editing
+            ? html`<energy-editor-pane
+                slot="side-pane"
+                .hass=${this.hass}
+                .narrow=${this.narrow}
+                .view=${this._editing}
+                @energy-preferences-changed=${this._reloadConfig}
+              ></energy-editor-pane>`
+            : nothing
+        }
       </hui-root>
     `;
   }
 
-  private _navigateConfig(ev?: Event) {
-    ev?.stopPropagation();
+  private async _setEditing(editMode: boolean) {
+    if (!editMode) {
+      this._stopEditing();
+      return;
+    }
+    // The pane reuses the energy settings, which live in the config panel
+    await this.hass.loadFragmentTranslation("config");
     const viewPath = this.route?.path?.split("/")[1] || "";
     const tabMap: Record<string, string> = {
       overview: "electricity",
@@ -178,9 +200,13 @@ class PanelEnergy extends LitElement {
       water: "water",
       now: "electricity",
     };
-    const tab = tabMap[viewPath] || "electricity";
-    navigate(`/config/energy/${tab}?historyBack=1`);
+    // Opens on the energy type of the view being looked at
+    this._editing = (tabMap[viewPath] || "electricity") as EnergyEditorView;
   }
+
+  private _stopEditing = () => {
+    this._editing = undefined;
+  };
 
   private async _reloadConfig() {
     await this._loadSystemData();

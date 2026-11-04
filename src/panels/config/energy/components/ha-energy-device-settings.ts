@@ -45,6 +45,9 @@ import { energyCardStyles } from "./styles";
 export class EnergyDeviceSettings extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
+  /** Compact list layout for the energy dashboard's editor pane. */
+  @property({ type: Boolean, reflect: true }) public pane = false;
+
   @property({ attribute: false })
   public preferences!: EnergyPreferences;
 
@@ -136,7 +139,11 @@ export class EnergyDeviceSettings extends LitElement {
               : ""
           }
           <div class="row">
-            <ha-button @click=${this._addDevice} appearance="filled" size="s">
+            <ha-button
+              @click=${this._addDevice}
+              appearance=${this.pane ? "plain" : "filled"}
+              size="s"
+            >
               <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon
               >${this.hass.localize(
                 "ui.panel.config.energy.device_consumption.add_device"

@@ -11,6 +11,8 @@ export interface LovelaceDashboardDetailsDialogParams {
   dashboard?: LovelaceDashboard;
   urlPath?: string;
   isDefault?: boolean;
+  /** Edit only the dashboard background, without the settings tab. */
+  backgroundOnly?: boolean;
   /** Create flow only; optional suggested values for the form. */
   suggestions?: LovelaceDashboardSuggestions;
   /**

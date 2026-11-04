@@ -15,6 +15,7 @@ import { HaListBase } from "./ha-list-base";
  * facts and `ha-list-item-button` for navigable rows.
  *
  * @slot - List items (`<ha-list-item-*>`).
+ * @slot header-start - Leading content of the header, such as a drag handle.
  * @slot header-action - Trailing content of the header, for a "show more" link or another action.
  *
  * @csspart header - The header above the frame.
@@ -37,6 +38,7 @@ export class HaGroupedList extends HaListBase {
       ${
         this.header
           ? html`<div part="header" class="header">
+              <slot name="header-start"></slot>
               <span class="header-text" id="header">${this.header}</span>
               <slot name="header-action"></slot>
             </div>`
@@ -63,7 +65,6 @@ export class HaGroupedList extends HaListBase {
       .header {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         gap: var(--ha-space-2);
         margin: 0 0 var(--ha-space-1);
         margin-inline: calc(
@@ -76,6 +77,7 @@ export class HaGroupedList extends HaListBase {
       }
 
       .header-text {
+        flex: 1;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;

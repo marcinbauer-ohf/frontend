@@ -2,6 +2,8 @@ import type { HassEntity } from "home-assistant-js-websocket";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import { computeDomain } from "../../common/entity/compute_domain";
+import { stateCardType } from "../../common/entity/state_card_type";
+import "../../components/ha-state-icon";
 import type { ExtEntityRegistryEntry } from "../../data/entity/entity_registry";
 import type { HomeAssistant } from "../../types";
 import {
@@ -12,6 +14,7 @@ import {
   DOMAINS_NO_INFO,
   DOMAINS_WITH_MORE_INFO,
 } from "./const";
+import "./components/ha-more-info-state-header";
 import "./ha-more-info-history";
 import "./ha-more-info-logbook";
 import "./more-info-content";
@@ -36,6 +39,16 @@ export class MoreInfoInfo extends LitElement {
     const isNewMoreInfo = stateObj && computeShowNewMoreInfo(stateObj);
     const isFullHeight =
       isNewMoreInfo || DOMAINS_FULL_HEIGHT_MORE_INFO.includes(domain);
+    // An entity with nothing to operate and no control of its own is stated
+    // the way a light states itself: the value large, when it changed under
+    // it, and the icon where a control would have been.
+    const isReading =
+      stateObj &&
+      !isNewMoreInfo &&
+      !DOMAINS_WITH_MORE_INFO.includes(domain) &&
+      !DOMAINS_NO_INFO.includes(domain) &&
+      !("custom_ui_state_card" in stateObj.attributes) &&
+      stateCardType(this.hass, stateObj) === "display";
 
     return html`
       <div class="container" data-domain=${domain}>
@@ -68,15 +81,24 @@ export class MoreInfoInfo extends LitElement {
         }
         <div class="content">
           ${
-            DOMAINS_NO_INFO.includes(domain) || isNewMoreInfo
-              ? ""
-              : html`
-                  <state-card-content
-                    in-dialog
+            isReading
+              ? html`
+                  <ha-more-info-state-header
                     .stateObj=${stateObj}
-                    .hass=${this.hass}
-                  ></state-card-content>
+                  ></ha-more-info-state-header>
+                  <div class="reading-icon">
+                    <ha-state-icon .stateObj=${stateObj}></ha-state-icon>
+                  </div>
                 `
+              : DOMAINS_NO_INFO.includes(domain) || isNewMoreInfo
+                ? ""
+                : html`
+                    <state-card-content
+                      in-dialog
+                      .stateObj=${stateObj}
+                      .hass=${this.hass}
+                    ></state-card-content>
+                  `
           }
           ${
             DOMAINS_WITH_MORE_INFO.includes(domain) ||
@@ -143,6 +165,17 @@ export class MoreInfoInfo extends LitElement {
     }
     more-info-content[full-height] {
       flex: 1;
+    }
+
+    /* Plain and grey: a picture of what the value is of, not a control
+       standing idle. */
+    .reading-icon {
+      display: flex;
+      justify-content: center;
+      padding-block: var(--ha-space-6);
+      margin-bottom: var(--ha-space-4);
+      color: var(--disabled-text-color);
+      --mdc-icon-size: 72px;
     }
 
     state-card-content,

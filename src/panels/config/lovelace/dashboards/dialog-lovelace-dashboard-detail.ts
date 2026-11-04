@@ -63,7 +63,7 @@ export class DialogLovelaceDashboardDetail extends DirtyStateProviderMixin<Dashb
     this._params = params;
     this._error = undefined;
     this._urlPathChanged = false;
-    this._currTab = TABS[0];
+    this._currTab = params.backgroundOnly ? "tab-background" : TABS[0];
     this._backgroundConfig = params.lovelaceConfig;
     this._open = true;
     if (this._params.dashboard) {
@@ -118,7 +118,9 @@ export class DialogLovelaceDashboardDetail extends DirtyStateProviderMixin<Dashb
 
     const yamlMode = this._params.dashboard?.mode === "yaml";
 
-    const titleInvalid = !this._data.title || !this._data.title.trim();
+    const titleInvalid =
+      !this._params.backgroundOnly &&
+      (!this._data.title || !this._data.title.trim());
     const dialogTitle = this._params.urlPath
       ? this._data.title ||
         this.hass.localize(
@@ -131,6 +133,8 @@ export class DialogLovelaceDashboardDetail extends DirtyStateProviderMixin<Dashb
       this._params.dashboard?.mode !== "yaml" &&
       Boolean(this._params.lovelaceConfig) &&
       Boolean(this._params.saveConfig);
+    const backgroundOnly = Boolean(this._params.backgroundOnly);
+    const showTabs = showBackgroundTab && !backgroundOnly;
 
     const cancelButton = html`
       <ha-button
@@ -145,13 +149,21 @@ export class DialogLovelaceDashboardDetail extends DirtyStateProviderMixin<Dashb
     return html`
       <ha-dialog
         .open=${this._open}
-        header-title=${showBackgroundTab ? nothing : dialogTitle}
+        header-title=${
+          showTabs
+            ? nothing
+            : backgroundOnly
+              ? this.hass.localize(
+                  "ui.panel.lovelace.editor.edit_view.tab_background"
+                )
+              : dialogTitle
+        }
         width=${showBackgroundTab ? "large" : "medium"}
         .preventScrimClose=${this.isDirtyState}
         @closed=${this._dialogClosed}
       >
         ${
-          showBackgroundTab
+          showTabs
             ? html`
                 <ha-dialog-header show-border slot="header">
                   <ha-icon-button
@@ -185,7 +197,7 @@ export class DialogLovelaceDashboardDetail extends DirtyStateProviderMixin<Dashb
         </div>
         <ha-dialog-footer slot="footer">
           ${
-            this._params.urlPath
+            this._params.urlPath && !backgroundOnly
               ? html`
                   ${
                     this._params.dashboard?.mode === "storage"
@@ -220,15 +232,17 @@ export class DialogLovelaceDashboardDetail extends DirtyStateProviderMixin<Dashb
             ?autofocus=${yamlMode}
           >
             ${
-              this._params.urlPath
-                ? this._params.dashboard?.mode === "storage"
-                  ? this.hass.localize(
-                      "ui.panel.config.lovelace.dashboards.detail.update"
+              backgroundOnly
+                ? this.hass.localize("ui.common.save")
+                : this._params.urlPath
+                  ? this._params.dashboard?.mode === "storage"
+                    ? this.hass.localize(
+                        "ui.panel.config.lovelace.dashboards.detail.update"
+                      )
+                    : this.hass.localize("ui.common.close")
+                  : this.hass.localize(
+                      "ui.panel.config.lovelace.dashboards.detail.create"
                     )
-                  : this.hass.localize("ui.common.close")
-                : this.hass.localize(
-                    "ui.panel.config.lovelace.dashboards.detail.create"
-                  )
             }
           </ha-button>
         </ha-dialog-footer>
@@ -419,7 +433,9 @@ export class DialogLovelaceDashboardDetail extends DirtyStateProviderMixin<Dashb
     }
     this._submitting = true;
     try {
-      if (this._params.dashboard) {
+      if (this._params.backgroundOnly) {
+        // Only the background is edited here
+      } else if (this._params.dashboard) {
         await this._params.updateDashboard({
           require_admin: this._data.require_admin ?? false,
           show_in_sidebar: this._data.show_in_sidebar ?? true,

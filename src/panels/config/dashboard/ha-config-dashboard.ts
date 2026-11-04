@@ -282,87 +282,91 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
           .isWide=${this.isWide}
           full-width
         >
-          ${
-            repairsIssues.length || canInstallUpdates.length
-              ? html`<div class="dashboard-alerts">
-                  ${
-                    repairsIssues.length
-                      ? html`
-                          <ha-card outlined class="dashboard-alert-card">
-                            <div
-                              class="dashboard-alert-title"
-                              role="heading"
-                              aria-level="2"
-                            >
-                              <a href="/config/repairs?historyBack=1">
-                                ${this.hass.localize(
-                                  "ui.panel.config.repairs.title",
-                                  {
-                                    count: totalRepairIssues,
-                                  }
-                                )}
-                                <ha-icon-next></ha-icon-next>
-                              </a>
-                            </div>
-                            <ha-config-repairs
-                              .hass=${this.hass}
-                              .narrow=${this.narrow}
-                              .repairsIssues=${repairsIssues}
-                            ></ha-config-repairs>
-                          </ha-card>
-                        `
-                      : ""
-                  }
-                  ${
-                    canInstallUpdates.length
-                      ? html`
-                          <ha-card outlined class="dashboard-alert-card">
-                            <div
-                              class="dashboard-alert-title"
-                              role="heading"
-                              aria-level="2"
-                            >
-                              <a href="/config/updates?historyBack=1">
-                                ${this.hass.localize(
-                                  "ui.panel.config.updates.title",
-                                  {
-                                    count: totalUpdates,
-                                  }
-                                )}
-                                <ha-icon-next></ha-icon-next>
-                              </a>
-                            </div>
-                            <ha-config-updates
-                              .narrow=${this.narrow}
-                              .updateEntities=${canInstallUpdates}
-                            ></ha-config-updates>
-                          </ha-card>
-                        `
-                      : ""
-                  }
-                </div>`
-              : ""
-          }
-          ${this._pages(
-            this.cloudStatus,
-            isComponentLoaded(this.hass.config, "cloud"),
-            this.hass.auth.external?.config.hasSettingsScreen,
-            this.hass.userData?.apps_info_dismissed,
-            isComponentLoaded(this.hass.config, "hassio")
-          ).map((categoryPages) =>
-            categoryPages.length === 0
-              ? nothing
-              : html`
-                  <ha-card outlined>
-                    <ha-config-navigation
-                      .hass=${this.hass}
-                      .narrow=${this.narrow}
-                      .pages=${categoryPages}
-                    ></ha-config-navigation>
-                  </ha-card>
-                `
-          )}
-          <ha-tip>${this._tip}</ha-tip>
+          <div class="columns">
+            <div class="main">
+              ${this._pages(
+                this.cloudStatus,
+                isComponentLoaded(this.hass.config, "cloud"),
+                this.hass.auth.external?.config.hasSettingsScreen,
+                this.hass.userData?.apps_info_dismissed,
+                isComponentLoaded(this.hass.config, "hassio")
+              ).map((categoryPages) =>
+                categoryPages.length === 0
+                  ? nothing
+                  : html`
+                      <ha-card outlined>
+                        <ha-config-navigation
+                          .hass=${this.hass}
+                          .narrow=${this.narrow}
+                          .pages=${categoryPages}
+                        ></ha-config-navigation>
+                      </ha-card>
+                    `
+              )}
+              <ha-tip>${this._tip}</ha-tip>
+            </div>
+            ${
+              repairsIssues.length || canInstallUpdates.length
+                ? html`<div class="dashboard-alerts">
+                    ${
+                      repairsIssues.length
+                        ? html`
+                            <ha-card outlined class="dashboard-alert-card">
+                              <div
+                                class="dashboard-alert-title"
+                                role="heading"
+                                aria-level="2"
+                              >
+                                <a href="/config/repairs?historyBack=1">
+                                  ${this.hass.localize(
+                                    "ui.panel.config.repairs.title",
+                                    {
+                                      count: totalRepairIssues,
+                                    }
+                                  )}
+                                  <ha-icon-next></ha-icon-next>
+                                </a>
+                              </div>
+                              <ha-config-repairs
+                                .hass=${this.hass}
+                                .narrow=${this.narrow}
+                                .repairsIssues=${repairsIssues}
+                              ></ha-config-repairs>
+                            </ha-card>
+                          `
+                        : ""
+                    }
+                    ${
+                      canInstallUpdates.length
+                        ? html`
+                            <ha-card outlined class="dashboard-alert-card">
+                              <div
+                                class="dashboard-alert-title"
+                                role="heading"
+                                aria-level="2"
+                              >
+                                <a href="/config/updates?historyBack=1">
+                                  ${this.hass.localize(
+                                    "ui.panel.config.updates.title",
+                                    {
+                                      count: totalUpdates,
+                                    }
+                                  )}
+                                  <ha-icon-next></ha-icon-next>
+                                </a>
+                              </div>
+                              <ha-config-updates
+                                .narrow=${this.narrow}
+                                .updateEntities=${canInstallUpdates}
+                              ></ha-config-updates>
+                            </ha-card>
+                          `
+                        : ""
+                    }
+                  </div>`
+                : ""
+            }
+          </div>
         </ha-config-section>
       </ha-top-app-bar-fixed>
     `;
@@ -425,7 +429,35 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
         ha-config-section {
           margin: auto;
           margin-top: -32px;
-          max-width: 600px;
+          max-width: 1040px;
+          container-type: inline-size;
+        }
+
+        .columns {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: var(--ha-space-6);
+          align-items: start;
+        }
+
+        .main {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-6);
+        }
+
+        /* Alerts stay above the navigation when stacked */
+        .dashboard-alerts {
+          order: -1;
+        }
+
+        @container (min-width: 840px) {
+          .columns {
+            grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+          }
+          .dashboard-alerts {
+            order: 0;
+          }
         }
 
         ha-card {

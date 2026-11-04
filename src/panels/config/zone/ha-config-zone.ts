@@ -365,7 +365,7 @@ export class HaConfigZone extends SubscribeMixin(LitElement) {
         .hass=${this.hass}
         .route=${this.route}
         back-path="/config"
-        .tabs=${configSections.areas}
+        .tabs=${configSections.zone}
         has-fab
       >
         ${

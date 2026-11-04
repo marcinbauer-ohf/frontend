@@ -1,12 +1,8 @@
 import {
   mdiAccount,
-  mdiCodeBraces,
   mdiCommentProcessingOutline,
   mdiDevices,
   mdiDotsVertical,
-  mdiFileMultiple,
-  mdiFormatListBulletedTriangle,
-  mdiHelpCircleOutline,
   mdiMagnify,
   mdiPencil,
   mdiPlus,
@@ -16,18 +12,22 @@ import {
   mdiShape,
   mdiSofa,
   mdiUndo,
-  mdiViewDashboard,
 } from "@mdi/js";
+import { ContextProvider } from "@lit/context";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators";
+import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { ifDefined } from "lit/directives/if-defined";
 import memoizeOne from "memoize-one";
+import { homeEditorPath } from "../../common/url/home-query-params";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import { UndoRedoController } from "../../common/controllers/undo-redo-controller";
-import { fireEvent } from "../../common/dom/fire_event";
+import { fireEvent, type HASSDomEvent } from "../../common/dom/fire_event";
+import { mainWindow } from "../../common/dom/get_main_window";
 import { ctrlOrCmdLabel } from "../../common/keyboard/ctrl-or-cmd";
+import { isSwipeLocked } from "../../common/dom/is-swipe-locked";
+import { computeRTLDirection } from "../../common/util/compute_rtl";
 import { goBack, navigate, replaceCurrentUrl } from "../../common/navigate";
 import type { LocalizeKeys } from "../../common/translations/localize";
 import { constructUrlCurrentPath } from "../../common/url/construct-url";
@@ -37,6 +37,7 @@ import {
   extractSearchParamsObject,
   removeSearchParam,
 } from "../../common/url/search-params";
+import { debounce } from "../../common/util/debounce";
 import { afterNextRender } from "../../common/util/render-status";
 import "../../components/ha-button";
 import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
@@ -44,7 +45,6 @@ import "../../components/ha-dropdown";
 import "../../components/ha-dropdown-item";
 import "../../components/ha-icon";
 import "../../components/ha-icon-button";
-import "../../components/ha-icon-button-arrow-next";
 import "../../components/ha-icon-button-arrow-prev";
 import "../../components/ha-menu-button";
 import "../../components/ha-svg-icon";
@@ -57,14 +57,19 @@ import type {
   LovelaceRawConfig,
 } from "../../data/lovelace/config/types";
 import { isStrategyDashboard } from "../../data/lovelace/config/types";
+import type { LovelaceCardConfig } from "../../data/lovelace/config/card";
 import type { LovelaceViewConfig } from "../../data/lovelace/config/view";
+import type {
+  LovelaceDashboard,
+  LovelaceDashboardMutableParams,
+} from "../../data/lovelace/dashboard";
 import {
   deleteDashboard,
   fetchDashboards,
   updateDashboard,
 } from "../../data/lovelace/dashboard";
 import { fetchLovelaceInfo } from "../../data/lovelace/resource";
-import { getPanelTitle } from "../../data/panel";
+import { DEFAULT_PANEL, getPanelTitle } from "../../data/panel";
 import { createPerson } from "../../data/person";
 import { showListItemsDialog } from "../../dialogs/dialog-list-items/show-list-items-dialog";
 import {
@@ -83,9 +88,16 @@ import { showToast } from "../../util/toast";
 import { showAreaRegistryDetailDialog } from "../config/areas/show-dialog-area-registry-detail";
 import { showNewAutomationDialog } from "../config/automation/show-dialog-new-automation";
 import { showAddIntegrationDialog } from "../config/integrations/show-add-integration-dialog";
-import { showDashboardDetailDialog } from "../config/lovelace/dashboards/show-dialog-lovelace-dashboard-detail";
 import { showPersonDetailDialog } from "../config/person/show-dialog-person-detail";
-import { swapView } from "./editor/config-util";
+import { selectedCardContext } from "./common/context";
+import type { DashboardEditorAction } from "./editor/hui-dashboard-editor-pane";
+import "./editor/hui-dashboard-editor-pane";
+import "./editor/card-editor/hui-card-editor-pane";
+import type {
+  CardPaneEditorParams,
+  HuiCardEditorPane,
+} from "./editor/card-editor/hui-card-editor-pane";
+import { setAtPath } from "./editor/lovelace-path";
 import { showDashboardStrategyEditorDialog } from "./editor/dashboard-strategy-editor/dialogs/show-dialog-dashboard-strategy-editor";
 import { showSaveDialog } from "./editor/show-save-config-dialog";
 import { showEditViewDialog } from "./editor/view-editor/show-edit-view-dialog";
@@ -129,6 +141,10 @@ interface UndoStackItem {
   config: LovelaceRawConfig;
 }
 
+const SWIPE_EDGE = 24; // px
+const SWIPE_DISTANCE = 60; // px
+const SWIPE_DURATION = 600; // ms
+
 @customElement("hui-root")
 class HUIRoot extends LitElement {
   @property({ attribute: false }) public panel?: PanelInfo;
@@ -151,7 +167,8 @@ class HUIRoot extends LitElement {
   /**
    * Panel-driven editing (the home panel edits itself, not the Lovelace
    * config): frames the canvas and makes room for a pane in the `side-pane`
-   * slot, without the rest of the editor chrome.
+   * slot. Lovelace edit mode frames the canvas the same way, with the
+   * dashboard's own editor pane.
    */
   @property({ type: Boolean, reflect: true }) public editing = false;
 
@@ -162,6 +179,21 @@ class HUIRoot extends LitElement {
   @state() private _curView?: number | "hass-unused-entities";
 
   @state() private _resourceMode: "yaml" | "storage" = "storage";
+
+  @state() private _cardEditor?: CardPaneEditorParams;
+
+  // The registry entry whose settings the editor pane edits in place
+  @state() private _dashboard?: LovelaceDashboard;
+
+  @query("hui-card-editor-pane") private _cardPane?: HuiCardEditorPane;
+
+  @query("#side-pane") private _sidePane?: HTMLElement;
+
+  @query(".edit-toolbar") private _editToolbar?: HTMLElement;
+
+  private _selectedCardProvider = new ContextProvider(this, {
+    context: selectedCardContext,
+  });
 
   private _configChangedByUndo = false;
 
@@ -185,97 +217,21 @@ class HUIRoot extends LitElement {
     isComponentLoaded(this.hass.config, "conversation")
   );
 
-  private _renderActionItems(): TemplateResult {
-    if (this.editing) {
-      return html`<ha-button
-        appearance="filled"
-        class="done"
-        @click=${this._sidePaneDone}
-      >
-        ${this.hass.localize("ui.common.done")}
-      </ha-button>`;
+  private _renderActionItems(): TemplateResult | typeof nothing {
+    // Editing keeps its actions at the bottom of the pane
+    if (this.editing || this._editMode) {
+      return nothing;
     }
 
     const result: TemplateResult[] = [];
-
-    if (this._editMode) {
-      result.push(
-        html`<ha-icon-button
-            slot="toolbar-icon"
-            .path=${mdiUndo}
-            @click=${this._undo}
-            .disabled=${!this._undoRedoController.canUndo}
-            id="button-undo"
-          >
-          </ha-icon-button>
-          <ha-tooltip placement="bottom" for="button-undo">
-            ${this.hass.localize("ui.common.undo")}
-          </ha-tooltip>
-          <ha-icon-button
-            slot="toolbar-icon"
-            .path=${mdiRedo}
-            @click=${this._redo}
-            .disabled=${!this._undoRedoController.canRedo}
-            id="button-redo"
-          >
-          </ha-icon-button>
-          <ha-tooltip placement="bottom" for="button-redo">
-            ${this.hass.localize("ui.common.redo")}
-          </ha-tooltip>
-          <ha-button
-            appearance="filled"
-            size="s"
-            class="exit-edit-mode"
-            @click=${this._editModeDisable}
-          >
-            ${this.hass!.localize("ui.panel.lovelace.menu.exit_edit_mode")}
-          </ha-button>`
-      );
-    }
 
     const isLovelaceDashboard = this.panel?.component_name === "lovelace";
 
     const items: ActionItem[] = [
       {
-        icon: mdiFormatListBulletedTriangle,
-        key: "ui.panel.lovelace.unused_entities.title",
-        overflowAction: this._handleUnusedEntities,
-        visible: this._editMode && !__DEMO__,
-        overflow: true,
-      },
-      {
-        icon: mdiCodeBraces,
-        key: "ui.panel.lovelace.editor.menu.raw_editor",
-        overflowAction: this._handleRawEditor,
-        visible: this._editMode,
-        overflow: true,
-      },
-      {
-        icon: mdiViewDashboard,
-        key: "ui.panel.lovelace.editor.menu.manage_dashboards",
-        overflowAction: this._handleManageDashboards,
-        visible: this._editMode && !__DEMO__,
-        overflow: true,
-      },
-      {
-        icon: mdiFileMultiple,
-        key: "ui.panel.lovelace.editor.menu.manage_resources",
-        overflowAction: this._handleManageResources,
-        visible: this._editMode,
-        overflow: true,
-      },
-      {
-        icon: mdiHelpCircleOutline,
-        key: "ui.panel.lovelace.menu.help",
-        overflowAction: this._handleHelp,
-        visible: this._editMode,
-        overflow: true,
-      },
-      {
         icon: mdiPlus,
         key: "ui.panel.lovelace.menu.add",
-        visible:
-          !this._editMode && this.hass.user?.is_admin && !this.hass.kioskMode,
+        visible: this.hass.user?.is_admin && !this.hass.kioskMode,
         overflow: this.narrow,
         subItems: [
           {
@@ -314,10 +270,7 @@ class HUIRoot extends LitElement {
         overflowAction: this._showVoiceCommandDialog,
         suffix:
           this.hass.enableShortcuts && !isMobileClient ? "(A)" : undefined,
-        visible:
-          !this._editMode &&
-          this.narrow &&
-          this._conversation(this.hass.config.components),
+        visible: this.narrow && this._conversation(this.hass.config.components),
         overflow: true,
       },
       {
@@ -329,31 +282,28 @@ class HUIRoot extends LitElement {
           this.hass.enableShortcuts && !isMobileClient
             ? `(${ctrlOrCmdLabel(this.hass.localize)} + K)`
             : undefined,
-        visible: !this._editMode && !this.hass.kioskMode && this.narrow,
+        visible: !this.hass.kioskMode && this.narrow,
         overflow: true,
       },
       {
         icon: mdiRefresh,
         key: "ui.common.refresh",
         overflowAction: this._handleRefresh,
-        visible: !this._editMode && this._yamlMode,
+        visible: this._yamlMode,
         overflow: true,
       },
       {
         icon: mdiShape,
         key: "ui.panel.lovelace.unused_entities.title",
         overflowAction: this._handleUnusedEntities,
-        visible: !this._editMode && this._yamlMode,
+        visible: this._yamlMode,
         overflow: true,
       },
       {
         icon: mdiRefresh,
         key: "ui.panel.lovelace.menu.reload_resources",
         overflowAction: this._handleReloadResources,
-        visible:
-          !this._editMode &&
-          this._resourceMode === "yaml" &&
-          isLovelaceDashboard,
+        visible: this._resourceMode === "yaml" && isLovelaceDashboard,
         overflow: true,
       },
       {
@@ -362,7 +312,6 @@ class HUIRoot extends LitElement {
         overflowAction: this._enableEditMode,
         buttonAction: this._enableEditMode,
         visible:
-          !this._editMode &&
           this.hass!.user?.is_admin &&
           !this.hass!.config.recovery_mode &&
           !this.hass.kioskMode &&
@@ -565,37 +514,7 @@ class HUIRoot extends LitElement {
               "hide-tab": Boolean(hidden),
             })}
           >
-            ${
-              this._editMode
-                ? html`
-                    <ha-icon-button-arrow-prev
-                      .label=${this.hass!.localize(
-                        "ui.panel.lovelace.editor.edit_view.move_left"
-                      )}
-                      class="edit-icon view"
-                      @click=${this._moveViewLeft}
-                      .disabled=${this._curView === 0}
-                    ></ha-icon-button-arrow-prev>
-                    ${tabContent}
-                    <ha-icon-button
-                      .title=${this.hass!.localize(
-                        "ui.panel.lovelace.editor.edit_view.edit"
-                      )}
-                      class="edit-icon view"
-                      .path=${mdiPencil}
-                      @click=${this._editView}
-                    ></ha-icon-button>
-                    <ha-icon-button-arrow-next
-                      .label=${this.hass!.localize(
-                        "ui.panel.lovelace.editor.edit_view.move_right"
-                      )}
-                      class="edit-icon view"
-                      @click=${this._moveViewRight}
-                      .disabled=${(this._curView! as number) + 1 === views.length}
-                    ></ha-icon-button-arrow-next>
-                  `
-                : tabContent
-            }
+            ${tabContent}
           </ha-tab-group-tab>
         `;
       })}
@@ -607,111 +526,127 @@ class HUIRoot extends LitElement {
     return html`
       <div
         class=${classMap({
-          "edit-mode": this._editMode,
-          framed: this.editing,
+          framed: this.editing || this._editMode,
           narrow: this.narrow,
+          "has-tabs": hasTabViews && !isSubview,
         })}
       >
         <div class="header">
           <slot name="toolbar">
             <div class="toolbar">
               ${
-                this._editMode
+                isSubview || this.backButton
                   ? html`
-                      <div class="main-title">
-                        ${
-                          dashboardTitle ||
-                          this.hass!.localize("ui.panel.lovelace.editor.header")
-                        }
-                        <ha-icon-button
-                          slot="actionItems"
-                          .label=${this.hass!.localize(
-                            "ui.panel.lovelace.editor.edit_lovelace.edit_title"
-                          )}
-                          .path=${mdiPencil}
-                          class="edit-icon"
-                          @click=${this._editDashboard}
-                        ></ha-icon-button>
-                      </div>
-                      <div class="action-items">
-                        ${this._renderActionItems()}
-                      </div>
+                      <ha-icon-button-arrow-prev
+                        slot="navigationIcon"
+                        .href=${this._backPath}
+                        @click=${this._handleBackClick}
+                      ></ha-icon-button-arrow-prev>
                     `
                   : html`
-                      ${
-                        isSubview || this.backButton
-                          ? html`
-                              <ha-icon-button-arrow-prev
-                                slot="navigationIcon"
-                                .href=${this._backPath}
-                                @click=${this._handleBackClick}
-                              ></ha-icon-button-arrow-prev>
-                            `
-                          : html`
-                              <ha-menu-button
-                                slot="navigationIcon"
-                              ></ha-menu-button>
-                            `
-                      }
-                      ${
-                        isSubview
-                          ? html`
-                              <div class="main-title">
-                                ${curViewConfig.title}
-                              </div>
-                            `
-                          : hasTabViews
-                            ? tabs
-                            : html`
-                                <div class="main-title">
-                                  ${views[0]?.title ?? dashboardTitle}
-                                </div>
-                              `
-                      }
-                      ${this._renderSearch()}
-                      <div class="action-items">
-                        ${this._renderActionItems()}
-                      </div>
+                      <ha-menu-button slot="navigationIcon"></ha-menu-button>
                     `
               }
+              <div class="main-title">
+                ${
+                  isSubview
+                    ? curViewConfig.title
+                    : hasTabViews
+                      ? dashboardTitle
+                      : (views[0]?.title ?? dashboardTitle)
+                }
+              </div>
+              ${this._renderSearch()}
+              <div class="action-items">${this._renderActionItems()}</div>
             </div>
-            ${
-              this._editMode
-                ? html`
-                    <div class="tab-bar">
-                      ${tabs}
-                      <ha-icon-button
-                        slot="nav"
-                        id="add-view"
-                        @click=${this._addView}
-                        .label=${this.hass!.localize(
-                          "ui.panel.lovelace.editor.edit_view.add"
-                        )}
-                        .path=${mdiPlus}
-                      ></ha-icon-button>
-                    </div>
-                  `
-                : nothing
-            }
           </slot>
         </div>
         <hui-view-container
-          class=${this._editMode ? "has-tab-bar" : ""}
+          @touchstart=${this._swipeStartListener}
+          @touchend=${this._swipeEndListener}
+          @touchcancel=${this._swipeEndListener}
           .hass=${this.hass}
           .theme=${curViewConfig?.theme}
           id="view"
+          @ll-edit-card-in-pane=${this._editCardInPane}
         >
           <hui-view-background .hass=${this.hass} .background=${background}>
           </hui-view-background>
         </hui-view-container>
-        <div id="side-pane"><slot name="side-pane"></slot></div>
+        ${
+          hasTabViews && !isSubview
+            ? html`<div class="view-tabs">${tabs}</div>`
+            : nothing
+        }
+        ${
+          this._editMode && !this.narrow
+            ? html`<div class="edit-toolbar">
+                <div class="edit-toolbar-surface">
+                  <ha-icon-button
+                    .path=${mdiUndo}
+                    .label=${this.hass.localize("ui.common.undo")}
+                    .disabled=${!this._undoRedoController.canUndo}
+                    @click=${this._undo}
+                  ></ha-icon-button>
+                  <ha-icon-button
+                    .path=${mdiRedo}
+                    .label=${this.hass.localize("ui.common.redo")}
+                    .disabled=${!this._undoRedoController.canRedo}
+                    @click=${this._redo}
+                  ></ha-icon-button>
+                  <ha-button
+                    appearance="filled"
+                    @click=${this._editModeDisable}
+                  >
+                    ${this.hass.localize("ui.common.done")}
+                  </ha-button>
+                </div>
+              </div>`
+            : nothing
+        }
+        <div id="side-pane">
+          ${
+            this._editMode && this._cardEditor
+              ? html`<hui-card-editor-pane
+                  .hass=${this.hass}
+                  .lovelaceConfig=${this.config}
+                  .cardConfig=${this._cardEditor.cardConfig}
+                  .sectionConfig=${this._cardEditor.sectionConfig}
+                  .saveCardConfig=${this._saveCardConfig}
+                  .narrow=${this.narrow}
+                  @card-editor-preview=${this._previewCard}
+                  @side-pane-closed=${this._closeCardEditor}
+                ></hui-card-editor-pane>`
+              : this._editMode
+                ? html`<hui-dashboard-editor-pane
+                    .hass=${this.hass}
+                    .views=${views}
+                    .background=${this.config.background}
+                    .curView=${this._curView}
+                    .dashboard=${this._dashboard}
+                    .isDefault=${
+                      this.lovelace?.urlPath ===
+                      (this.hass.systemData?.default_panel || DEFAULT_PANEL)
+                    }
+                    .canUndo=${this._undoRedoController.canUndo}
+                    .canRedo=${this._undoRedoController.canRedo}
+                    .narrow=${this.narrow}
+                    .canDelete=${
+                      this.lovelace?.mode === "storage" &&
+                      this.lovelace.urlPath !== null
+                    }
+                    @dashboard-editor-action=${this._handleEditorAction}
+                    @dashboard-editor-view=${this._handleEditorView}
+                    @dashboard-editor-view-moved=${this._moveView}
+                    @dashboard-editor-settings=${this._dashboardSettingsChanged}
+                    @dashboard-editor-background=${this._backgroundChanged}
+                  ></hui-dashboard-editor-pane>`
+                : html`<slot name="side-pane"></slot>`
+          }
+        </div>
       </div>
     `;
   }
-
-  private _sidePaneDone = () => {
-    fireEvent(this, "side-pane-closed");
-  };
 
   private _handleWindowScroll = () => {
     this.toggleAttribute("scrolled", window.scrollY !== 0);
@@ -786,6 +721,9 @@ class HUIRoot extends LitElement {
   }
 
   protected willUpdate(changedProperties: PropertyValues<this>): void {
+    if ((changedProperties as PropertyValues).has("_cardEditor")) {
+      this._selectedCardProvider.setValue(this._cardEditor?.path.join());
+    }
     if (changedProperties.has("lovelace")) {
       const oldLovelace = changedProperties.get("lovelace") as
         Lovelace | undefined;
@@ -857,6 +795,12 @@ class HUIRoot extends LitElement {
 
       if (!oldLovelace || oldLovelace.editMode !== this.lovelace!.editMode) {
         const views = this.config && this.config.views;
+
+        if (this.lovelace!.editMode) {
+          this._fetchDashboard();
+        } else {
+          this._dashboard = undefined;
+        }
 
         // Leave unused entities when leaving edit mode
         if (
@@ -1016,7 +960,7 @@ class HUIRoot extends LitElement {
           ),
           action: {
             action: () => {
-              navigate(`/config/person`);
+              navigate(homeEditorPath("people"));
             },
             text: this.hass.localize(
               "ui.panel.lovelace.menu.add_person_action"
@@ -1087,28 +1031,7 @@ class HUIRoot extends LitElement {
             narrow: this.narrow!,
           });
         },
-        deleteDashboard: async () => {
-          const confirm = await showConfirmationDialog(this, {
-            title: this.hass!.localize(
-              "ui.panel.config.lovelace.dashboards.confirm_delete_title",
-              { dashboard_title: dashboard!.title }
-            ),
-            text: this.hass!.localize(
-              "ui.panel.config.lovelace.dashboards.confirm_delete_text"
-            ),
-            confirmText: this.hass!.localize("ui.common.delete"),
-            destructive: true,
-          });
-          if (!confirm) {
-            return false;
-          }
-          try {
-            await deleteDashboard(this.hass!, dashboard!.id);
-            return true;
-          } catch (_err: any) {
-            return false;
-          }
-        },
+        deleteDashboard: () => this._deleteDashboard(dashboard!),
       });
       return;
     }
@@ -1123,54 +1046,191 @@ class HUIRoot extends LitElement {
     );
   };
 
-  private _editModeDisable(): void {
-    this.lovelace!.setEditMode(false);
-    this._undoRedoController.reset();
+  private async _editCardInPane(
+    ev: HASSDomEvent<HASSDomEvents["ll-edit-card-in-pane"]>
+  ) {
+    if (!this._editMode) {
+      return;
+    }
+    ev.preventDefault();
+    // Tapping the card being edited keeps its edits as they are
+    if (this._cardEditor?.path.join() === ev.detail.path.join()) {
+      return;
+    }
+    if (!(await this._confirmLeaveCard())) {
+      return;
+    }
+    this._closeCardEditor();
+    this._cardEditor = ev.detail;
   }
 
-  private async _editDashboard() {
-    const urlPath = this.route?.prefix.slice(1);
+  private async _confirmLeaveCard(): Promise<boolean> {
+    return (await this._cardPane?.confirmLeave()) ?? true;
+  }
+
+  private _previewCard(ev: HASSDomEvent<HASSDomEvents["card-editor-preview"]>) {
+    this._debouncedPreview(ev.detail.config);
+  }
+
+  // The open view shows the card as edited, without saving the dashboard.
+  // ponytail: the preview config is what the view holds, so moving or
+  // deleting another card while one has unsaved edits saves those edits too;
+  // keep the preview out of the view's lovelace if that bites.
+  private _debouncedPreview = debounce((config?: LovelaceCardConfig) => {
+    const view =
+      this._curView != null ? this._viewCache[this._curView] : undefined;
+    if (!view || !this._cardEditor) {
+      return;
+    }
+    view.lovelace = config
+      ? {
+          ...this.lovelace!,
+          config: setAtPath(
+            this.lovelace!.config,
+            this._cardEditor.path,
+            config
+          ),
+        }
+      : this.lovelace!;
+  }, 150);
+
+  private _saveCardConfig = (config: LovelaceCardConfig) =>
+    this.lovelace!.saveConfig(
+      setAtPath(this.lovelace!.config, this._cardEditor!.path, config)
+    );
+
+  private _closeCardEditor = () => {
+    if (!this._cardEditor) {
+      return;
+    }
+    this._debouncedPreview.cancel();
+    this._cardEditor = undefined;
+    const view =
+      this._curView != null ? this._viewCache[this._curView] : undefined;
+    if (view) {
+      view.lovelace = this.lovelace!;
+    }
+  };
+
+  private async _editModeDisable() {
+    if (!(await this._confirmLeaveCard())) {
+      return;
+    }
+    this._closeCardEditor();
+    const animations = this._animateEditChromeOut();
+    await Promise.all(animations.map((animation) => animation.finished));
+    this.lovelace!.setEditMode(false);
+    this._undoRedoController.reset();
+    // Held at their end state so they don't flash back before the update
+    await this.updateComplete;
+    animations.forEach((animation) => animation.cancel());
+  }
+
+  // The reverse of their entrances: the pane slides back to its edge and
+  // the floating toolbar sinks away. On a phone the pane is a bottom sheet.
+  private _animateEditChromeOut(): Animation[] {
+    if (
+      this.narrow ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return [];
+    }
+    const options: KeyframeAnimationOptions = {
+      duration: 200,
+      easing: "cubic-bezier(0.3, 0, 1, 1)",
+      fill: "forwards",
+    };
+    const direction = mainWindow.document.dir === "rtl" ? -1 : 1;
+    return [
+      this._sidePane?.animate(
+        {
+          translate: `calc(${direction} * (100% + var(--ha-space-4))) 0`,
+        },
+        options
+      ),
+      this._editToolbar?.animate(
+        { opacity: 0, transform: "translateY(var(--ha-space-6))" },
+        options
+      ),
+    ].filter((animation): animation is Animation => Boolean(animation));
+  }
+
+  private async _fetchDashboard() {
+    const urlPath = this.lovelace?.urlPath;
+    if (!urlPath || this.lovelace?.mode !== "storage") {
+      return;
+    }
+    // The pane's settings form uses the dashboard config labels
     await this.hass.loadFragmentTranslation("config");
     const dashboards = await fetchDashboards(this.hass);
-    const dashboard = dashboards.find((d) => d.url_path === urlPath);
-    const lovelace = this.lovelace;
-    const lovelaceConfig =
-      lovelace && !isStrategyDashboard(lovelace.rawConfig)
-        ? lovelace.rawConfig
-        : undefined;
+    this._dashboard = dashboards.find((d) => d.url_path === urlPath);
+  }
 
-    showDashboardDetailDialog(this, {
-      dashboard,
-      urlPath,
-      ...(lovelace && lovelaceConfig
-        ? { lovelaceConfig, saveConfig: lovelace.saveConfig }
-        : {}),
-      updateDashboard: async (values) => {
-        await updateDashboard(this.hass!, dashboard!.id, values);
-      },
-      removeDashboard: async () => {
-        const confirm = await showConfirmationDialog(this, {
-          title: this.hass!.localize(
-            "ui.panel.config.lovelace.dashboards.confirm_delete_title",
-            { dashboard_title: dashboard!.title }
-          ),
-          text: this.hass!.localize(
-            "ui.panel.config.lovelace.dashboards.confirm_delete_text"
-          ),
-          confirmText: this.hass!.localize("ui.common.delete"),
-          destructive: true,
-        });
-        if (!confirm) {
-          return false;
+  private _dashboardSettingsChanged(
+    ev: HASSDomEvent<HASSDomEvents["dashboard-editor-settings"]>
+  ) {
+    this._saveDashboardSettings(this._dashboard!.id, ev.detail);
+  }
+
+  // ponytail: last write wins; a failed save is only shown as a toast
+  private _saveDashboardSettings = debounce(
+    async (id: string, values: LovelaceDashboardMutableParams) => {
+      try {
+        const updated = await updateDashboard(this.hass, id, values);
+        if (this._dashboard?.id === id) {
+          this._dashboard = updated;
         }
-        try {
-          await deleteDashboard(this.hass!, dashboard!.id);
-          return true;
-        } catch (_err: any) {
-          return false;
-        }
-      },
+      } catch (err: any) {
+        showToast(this, { message: err?.message || String(err) });
+      }
+    },
+    500
+  );
+
+  private _backgroundChanged(
+    ev: HASSDomEvent<HASSDomEvents["dashboard-editor-background"]>
+  ) {
+    const lovelace = this.lovelace!;
+    lovelace.saveConfig({
+      ...lovelace.config,
+      background: ev.detail.background,
     });
+  }
+
+  private async _deleteDashboard(dashboard: LovelaceDashboard) {
+    await this.hass.loadFragmentTranslation("config");
+    const confirm = await showConfirmationDialog(this, {
+      title: this.hass!.localize(
+        "ui.panel.config.lovelace.dashboards.confirm_delete_title",
+        { dashboard_title: dashboard.title }
+      ),
+      text: this.hass!.localize(
+        "ui.panel.config.lovelace.dashboards.confirm_delete_text"
+      ),
+      confirmText: this.hass!.localize("ui.common.delete"),
+      destructive: true,
+    });
+    if (!confirm) {
+      return false;
+    }
+    try {
+      await deleteDashboard(this.hass!, dashboard.id);
+    } catch (_err: any) {
+      return false;
+    }
+    // The dashboard is gone, so leave it for the default one
+    navigate("/", { replace: true });
+    return true;
+  }
+
+  private async _deleteCurrentDashboard() {
+    const urlPath = this.route?.prefix.slice(1);
+    const dashboard = (await fetchDashboards(this.hass)).find(
+      (d) => d.url_path === urlPath
+    );
+    if (dashboard) {
+      await this._deleteDashboard(dashboard);
+    }
   }
 
   private _navigateToView(path: string | number, replace?: boolean) {
@@ -1206,10 +1266,35 @@ class HUIRoot extends LitElement {
     }
   }
 
-  private _editView() {
+  private _handleEditorAction(
+    ev: HASSDomEvent<HASSDomEvents["dashboard-editor-action"]>
+  ) {
+    const handlers: Record<DashboardEditorAction, () => void> = {
+      "delete-dashboard": () => this._deleteCurrentDashboard(),
+      "add-view": () => this._addView(),
+      "raw-editor": this._handleRawEditor,
+      "unused-entities": this._handleUnusedEntities,
+      "manage-dashboards": this._handleManageDashboards,
+      "manage-resources": this._handleManageResources,
+      help: this._handleHelp,
+      undo: () => this._undo(),
+      redo: () => this._redo(),
+      done: () => this._editModeDisable(),
+    };
+    handlers[ev.detail.action]();
+  }
+
+  private _handleEditorView(
+    ev: HASSDomEvent<HASSDomEvents["dashboard-editor-view"]>
+  ) {
+    const { index, edit } = ev.detail;
+    if (!edit) {
+      this._navigateToView(this.config.views[index].path || index);
+      return;
+    }
     showEditViewDialog(this, {
       lovelace: this.lovelace!,
-      viewIndex: this._curView as number,
+      viewIndex: index,
       saveCallback: (viewIndex: number, viewConfig: LovelaceViewConfig) => {
         const path = viewConfig.path || viewIndex;
         this._navigateToView(path);
@@ -1217,34 +1302,28 @@ class HUIRoot extends LitElement {
     });
   }
 
-  private _moveViewLeft(ev) {
-    ev.stopPropagation();
-    if (this._curView === 0) {
-      return;
-    }
+  private _moveView(
+    ev: HASSDomEvent<HASSDomEvents["dashboard-editor-view-moved"]>
+  ) {
+    const { oldIndex, newIndex } = ev.detail;
     const lovelace = this.lovelace!;
-    const oldIndex = this._curView as number;
-    const newIndex = (this._curView as number) - 1;
-    if (!this.config.views[oldIndex].path) {
-      this._navigateToView(newIndex, true);
-    }
-    lovelace.saveConfig(swapView(lovelace.config, oldIndex, newIndex));
-    this._selectView(newIndex);
-  }
+    const views = [...lovelace.config.views];
+    views.splice(newIndex, 0, ...views.splice(oldIndex, 1));
 
-  private _moveViewRight(ev) {
-    ev.stopPropagation();
-    if ((this._curView! as number) + 1 === this.lovelace!.config.views.length) {
-      return;
+    // Keep the open view open: a view without a path is addressed by its
+    // index, which the move may have changed
+    const current =
+      typeof this._curView === "number"
+        ? lovelace.config.views[this._curView]
+        : undefined;
+    const curIndex = current ? views.indexOf(current) : -1;
+    if (current && !current.path) {
+      this._navigateToView(curIndex, true);
     }
-    const lovelace = this.lovelace!;
-    const oldIndex = this._curView as number;
-    const newIndex = (this._curView as number) + 1;
-    if (!this.config.views[oldIndex].path) {
-      this._navigateToView(newIndex, true);
+    lovelace.saveConfig({ ...lovelace.config, views });
+    if (current) {
+      this._selectView(curIndex);
     }
-    lovelace.saveConfig(swapView(lovelace.config, oldIndex, newIndex));
-    this._selectView(newIndex);
   }
 
   private _addView() {
@@ -1257,12 +1336,95 @@ class HUIRoot extends LitElement {
     });
   }
 
-  private _handleViewSelected(ev) {
+  private async _handleViewSelected(ev) {
     ev.preventDefault();
+    if (!(await this._confirmLeaveCard())) {
+      return;
+    }
     const viewIndex = Number(ev.detail.name);
     if (viewIndex !== this._curView) {
       const path = this.config.views[viewIndex].path || viewIndex;
       this._navigateToView(path);
+    }
+  }
+
+  // On a phone, a sideways swipe over the view moves to the next or previous
+  // tab. Touches in controls that drag on their own, in anything that
+  // scrolls sideways, or at the screen edges (the system back gesture) are
+  // left alone.
+  private _swipeStart?: { x: number; y: number; time: number };
+
+  private _swipeStartListener = {
+    passive: true,
+    handleEvent: (ev: TouchEvent) => {
+      this._swipeStart = undefined;
+      const touch = ev.touches[0];
+      if (
+        !this.narrow ||
+        this._editMode ||
+        ev.touches.length !== 1 ||
+        touch.clientX < SWIPE_EDGE ||
+        touch.clientX > window.innerWidth - SWIPE_EDGE
+      ) {
+        return;
+      }
+      const path = ev.composedPath();
+      if (
+        isSwipeLocked(path, ev.currentTarget!) ||
+        path.some(
+          (target) =>
+            target instanceof HTMLElement &&
+            target.scrollWidth > target.clientWidth &&
+            ["auto", "scroll"].includes(getComputedStyle(target).overflowX)
+        )
+      ) {
+        return;
+      }
+      this._swipeStart = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now(),
+      };
+    },
+  };
+
+  private _swipeEndListener = {
+    passive: true,
+    handleEvent: (ev: TouchEvent) => {
+      const start = this._swipeStart;
+      this._swipeStart = undefined;
+      const touch = ev.changedTouches[0];
+      if (!start || !touch || ev.type === "touchcancel") {
+        return;
+      }
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      if (
+        Math.abs(dx) < SWIPE_DISTANCE ||
+        Math.abs(dx) < 2 * Math.abs(dy) ||
+        Date.now() - start.time > SWIPE_DURATION
+      ) {
+        return;
+      }
+      // Swiping towards the start reveals the next tab
+      const rtl = computeRTLDirection(this.hass) === "rtl";
+      this._swipeToView(dx < 0 !== rtl ? 1 : -1);
+    },
+  };
+
+  private _swipeToView(step: 1 | -1) {
+    if (typeof this._curView !== "number") {
+      return;
+    }
+    const views = this.config.views;
+    if (views[this._curView]?.subview) {
+      return;
+    }
+    for (let i = this._curView + step; i >= 0 && i < views.length; i += step) {
+      if (!views[i].subview && this._isVisible(views[i])) {
+        this._navigateToView(views[i].path || i);
+        return;
+      }
     }
   }
 
@@ -1281,6 +1443,9 @@ class HUIRoot extends LitElement {
     if (this._curView === viewIndex) {
       return;
     }
+
+    // A card's editor belongs to the view it was opened from
+    this._closeCardEditor();
 
     // Save scroll position of current view
     if (this._curView != null) {
@@ -1405,6 +1570,8 @@ class HUIRoot extends LitElement {
       css`
         :host {
           user-select: none;
+          --hui-view-tabs-height: 48px;
+          --hui-edit-toolbar-height: 56px;
         }
         .header {
           background-color: var(--app-header-background-color);
@@ -1424,10 +1591,6 @@ class HUIRoot extends LitElement {
             0px 1px 10px 0px rgba(0, 0, 0, 0.12)
           );
         }
-        .edit-mode .header {
-          background-color: var(--app-header-edit-background-color, #455a64);
-          color: var(--app-header-edit-text-color, white);
-        }
         .toolbar {
           border-bottom: var(--app-header-border-bottom, none);
           height: var(--header-height);
@@ -1435,12 +1598,11 @@ class HUIRoot extends LitElement {
           align-items: center;
           font-size: var(--ha-font-size-xl);
           padding: 0px 12px;
-          padding-right: calc(12px + var(--safe-area-inset-right, 0px));
+          padding-right: calc(
+            var(--ha-space-4) + var(--safe-area-inset-right, 0px)
+          );
           font-weight: var(--ha-font-weight-normal);
           box-sizing: border-box;
-        }
-        .edit-mode .toolbar {
-          border-bottom: none;
         }
         .narrow .toolbar {
           padding: 0 calc(4px + var(--safe-area-inset-right, 0px)) 0
@@ -1468,7 +1630,6 @@ class HUIRoot extends LitElement {
            the search sits in the middle, and the plus and edit buttons share
            one rounded surface. */
         .toolbar:has(.search) > .main-title,
-        .toolbar:has(.search) > ha-tab-group,
         .search ~ .action-items {
           flex: 1 1 0;
         }
@@ -1512,34 +1673,66 @@ class HUIRoot extends LitElement {
         ha-icon-button.primary {
           color: var(--ha-color-on-primary-normal);
         }
-        .edit-mode .action-items ha-icon-button[disabled] {
-          --ha-color-on-disabled-quiet: color-mix(
-            in srgb,
-            var(--app-header-edit-text-color, #fff) 50%,
-            transparent
+        /* The view tabs float as a pill centered over the top of the
+           canvas; the view starts below it so the first cards are not
+           covered, and the rest scroll under it. */
+        .has-tabs hui-view-container {
+          --view-container-padding-top: calc(
+            var(--hui-view-tabs-height) + var(--ha-space-6)
           );
         }
-        ha-tab-group {
-          --ha-tab-indicator-color: var(
-            --app-header-selection-bar-color,
-            var(--app-header-text-color, white)
+        .view-tabs {
+          position: fixed;
+          z-index: 3;
+          top: calc(
+            var(--header-height, 56px) + var(--safe-area-inset-top, 0px) +
+              var(--ha-space-4)
           );
-          --ha-tab-active-text-color: var(--app-header-text-color, white);
+          inset-inline-start: calc(
+            var(--ha-sidebar-width, 0px) + var(--ha-space-4)
+          );
+          inset-inline-end: calc(
+            var(--safe-area-inset-right, 0px) + var(--ha-space-4)
+          );
+          display: flex;
+          justify-content: center;
+          pointer-events: none;
+        }
+        .framed .view-tabs {
+          inset-inline-end: calc(
+            var(--safe-area-inset-right, 0px) +
+              var(--ha-side-pane-width, 360px) +
+              var(--ha-panel-frame-gutter, var(--ha-space-2)) +
+              var(--ha-space-4)
+          );
+        }
+        .narrow .view-tabs,
+        .narrow.framed .view-tabs {
+          inset-inline-start: var(--ha-space-4);
+          inset-inline-end: var(--ha-space-4);
+        }
+        ha-tab-group {
+          --ha-tab-active-text-color: var(--primary-color);
           --ha-tab-track-color: transparent;
-          align-self: flex-end;
-          flex-grow: 1;
+          --ha-tab-indicator-color: transparent;
+          pointer-events: auto;
           min-width: 0;
-          height: 100%;
+          max-width: 100%;
+          padding: var(--ha-space-1);
+          box-sizing: border-box;
+          border-radius: var(--ha-border-radius-pill);
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          box-shadow: var(--ha-box-shadow-l, 0 4px 16px rgba(0, 0, 0, 0.16));
+          overflow: hidden;
         }
         ha-tab-group::part(nav) {
           padding: 0;
         }
         ha-tab-group::part(scroll-button) {
-          inset-block-end: var(--safe-track-width);
-          background-color: var(--app-header-background-color);
           background: linear-gradient(
             90deg,
-            var(--app-header-background-color),
+            var(--card-background-color),
             transparent
           );
           z-index: 1;
@@ -1547,92 +1740,23 @@ class HUIRoot extends LitElement {
         ha-tab-group::part(scroll-button-end) {
           background: linear-gradient(
             270deg,
-            var(--app-header-background-color),
+            var(--card-background-color),
             transparent
           );
-        }
-        .edit-mode ha-tab-group::part(scroll-button) {
-          background-color: var(--app-header-edit-background-color, #455a64);
-          background: linear-gradient(
-            90deg,
-            var(--app-header-edit-background-color, #455a64),
-            transparent
-          );
-        }
-        .edit-mode ha-tab-group::part(scroll-button-end) {
-          background: linear-gradient(
-            270deg,
-            var(--app-header-edit-background-color, #455a64),
-            transparent
-          );
-        }
-        .edit-mode div[main-title] {
-          pointer-events: auto;
-        }
-        .tab-bar {
-          display: flex;
-          padding-right: var(--safe-area-inset-right, 0px);
-        }
-        .narrow .tab-bar {
-          padding-left: var(--safe-area-inset-left, 0px);
-        }
-        .edit-mode ha-tab-group {
-          flex-grow: 0;
-          color: var(--app-header-edit-text-color, #fff);
-          --ha-tab-active-text-color: var(--app-header-edit-text-color, #fff);
-          --ha-tab-indicator-color: var(--app-header-edit-text-color, #fff);
         }
         ha-tab-group-tab {
-          --ha-tab-group-tab-height: var(--header-height, 56px);
-          height: var(--ha-tab-group-tab-height);
+          height: calc(var(--hui-view-tabs-height) - 2 * var(--ha-space-1));
         }
-        .tab-bar ha-tab-group-tab {
-          --ha-tab-group-tab-height: var(--tab-bar-height, 56px);
-        }
-        ha-tab-group-tab[aria-selected="true"] .edit-icon {
-          display: inline-flex;
-        }
-
         ha-tab-group-tab::part(base) {
-          padding-inline-start: var(--ha-tab-padding-start, var(--wa-space-l));
-          padding-inline-end: var(--ha-tab-padding-end, var(--wa-space-l));
-          padding-top: calc((var(--ha-tab-group-tab-height) - 20px) / 2);
+          height: 100%;
+          padding: 0 var(--ha-space-4);
+          border-radius: var(--ha-border-radius-pill);
         }
-        ha-tab-group-tab.icon-only::part(base),
-        ha-tab-group-tab.icon-and-title::part(base) {
-          padding-top: calc((var(--ha-tab-group-tab-height) - 20px) / 2 - 2px);
-          padding-bottom: calc(
-            (var(--ha-tab-group-tab-height) - 20px) / 2 - 4px
-          );
+        ha-tab-group-tab[active]::part(base) {
+          background: var(--ha-color-fill-primary-quiet-resting);
         }
         ha-tab-group-tab.icon-and-title ha-icon {
           margin-inline-end: var(--ha-space-2);
-        }
-        .edit-mode ha-tab-group-tab[aria-selected="true"]::part(base) {
-          padding: 0;
-          margin-top: calc((var(--tab-bar-height, 56px) - 48px) / 2);
-        }
-        .edit-icon {
-          color: var(--accent-color);
-          padding: 0 8px;
-          vertical-align: middle;
-          --mdc-theme-text-disabled-on-light: var(--disabled-text-color);
-          direction: var(--direction);
-        }
-        .edit-icon:last-child {
-          padding-left: 0;
-        }
-        .edit-icon.view {
-          display: none;
-        }
-        #add-view {
-          white-space: nowrap;
-          display: flex;
-          align-items: center;
-        }
-        #add-view ha-svg-icon {
-          background-color: var(--accent-color);
-          border-radius: var(--ha-border-radius-sm);
         }
         a {
           color: var(--text-primary-color, white);
@@ -1665,26 +1789,18 @@ class HUIRoot extends LitElement {
           flex: 1 1 100%;
           max-width: 100%;
         }
-        /**
-         * In edit mode we have the tab bar on a new line *
-         */
-        hui-view-container.has-tab-bar {
-          padding-top: calc(
-            var(--header-height, 56px) +
-              calc(var(--tab-bar-height, 56px) - 2px) +
-              var(--safe-area-inset-top, 0px)
-          );
-        }
         /* Panel-driven editing: the canvas gives up its end side to the
            pane, which sits on the chrome beside it the way the sidebar does,
            rather than floating over the content. The chrome colour is
            painted around the canvas from behind the content, so the canvas
            keeps its rounded corner where it meets the pane. */
-        .framed hui-view-container {
+        .framed {
           --hui-side-pane-space: calc(
             var(--ha-side-pane-width, 360px) +
               var(--ha-panel-frame-gutter, var(--ha-space-2))
           );
+        }
+        .framed hui-view-container {
           padding-inline-end: calc(
             var(--view-container-inset-right) + var(--hui-side-pane-space)
           );
@@ -1701,10 +1817,100 @@ class HUIRoot extends LitElement {
           );
           width: auto;
           height: auto;
-          border: 2px solid var(--primary-color);
           border-radius: var(--ha-border-radius-xl);
           box-shadow: 0 0 0 100vmax var(--app-header-background-color);
           box-sizing: border-box;
+        }
+        /* While editing, undo, redo and Done float at the bottom of the
+           canvas like the energy dashboard's date picker, and the view gets
+           room at its end so the last cards scroll clear of them. */
+        .framed:not(.narrow) hui-view-container {
+          --view-container-padding-bottom: calc(
+            var(--hui-edit-toolbar-height) + 2 * var(--ha-space-4)
+          );
+        }
+        /* A blue fade rises from the canvas's bottom edge behind the
+           toolbar, so editing is hard to miss. */
+        .edit-toolbar {
+          position: fixed;
+          z-index: 3;
+          bottom: var(--safe-area-inset-bottom, 0px);
+          inset-inline-start: var(--ha-sidebar-width, 0px);
+          inset-inline-end: calc(
+            var(--safe-area-inset-right, 0px) + var(--hui-side-pane-space)
+          );
+          display: flex;
+          justify-content: center;
+          padding: var(--ha-space-12) var(--ha-space-4) var(--ha-space-4);
+          border-radius: 0 0 var(--ha-border-radius-xl)
+            var(--ha-border-radius-xl);
+          background: linear-gradient(
+            to top,
+            color-mix(in srgb, var(--primary-color) 30%, transparent),
+            transparent
+          );
+          pointer-events: none;
+          animation: edit-toolbar-fade-in
+            var(--ha-animation-duration-normal, 250ms) ease-out;
+        }
+        @keyframes edit-toolbar-fade-in {
+          from {
+            opacity: 0;
+          }
+        }
+        .edit-toolbar-surface {
+          pointer-events: auto;
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-1);
+          height: var(--hui-edit-toolbar-height);
+          padding: 0 var(--ha-space-2);
+          box-sizing: border-box;
+          border-radius: var(--ha-border-radius-pill);
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          box-shadow: var(--ha-box-shadow-l);
+          animation: edit-toolbar-in var(--ha-animation-duration-normal, 250ms)
+            ease-out;
+        }
+        @keyframes edit-toolbar-in {
+          from {
+            opacity: 0;
+            transform: translateY(var(--ha-space-6));
+          }
+        }
+        .edit-toolbar-surface ha-button {
+          margin-inline-start: var(--ha-space-2);
+        }
+        /* While editing, the scroll shadow belongs to the canvas, not the
+           whole top bar: the bar drops its own, and a layer over the content
+           with the frame's shape casts it inward from the frame's top edge. */
+        :host([scrolled]) .framed:not(.narrow) .header {
+          box-shadow: none;
+        }
+        /* Above the content, so cards scroll under the frame's edge */
+        .framed::before {
+          content: "";
+          position: fixed;
+          z-index: 4;
+          pointer-events: none;
+          top: calc(
+            var(--header-height, 56px) + var(--safe-area-inset-top, 0px)
+          );
+          bottom: var(--safe-area-inset-bottom, 0px);
+          inset-inline-start: var(--ha-sidebar-width, 0px);
+          inset-inline-end: calc(
+            var(--safe-area-inset-right, 0px) + var(--hui-side-pane-space)
+          );
+          border: 2px solid var(--primary-color);
+          border-radius: var(--ha-border-radius-xl);
+          transition: box-shadow var(--ha-animation-duration-fast, 150ms);
+        }
+        :host([scrolled]) .framed::before {
+          box-shadow: inset 0 10px 8px -8px rgba(0, 0, 0, 0.25);
+        }
+        .narrow.framed::before {
+          display: none;
         }
         #side-pane {
           display: none;
@@ -1714,8 +1920,7 @@ class HUIRoot extends LitElement {
           position: fixed;
           z-index: 3;
           top: calc(
-            var(--header-height, 56px) + var(--safe-area-inset-top, 0px) +
-              var(--ha-panel-frame-gutter, var(--ha-space-2))
+            var(--header-height, 56px) + var(--safe-area-inset-top, 0px)
           );
           bottom: var(--safe-area-inset-bottom, 0px);
           inset-inline-end: var(--safe-area-inset-right, 0px);
@@ -1723,11 +1928,14 @@ class HUIRoot extends LitElement {
         }
         /* On a phone the pane is a bottom sheet of its own, so the canvas
            stays as it is. */
-        .narrow.framed hui-view-container {
+        .narrow.framed {
           --hui-side-pane-space: 0px;
+        }
+        .narrow.framed hui-view-container {
           padding-inline-end: var(--view-container-inset-right);
         }
         .narrow.framed hui-view-background {
+          border: 2px solid var(--primary-color);
           position: absolute;
           inset: 0;
           width: 100%;
@@ -1742,10 +1950,6 @@ class HUIRoot extends LitElement {
         }
         .hide-tab {
           display: none;
-        }
-        .exit-edit-mode {
-          --mdc-theme-primary: var(--app-header-edit-text-color, #fff);
-          --mdc-button-outline-color: var(--app-header-edit-text-color, #fff);
         }
         .child-view-icon {
           opacity: 0.5;

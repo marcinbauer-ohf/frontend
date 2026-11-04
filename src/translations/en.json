@@ -2897,9 +2897,16 @@
       },
       "home": {
         "editor": {
-          "title": "Edit home",
+          "title": "Edit your home",
           "home": "Home",
-          "home_name": "Name",
+          "home_name": "Home name",
+          "people": "People",
+          "people_count": "{count} {count, plural,\n  one {person}\n  other {people}\n}",
+          "people_yaml": "Set up in YAML",
+          "overview_page_header": "Overview page",
+          "home_setup_header": "Home setup",
+          "location_description": "Where your home is on the map",
+          "no_favorites": "No favorites yet",
           "floors_and_areas": "Floors and areas",
           "floors_and_areas_count": "{floors} {floors, plural,\n  one {floor}\n  other {floors}\n}, {areas} {areas, plural,\n  one {area}\n  other {areas}\n}",
           "favorites_count": "{count} {count, plural,\n  one {entity}\n  other {entities}\n}",
@@ -2995,8 +3002,28 @@
             "secondary": "Services and devices connected to Home Assistant"
           },
           "automations": {
-            "main": "Automations & scenes",
-            "secondary": "Automations, scenes, scripts, and blueprints"
+            "main": "Automations",
+            "secondary": "Do things when something happens"
+          },
+          "scenes": {
+            "main": "Scenes",
+            "secondary": "Set several devices to a state in one go"
+          },
+          "scripts": {
+            "main": "Scripts",
+            "secondary": "Run a sequence of actions on demand"
+          },
+          "blueprints": {
+            "main": "Blueprints",
+            "secondary": "Ready-made automations and scripts to fill in"
+          },
+          "labels": {
+            "main": "Labels",
+            "secondary": "Group and filter anything in your home"
+          },
+          "zones": {
+            "main": "Zones",
+            "secondary": "Places on the map, such as work or school"
           },
           "backup": {
             "main": "Backup",
@@ -3030,13 +3057,9 @@
             "main": "Tags",
             "secondary": "Set up NFC tags and QR codes"
           },
-          "people": {
-            "main": "People",
+          "users": {
+            "main": "Users",
             "secondary": "Manage who can access your home"
-          },
-          "areas": {
-            "main": "Areas, labels & zones",
-            "secondary": "Manage locations in and around your house"
           },
           "companion": {
             "main": "Companion app",
@@ -10257,6 +10280,11 @@
             "manage_dashboards": "Manage dashboards",
             "manage_resources": "Manage resources"
           },
+          "pane": {
+            "title": "Edit dashboard",
+            "views": "Views",
+            "delete": "Delete dashboard"
+          },
           "common": {
             "edit": "Edit",
             "clear": "Clear",
@@ -12840,6 +12868,9 @@
       },
       "energy": {
         "error_loading_preferences": "An error occurred loading energy preferences: {error}",
+        "editor": {
+          "title": "Edit energy dashboard"
+        },
         "title": {
           "overview": "Summary",
           "electricity": "Electricity",

@@ -1,6 +1,7 @@
 import { sanitizeUrl } from "@braintree/sanitize-url";
 import { html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
+import { homeEditorPath } from "../../common/url/home-query-params";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import {
   protocolIntegrationPicked,
@@ -322,7 +323,7 @@ export const getMyRedirects = (): Redirects => ({
     redirect: "/energy",
   },
   areas: {
-    redirect: "/config/areas/dashboard",
+    redirect: homeEditorPath("areas"),
   },
   blueprint_import: {
     component: "blueprint",
@@ -388,7 +389,7 @@ export const getMyRedirects = (): Redirects => ({
   },
   people: {
     component: "person",
-    redirect: "/config/person",
+    redirect: homeEditorPath("people"),
   },
   zones: {
     component: "zone",

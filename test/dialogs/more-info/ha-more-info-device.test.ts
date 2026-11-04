@@ -990,7 +990,7 @@ describe("ha-more-info-device", () => {
     ]);
     expect(places).toEqual([
       ["ui.components.area-picker.area", "Bathroom", "/config/areas/area/bath"],
-      ["ui.dialogs.more_info_control.floor", "First floor", "/config/areas"],
+      ["ui.dialogs.more_info_control.floor", "First floor", "/home?edit=areas"],
     ]);
 
     const groups = [

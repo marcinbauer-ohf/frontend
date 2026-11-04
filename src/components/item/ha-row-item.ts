@@ -31,6 +31,7 @@ import type { HASSDomTargetEvent } from "../../common/dom/fire_event";
  * @cssprop --ha-row-item-padding-inline - Horizontal padding inside the row.
  * @cssprop --ha-row-item-gap - Gap between start, content, and end.
  * @cssprop --ha-row-item-min-height - Minimum row height.
+ * @cssprop --ha-row-item-icon-color - Color of the start slot content, such as icons.
  *
  * @attr {string} headline - Primary text. Overridden by the `headline` slot.
  * @attr {string} supporting-text - Secondary text. Overridden by the `supporting-text` slot.
@@ -173,6 +174,9 @@ export class HaRowItem extends LitElement {
       display: flex;
       align-items: center;
       flex: 0 0 auto;
+    }
+    .start {
+      color: var(--ha-row-item-icon-color, var(--ha-color-text-secondary));
     }
     .start[hidden],
     .end[hidden] {

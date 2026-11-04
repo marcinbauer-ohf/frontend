@@ -1,5 +1,6 @@
 import { ReactiveElement } from "lit";
 import { customElement } from "lit/decorators";
+import { homeEditorPath } from "../../../../common/url/home-query-params";
 import { getAreasFloorHierarchy } from "../../../../common/areas/areas-floor-hierarchy";
 import { isComponentLoaded } from "../../../../common/config/is_component_loaded";
 import { getEntityContext } from "../../../../common/entity/context/get_entity_context";
@@ -645,7 +646,7 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
                 variant: "brand" as const,
                 tap_action: {
                   action: "navigate" as const,
-                  navigation_path: "/config/areas/dashboard",
+                  navigation_path: homeEditorPath("areas"),
                 },
               },
             ],

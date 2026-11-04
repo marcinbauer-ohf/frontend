@@ -512,7 +512,7 @@ class HaSceneDashboard extends SubscribeMixin(LitElement) {
         .narrow=${this.narrow}
         back-path="/config"
         .route=${this.route}
-        .tabs=${configSections.automations}
+        .tabs=${configSections.scene}
         .searchLabel=${this.hass.localize(
           "ui.panel.config.scene.picker.search",
           { number: scenes.length }

@@ -12,6 +12,7 @@ import type { CSSResultGroup, TemplateResult } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
+import { consume } from "../../../common/decorators/consume";
 import { consumeLocalize } from "../../../common/decorators/consume-context-entry";
 import type { LocalizeFunc } from "../../../common/translations/localize";
 import { fireEvent } from "../../../common/dom/fire_event";
@@ -21,6 +22,7 @@ import "../../../components/ha-dropdown-item";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-svg-icon";
 import { haStyle } from "../../../resources/styles";
+import { selectedCardContext } from "../common/context";
 import type { LovelacePath } from "../editor/lovelace-path";
 import type { Lovelace } from "../types";
 
@@ -45,6 +47,10 @@ export class HuiCardEditMode extends LitElement {
   @state()
   @consumeLocalize()
   private _localize!: LocalizeFunc;
+
+  @state()
+  @consume({ context: selectedCardContext, subscribe: true })
+  private _selectedPath?: string;
 
   @state()
   public _hover = false;
@@ -96,11 +102,20 @@ export class HuiCardEditMode extends LitElement {
   };
 
   protected render(): TemplateResult {
-    const showOverlay = (this._hover || this._focused) && !this.hiddenOverlay;
+    const selected = !this.noEdit && this._selectedPath === this.path?.join();
+    const showOverlay =
+      (this._hover || this._focused || selected) && !this.hiddenOverlay;
 
+    // A click on the card edits it, and the card being edited stays
+    // outlined, the way the automation editor marks its selected row.
     return html`
       <div class="card-wrapper" inert><slot></slot></div>
-      <div class="card-overlay ${classMap({ visible: showOverlay })}">
+      <div
+        class="card-overlay ${classMap({
+          visible: showOverlay,
+          selected: selected && !this.hiddenOverlay,
+        })}"
+      >
         ${
           this.noEdit
             ? html`
@@ -111,18 +126,16 @@ export class HuiCardEditMode extends LitElement {
               `
             : html`
                 <div
-                  class="control"
+                  class="control edit"
                   role="button"
                   aria-label=${this._localize(
                     "ui.panel.lovelace.editor.edit_card.edit_label"
                   )}
+                  aria-pressed=${selected}
                   @click=${this._handleOverlayClick}
                   @keydown=${this._handleOverlayClick}
                   tabindex="0"
-                >
-                  <div class="control-overlay"></div>
-                  <ha-svg-icon .path=${mdiPencil}> </ha-svg-icon>
-                </div>
+                ></div>
               `
         }
         <ha-dropdown
@@ -271,6 +284,25 @@ export class HuiCardEditMode extends LitElement {
         .card-overlay.visible {
           opacity: 1;
           pointer-events: auto;
+        }
+
+        /* The edit target takes clicks even while the menu is hidden, so a
+           single click opens the editor. */
+        .card-overlay .control.edit {
+          pointer-events: auto;
+          border-radius: var(
+            --ha-card-border-radius,
+            var(--ha-border-radius-lg)
+          );
+          outline: 0 solid transparent;
+          outline-offset: 2px;
+          transition: outline-color 180ms ease-in-out;
+        }
+        .card-overlay.visible .control.edit {
+          outline: 1px solid var(--ha-color-border-neutral-normal) !important;
+        }
+        .card-overlay.selected .control.edit {
+          outline: 2px solid var(--primary-color) !important;
         }
 
         .card-wrapper {

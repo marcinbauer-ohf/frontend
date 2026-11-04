@@ -21,6 +21,7 @@ import { ifDefined } from "lit/directives/if-defined";
 import { repeat } from "lit/directives/repeat";
 import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
+import { homeEditorPath } from "../../common/url/home-query-params";
 import { consume } from "../../common/decorators/consume";
 import type { HASSDomEvent } from "../../common/dom/fire_event";
 import { fireEvent } from "../../common/dom/fire_event";
@@ -1189,12 +1190,12 @@ export class HaMoreInfoDevice extends LitElement {
         }
         ${
           floor
-            ? // Floors have no page of their own; the areas dashboard is where
-              // they are laid out.
+            ? // Floors have no page of their own; the home page's editor is
+              // where they are laid out.
               this._renderFactLink(
                 this.hass.localize("ui.dialogs.more_info_control.floor"),
                 computeFloorName(floor) || floor.floor_id,
-                "/config/areas"
+                homeEditorPath("areas")
               )
             : nothing
         }

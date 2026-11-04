@@ -313,7 +313,7 @@ class HuiMapCard extends LitElement implements LovelaceCard {
             .fitZones=${this._config.fit_zones || false}
             .zoomPosition=${
               this.layout === PANEL_VIEW_LAYOUT &&
-              !computeRTL(
+              computeRTL(
                 this.hass.language,
                 this.hass.translationMetadata.translations
               )
@@ -816,7 +816,7 @@ class HuiMapCard extends LitElement implements LovelaceCard {
   }
 
   // The part of the map the overview covers, so fitted markers land next to
-  // it rather than under it: the bottom sheet on phones, the start side
+  // it rather than under it: the bottom sheet on phones, the end side
   // otherwise (see the #overview styles). Memoized so the map only refits
   // when the drawer actually changes size.
   private _overviewPadding(): MapFitPadding | undefined {
@@ -850,8 +850,8 @@ class HuiMapCard extends LitElement implements LovelaceCard {
       }
       const side = size + 2 * OVERVIEW_GAP;
       return computeRTL(language, translations)
-        ? { right: side }
-        : { left: side };
+        ? { left: side }
+        : { right: side };
     }
   );
 
@@ -1027,11 +1027,10 @@ class HuiMapCard extends LitElement implements LovelaceCard {
       flex-direction: column;
     }
 
-    /* The overview panel covers the start side in panel layout */
+    /* The overview pane covers the end side in panel layout */
     #root.panel-layout #buttons {
       left: auto;
-      inset-inline-start: auto;
-      inset-inline-end: 3px;
+      inset-inline-start: 3px;
     }
 
     #root {
@@ -1039,17 +1038,17 @@ class HuiMapCard extends LitElement implements LovelaceCard {
       height: 100%;
     }
 
+    /* Unlike other side panes, the map's is only as tall as its list, so
+       more of the map shows; a long list scrolls within the map's height. */
     #overview {
       position: absolute;
       top: var(--ha-space-3);
-      inset-inline-start: var(--ha-space-3);
-      width: min(360px, calc(100% - 2 * var(--ha-space-3)));
       max-height: calc(100% - 2 * var(--ha-space-3));
+      inset-inline-end: var(--ha-space-3);
+      width: min(360px, calc(100% - 2 * var(--ha-space-3)));
       display: flex;
+      flex-direction: column;
       z-index: 1;
-    }
-    #overview[single-tab] {
-      width: min(300px, calc(100% - 2 * var(--ha-space-3)));
     }
 
     #root.panel-layout {
@@ -1071,30 +1070,30 @@ class HuiMapCard extends LitElement implements LovelaceCard {
     /* Keep the attribution and scale ruler clear of the drawer: beside it on
        wide layouts, above it on phones. The controls sit at physical corners. */
     #root.panel-layout ha-map {
-      --ha-map-left-inset: calc(
-        var(--overview-width, 0px) + 2 * var(--ha-space-3) +
-          var(--map-bleed-left)
-      );
-      --ha-map-right-inset: var(--map-bleed-right);
-      --ha-map-bottom-inset: var(--map-bleed-bottom);
-    }
-    #root.panel-layout.rtl ha-map {
       --ha-map-left-inset: var(--map-bleed-left);
       --ha-map-right-inset: calc(
         var(--overview-width, 0px) + 2 * var(--ha-space-3) +
           var(--map-bleed-right)
       );
+      --ha-map-bottom-inset: var(--map-bleed-bottom);
+    }
+    #root.panel-layout.rtl ha-map {
+      --ha-map-left-inset: calc(
+        var(--overview-width, 0px) + 2 * var(--ha-space-3) +
+          var(--map-bleed-left)
+      );
+      --ha-map-right-inset: var(--map-bleed-right);
     }
 
     @media (max-width: 600px) {
-      #overview,
-      #overview[single-tab] {
+      #overview {
         top: auto;
         bottom: 0;
         inset-inline-start: 0;
         inset-inline-end: 0;
         width: auto;
         max-height: 70%;
+        flex-direction: row;
       }
 
       #root.panel-layout ha-map,

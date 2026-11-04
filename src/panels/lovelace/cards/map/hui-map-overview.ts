@@ -14,7 +14,6 @@ import {
   state,
 } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
-import { ifDefined } from "lit/directives/if-defined";
 import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
 import { formatTime } from "../../../../common/datetime/format_time";
@@ -35,23 +34,26 @@ import {
   HOME_ZONE_ENTITY_ID,
   zoneColor,
 } from "../../../../common/map/entity-map-colors";
-import { contrastingZoneContent } from "../../../../common/map/zone-marker";
-import "../../../../components/ha-button";
 import "../../../../components/ha-icon-button";
 import "../../../../components/ha-icon-button-prev";
+import "../../../../components/ha-icon-next";
 import "../../../../components/ha-relative-time";
+import "../../../../components/ha-side-pane";
 import "../../../../components/ha-snap-bottom-sheet";
 import type { HaSnapBottomSheet } from "../../../../components/ha-snap-bottom-sheet";
 import "../../../../components/ha-spinner";
 import "../../../../components/ha-state-icon";
 import "../../../../components/ha-svg-icon";
+import "../../../../components/ha-tab-group";
+import "../../../../components/ha-tab-group-tab";
+import "../../../../components/item/ha-list-item-base";
 import "../../../../components/item/ha-list-item-button";
-import "../../../../components/list/ha-list-base";
+import "../../../../components/list/ha-grouped-list";
+import "../../../../components/user/ha-person-badge";
 import type { HaMapEntity } from "../../../../components/map/ha-map";
 import {
   apiContext,
   configContext,
-  connectionContext,
   formattersContext,
   fullEntitiesContext,
   internationalizationContext,
@@ -60,14 +62,12 @@ import {
 import type { EntityRegistryEntry } from "../../../../data/entity/entity_registry";
 import type { HistoryStates } from "../../../../data/history";
 import { fetchDateWS } from "../../../../data/history";
-import { computeUserInitials } from "../../../../data/user";
 import { computeZoneTrackerState } from "../../../../data/zone";
 import { showMoreInfoDialog } from "../../../../dialogs/more-info/show-ha-more-info-dialog";
 import type {
   CurrentUser,
   HomeAssistantApi,
   HomeAssistantConfig,
-  HomeAssistantConnection,
   HomeAssistantFormatters,
   HomeAssistantInternationalization,
 } from "../../../../types";
@@ -117,10 +117,6 @@ export class HuiMapOverview extends LitElement {
   private _formatters!: HomeAssistantFormatters;
 
   @state()
-  @consume({ context: connectionContext, subscribe: true })
-  private _connection!: HomeAssistantConnection;
-
-  @state()
   @consume({ context: apiContext, subscribe: true })
   private _api!: HomeAssistantApi;
 
@@ -143,8 +139,7 @@ export class HuiMapOverview extends LitElement {
   @consume({ context: fullEntitiesContext, subscribe: true })
   private _entityReg: EntityRegistryEntry[] = [];
 
-  @queryAll(".tablist button")
-  private _tabButtons!: NodeListOf<HTMLButtonElement>;
+  @query("ha-tab-group-tab[active]") private _activeTab?: HTMLElement;
 
   // On phones the overview is a bottom sheet; elsewhere a floating panel
   @state() private _phone = false;
@@ -160,7 +155,7 @@ export class HuiMapOverview extends LitElement {
 
   @query(".peek") private _peek?: HTMLElement;
 
-  @query(".detail-name") private _detailName?: HTMLElement;
+  @query(".detail-focus") private _detailName?: HTMLElement;
 
   @queryAll("ha-list-item-button")
   private _listItems!: NodeListOf<HTMLElement>;
@@ -219,7 +214,6 @@ export class HuiMapOverview extends LitElement {
     if (tabs.length && !tabs.includes(this.tab)) {
       fireEvent(this, "map-overview-tab", { tab: tabs[0] });
     }
-    this.toggleAttribute("single-tab", tabs.length === 1);
     if (changedProps.has("selected")) {
       this._moveFocus(changedProps.get("selected"));
       if (this.selected) {
@@ -238,13 +232,8 @@ export class HuiMapOverview extends LitElement {
       const item = [...this._listItems].find(
         (listItem) => listItem.dataset.entityId === previous
       );
-      // The row may be on another tab; fall back to the selected tab button.
-      (
-        item ??
-        [...this._tabButtons].find(
-          (button) => button.getAttribute("aria-selected") === "true"
-        )
-      )?.focus();
+      // The row may be on another tab; fall back to the selected tab.
+      (item ?? this._activeTab)?.focus();
     }
   }
 
@@ -504,99 +493,271 @@ export class HuiMapOverview extends LitElement {
     const selectedStateObj = this.selected
       ? this._states[this.selected]
       : undefined;
-    const content = selectedStateObj
-      ? this._renderDetail(selectedStateObj)
-      : this._renderList(people, devices, zones);
+
+    if (this._phone) {
+      return html`<ha-snap-bottom-sheet
+        .minHeight=${this._sheetMinHeight}
+        .label=${this._i18n.localize(
+          "ui.panel.lovelace.cards.map.overview.label"
+        )}
+        @bottom-sheet-resized=${this._handleSheetResized}
+      >
+        <div class="panel sheet">
+          ${
+            selectedStateObj
+              ? this._renderDetail(selectedStateObj)
+              : this._renderList(people, devices, zones, true)
+          }
+        </div>
+      </ha-snap-bottom-sheet>`;
+    }
+
+    // Elsewhere it is a side pane floating over the map, built like the
+    // dashboard and automation editors' panes.
+    return html`<ha-side-pane
+      .heading=${
+        selectedStateObj
+          ? this._personName(selectedStateObj)
+          : this._i18n.localize("ui.panel.lovelace.cards.map.overview.label")
+      }
+      .back=${!!selectedStateObj}
+      no-close
+      @side-pane-back=${this._handleBack}
+    >
+      ${
+        selectedStateObj
+          ? this._renderDetailBody(selectedStateObj)
+          : this._renderList(people, devices, zones)
+      }
+    </ha-side-pane>`;
+  }
+
+  private _renderList(
+    people: HassEntity[],
+    devices: HassEntity[],
+    zones: HassEntity[],
+    sheet = false
+  ) {
+    const itemsPerTab = this._itemsPerTab(people, devices, zones);
+    const tabs = Object.keys(itemsPerTab) as OverviewTab[];
+    const tab = tabs.includes(this.tab) ? this.tab : tabs[0];
+    const label = (tabId: OverviewTab) =>
+      this._i18n.localize(`ui.panel.lovelace.cards.map.overview.${tabId}`);
+    // The tabs, or a lone tab's name, are what the collapsed sheet shows
+    const lone = tabs.length === 1;
 
     return html`
       ${
-        this._phone
-          ? html`<ha-snap-bottom-sheet
-              .minHeight=${this._sheetMinHeight}
-              .label=${this._i18n.localize(
-                "ui.panel.lovelace.cards.map.overview.label"
-              )}
-              @bottom-sheet-resized=${this._handleSheetResized}
-            >
-              <div class="panel sheet">${content}</div>
-            </ha-snap-bottom-sheet>`
-          : html`<div class="panel">${content}</div>`
+        lone && sheet
+          ? html`<div class="heading peek">${label(tab)}</div>`
+          : nothing
       }
+      ${
+        !lone
+          ? html`<ha-tab-group class="peek" @wa-tab-show=${this._handleTabShow}>
+              ${tabs.map(
+                (tabId) => html`
+                  <ha-tab-group-tab
+                    slot="nav"
+                    panel=${tabId}
+                    .active=${tab === tabId}
+                  >
+                    ${label(tabId)}
+                  </ha-tab-group-tab>
+                `
+              )}
+            </ha-tab-group>`
+          : nothing
+      }
+      <ha-grouped-list .header=${lone && !sheet ? label(tab) : undefined}>
+        ${itemsPerTab[tab]!.map(
+          (stateObj) => html`
+            <ha-list-item-button
+              data-entity-id=${stateObj.entity_id}
+              class=${classMap({
+                "no-location":
+                  tab !== "zones" && !getEntityLocation(stateObj, this._states),
+              })}
+              @click=${this._handleItemClick}
+            >
+              ${this._renderIcon(stateObj)}
+              <span slot="headline">${this._personName(stateObj)}</span>
+              <span slot="supporting-text">
+                ${this._renderDetailState(stateObj)}
+              </span>
+              <ha-icon-next slot="end"></ha-icon-next>
+            </ha-list-item-button>
+          `
+        )}
+      </ha-grouped-list>
     `;
   }
 
-  private _renderDetail(stateObj: HassEntity) {
-    const isZone = computeStateDomain(stateObj) === "zone";
-    const zoneCount = isZone ? Number(stateObj.state) : undefined;
+  // In the pane the name is the heading, so the summary takes focus instead
+  private _renderDetailBody(stateObj: HassEntity) {
+    const activity = this._activity;
+    const shown =
+      activity && !this._activityExpanded
+        ? activity.slice(0, ACTIVITY_INITIAL_ENTRIES)
+        : activity;
+    return html`
+      <ha-grouped-list>
+        <ha-list-item-base>
+          ${this._renderIcon(stateObj)}
+          <span slot="headline" class="detail-focus" tabindex="-1">
+            ${this._renderDetailState(stateObj)}
+          </span>
+        </ha-list-item-base>
+        ${
+          !__DEMO__ && this._user?.is_admin
+            ? html`<ha-list-item-button @click=${this._handleSettings}>
+                <ha-svg-icon slot="start" .path=${mdiCogOutline}></ha-svg-icon>
+                <span slot="headline">
+                  ${this._i18n.localize("ui.dialogs.more_info_control.settings")}
+                </span>
+                <ha-icon-next slot="end"></ha-icon-next>
+              </ha-list-item-button>`
+            : nothing
+        }
+      </ha-grouped-list>
+      <ha-grouped-list
+        .header=${this._i18n.localize(
+          "ui.panel.lovelace.cards.map.overview.activity"
+        )}
+      >
+        ${
+          !activity
+            ? html`<ha-list-item-base>
+                <ha-spinner slot="start" size="small"></ha-spinner>
+              </ha-list-item-base>`
+            : !activity.length
+              ? html`<ha-list-item-base
+                  class="empty"
+                  .headline=${this._i18n.localize(
+                    this._activityFailed
+                      ? "ui.panel.lovelace.cards.map.overview.activity_unavailable"
+                      : "ui.panel.lovelace.cards.map.overview.no_activity"
+                  )}
+                ></ha-list-item-base>`
+              : shown!.map((entry) => this._renderActivity(stateObj, entry))
+        }
+        ${
+          activity && shown && activity.length > shown.length
+            ? html`<ha-list-item-button
+                class="show-more"
+                @click=${this._showAllActivity}
+              >
+                <span slot="headline">
+                  ${this._i18n.localize(
+                    "ui.panel.lovelace.cards.map.overview.show_more"
+                  )}
+                </span>
+              </ha-list-item-button>`
+            : nothing
+        }
+      </ha-grouped-list>
+    `;
+  }
 
+  private _renderActivity(stateObj: HassEntity, entry: ActivityEntry) {
+    const person = entry.personId ? this._states[entry.personId] : undefined;
+    const zone = entry.personId
+      ? undefined
+      : ((entry.inZones && findFirstActiveZone(entry.inZones, this._states)) ??
+        this._zoneForState(entry.state));
+    return html`
+      <ha-list-item-base>
+        ${
+          zone || person
+            ? this._renderIcon((zone ?? person)!)
+            : html`<ha-svg-icon slot="start" .path=${mdiHistory}></ha-svg-icon>`
+        }
+        <span slot="headline">
+          ${
+            entry.personId
+              ? person
+                ? this._personName(person)
+                : entry.personId
+              : this._formatters.formatEntityState(stateObj, entry.state)
+          }
+        </span>
+        <span slot="supporting-text">
+          ${
+            entry.personId
+              ? html`${this._i18n.localize(
+                  entry.arrived
+                    ? "ui.panel.lovelace.cards.map.overview.entered"
+                    : "ui.panel.lovelace.cards.map.overview.left"
+                )}
+                · `
+              : nothing
+          }
+          ${formatTime(entry.when, this._i18n.locale, this._config)} ·
+          <ha-relative-time .datetime=${entry.when}></ha-relative-time>
+        </span>
+      </ha-list-item-base>
+    `;
+  }
+
+  // A picture or initials for people and pictured trackers, the zone's map
+  // color for zones, the state icon otherwise
+  private _renderIcon(stateObj: HassEntity) {
+    const picture = stateObj.attributes.entity_picture;
+    if (picture || computeStateDomain(stateObj) === "person") {
+      return html`<ha-person-badge
+        slot="start"
+        .person=${{ name: this._entityName(stateObj), picture }}
+      ></ha-person-badge>`;
+    }
+    return html`<ha-state-icon
+      slot="start"
+      .stateObj=${stateObj}
+      style=${styleMap(
+        computeStateDomain(stateObj) === "zone"
+          ? { color: this._zoneColor(stateObj) }
+          : {}
+      )}
+    ></ha-state-icon>`;
+  }
+
+  private _handleTabShow(ev: CustomEvent<{ name: string }>) {
+    const tab = ev.detail.name as OverviewTab;
+    if (tab !== this.tab) {
+      fireEvent(this, "map-overview-tab", { tab });
+    }
+  }
+
+  private _renderDetailState(stateObj: HassEntity) {
+    if (computeStateDomain(stateObj) !== "zone") {
+      return html`${this._formatters.formatEntityState(stateObj)} ·
+        <ha-relative-time
+          .datetime=${stateObj.last_updated}
+          format="short"
+        ></ha-relative-time>`;
+    }
+    const count = Number(stateObj.state);
+    return Number.isNaN(count)
+      ? nothing
+      : this._i18n.localize(
+          "ui.panel.lovelace.cards.map.overview.people_in_zone",
+          { count }
+        );
+  }
+
+  // The sheet has no header of its own, so it leads with the back button
+  // and the name, which also form its peek strip
+  private _renderDetail(stateObj: HassEntity) {
     return html`
       <div class="detail-header peek">
         <ha-icon-button-prev
           .label=${this._i18n.localize("ui.common.back")}
           @click=${this._handleBack}
         ></ha-icon-button-prev>
-        <div class="detail-title">
-          <span class="detail-name" tabindex="-1">
-            ${this._personName(stateObj)}
-          </span>
-          <span class="detail-state">
-            ${
-              isZone
-                ? zoneCount === undefined || Number.isNaN(zoneCount)
-                  ? nothing
-                  : this._i18n.localize(
-                      "ui.panel.lovelace.cards.map.overview.people_in_zone",
-                      { count: zoneCount }
-                    )
-                : html`${this._formatters.formatEntityState(stateObj)} ·
-                    <ha-relative-time
-                      .datetime=${stateObj.last_updated}
-                      format="short"
-                    ></ha-relative-time>`
-            }
-          </span>
-        </div>
-        ${
-          !__DEMO__ && this._user?.is_admin
-            ? html`<ha-icon-button
-                .label=${this._i18n.localize(
-                  "ui.dialogs.more_info_control.settings"
-                )}
-                .path=${mdiCogOutline}
-                @click=${this._handleSettings}
-              ></ha-icon-button>`
-            : nothing
-        }
+        <span class="detail-name detail-focus" tabindex="-1">
+          ${this._personName(stateObj)}
+        </span>
       </div>
-      <div class="list">
-        <div class="activity">
-          <div class="activity-header">
-            <span class="activity-icon">
-              <ha-svg-icon .path=${mdiHistory}></ha-svg-icon>
-            </span>
-            <span class="activity-title">
-              ${this._i18n.localize(
-                "ui.panel.lovelace.cards.map.overview.activity"
-              )}
-            </span>
-          </div>
-          ${
-            !this._activity
-              ? html`<div class="activity-loading">
-                  <ha-spinner size="small"></ha-spinner>
-                </div>`
-              : !this._activity.length
-                ? html`<span class="activity-empty">
-                    ${this._i18n.localize(
-                      this._activityFailed
-                        ? "ui.panel.lovelace.cards.map.overview.activity_unavailable"
-                        : "ui.panel.lovelace.cards.map.overview.no_activity"
-                    )}
-                  </span>`
-                : this._renderTimeline(stateObj, this._activity)
-          }
-        </div>
-      </div>
+      ${this._renderDetailBody(stateObj)}
     `;
   }
 
@@ -622,71 +783,6 @@ export class HuiMapOverview extends LitElement {
     );
   }
 
-  private _renderTimeline(stateObj: HassEntity, activity: ActivityEntry[]) {
-    const shown = this._activityExpanded
-      ? activity
-      : activity.slice(0, ACTIVITY_INITIAL_ENTRIES);
-    return html`
-      <div class="timeline">
-        ${shown.map((entry) => this._renderActivityEntry(stateObj, entry))}
-      </div>
-      ${
-        activity.length > shown.length
-          ? html`<ha-button
-              appearance="plain"
-              size="s"
-              class="show-more"
-              @click=${this._showAllActivity}
-            >
-              ${this._i18n.localize(
-                "ui.panel.lovelace.cards.map.overview.show_more"
-              )}
-            </ha-button>`
-          : nothing
-      }
-    `;
-  }
-
-  private _renderActivityEntry(stateObj: HassEntity, entry: ActivityEntry) {
-    const person = entry.personId ? this._states[entry.personId] : undefined;
-    const headline = entry.personId
-      ? person
-        ? this._personName(person)
-        : entry.personId
-      : this._formatters.formatEntityState(stateObj, entry.state);
-    const zone = entry.personId
-      ? undefined
-      : ((entry.inZones && findFirstActiveZone(entry.inZones, this._states)) ??
-        this._zoneForState(entry.state));
-    const tile = zone
-      ? this._renderZoneAvatar(zone)
-      : person
-        ? this._renderAvatar(person)
-        : html`<span class="rail" aria-hidden="true"></span>`;
-    return html`
-      <div class="entry">
-        ${tile}
-        <div class="entry-text">
-          <span class="entry-headline">${headline}</span>
-          <span class="entry-when">
-            ${
-              entry.personId
-                ? html`${this._i18n.localize(
-                    entry.arrived
-                      ? "ui.panel.lovelace.cards.map.overview.entered"
-                      : "ui.panel.lovelace.cards.map.overview.left"
-                  )}
-                  · `
-                : nothing
-            }
-            ${formatTime(entry.when, this._i18n.locale, this._config)} ·
-            <ha-relative-time .datetime=${entry.when}></ha-relative-time>
-          </span>
-        </div>
-      </div>
-    `;
-  }
-
   private _showAllActivity() {
     this._activityExpanded = true;
   }
@@ -701,193 +797,6 @@ export class HuiMapOverview extends LitElement {
       ...(devices.length ? { devices } : {}),
       ...(zones.length ? { zones } : {}),
     };
-  }
-
-  private _renderList(
-    people: HassEntity[],
-    devices: HassEntity[],
-    zones: HassEntity[]
-  ) {
-    const itemsPerTab = this._itemsPerTab(people, devices, zones);
-    const tabs = Object.keys(itemsPerTab) as OverviewTab[];
-    const tab = tabs.includes(this.tab) ? this.tab : tabs[0];
-    const items = itemsPerTab[tab]!;
-
-    // A lone heading also serves as the phone sheet's peek strip
-    if (tabs.length === 1) {
-      return html`
-        <div class="heading peek" id="tab-${tab}">
-          ${this._i18n.localize(`ui.panel.lovelace.cards.map.overview.${tab}`)}
-        </div>
-        ${this._renderItems(tab, items)}
-      `;
-    }
-
-    return html`
-      <div class="tabs peek">
-        <span
-          class="pill"
-          style=${styleMap({
-            "--tab-count": String(tabs.length),
-            "--tab-index": String(tabs.indexOf(tab)),
-          })}
-          aria-hidden="true"
-        ></span>
-        <div class="tablist" role="tablist" @keydown=${this._handleTabKeydown}>
-          ${tabs.map(
-            (tabId) => html`
-              <button
-                type="button"
-                role="tab"
-                id="tab-${tabId}"
-                aria-controls="tabpanel"
-                aria-selected=${tab === tabId}
-                tabindex=${tab === tabId ? 0 : -1}
-                data-tab=${tabId}
-                @click=${this._handleTabClick}
-              >
-                ${this._i18n.localize(
-                  `ui.panel.lovelace.cards.map.overview.${tabId}`
-                )}
-              </button>
-            `
-          )}
-        </div>
-      </div>
-      ${this._renderItems(tab, items)}
-    `;
-  }
-
-  private _renderItems(tab: OverviewTab, items: HassEntity[]) {
-    return html`
-      <div
-        class="list"
-        id="tabpanel"
-        role="tabpanel"
-        aria-labelledby="tab-${tab}"
-      >
-        <ha-list-base>
-          ${items.map((stateObj) =>
-            tab === "zones"
-              ? this._renderZone(stateObj)
-              : this._renderEntity(stateObj)
-          )}
-        </ha-list-base>
-      </div>
-    `;
-  }
-
-  private _renderEntity(stateObj: HassEntity) {
-    const name = this._personName(stateObj);
-    const location = getEntityLocation(stateObj, this._states);
-
-    return html`
-      <ha-list-item-button
-        data-entity-id=${stateObj.entity_id}
-        class=${classMap({ "no-location": !location })}
-        @click=${this._handleItemClick}
-      >
-        ${this._renderAvatar(stateObj, "start")}
-        <span slot="headline">${name}</span>
-        <span slot="supporting-text">
-          ${this._formatters.formatEntityState(stateObj)} ·
-          <ha-relative-time
-            .datetime=${stateObj.last_updated}
-            format="short"
-          ></ha-relative-time>
-        </span>
-      </ha-list-item-button>
-    `;
-  }
-
-  private _renderZone(stateObj: HassEntity) {
-    const count = Number(stateObj.state);
-
-    return html`
-      <ha-list-item-button
-        data-entity-id=${stateObj.entity_id}
-        @click=${this._handleItemClick}
-      >
-        ${this._renderZoneAvatar(stateObj, "start")}
-        <span slot="headline">${this._entityName(stateObj)}</span>
-        <span slot="supporting-text">
-          ${
-            Number.isNaN(count)
-              ? nothing
-              : this._i18n.localize(
-                  "ui.panel.lovelace.cards.map.overview.people_in_zone",
-                  { count }
-                )
-          }
-        </span>
-      </ha-list-item-button>
-    `;
-  }
-
-  private _renderAvatar(stateObj: HassEntity, slot?: string) {
-    const picture = stateObj.attributes.entity_picture;
-    return html`
-      <div class="avatar" slot=${ifDefined(slot)} aria-hidden="true">
-        ${
-          picture
-            ? html`<img
-                src=${this._connection.hassUrl(picture)}
-                alt=""
-                loading="lazy"
-              />`
-            : computeStateDomain(stateObj) === "person"
-              ? html`<span class="initials"
-                  >${computeUserInitials(this._entityName(stateObj))}</span
-                >`
-              : html`<ha-state-icon .stateObj=${stateObj}></ha-state-icon>`
-        }
-      </div>
-    `;
-  }
-
-  private _renderZoneAvatar(zone: HassEntity, slot?: string) {
-    const color = this._zoneColor(zone);
-    return html`
-      <div
-        class="avatar zone"
-        slot=${ifDefined(slot)}
-        aria-hidden="true"
-        style=${styleMap({
-          background: color,
-          color: contrastingZoneContent(color),
-        })}
-      >
-        <ha-state-icon .stateObj=${zone}></ha-state-icon>
-      </div>
-    `;
-  }
-
-  private _handleTabClick(ev: HASSDomCurrentTargetEvent<HTMLButtonElement>) {
-    fireEvent(this, "map-overview-tab", {
-      tab: ev.currentTarget.dataset.tab as OverviewTab,
-    });
-  }
-
-  private _handleTabKeydown(ev: KeyboardEvent) {
-    const step =
-      ev.key === "ArrowRight" ? 1 : ev.key === "ArrowLeft" ? -1 : undefined;
-    if (step === undefined) {
-      return;
-    }
-    ev.preventDefault();
-    const buttons = [...this._tabButtons].filter((button) => !button.disabled);
-    const current = buttons.indexOf(ev.target as HTMLButtonElement);
-    const rtl = getComputedStyle(this).direction === "rtl";
-    const next =
-      buttons[
-        (current + (rtl ? -step : step) + buttons.length) % buttons.length
-      ];
-    if (next?.dataset.tab) {
-      fireEvent(this, "map-overview-tab", {
-        tab: next.dataset.tab as OverviewTab,
-      });
-      next.focus();
-    }
   }
 
   private _handleItemClick(ev: Event) {
@@ -911,20 +820,19 @@ export class HuiMapOverview extends LitElement {
     :host {
       display: block;
       pointer-events: none;
+      --ha-picture-border-radius: var(--ha-border-radius-circle);
     }
 
-    .panel {
-      --avatar-size: 48px;
-      pointer-events: auto;
-      box-sizing: border-box;
-      width: 100%;
-      max-height: 100%;
+    /* Sized by its content instead of filling the map's height; the card
+       inside shrinks (it clips, so its minimum is 0) and its body scrolls. */
+    ha-side-pane {
+      flex: 0 1 auto;
       display: flex;
       flex-direction: column;
-      padding: var(--ha-space-3);
-      border-radius: var(--ha-border-radius-xl);
-      background: var(--card-background-color);
-      color: var(--primary-text-color);
+      height: auto;
+      min-height: 0;
+      min-width: 0;
+      pointer-events: auto;
       /* Floats over the map, so it keeps its shadow where cards lose theirs */
       box-shadow: var(--ha-box-shadow-m);
     }
@@ -940,15 +848,16 @@ export class HuiMapOverview extends LitElement {
     .panel.sheet {
       flex: 1;
       min-height: 0;
-      background: none;
-      box-shadow: none;
-      --sheet-bottom-space: max(
-        var(--ha-space-3),
-        var(--safe-area-inset-bottom)
-      );
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      display: flex;
+      flex-direction: column;
+      gap: var(--ha-space-3);
+      box-sizing: border-box;
+      color: var(--primary-text-color);
       padding-top: var(--ha-space-7);
       padding-right: max(var(--ha-space-3), var(--safe-area-inset-right));
-      padding-bottom: var(--sheet-bottom-space);
+      padding-bottom: max(var(--ha-space-3), var(--safe-area-inset-bottom));
       padding-left: max(var(--ha-space-3), var(--safe-area-inset-left));
     }
 
@@ -957,142 +866,38 @@ export class HuiMapOverview extends LitElement {
       padding: var(--ha-space-2) var(--ha-space-3);
       font-size: var(--ha-font-size-l);
       font-weight: var(--ha-font-weight-medium);
-      color: var(--primary-text-color);
     }
 
-    .tabs {
-      position: relative;
-      flex: none;
-      padding: var(--ha-space-1);
-      border-radius: var(--ha-border-radius-lg);
-      background: var(--ha-color-fill-neutral-quiet-resting);
-    }
-
-    .tablist {
-      display: flex;
-      gap: var(--ha-space-1);
-    }
-
-    .tabs .pill {
-      --segment-width: calc(
-        (100% - (var(--tab-count) + 1) * var(--ha-space-1)) / var(--tab-count)
-      );
-      position: absolute;
-      inset-block: var(--ha-space-1);
-      inset-inline-start: calc(
-        var(--ha-space-1) + var(--tab-index) *
-          (var(--segment-width) + var(--ha-space-1))
-      );
-      width: var(--segment-width);
-      border-radius: calc(var(--ha-border-radius-lg) - var(--ha-space-1));
+    /* The tabs stay above the list as it scrolls */
+    ha-tab-group {
+      position: sticky;
+      top: 0;
+      z-index: 1;
       background: var(--card-background-color);
-      box-shadow: var(--ha-box-shadow-s);
-      transition: inset-inline-start 200ms ease;
     }
-
-    .tabs button {
-      position: relative;
+    ha-tab-group-tab {
       flex: 1;
-      border: none;
-      margin: 0;
-      padding: var(--ha-space-2) var(--ha-space-3);
-      border-radius: calc(var(--ha-border-radius-lg) - var(--ha-space-1));
-      background: none;
-      cursor: pointer;
-      font-family: inherit;
-      font-size: var(--ha-font-size-m);
-      font-weight: var(--ha-font-weight-medium);
-      color: var(--secondary-text-color);
-      transition: color 180ms ease-in-out;
     }
-
-    .tabs button[aria-selected="true"] {
-      color: var(--primary-text-color);
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .tabs .pill {
-        transition: none;
-      }
-    }
-
-    .tabs button:disabled {
-      cursor: default;
-      opacity: 0.5;
-    }
-
-    .tabs button:focus-visible {
-      outline: 2px solid var(--primary-color);
-      outline-offset: -2px;
-    }
-
-    .list {
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-    }
-
-    ha-list-base {
-      flex: 1;
-      min-height: 0;
-      overflow-y: auto;
-      margin-top: var(--ha-space-2);
-      margin-bottom: calc(-1 * var(--sheet-bottom-space, 0px));
-      padding-bottom: var(--sheet-bottom-space, 0px);
-    }
-
-    ha-list-item-button {
-      border-radius: var(--ha-border-radius-lg);
-      --ha-list-item-focus-radius: var(--ha-border-radius-lg);
-      --ha-row-item-gap: var(--ha-space-3);
-      --ha-row-item-padding-inline: var(--ha-space-2);
-      /* The ripple's hover layer would sit above the content */
-      --ha-ripple-hover-opacity: 0;
-    }
-
-    ha-list-item-button:hover,
-    ha-list-item-button:focus-within {
-      background: var(--ha-color-fill-neutral-quiet-resting);
-    }
-
-    ha-list-item-button::part(headline) {
-      font-weight: var(--ha-font-weight-medium);
-    }
-
-    ha-list-item-button.no-location {
-      color: var(--secondary-text-color);
-    }
-
-    .avatar {
-      position: relative;
-      flex: none;
-      width: var(--avatar-size);
-      height: var(--avatar-size);
-      border-radius: var(--ha-border-radius-lg);
-      overflow: visible;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--ha-color-fill-neutral-quiet-resting);
-      color: var(--secondary-text-color);
-      font-weight: var(--ha-font-weight-medium);
-      box-sizing: border-box;
-    }
-
-    .avatar img {
+    ha-tab-group-tab::part(base) {
       width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: inherit;
+      justify-content: center;
     }
 
-    .avatar.zone {
-      border: none;
-      background: var(--accent-color);
-      color: #fff;
+    ha-person-badge {
+      width: 32px;
+      height: 32px;
+      --person-badge-font-size: var(--ha-font-size-s);
     }
-
+    ha-icon-next {
+      color: var(--secondary-text-color);
+    }
+    .no-location,
+    .empty {
+      color: var(--secondary-text-color);
+    }
+    .show-more {
+      color: var(--primary-color);
+    }
     ha-relative-time {
       display: inline;
     }
@@ -1102,119 +907,12 @@ export class HuiMapOverview extends LitElement {
       display: flex;
       align-items: center;
       gap: var(--ha-space-1);
-      padding: var(--ha-space-1) var(--ha-space-3);
-      border-radius: var(--ha-border-radius-lg);
-      background: var(--ha-color-fill-neutral-quiet-resting);
-      color: var(--primary-text-color);
     }
-
-    .detail-title {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-    }
-
     .detail-name {
+      flex: 1;
+      min-width: 0;
       font-size: var(--ha-font-size-l);
       font-weight: var(--ha-font-weight-medium);
-    }
-
-    .detail-state {
-      color: var(--secondary-text-color);
-      font-size: var(--ha-font-size-s);
-    }
-
-    .activity {
-      margin-top: var(--ha-space-2);
-      padding: var(--ha-space-3);
-      border-radius: var(--ha-border-radius-lg);
-      background: var(--ha-color-fill-neutral-quiet-resting);
-      /* Scrolls within the drawer's height instead of being clipped by it */
-      min-height: 0;
-      overflow-y: auto;
-    }
-
-    /* The panel shares the avatar's resting fill */
-    .activity .avatar {
-      background: var(--card-background-color);
-    }
-
-    .activity-header {
-      display: flex;
-      align-items: center;
-      gap: var(--ha-space-3);
-    }
-
-    .activity-icon {
-      flex: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: var(--avatar-size);
-      height: var(--avatar-size);
-      border-radius: var(--ha-border-radius-lg);
-      background: var(--card-background-color);
-      color: var(--primary-color);
-    }
-
-    .activity-title {
-      font-weight: var(--ha-font-weight-medium);
-    }
-
-    .activity-loading {
-      display: flex;
-      justify-content: center;
-      padding: var(--ha-space-3);
-    }
-
-    .activity-empty {
-      color: var(--secondary-text-color);
-      font-size: var(--ha-font-size-s);
-    }
-
-    .timeline {
-      display: flex;
-      flex-direction: column;
-      gap: var(--ha-space-4);
-      margin-top: var(--ha-space-3);
-    }
-
-    .entry {
-      display: flex;
-      align-items: center;
-      gap: var(--ha-space-3);
-    }
-
-    /* Centered under the tiles */
-    .rail {
-      flex: none;
-      align-self: stretch;
-      width: var(--ha-border-width-md);
-      margin-inline: calc((var(--avatar-size) - var(--ha-border-width-md)) / 2);
-      border-radius: var(--ha-border-radius-pill);
-      background: var(--divider-color);
-    }
-
-    .entry-text {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-    }
-
-    .entry-headline {
-      font-weight: var(--ha-font-weight-medium);
-      color: var(--primary-text-color);
-    }
-    .entry-when {
-      color: var(--secondary-text-color);
-      font-size: var(--ha-font-size-s);
-    }
-    .show-more {
-      display: block;
-      margin-top: var(--ha-space-3);
-      padding-top: var(--ha-space-2);
-      border-top: 1px solid var(--divider-color);
     }
   `;
 }

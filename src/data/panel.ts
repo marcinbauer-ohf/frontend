@@ -25,6 +25,14 @@ export const SYSTEM_PANELS = [MY_REDIRECT_PANEL, NOT_FOUND_PANEL, APP_PANEL];
 /** Panel to show when no panel is picked. */
 export const DEFAULT_PANEL = HOME_PANEL;
 
+/** Core panels the sidebar leaves out until the user adds them. */
+const DEFAULT_HIDDEN_PANELS = ["history", "logbook"];
+
+/** Whether a panel stays out of the sidebar unless the user placed it. */
+export const isPanelHiddenByDefault = (panel: PanelInfo): boolean =>
+  panel.default_visible === false ||
+  DEFAULT_HIDDEN_PANELS.includes(panel.url_path);
+
 export const hasLegacyOverviewPanel = (hass: HomeAssistant): boolean =>
   Boolean(hass.panels.lovelace?.config);
 

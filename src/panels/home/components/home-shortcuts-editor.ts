@@ -17,6 +17,7 @@ import "../../../components/ha-settings-row";
 import "../../../components/ha-sortable";
 import "../../../components/ha-svg-icon";
 import "../../../components/ha-switch";
+import "../../../components/list/ha-grouped-list";
 import {
   resolveShortcutItems,
   type CustomShortcutItem,
@@ -64,7 +65,7 @@ export class HomeShortcutsEditor extends LitElement {
 
     return html`
       <ha-sortable handle-selector=".handle" @item-moved=${this._moved}>
-        <div class="list">
+        <ha-grouped-list>
           ${repeat(
             resolved,
             (item) => this._itemKey(item),
@@ -119,7 +120,7 @@ export class HomeShortcutsEditor extends LitElement {
               `;
             }
           )}
-        </div>
+        </ha-grouped-list>
       </ha-sortable>
       <ha-navigation-picker
         .hass=${this.hass}
@@ -224,14 +225,12 @@ export class HomeShortcutsEditor extends LitElement {
     :host {
       display: block;
     }
-    .list {
-      display: flex;
-      flex-direction: column;
-    }
     .row {
       display: flex;
       align-items: center;
       gap: var(--ha-space-2);
+      padding: var(--ha-space-1) var(--ha-row-item-padding-inline);
+      background: var(--card-background-color);
     }
     .row-content {
       flex: 1;
@@ -262,7 +261,7 @@ export class HomeShortcutsEditor extends LitElement {
     }
     ha-navigation-picker {
       display: block;
-      padding-top: var(--ha-space-2);
+      padding-top: var(--ha-space-3);
     }
   `;
 }

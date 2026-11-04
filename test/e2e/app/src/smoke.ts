@@ -16,13 +16,17 @@ import { e2ePanelRouteAssertions } from "./ha-test-panels";
 
 export const configLinks: LinkSmokeCase[] = [
   { href: "/config/integrations", label: "Devices & services" },
-  { href: "/config/automation", label: "Automations & scenes" },
-  { href: "/config/areas", label: "Areas, labels & zones" },
+  { href: "/config/automation", label: "Automations" },
+  { href: "/config/scene", label: "Scenes" },
+  { href: "/config/script", label: "Scripts" },
+  { href: "/config/blueprint", label: "Blueprints" },
+  { href: "/config/labels", label: "Labels" },
+  { href: "/config/zone", label: "Zones" },
   { href: "/config/apps", label: "Apps" },
   { href: "/config/lovelace/dashboards", label: "Dashboards" },
   { href: "/config/connectivity", label: "Connectivity" },
   { href: "/config/voice-assistants", label: "Voice assistants" },
-  { href: "/config/person", label: "People" },
+  { href: "/config/users", label: "Users" },
   { href: "/config/system", label: "System" },
   { href: "/config/tools", label: "Tools" },
   { href: "/config/info", label: "About" },
@@ -193,7 +197,6 @@ const CONFIG_ROUTES = routeCases([
   ["/config/devices", "ha-config-devices"],
   ["/config/entities", "ha-config-entities"],
   ["/config/helpers", "ha-config-helpers"],
-  ["/config/areas", "ha-config-areas"],
   ["/config/apps", "ha-config-apps"],
   ["/config/app", "ha-config-app-dashboard"],
   ["/config/automation", "ha-config-automation"],
@@ -207,7 +210,6 @@ const CONFIG_ROUTES = routeCases([
   ["/config/hardware", "ha-config-hardware"],
   ["/config/labs", "ha-config-labs"],
   ["/config/lovelace", "ha-config-lovelace"],
-  ["/config/person", "ha-config-person"],
   ["/config/storage", "ha-config-section-storage"],
   ["/config/tags", "ha-config-tags"],
   ["/config/users", "ha-config-users"],
@@ -240,7 +242,6 @@ const CONFIG_ROUTES = routeCases([
 const NESTED_CONFIG_ROUTES = routeCases([
   ["/config/integrations/dashboard", "ha-config-integrations-dashboard"],
   ["/config/devices/dashboard", "ha-config-devices-dashboard"],
-  ["/config/areas/dashboard", "ha-config-areas-dashboard"],
   ["/config/backup/settings", "ha-config-backup-settings"],
 ]);
 

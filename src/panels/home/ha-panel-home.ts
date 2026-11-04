@@ -5,7 +5,14 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { styleMap } from "lit/directives/style-map";
 import { atLeastVersion } from "../../common/config/version";
-import { navigate } from "../../common/navigate";
+import { mainWindow } from "../../common/dom/get_main_window";
+import { navigate, replaceCurrentUrl } from "../../common/navigate";
+import { constructUrlCurrentPath } from "../../common/url/construct-url";
+import { homeQueryParamConfig } from "../../common/url/home-query-params";
+import {
+  decodeQueryParams,
+  updateQueryString,
+} from "../../common/url/query-params";
 import { debounce } from "../../common/util/debounce";
 import { deepEqual } from "../../common/util/deep-equal";
 import "../../components/ha-button";
@@ -40,6 +47,10 @@ import {
 } from "../lovelace/strategies/get-strategy";
 import type { Lovelace } from "../lovelace/types";
 import "./components/home-editor-pane";
+import {
+  HOME_EDITOR_VIEWS,
+  type EditorView,
+} from "./components/home-editor-pane";
 import { showNewOverviewDialog } from "./dialogs/show-dialog-new-overview";
 import { hasLegacyOverviewPanel } from "../../data/panel";
 
@@ -62,6 +73,8 @@ class PanelHome extends SubscribeMixin(LitElement) {
   @state() private _extraActionItems?: ExtraActionItem[];
 
   @state() private _editing = false;
+
+  @state() private _editView?: EditorView;
 
   @query(".banner") private _banner?: HTMLElement;
 
@@ -124,6 +137,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
 
     if (changedProps.has("route")) {
       this._updateExtraActionItems();
+      this._applyEditLink();
     }
 
     if (!changedProps.has("hass")) {
@@ -278,8 +292,38 @@ class PanelHome extends SubscribeMixin(LitElement) {
     this._updateExtraActionItems();
   };
 
+  // A link such as /home?edit=areas opens the editor on that view. The panel
+  // spans several paths (/home, /home/overview, /home/areas-…), so the URL is
+  // read on every route change rather than through a path-bound controller.
+  private _applyEditLink() {
+    const search = mainWindow.location.search;
+    const { edit: view } = decodeQueryParams(search, homeQueryParamConfig);
+    if (!view) {
+      return;
+    }
+    // The link is a request to open the editor, not state to keep
+    replaceCurrentUrl(
+      constructUrlCurrentPath(
+        updateQueryString(search, { edit: "" }, homeQueryParamConfig)
+      )
+    );
+    if (
+      this.hass.user?.is_admin &&
+      (HOME_EDITOR_VIEWS as readonly string[]).includes(view)
+    ) {
+      this._editView = view as EditorView;
+      this._startEditing();
+    }
+  }
+
+  protected firstUpdated(changedProps: PropertyValues<this>) {
+    super.firstUpdated(changedProps);
+    this._applyEditLink();
+  }
+
   private _stopEditing = () => {
     this._editing = false;
+    this._editView = undefined;
     this._updateExtraActionItems();
   };
 
@@ -373,6 +417,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
                 slot="side-pane"
                 .hass=${this.hass}
                 .config=${this._config ?? {}}
+                .view=${this._editView}
                 .narrow=${this.narrow}
                 @value-changed=${this._editorChanged}
               ></home-editor-pane>`
@@ -487,8 +532,6 @@ class PanelHome extends SubscribeMixin(LitElement) {
   static readonly styles: CSSResultGroup = css`
     :host {
       display: block;
-      /* The home content starts at the toolbar title, not centered */
-      --ha-view-sections-margin-inline-start: 0;
     }
     .banner {
       display: flex;

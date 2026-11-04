@@ -1,6 +1,5 @@
 import {
   mdiAccessPointNetwork,
-  mdiAccount,
   mdiBackupRestore,
   mdiBadgeAccountHorizontal,
   mdiBluetooth,
@@ -28,7 +27,6 @@ import {
   mdiScrewdriver,
   mdiScriptText,
   mdiShape,
-  mdiSofa,
   mdiStarFourPoints,
   mdiStore,
   mdiTextBoxOutline,
@@ -69,13 +67,46 @@ export const configSections: Record<string, PageNavigation[]> = {
       translationKey: "automations",
       iconPath: mdiRobot,
       iconColor: "#518C43",
+      component: "automation",
+      adminOnly: true,
+    },
+    {
+      path: "/config/scene",
+      translationKey: "scenes",
+      iconPath: mdiPalette,
+      iconColor: "#518C43",
+      component: "scene",
+      adminOnly: true,
+    },
+    {
+      path: "/config/script",
+      translationKey: "scripts",
+      iconPath: mdiScriptText,
+      iconColor: "#518C43",
+      component: "script",
+      adminOnly: true,
+    },
+    {
+      path: "/config/blueprint",
+      translationKey: "blueprints",
+      iconPath: mdiPaletteSwatch,
+      iconColor: "#518C43",
+      component: "blueprint",
+      adminOnly: true,
+    },
+    {
+      path: "/config/labels",
+      translationKey: "labels",
+      iconPath: mdiLabel,
+      iconColor: "#2D338F",
+      component: "labels",
       core: true,
       adminOnly: true,
     },
     {
-      path: "/config/areas",
-      translationKey: "areas",
-      iconPath: mdiSofa,
+      path: "/config/zone",
+      translationKey: "zones",
+      iconPath: mdiMapMarkerRadius,
       iconColor: "#E48629",
       component: "zone",
       adminOnly: true,
@@ -253,11 +284,12 @@ export const configSections: Record<string, PageNavigation[]> = {
   ],
   dashboard_3: [
     {
-      path: "/config/person",
-      translationKey: "people",
-      iconPath: mdiAccount,
+      path: "/config/users",
+      translationKey: "users",
+      iconPath: mdiBadgeAccountHorizontal,
       iconColor: "#5A87FA",
-      component: ["person", "users"],
+      component: "users",
+      core: true,
       adminOnly: true,
     },
     {
@@ -309,7 +341,9 @@ export const configSections: Record<string, PageNavigation[]> = {
       adminOnly: true,
     },
   ],
-  automations: [
+  // Each of these pages is its own row in the settings list, so each
+  // section holds one page and the page shows no tabs.
+  automation: [
     {
       component: "automation",
       path: "/config/automation",
@@ -318,6 +352,8 @@ export const configSections: Record<string, PageNavigation[]> = {
       iconColor: "#518C43",
       adminOnly: true,
     },
+  ],
+  scene: [
     {
       component: "scene",
       path: "/config/scene",
@@ -326,6 +362,8 @@ export const configSections: Record<string, PageNavigation[]> = {
       iconColor: "#518C43",
       adminOnly: true,
     },
+  ],
+  script: [
     {
       component: "script",
       path: "/config/script",
@@ -334,6 +372,8 @@ export const configSections: Record<string, PageNavigation[]> = {
       iconColor: "#518C43",
       adminOnly: true,
     },
+  ],
+  blueprint: [
     {
       component: "blueprint",
       path: "/config/blueprint",
@@ -441,15 +481,7 @@ export const configSections: Record<string, PageNavigation[]> = {
       adminOnly: true,
     },
   ],
-  persons: [
-    {
-      component: "person",
-      path: "/config/person",
-      translationKey: "ui.panel.config.person.caption",
-      iconPath: mdiAccount,
-      iconColor: "#5A87FA",
-      adminOnly: true,
-    },
+  users: [
     {
       component: "users",
       path: "/config/users",
@@ -460,16 +492,7 @@ export const configSections: Record<string, PageNavigation[]> = {
       adminOnly: true,
     },
   ],
-  areas: [
-    {
-      component: "areas",
-      path: "/config/areas",
-      translationKey: "ui.panel.config.areas.caption",
-      iconPath: mdiSofa,
-      iconColor: "#2D338F",
-      core: true,
-      adminOnly: true,
-    },
+  labels: [
     {
       component: "labels",
       path: "/config/labels",
@@ -479,6 +502,8 @@ export const configSections: Record<string, PageNavigation[]> = {
       core: true,
       adminOnly: true,
     },
+  ],
+  zone: [
     {
       component: "zone",
       path: "/config/zone",

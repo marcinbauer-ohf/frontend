@@ -256,7 +256,7 @@ export class HaConfigLabels extends LitElement {
         .narrow=${this.narrow}
         back-path="/config"
         .route=${this.route}
-        .tabs=${configSections.areas}
+        .tabs=${configSections.labels}
         .columns=${this._columns(this.hass.localize, this.narrow)}
         .data=${this._data(this._labels)}
         .loading=${this._loading}

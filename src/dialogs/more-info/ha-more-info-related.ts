@@ -3,6 +3,7 @@ import type { HassEntity } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
+import { homeEditorPath } from "../../common/url/home-query-params";
 import { consume } from "../../common/decorators/consume";
 import { fireEvent } from "../../common/dom/fire_event";
 import { computeAreaName } from "../../common/entity/compute_area_name";
@@ -165,7 +166,7 @@ class HaMoreInfoRelated extends LitElement {
       contextEntries.push({
         translationKey: "ui.dialogs.more_info_control.floor",
         value: floorName,
-        href: "/config/areas/dashboard",
+        href: homeEditorPath("areas"),
         icon: html`<ha-floor-icon .floor=${floor}></ha-floor-icon>`,
         subject: true,
       });

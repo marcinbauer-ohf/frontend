@@ -454,7 +454,7 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
         back-path="/config"
         id="entity_id"
         .route=${this.route}
-        .tabs=${configSections.automations}
+        .tabs=${configSections.automation}
         .searchLabel=${this.hass.localize(
           "ui.panel.config.automation.picker.search",
           { number: automations.length }

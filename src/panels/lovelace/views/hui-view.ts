@@ -4,7 +4,7 @@ import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { consume } from "../../../common/decorators/consume";
 import { storage } from "../../../common/decorators/storage";
-import type { HASSDomEvent } from "../../../common/dom/fire_event";
+import { fireEvent, type HASSDomEvent } from "../../../common/dom/fire_event";
 import { debounce } from "../../../common/util/debounce";
 import { deepEqual } from "../../../common/util/deep-equal";
 import "../../../components/ha-svg-icon";
@@ -59,6 +59,7 @@ import {
   checkStrategyShouldRegenerate,
   generateLovelaceViewStrategy,
 } from "../strategies/get-strategy";
+import type { CardPaneEditorParams } from "../editor/card-editor/hui-card-editor-pane";
 import type { Lovelace } from "../types";
 import { getViewType } from "./get-view-type";
 
@@ -67,6 +68,9 @@ declare global {
   interface HASSDomEvents {
     "ll-create-card": { path: LovelacePath; suggested?: string[] };
     "ll-edit-card": { path: LovelacePath };
+    /** Offers a card's editor to the dashboard, which cancels it to show the
+     * editor itself; otherwise the view opens the edit dialog. */
+    "ll-edit-card-in-pane": CardPaneEditorParams;
     "ll-delete-card": DeleteCardParams;
     "ll-duplicate-card": { path: LovelacePath };
     "ll-copy-card": { path: LovelacePath };
@@ -167,6 +171,16 @@ export class HUIView extends ReactiveElement {
         if (!cardConfig) {
           return;
         }
+        const sectionConfig = getCardSectionConfig(this.lovelace.config, path);
+        const offer = fireEvent(
+          this,
+          "ll-edit-card-in-pane",
+          { path, cardConfig, sectionConfig },
+          { cancelable: true }
+        );
+        if (offer.defaultPrevented) {
+          return;
+        }
         showEditCardDialog(this, {
           lovelaceConfig: this.lovelace.config,
           saveCardConfig: async (newCardConfig) => {
@@ -177,7 +191,7 @@ export class HUIView extends ReactiveElement {
             );
             await this.lovelace.saveConfig(newConfig);
           },
-          sectionConfig: getCardSectionConfig(this.lovelace.config, path),
+          sectionConfig,
           cardConfig,
         });
       }

@@ -18,6 +18,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { ifDefined } from "lit/directives/if-defined";
 import memoizeOne from "memoize-one";
+import { homeEditorPath } from "../../../common/url/home-query-params";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import { consume } from "../../../common/decorators/consume";
 import type { HASSDomCurrentTargetEvent } from "../../../common/dom/fire_event";
@@ -639,7 +640,7 @@ class HaConfigAreaPage extends LitElement {
       <hass-subpage
         .hass=${this.hass}
         .narrow=${this.narrow}
-        back-path="/config/areas/dashboard"
+        .backPath=${homeEditorPath("areas")}
         .header=${html`${
           area.icon
             ? html`<ha-icon
@@ -905,7 +906,7 @@ class HaConfigAreaPage extends LitElement {
       destructive: true,
       confirm: async () => {
         await deleteAreaRegistryEntry(this.hass!, area!.area_id);
-        afterNextRender(() => goBack("/config/areas/dashboard"));
+        afterNextRender(() => goBack(homeEditorPath("areas")));
       },
     });
   }

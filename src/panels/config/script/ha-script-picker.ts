@@ -445,7 +445,7 @@ class HaScriptPicker extends SubscribeMixin(LitElement) {
         .narrow=${this.narrow}
         back-path="/config"
         .route=${this.route}
-        .tabs=${configSections.automations}
+        .tabs=${configSections.script}
         .searchLabel=${this.hass.localize(
           "ui.panel.config.script.picker.search",
           { number: scripts.length }

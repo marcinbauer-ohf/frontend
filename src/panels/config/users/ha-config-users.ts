@@ -174,7 +174,7 @@ export class HaConfigUsers extends LitElement {
         .narrow=${this.narrow}
         .route=${this.route}
         back-path="/config"
-        .tabs=${configSections.persons}
+        .tabs=${configSections.users}
         .columns=${this._columns(this.narrow, this.hass.localize)}
         .loading=${this._loading}
         .data=${this._userData(this._users, this.hass.localize)}

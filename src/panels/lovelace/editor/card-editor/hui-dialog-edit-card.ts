@@ -20,11 +20,6 @@ import "../../../../components/ha-icon-button";
 import "../../../../components/ha-spinner";
 import type { LovelaceCardConfig } from "../../../../data/lovelace/config/card";
 import type { LovelaceSectionConfig } from "../../../../data/lovelace/config/section";
-import {
-  getCustomCardEntry,
-  isCustomType,
-  stripCustomPrefix,
-} from "../../../../data/lovelace_custom_cards";
 import { showConfirmationDialog } from "../../../../dialogs/generic/show-dialog-box";
 import type { HassDialog } from "../../../../dialogs/make-dialog-manager";
 import { DirtyStateProviderMixin } from "../../../../mixins/dirty-state-provider-mixin";
@@ -43,6 +38,7 @@ import { getCardDefaultConfig } from "../get-card-default-config";
 import { getCardDocumentationURL } from "../get-dashboard-documentation-url";
 import type { ConfigChangedEvent } from "../hui-element-editor";
 import type { GUIModeChangedEvent } from "../types";
+import { cardEditorHeading } from "./card-editor-heading";
 import "./hui-card-element-editor";
 import type { HuiCardElementEditor } from "./hui-card-element-editor";
 import type { EditCardDialogParams } from "./show-edit-card-dialog";
@@ -170,32 +166,10 @@ export class HuiDialogEditCard
       return nothing;
     }
 
-    let heading: string;
-    if (this._cardConfig.type) {
-      let cardName: string | undefined;
-      if (isCustomType(this._cardConfig.type)) {
-        // prettier-ignore
-        cardName = getCustomCardEntry(
-          stripCustomPrefix(this._cardConfig.type)
-        )?.name;
-        // Trim names that end in " Card" so as not to redundantly duplicate it
-        if (cardName?.toLowerCase().endsWith(" card")) {
-          cardName = cardName.substring(0, cardName.length - 5);
-        }
-      } else {
-        cardName = this.hass!.localize(
-          `ui.panel.lovelace.editor.card.${this._cardConfig.type}.name`
-        );
-      }
-      heading = this.hass!.localize(
-        "ui.panel.lovelace.editor.edit_card.typed_header",
-        { type: cardName }
-      );
-    } else {
-      heading = this.hass!.localize(
-        "ui.panel.lovelace.editor.edit_card.header"
-      );
-    }
+    const heading = cardEditorHeading(
+      this.hass.localize,
+      this._cardConfig.type
+    );
 
     return html`
       <ha-dialog

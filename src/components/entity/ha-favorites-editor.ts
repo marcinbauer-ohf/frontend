@@ -6,6 +6,7 @@ import { fireEvent, type HASSDomEvent } from "../../common/dom/fire_event";
 import type { HaEntityPicker } from "./ha-entity-picker";
 import "./ha-entity-picker";
 import "../ha-sortable";
+import "../list/ha-grouped-list";
 import "../ha-svg-icon";
 import type { HaEntityPickerEntityFilterFunc } from "../../data/entity/entity";
 import type { ValueChangedEvent } from "../../types";
@@ -24,33 +25,49 @@ export class HaFavoritesEditor extends LitElement {
 
   @property({ attribute: "add-button-label" }) public addButtonLabel?: string;
 
+  /** Shown in the empty frame; without it an empty list renders nothing. */
+  @property({ attribute: "empty-label" }) public emptyLabel?: string;
+
   protected render() {
     return html`
       ${this.label ? html`<p class="field-label">${this.label}</p>` : nothing}
       ${
         this.helper ? html`<p class="field-helper">${this.helper}</p>` : nothing
       }
-      <ha-sortable handle-selector=".handle" @item-moved=${this._moved}>
-        <div class="favorites-list">
-          ${repeat(
-            this.favorites,
-            (entityId) => entityId,
-            (entityId, index) => html`
-              <div class="favorite-row">
-                <div class="handle">
-                  <ha-svg-icon .path=${mdiDragHorizontalVariant}></ha-svg-icon>
-                </div>
-                <ha-favorite-entity-list-item
-                  class="favorite-content"
-                  .entityId=${entityId}
-                  .index=${index}
-                  @delete-favorite-entity=${this._remove}
-                ></ha-favorite-entity-list-item>
-              </div>
-            `
-          )}
-        </div>
-      </ha-sortable>
+      ${
+        !this.favorites.length
+          ? this.emptyLabel
+            ? html`<ha-grouped-list>
+                <div class="empty">${this.emptyLabel}</div>
+              </ha-grouped-list>`
+            : nothing
+          : html`<ha-sortable
+              handle-selector=".handle"
+              @item-moved=${this._moved}
+            >
+              <ha-grouped-list>
+                ${repeat(
+                  this.favorites,
+                  (entityId) => entityId,
+                  (entityId, index) => html`
+                    <div class="favorite-row">
+                      <div class="handle">
+                        <ha-svg-icon
+                          .path=${mdiDragHorizontalVariant}
+                        ></ha-svg-icon>
+                      </div>
+                      <ha-favorite-entity-list-item
+                        class="favorite-content"
+                        .entityId=${entityId}
+                        .index=${index}
+                        @delete-favorite-entity=${this._remove}
+                      ></ha-favorite-entity-list-item>
+                    </div>
+                  `
+                )}
+              </ha-grouped-list>
+            </ha-sortable>`
+      }
       <ha-entity-picker
         add-button
         .addButtonLabel=${this.addButtonLabel}
@@ -104,14 +121,17 @@ export class HaFavoritesEditor extends LitElement {
       color: var(--secondary-text-color);
       font-size: 12px;
     }
-    .favorites-list {
-      display: flex;
-      flex-direction: column;
-    }
     .favorite-row {
       display: flex;
       align-items: center;
       gap: var(--ha-space-2);
+      padding: var(--ha-space-1) var(--ha-row-item-padding-inline);
+      background: var(--card-background-color);
+    }
+    .empty {
+      padding: var(--ha-space-2) var(--ha-row-item-padding-inline);
+      font-size: var(--ha-font-size-m);
+      color: var(--secondary-text-color);
     }
     .favorite-content {
       flex: 1;
@@ -126,7 +146,7 @@ export class HaFavoritesEditor extends LitElement {
     }
     ha-entity-picker {
       display: block;
-      padding-top: var(--ha-space-2);
+      padding-top: var(--ha-space-3);
     }
   `;
 }

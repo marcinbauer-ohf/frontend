@@ -1,6 +1,8 @@
 import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators";
+import { navigate } from "../../common/navigate";
+import { homeEditorPath } from "../../common/url/home-query-params";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import type { HASSDomEvent } from "../../common/dom/fire_event";
 import { listenMediaQuery } from "../../common/dom/media_query";
@@ -37,6 +39,13 @@ class HaPanelConfig extends HassRouterPage {
 
   protected routerOptions: RouterOptions = {
     defaultPage: "dashboard",
+    // People are edited in the home page's editor now
+    beforeRender: (page) => {
+      if (page === "person") {
+        navigate(homeEditorPath("people"), { replace: true });
+      }
+      return undefined;
+    },
     routes: {
       analytics: {
         tag: "ha-config-section-analytics",
@@ -132,10 +141,6 @@ class HaPanelConfig extends HassRouterPage {
       network: {
         tag: "ha-config-section-network",
         load: () => import("./network/ha-config-section-network"),
-      },
-      person: {
-        tag: "ha-config-person",
-        load: () => import("./person/ha-config-person"),
       },
       script: {
         tag: "ha-config-script",

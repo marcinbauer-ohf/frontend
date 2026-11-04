@@ -28,6 +28,7 @@ import {
   getPanelIcon,
   getPanelIconPath,
   getPanelTitle,
+  isPanelHiddenByDefault,
 } from "../../data/panel";
 import { DirtyStateProviderMixin } from "../../mixins/dirty-state-provider-mixin";
 import type { HomeAssistant, ValueChangedEvent } from "../../types";
@@ -111,7 +112,7 @@ class DialogEditSidebar extends DirtyStateProviderMixin<SidebarState>()(
 
     for (const panel of panels) {
       if (
-        panel.default_visible === false &&
+        isPanelHiddenByDefault(panel) &&
         !orderSet.has(panel.url_path) &&
         !hiddenSet.has(panel.url_path)
       ) {

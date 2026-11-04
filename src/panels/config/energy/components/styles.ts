@@ -57,4 +57,58 @@ export const energyCardStyles = css`
     flex-direction: column;
     gap: var(--ha-space-2);
   }
+
+  /* In the editor pane each section reads as a grouped list: a quiet header
+     over a framed box of rows, like the rest of the pane. */
+  :host([pane]) ha-card {
+    --ha-card-background: transparent;
+    --ha-card-border-width: 0;
+    --ha-card-box-shadow: none;
+  }
+  :host([pane]) .card-header,
+  :host([pane]) h3 {
+    display: block;
+    margin: 0 0 var(--ha-space-1);
+    padding: 0;
+    padding-inline: calc(var(--ha-space-3) + var(--ha-border-width-sm));
+    font-size: var(--ha-font-size-m);
+    font-weight: var(--ha-font-weight-medium);
+    line-height: var(--ha-line-height-normal);
+    color: var(--secondary-text-color);
+  }
+  :host([pane]) h3 {
+    margin-top: var(--ha-space-4);
+  }
+  :host([pane]) .card-header ha-svg-icon,
+  :host([pane]) .card-content > p:first-child {
+    display: none;
+  }
+  :host([pane]) .card-content {
+    padding: 0;
+  }
+  :host([pane]) .items-container {
+    padding: 0;
+    gap: 0;
+    border-color: var(--divider-color);
+    margin-bottom: var(--ha-space-3);
+  }
+  :host([pane]) .items-container .row {
+    padding-inline-start: var(--ha-space-3);
+  }
+  :host([pane]) .items-container .row + .row {
+    border-top: var(--ha-border-width-sm) solid var(--divider-color);
+  }
+  :host([pane]) .row ha-svg-icon,
+  :host([pane]) .row ha-icon,
+  :host([pane]) .row img {
+    margin-inline-end: var(--ha-space-3);
+    color: var(--secondary-text-color);
+  }
+  :host([pane]) ha-button ha-svg-icon {
+    margin: 0;
+    color: inherit;
+  }
+  :host([pane]) .row:not(.items-container .row) {
+    height: auto;
+  }
 `;

@@ -30,6 +30,8 @@ declare global {
  *
  * @slot - The pane's content.
  * @slot actions - Buttons beside the heading, such as a menu.
+ * @slot footer - The pane's main actions, such as Done, pinned at the bottom
+ *   where the user is working.
  *
  * @fires side-pane-closed - When the pane is dismissed.
  * @fires side-pane-back - When the back button is pressed.
@@ -121,7 +123,8 @@ export class HaSidePane extends LitElement {
         <slot name="actions" slot="actionItems"></slot>
       </ha-dialog-header>
     `;
-    const body = html`<div class="body"><slot></slot></div>`;
+    const body = html`<div class="body"><slot></slot></div>
+      <slot name="footer"></slot>`;
     if (this.narrow && this.modal) {
       return html`<ha-bottom-sheet
         .open=${this._sheetOpen}
@@ -337,6 +340,10 @@ export class HaSidePane extends LitElement {
       opacity: 0;
     }
 
+    :host(:not([narrow])) ha-card {
+      border: 1px solid var(--ha-color-border-neutral-quiet);
+    }
+
     ha-card {
       height: 100%;
       display: flex;
@@ -346,6 +353,16 @@ export class HaSidePane extends LitElement {
 
     ha-dialog-header {
       flex-shrink: 0;
+    }
+
+    ::slotted([slot="footer"]) {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: var(--ha-space-2);
+      padding: var(--ha-space-3) var(--ha-space-4);
+      border-top: var(--ha-border-width-sm) solid var(--divider-color);
     }
 
     .body {

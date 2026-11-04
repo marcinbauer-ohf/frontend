@@ -23,6 +23,7 @@ import {
   getPanelIcon,
   getPanelIconPath,
   getPanelTitle,
+  isPanelHiddenByDefault,
 } from "../data/panel";
 import type { PersistentNotification } from "../data/persistent_notification";
 import { subscribeNotifications } from "../data/persistent_notification";
@@ -141,7 +142,7 @@ export const computePanels = memoizeOne(
         (!panel.title ||
           panel.show_in_sidebar === false ||
           hiddenPanels.includes(panel.url_path) ||
-          (panel.default_visible === false &&
+          (isPanelHiddenByDefault(panel) &&
             !panelsOrder.includes(panel.url_path)))
       ) {
         return;

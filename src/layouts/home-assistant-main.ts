@@ -270,6 +270,10 @@ export class HomeAssistantMain extends LitElement {
       background: var(--ha-panel-background, var(--primary-background-color));
       background-attachment: scroll !important;
     }
+    /* Desktop chrome gets a little more air than the phone's 56px bars. */
+    :host(:not([modal])) {
+      --header-height: 64px;
+    }
     /* The framed look: the panel is a rounded canvas set in from the top bar
        and the sidebar, and the chrome colour wraps around its right and
        bottom edges too. A frame painted above the content (but under each
@@ -278,7 +282,7 @@ export class HomeAssistantMain extends LitElement {
        the gutters. A phone has no chrome to match, so it stays edge to edge. */
     :host(:not([modal])) partial-panel-resolver {
       --ha-panel-frame-gutter: var(--ha-space-2);
-      --ha-panel-frame-bottom: 56px;
+      --ha-panel-frame-bottom: 64px;
       --safe-area-inset-right: calc(
         var(--app-safe-area-inset-right, env(safe-area-inset-right, 0px)) +
           var(--ha-panel-frame-gutter)
@@ -322,18 +326,24 @@ export class HomeAssistantMain extends LitElement {
         --app-safe-area-inset-right,
         env(safe-area-inset-right, 0px)
       );
-      height: var(--ha-panel-frame-bottom, 56px);
+      height: var(--ha-panel-frame-bottom, 64px);
       display: flex;
-      align-items: center;
+      /* Assist starts at the canvas's start edge and lines up with the
+         sidebar's profile row: both are 40px tall and sit 16px off the
+         bottom (the row's 8px margin plus its list's 8px margin). */
+      align-items: flex-end;
       justify-content: space-between;
       gap: var(--ha-space-2);
       padding: var(--ha-space-2);
+      padding-bottom: var(--ha-space-4);
+      padding-inline-start: 0;
       box-sizing: border-box;
       color: var(--app-header-text-color, var(--primary-text-color));
     }
     .clock {
       display: flex;
       align-items: baseline;
+      line-height: 40px;
       gap: var(--ha-space-2);
       padding: 0 var(--ha-space-2);
       white-space: nowrap;
@@ -350,7 +360,7 @@ export class HomeAssistantMain extends LitElement {
       display: flex;
       align-items: center;
       gap: var(--ha-space-2);
-      width: min(480px, 40vw);
+      width: min(320px, 30vw);
       height: 40px;
       padding: 0 var(--ha-space-3);
       border: none;
