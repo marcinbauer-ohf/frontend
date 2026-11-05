@@ -4,6 +4,8 @@ import type { User } from "../../../data/user";
 export interface AddUserDialogParams {
   userAddedCallback: (user: User) => void;
   name?: string;
+  /** Start with "Send an invite" switched on. */
+  invite?: boolean;
 }
 
 export const loadAddUserDialog = () => import("./dialog-add-user");

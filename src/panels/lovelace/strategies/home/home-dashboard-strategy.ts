@@ -90,6 +90,16 @@ export class HomeDashboardStrategy extends ReactiveElement {
       icon: HOME_SUMMARIES_ICONS.media_players,
     } satisfies LovelaceViewRawConfig;
 
+    const peopleView = {
+      title: getSummaryLabel(hass.localize, "persons"),
+      path: "people",
+      subview: true,
+      strategy: {
+        type: "home-people",
+      },
+      icon: HOME_SUMMARIES_ICONS.persons,
+    } satisfies LovelaceViewRawConfig;
+
     const automationsView = {
       title: getSummaryLabel(hass.localize, "automations"),
       path: "automations",
@@ -127,6 +137,7 @@ export class HomeDashboardStrategy extends ReactiveElement {
           } satisfies HomeOverviewViewStrategyConfig,
         },
         ...areaViews,
+        peopleView,
         mediaPlayersView,
         automationsView,
         otherDevicesView,

@@ -15,6 +15,7 @@ export interface SummaryShortcutItem {
 export type ShortcutItem = CustomShortcutItem | SummaryShortcutItem;
 
 export const DEFAULT_SUMMARY_KEYS = [
+  "persons",
   "light",
   "climate",
   "security",

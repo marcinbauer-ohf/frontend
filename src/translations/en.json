@@ -2897,15 +2897,18 @@
       },
       "home": {
         "editor": {
-          "title": "Edit your home",
+          "title": "Customize home",
           "home": "Home",
           "home_name": "Home name",
           "people": "People",
           "people_count": "{count} {count, plural,\n  one {person}\n  other {people}\n}",
           "people_yaml": "Set up in YAML",
-          "overview_page_header": "Overview page",
-          "home_setup_header": "Home setup",
-          "location_description": "Where your home is on the map",
+          "overview_page_header": "On this page",
+          "home_setup_header": "Your home",
+          "favorites_and_suggested": "Favorite and suggested devices",
+          "role_user": "User",
+          "location_and_region": "Location and region",
+          "intro": "Choose what your home page shows, and tell Home Assistant who lives here and where your home is.",
           "no_favorites": "No favorites yet",
           "floors_and_areas": "Floors and areas",
           "floors_and_areas_count": "{floors} {floors, plural,\n  one {floor}\n  other {floors}\n}, {areas} {areas, plural,\n  one {area}\n  other {areas}\n}",
@@ -2913,8 +2916,8 @@
           "description": "Configure your Overview page display preferences.",
           "personalize": "Personalize",
           "personalize_description": "Customize the top of your Overview page.",
-          "suggested_entities": "Suggested entities",
-          "suggested_entities_description": "Show entities you use often alongside your favorites.",
+          "suggested_entities": "Suggested devices",
+          "suggested_entities_description": "Show devices you use often alongside your favorites.",
           "suggested_entities_disabled_description": "Your favorites already fill the section. Remove a favorite to make room for suggestions.",
           "save_failed": "Failed to save Overview page configuration",
           "areas_hint": "You can rearrange your floors and areas in the order that best represents your house on the {areas_page}.",
@@ -2951,6 +2954,7 @@
         }
       },
       "security": {
+        "edit": "Edit security",
         "editor": {
           "title": "Edit security and safety page",
           "description": "Configure your security and safety display preferences.",
@@ -7682,6 +7686,7 @@
             "update": "Update",
             "confirm_delete_user_title": "Delete user account",
             "confirm_delete_user_text": "The user account for ''{name}'' will be permanently deleted. You can still track the user, but the person will no longer be able to log in.",
+            "invite": "Invite to Home Assistant",
             "allow_login": "Allow login",
             "allow_login_description": "Allow access using username and password.",
             "select_user": "Select user account",
@@ -8034,6 +8039,17 @@
             "unnamed_user": "Unnamed user",
             "confirm_user_deletion_title": "Delete {name}?",
             "confirm_user_deletion_text": "This user will be permanently deleted."
+          },
+          "invite": {
+            "send": "Send an invite",
+            "send_description": "Share a link that opens the Home Assistant app and connects it to this home.",
+            "title": "Invite {name}",
+            "description": "Scan this code with {name}'s phone, or send them the link. It opens the Home Assistant app and connects it to this home.",
+            "credentials": "They sign in with the username {username} and the password you set.",
+            "local_only": "This link uses your local address, so it only works on your home network. Set up remote access to invite people from anywhere.",
+            "copy_link": "Copy link",
+            "share": "Share",
+            "share_title": "Join our smart home"
           },
           "add_user": {
             "caption": "Add user",
@@ -9952,7 +9968,7 @@
               "weather": "Weather",
               "maintenance": "Maintenance",
               "energy": "Today's energy",
-              "persons": "Presence"
+              "persons": "People"
             },
             "welcome_user": "Welcome {user}",
             "summaries": "Summaries",
@@ -10263,7 +10279,8 @@
           "add_person_success": "Person added",
           "add_person_action": "View persons",
           "add_person": "Add person",
-          "edit_overview": "Edit overview",
+          "edit_overview": "Edit home",
+          "edit_energy": "Edit energy",
           "edit_area": "Edit area"
         },
         "reload_resources": {

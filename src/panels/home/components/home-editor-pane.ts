@@ -31,8 +31,6 @@ import "../../../components/ha-sortable";
 import "../../../components/ha-svg-icon";
 import "../../../components/ha-switch";
 import type { HaSwitch } from "../../../components/ha-switch";
-import "../../../components/input/ha-input";
-import type { HaInput } from "../../../components/input/ha-input";
 import "../../../components/item/ha-list-item-base";
 import "../../../components/item/ha-list-item-button";
 import "../../../components/list/ha-grouped-list";
@@ -51,10 +49,15 @@ import {
   type Person,
   updatePerson,
 } from "../../../data/person";
-import { fetchUsers, type User } from "../../../data/user";
+import {
+  fetchUsers,
+  SYSTEM_GROUP_ID_ADMIN,
+  type User,
+} from "../../../data/user";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import { stringCompare } from "../../../common/string/compare";
 import "../../../components/user/ha-person-badge";
+import "../../../components/user/ha-person-stack";
 import type { HomeFrontendSystemData } from "../../../data/frontend";
 import type { FloorRegistryEntry } from "../../../data/floor_registry";
 import {
@@ -64,7 +67,10 @@ import {
   updateFloorRegistryEntry,
 } from "../../../data/floor_registry";
 import type { ShortcutItem } from "../../../data/home_shortcuts";
-import { showConfirmationDialog } from "../../../dialogs/generic/show-dialog-box";
+import {
+  showConfirmationDialog,
+  showPromptDialog,
+} from "../../../dialogs/generic/show-dialog-box";
 import type { HomeAssistant, ValueChangedEvent } from "../../../types";
 import { showAreaRegistryDetailDialog } from "../../config/areas/show-dialog-area-registry-detail";
 import { showFloorRegistryDetailDialog } from "../../config/areas/show-dialog-floor-registry-detail";
@@ -91,12 +97,9 @@ export const HOME_EDITOR_VIEWS = [
 
 export type EditorView = (typeof HOME_EDITOR_VIEWS)[number];
 
-// Avatars shown on the People row before the rest collapse into "+N"
-const PEOPLE_STACK_MAX = 4;
-
 const VIEW_TITLE: Record<EditorView, LocalizeKeys> = {
   home: "ui.panel.home.editor.title",
-  favorites: "ui.panel.lovelace.editor.strategy.home.favorite_entities",
+  favorites: "ui.panel.home.editor.favorites_and_suggested",
   areas: "ui.panel.home.editor.floors_and_areas",
   summaries: "ui.panel.home.editor.summaries",
   people: "ui.panel.home.editor.people",
@@ -123,6 +126,8 @@ export class HomeEditorPane extends LitElement {
   @state() private _view: EditorView = "home";
 
   @state() private _persons?: { storage: Person[]; config: Person[] };
+
+  @state() private _users?: User[];
 
   private _usersLoad?: Promise<User[]>;
 
@@ -188,14 +193,14 @@ export class HomeEditorPane extends LitElement {
     const favorites = this.config.favorite_entities ?? [];
     switch (this._view) {
       case "favorites":
-        return html`<ha-favorites-editor
-          .favorites=${favorites}
-          .addButtonLabel=${this.hass.localize(
-            "ui.panel.lovelace.editor.strategy.home.add_favorite_entity"
-          )}
-          .emptyLabel=${this.hass.localize("ui.panel.home.editor.no_favorites")}
-          @value-changed=${this._favoritesChanged}
-        ></ha-favorites-editor>`;
+        return html`${this._renderSuggestedSwitch(favorites)}<ha-favorites-editor
+            .favorites=${favorites}
+            .addButtonLabel=${this.hass.localize(
+              "ui.panel.lovelace.editor.strategy.home.add_favorite_entity"
+            )}
+            .emptyLabel=${this.hass.localize("ui.panel.home.editor.no_favorites")}
+            @value-changed=${this._favoritesChanged}
+          ></ha-favorites-editor>`;
       case "areas":
         return this._renderFloors();
       case "people":
@@ -211,16 +216,33 @@ export class HomeEditorPane extends LitElement {
     }
   }
 
-  private _renderHome(favorites: string[]) {
+  private _renderSuggestedSwitch(favorites: string[]) {
     const localize = this.hass.localize;
     const suggestionsDisabled = favorites.length >= SUGGESTED_ENTITIES_CAP;
+    return html`<ha-grouped-list>
+      <ha-list-item-base
+        .headline=${localize("ui.panel.home.editor.suggested_entities")}
+        .supportingText=${localize(
+          suggestionsDisabled
+            ? "ui.panel.home.editor.suggested_entities_disabled_description"
+            : "ui.panel.home.editor.suggested_entities_description"
+        )}
+      >
+        <ha-switch
+          slot="end"
+          .checked=${!this.config.hide_suggested_entities}
+          .disabled=${suggestionsDisabled}
+          @change=${this._suggestedChanged}
+        ></ha-switch>
+      </ha-list-item-base>
+    </ha-grouped-list>`;
+  }
+
+  private _renderHome(favorites: string[]) {
+    const localize = this.hass.localize;
     const hierarchy = this._hierarchy(this.hass.floors, this.hass.areas);
     return html`
-      <ha-input
-        .label=${localize("ui.panel.home.editor.home_name")}
-        .value=${this.hass.config.location_name}
-        @change=${this._nameChanged}
-      ></ha-input>
+      <p class="intro">${localize("ui.panel.home.editor.intro")}</p>
       <ha-grouped-list
         .header=${localize("ui.panel.home.editor.overview_page_header")}
       >
@@ -246,25 +268,17 @@ export class HomeEditorPane extends LitElement {
             count: favorites.length,
           })
         )}
-        <ha-list-item-base
-          .headline=${localize("ui.panel.home.editor.suggested_entities")}
-          .supportingText=${localize(
-            suggestionsDisabled
-              ? "ui.panel.home.editor.suggested_entities_disabled_description"
-              : "ui.panel.home.editor.suggested_entities_description"
-          )}
-        >
-          <ha-switch
-            slot="end"
-            .checked=${!this.config.hide_suggested_entities}
-            .disabled=${suggestionsDisabled}
-            @change=${this._suggestedChanged}
-          ></ha-switch>
-        </ha-list-item-base>
       </ha-grouped-list>
       <ha-grouped-list
         .header=${localize("ui.panel.home.editor.home_setup_header")}
       >
+        <ha-list-item-button
+          .headline=${localize("ui.panel.home.editor.home_name")}
+          .supportingText=${this.hass.config.location_name}
+          @click=${this._editName}
+        >
+          <ha-svg-icon slot="end" .path=${mdiPencil}></ha-svg-icon>
+        </ha-list-item-button>
         ${
           this._canEditPeople && this._persons
             ? this._renderSectionRow(
@@ -278,10 +292,12 @@ export class HomeEditorPane extends LitElement {
             : nothing
         }
         <ha-list-item-button
-          .headline=${localize(
-            "ui.panel.config.core.section.core.location_card.header"
+          .headline=${localize("ui.panel.home.editor.location_and_region")}
+          .supportingText=${this._regionSummary(
+            this.hass.config.country,
+            this.hass.config.time_zone,
+            this.hass.locale.language
           )}
-          .supportingText=${localize("ui.panel.home.editor.location_description")}
           @click=${this._editLocation}
         ></ha-list-item-button>
         ${this._renderSectionRow(
@@ -311,22 +327,12 @@ export class HomeEditorPane extends LitElement {
     </ha-list-item-button>`;
   }
 
-  // Overlapping avatars, each ringed in the surface color so the edges read
   private _renderPeopleStack() {
-    const persons = [...this._persons!.storage, ...this._persons!.config];
-    if (!persons.length) {
-      return nothing;
-    }
-    const rest = persons.length - PEOPLE_STACK_MAX;
-    return html`<div slot="end" class="people-stack" aria-hidden="true">
-      ${persons
-        .slice(0, PEOPLE_STACK_MAX)
-        .map(
-          (person) =>
-            html`<ha-person-badge .person=${person}></ha-person-badge>`
-        )}
-      ${rest > 0 ? html`<span class="more">+${rest}</span>` : nothing}
-    </div>`;
+    return html`<ha-person-stack
+      slot="end"
+      aria-hidden="true"
+      .persons=${[...this._persons!.storage, ...this._persons!.config]}
+    ></ha-person-stack>`;
   }
 
   private _renderPeople() {
@@ -344,6 +350,7 @@ export class HomeEditorPane extends LitElement {
                   html`<ha-list-item-button
                     .person=${person}
                     .headline=${person.name}
+                    .supportingText=${this._personRole(person)}
                     @click=${this._editPerson}
                   >
                     <ha-person-badge
@@ -384,6 +391,23 @@ export class HomeEditorPane extends LitElement {
           : nothing
       }
     `;
+  }
+
+  // Owner, administrator or user, from the person's login; none without one
+  private _personRole(person: Person) {
+    const user = person.user_id
+      ? this._users?.find((u) => u.id === person.user_id)
+      : undefined;
+    if (!user) {
+      return undefined;
+    }
+    const localize = this.hass.localize;
+    if (user.is_owner) {
+      return localize("ui.panel.config.users.editor.owner");
+    }
+    return user.group_ids.includes(SYSTEM_GROUP_ID_ADMIN)
+      ? localize("ui.panel.config.users.editor.admin")
+      : localize("ui.panel.home.editor.role_user");
   }
 
   private _showSection(ev: Event) {
@@ -549,8 +573,15 @@ export class HomeEditorPane extends LitElement {
     fireEvent(this, "value-changed", { value: config });
   }
 
-  private async _fetchPersons() {
+  private _loadUsers() {
     this._usersLoad = fetchUsers(this.hass);
+    this._usersLoad.then((users) => {
+      this._users = users;
+    });
+  }
+
+  private async _fetchPersons() {
+    this._loadUsers();
     const { storage, config } = await fetchPersons(this.hass);
     this._persons = {
       storage: this._sortPersons(storage),
@@ -640,24 +671,60 @@ export class HomeEditorPane extends LitElement {
           return false;
         }
       },
-      refreshUsers: () => {
-        this._usersLoad = fetchUsers(this.hass);
-      },
+      refreshUsers: () => this._loadUsers(),
     });
   }
 
   // The same dialog as the Location card in the general settings
+  // Home Assistant stores coordinates, not an address, so the row names the
+  // region instead: the country and time zone
+  private _regionSummary = memoizeOne(
+    (
+      country: string | null | undefined,
+      timeZone: string,
+      language: string
+    ) => {
+      let countryName: string | undefined;
+      if (country) {
+        try {
+          countryName = new Intl.DisplayNames(language, {
+            type: "region",
+          }).of(country);
+        } catch {
+          countryName = country;
+        }
+      }
+      return [countryName, timeZone.replace(/_/g, " ")]
+        .filter(Boolean)
+        .join(" · ");
+    }
+  );
+
   private _editLocation() {
     showHomeZoneDetailDialog(this, {
-      updateEntry: ({ latitude, longitude, radius }) =>
-        saveCoreConfig(this.hass, { latitude, longitude, radius }),
+      region: true,
+      title: this.hass.localize("ui.panel.home.editor.location_and_region"),
+      updateEntry: ({ latitude, longitude, radius, country, time_zone }) =>
+        saveCoreConfig(this.hass, {
+          latitude,
+          longitude,
+          radius,
+          country,
+          time_zone,
+        }),
     });
   }
 
-  private _nameChanged(ev: Event) {
-    const name = (ev.target as HaInput).value?.trim();
-    if (name && name !== this.hass.config.location_name) {
-      saveCoreConfig(this.hass, { location_name: name });
+  private async _editName() {
+    const name = await showPromptDialog(this, {
+      title: this.hass.localize("ui.panel.home.editor.home_name"),
+      inputLabel: this.hass.localize("ui.panel.home.editor.home_name"),
+      defaultValue: this.hass.config.location_name,
+      confirmText: this.hass.localize("ui.common.save"),
+    });
+    const trimmed = name?.trim();
+    if (trimmed && trimmed !== this.hass.config.location_name) {
+      saveCoreConfig(this.hass, { location_name: trimmed });
     }
   }
 
@@ -848,15 +915,16 @@ export class HomeEditorPane extends LitElement {
     :host {
       display: contents;
     }
-    ha-input {
-      display: block;
-      margin-bottom: var(--ha-space-3);
+    .intro {
+      margin: 0 0 var(--ha-space-4);
+      color: var(--secondary-text-color);
     }
     ha-grouped-list {
       display: block;
       margin-bottom: var(--ha-space-3);
     }
-    ha-list-item-button ha-icon-next {
+    ha-list-item-button ha-icon-next,
+    ha-list-item-button > ha-svg-icon[slot="end"] {
       color: var(--secondary-text-color);
     }
     /* Header menus and row actions at 32px keep the header close to its
@@ -901,31 +969,6 @@ export class HomeEditorPane extends LitElement {
     }
     .create-floor {
       color: var(--primary-color);
-    }
-    .people-stack {
-      display: flex;
-      align-items: center;
-      --ha-picture-border-radius: var(--ha-border-radius-circle);
-    }
-    .people-stack ha-person-badge,
-    .people-stack .more {
-      width: 28px;
-      height: 28px;
-      border-radius: var(--ha-border-radius-circle);
-      box-shadow: 0 0 0 2px var(--card-background-color);
-      --person-badge-font-size: var(--ha-font-size-xs);
-      --ha-person-badge-font-size-long: var(--ha-font-size-xs);
-    }
-    .people-stack > :not(:first-child) {
-      margin-inline-start: calc(-1 * var(--ha-space-2));
-    }
-    .people-stack .more {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background-color: var(--secondary-background-color);
-      color: var(--secondary-text-color);
-      font-size: var(--ha-font-size-xs);
     }
   `;
 }

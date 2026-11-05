@@ -24,6 +24,7 @@ import { DirtyStateProviderMixin } from "../../../mixins/dirty-state-provider-mi
 import { haStyleDialog } from "../../../resources/styles";
 import type { HomeAssistant, ValueChangedEvent } from "../../../types";
 import type { AddUserDialogParams } from "./show-dialog-add-user";
+import { showShareInviteDialog } from "./show-dialog-share-invite";
 
 interface AddUserFormState {
   name?: string;
@@ -49,6 +50,8 @@ export class DialogAddUser extends DirtyStateProviderMixin<AddUserFormState>()(
 
   @state() private _open = false;
 
+  @state() private _invite = false;
+
   @state() private _name?: string;
 
   @state() private _username?: string;
@@ -71,6 +74,7 @@ export class DialogAddUser extends DirtyStateProviderMixin<AddUserFormState>()(
     this._passwordConfirm = "";
     this._isAdmin = false;
     this._localOnly = false;
+    this._invite = params.invite ?? false;
     this._error = undefined;
     this._loading = false;
 
@@ -217,6 +221,21 @@ export class DialogAddUser extends DirtyStateProviderMixin<AddUserFormState>()(
               @change=${this._adminChanged}
             ></ha-switch>
           </ha-row-item>
+          <ha-row-item>
+            <span slot="headline"
+              >${this.hass.localize("ui.panel.config.users.invite.send")}</span
+            >
+            <span slot="supporting-text"
+              >${this.hass.localize(
+                "ui.panel.config.users.invite.send_description"
+              )}</span
+            >
+            <ha-switch
+              slot="end"
+              .checked=${this._invite}
+              @change=${this._inviteChanged}
+            ></ha-switch>
+          </ha-row-item>
           ${
             !this._isAdmin
               ? html`
@@ -297,6 +316,10 @@ export class DialogAddUser extends DirtyStateProviderMixin<AddUserFormState>()(
     this._publishDirtyState();
   }
 
+  private _inviteChanged(ev: Event): void {
+    this._invite = (ev.target as HaSwitch).checked;
+  }
+
   private _publishDirtyState(): void {
     this._updateDirtyState({
       name: this._name,
@@ -354,6 +377,12 @@ export class DialogAddUser extends DirtyStateProviderMixin<AddUserFormState>()(
     ];
     this._params!.userAddedCallback(user);
     this._markDirtyStateClean();
+    if (this._invite) {
+      showShareInviteDialog(this, {
+        name: user.name,
+        username: this._username,
+      });
+    }
     this._close();
   }
 

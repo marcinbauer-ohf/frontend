@@ -5,6 +5,8 @@ import { customElement, property } from "lit/decorators";
 import { computeStateDomain } from "../../common/entity/compute_state_domain";
 import { getEntityLocation } from "../../common/entity/get_entity_location";
 import { navigate } from "../../common/navigate";
+import "../../components/ha-button";
+import "../../components/ha-svg-icon";
 import "../../components/ha-icon-button";
 import "../../components/ha-top-app-bar-fixed";
 import "../../components/map/ha-map";
@@ -24,14 +26,23 @@ class HaPanelMap extends LitElement {
       <ha-top-app-bar-fixed .narrow=${this.narrow}>
         <div slot="title">${this.hass.localize("panel.map")}</div>
         ${
-          !__DEMO__ && this.hass.user?.is_admin
-            ? html`<ha-icon-button
+          !__DEMO__ && this.hass.user?.is_admin && !this.narrow
+            ? html`<ha-button
                 slot="actionItems"
-                .label=${this.hass!.localize("ui.panel.map.edit_zones")}
-                .path=${mdiPencil}
+                appearance="plain"
+                variant="neutral"
                 @click=${this._openZonesEditor}
-              ></ha-icon-button>`
-            : ""
+                ><ha-svg-icon slot="start" .path=${mdiPencil}></ha-svg-icon
+                >${this.hass.localize("ui.panel.map.edit_zones")}</ha-button
+              >`
+            : !__DEMO__ && this.hass.user?.is_admin
+              ? html`<ha-icon-button
+                  slot="actionItems"
+                  .label=${this.hass!.localize("ui.panel.map.edit_zones")}
+                  .path=${mdiPencil}
+                  @click=${this._openZonesEditor}
+                ></ha-icon-button>`
+              : ""
         }
         <ha-map .entities=${this._entities} auto-fit interactive-zones></ha-map>
       </ha-top-app-bar-fixed>

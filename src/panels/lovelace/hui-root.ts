@@ -4,6 +4,7 @@ import {
   mdiDevices,
   mdiDotsVertical,
   mdiMagnify,
+  mdiHomeEdit,
   mdiPencil,
   mdiPlus,
   mdiRedo,
@@ -120,12 +121,15 @@ interface ActionItem {
   overflow_can_promote?: boolean;
   suffix?: string;
   subItems?: SubActionItem[];
+  /** Shown as a labeled button instead of an icon when not narrow. */
+  text?: boolean;
 }
 
 export interface ExtraActionItem {
   icon: string;
   labelKey: LocalizeKeys;
   action: () => void;
+  text?: boolean;
 }
 
 interface SubActionItem {
@@ -306,9 +310,14 @@ class HUIRoot extends LitElement {
         visible: this._resourceMode === "yaml" && isLovelaceDashboard,
         overflow: true,
       },
+      // Built-in dashboards name what they edit; custom ones keep the pencil
       {
         icon: mdiPencil,
-        key: "ui.panel.lovelace.menu.configure_ui",
+        key:
+          this.panel?.component_name === "energy"
+            ? "ui.panel.lovelace.menu.edit_energy"
+            : "ui.panel.lovelace.menu.configure_ui",
+        text: !isLovelaceDashboard,
         overflowAction: this._enableEditMode,
         buttonAction: this._enableEditMode,
         visible:
@@ -331,6 +340,7 @@ class HUIRoot extends LitElement {
           overflowAction: extraItem.action,
           visible: true,
           overflow: this.narrow,
+          text: extraItem.text,
         });
       });
     }
@@ -376,20 +386,36 @@ class HUIRoot extends LitElement {
               ${label}
             </ha-tooltip>
           `
-        : html`
-            <ha-icon-button
+        : item.text && !this.narrow
+          ? html`<ha-button
               slot="actionItems"
-              .id="button-${index}"
-              .path=${item.icon}
-              .label=${label}
-              hide-title
+              appearance="plain"
+              variant="neutral"
               @click=${item.buttonAction}
-            ></ha-icon-button>
-            <ha-tooltip placement="bottom" .for="button-${index}">
+            >
+              <ha-svg-icon slot="start" .path=${item.icon}></ha-svg-icon>
               ${label}
-            </ha-tooltip>
-          `;
-      if (!this.narrow && (item.icon === mdiPlus || item.icon === mdiPencil)) {
+            </ha-button>`
+          : html`
+              <ha-icon-button
+                slot="actionItems"
+                .id="button-${index}"
+                .path=${item.icon}
+                .label=${label}
+                hide-title
+                @click=${item.buttonAction}
+              ></ha-icon-button>
+              <ha-tooltip placement="bottom" .for="button-${index}">
+                ${label}
+              </ha-tooltip>
+            `;
+      if (
+        !this.narrow &&
+        (item.icon === mdiPlus ||
+          item.icon === mdiPencil ||
+          item.icon === mdiHomeEdit ||
+          item.text)
+      ) {
         grouped.push(button);
       } else {
         result.push(button);

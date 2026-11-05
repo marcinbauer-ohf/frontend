@@ -1,4 +1,12 @@
-import { mdiAccount, mdiAccountPlus, mdiPencil } from "@mdi/js";
+import {
+  mdiAccount,
+  mdiAccountKey,
+  mdiAccountPlus,
+  mdiAccountRemove,
+  mdiDotsVertical,
+  mdiPencil,
+  mdiShareVariant,
+} from "@mdi/js";
 import type { CSSResultGroup } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -8,6 +16,10 @@ import "../../../components/entity/ha-entities-picker";
 import "../../../components/ha-button";
 import "../../../components/ha-dialog";
 import "../../../components/ha-dialog-footer";
+import "../../../components/ha-dropdown";
+import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
+import "../../../components/ha-dropdown-item";
+import "../../../components/ha-svg-icon";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-picture-upload";
 import type { HaPictureUpload } from "../../../components/ha-picture-upload";
@@ -36,6 +48,7 @@ import type { HomeAssistant, ValueChangedEvent } from "../../../types";
 import { documentationUrl } from "../../../util/documentation-url";
 import { showAddUserDialog } from "../users/show-dialog-add-user";
 import { showAdminChangePasswordDialog } from "../users/show-dialog-admin-change-password";
+import { showShareInviteDialog } from "../users/show-dialog-share-invite";
 import type { PersonDetailDialogParams } from "./show-dialog-person-detail";
 import { showListItemsDialog } from "../../../dialogs/dialog-list-items/show-list-items-dialog";
 import { computeDomain } from "../../../common/entity/compute_domain";
@@ -172,6 +185,7 @@ class DialogPersonDetail
         }
         @closed=${this._dialogClosed}
       >
+        ${this._renderLoginMenu()}
         <div>
           ${this._error ? html` <div class="error">${this._error}</div> ` : ""}
           <div class="form">
@@ -193,30 +207,6 @@ class DialogPersonDetail
               .cropOptions=${cropOptions}
               @change=${this._pictureChanged}
             ></ha-picture-upload>
-
-            <ha-row-item>
-              <span slot="headline"
-                >${this.hass!.localize(
-                  "ui.panel.config.person.detail.allow_login"
-                )}</span
-              >
-              <span slot="supporting-text"
-                >${this.hass!.localize(
-                  "ui.panel.config.person.detail.allow_login_description"
-                )}</span
-              >
-              <ha-switch
-                slot="end"
-                @change=${this._allowLoginChanged}
-                ?disabled=${
-                  this._user &&
-                  (this._user.id === this.hass.user?.id ||
-                    this._user.system_generated ||
-                    this._user.is_owner)
-                }
-                .checked=${this._userId}
-              ></ha-switch>
-            </ha-row-item>
 
             ${this._renderUserFields()}
             ${
@@ -315,6 +305,55 @@ class DialogPersonDetail
     `;
   }
 
+  // Logging in is the exception for a person, so it lives in the menu
+  private _renderLoginMenu() {
+    const user = this._user;
+    const locked =
+      user &&
+      (user.id === this.hass.user?.id ||
+        user.system_generated ||
+        user.is_owner);
+    if (locked) {
+      return nothing;
+    }
+    return html`<ha-dropdown
+      slot="headerActionItems"
+      @wa-select=${this._handleMenuAction}
+    >
+      <ha-icon-button
+        slot="trigger"
+        .path=${mdiDotsVertical}
+        .label=${this.hass.localize("ui.common.menu")}
+      ></ha-icon-button>
+      ${
+        this._userId
+          ? html`<ha-dropdown-item value="delete_login" variant="danger">
+              <ha-svg-icon slot="icon" .path=${mdiAccountRemove}></ha-svg-icon>
+              ${this.hass.localize(
+                "ui.panel.config.person.detail.confirm_delete_user_title"
+              )}
+            </ha-dropdown-item>`
+          : html`<ha-dropdown-item value="invite">
+                <ha-svg-icon slot="icon" .path=${mdiShareVariant}></ha-svg-icon>
+                ${this.hass.localize("ui.panel.config.person.detail.invite")}
+              </ha-dropdown-item>
+              <ha-dropdown-item value="allow_login">
+                <ha-svg-icon slot="icon" .path=${mdiAccountKey}></ha-svg-icon>
+                ${this.hass.localize("ui.panel.config.person.detail.allow_login")}
+              </ha-dropdown-item>`
+      }
+    </ha-dropdown>`;
+  }
+
+  private _handleMenuAction(ev: HaDropdownSelectEvent) {
+    const action = ev.detail.item.value;
+    if (action === "allow_login" || action === "invite") {
+      this._allowLogin(action === "invite");
+    } else {
+      this._deleteLogin();
+    }
+  }
+
   private _renderUserFields() {
     const user = this._user;
     if (!user) return nothing;
@@ -382,6 +421,30 @@ class DialogPersonDetail
             `
           : nothing
       }
+      ${
+        !user.system_generated && hasHomeAssistantCredential
+          ? html`<ha-row-item>
+              <span slot="headline"
+                >${this.hass.localize(
+                  "ui.panel.config.users.invite.send"
+                )}</span
+              >
+              <span slot="supporting-text"
+                >${this.hass.localize(
+                  "ui.panel.config.users.invite.send_description"
+                )}</span
+              >
+              <ha-icon-button
+                slot="end"
+                .path=${mdiShareVariant}
+                .label=${this.hass.localize(
+                  "ui.panel.config.users.invite.share"
+                )}
+                @click=${this._shareInvite}
+              ></ha-icon-button>
+            </ha-row-item>`
+          : nothing
+      }
       <ha-row-item>
         <span slot="headline"
           >${this.hass.localize(
@@ -419,6 +482,13 @@ class DialogPersonDetail
     `;
   }
 
+  private _shareInvite() {
+    showShareInviteDialog(this, {
+      name: this._name,
+      username: this._user?.username,
+    });
+  }
+
   private _nameChanged(ev: InputEvent) {
     this._error = undefined;
     this._name = (ev.target as HTMLInputElement).value;
@@ -450,62 +520,65 @@ class DialogPersonDetail
     this._updateDirtyState(this._currentState());
   }
 
-  private async _allowLoginChanged(ev): Promise<void> {
-    const target = ev.target;
-    if (target.checked) {
-      target.checked = false;
+  // With invite, the new account's form starts with the invite switched on,
+  // and linking an existing account shares the invite right after
+  private async _allowLogin(invite = false): Promise<void> {
+    const users = await fetchUsers(this.hass);
+    const currentLinkedUsers = new Set(
+      Object.values(this.hass.states)
+        .filter(
+          (s) => computeDomain(s.entity_id) === "person" && s.attributes.user_id
+        )
+        .map((s) => s.attributes.user_id)
+    );
+    const eligibleUsers = users.filter(
+      (u) =>
+        !currentLinkedUsers.has(u.id) &&
+        !u.system_generated &&
+        u.credentials.length > 0
+    );
+    const addUserDialog = () =>
+      showAddUserDialog(this, {
+        userAddedCallback: async (user?: User) => {
+          if (user) {
+            this._linkUser(user, true);
+          }
+        },
+        name: this._name,
+        invite,
+      });
 
-      const users = await fetchUsers(this.hass);
-      const currentLinkedUsers = new Set(
-        Object.values(this.hass.states)
-          .filter(
-            (s) =>
-              computeDomain(s.entity_id) === "person" && s.attributes.user_id
-          )
-          .map((s) => s.attributes.user_id)
-      );
-      const eligibleUsers = users.filter(
-        (u) =>
-          !currentLinkedUsers.has(u.id) &&
-          !u.system_generated &&
-          u.credentials.length > 0
-      );
-      const addUserDialog = () =>
-        showAddUserDialog(this, {
-          userAddedCallback: async (user?: User) => {
-            if (user) {
-              target.checked = true;
-              this._linkUser(user, true);
+    if (eligibleUsers.length === 0) {
+      addUserDialog();
+      return;
+    }
+
+    showListItemsDialog(this, {
+      title: this.hass.localize("ui.panel.config.person.detail.select_user"),
+      items: [
+        {
+          iconPath: mdiAccountPlus,
+          label: this.hass.localize(
+            "ui.panel.config.person.detail.create_new_user"
+          ),
+          action: addUserDialog,
+        },
+        ...eligibleUsers.map((user) => ({
+          iconPath: mdiAccount,
+          label: user.username ? `${user.name} (${user.username})` : user.name,
+          action: async () => {
+            await this._linkUser(user, false);
+            if (invite) {
+              this._shareInvite();
             }
           },
-          name: this._name,
-        });
+        })),
+      ],
+    });
+  }
 
-      if (eligibleUsers.length === 0) {
-        addUserDialog();
-        return;
-      }
-
-      showListItemsDialog(this, {
-        title: this.hass.localize("ui.panel.config.person.detail.select_user"),
-        items: [
-          {
-            iconPath: mdiAccountPlus,
-            label: this.hass.localize(
-              "ui.panel.config.person.detail.create_new_user"
-            ),
-            action: addUserDialog,
-          },
-          ...eligibleUsers.map((user) => ({
-            iconPath: mdiAccount,
-            label: user.username
-              ? `${user.name} (${user.username})`
-              : user.name,
-            action: () => this._linkUser(user, false),
-          })),
-        ],
-      });
-    } else if (this._userId) {
+  private async _deleteLogin(): Promise<void> {
+    if (this._userId) {
       if (
         !(await showConfirmationDialog(this, {
           title: this.hass!.localize(
@@ -520,7 +593,6 @@ class DialogPersonDetail
           destructive: true,
         }))
       ) {
-        target.checked = true;
         return;
       }
       await deleteUser(this.hass, this._userId);

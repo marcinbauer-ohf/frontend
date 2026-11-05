@@ -7,36 +7,45 @@ import "../../../components/ha-dialog-footer";
 import "../../../components/ha-dialog";
 import "../../../components/ha-form/ha-form";
 import "../../../components/ha-button";
-import type { HomeZoneMutableParams } from "../../../data/zone";
+import type { LocalizeKeys } from "../../../common/translations/localize";
 import { DirtyStateProviderMixin } from "../../../mixins/dirty-state-provider-mixin";
 import { haStyleDialog } from "../../../resources/styles";
 import type { HomeAssistant } from "../../../types";
-import type { HomeZoneDetailDialogParams } from "./show-dialog-home-zone-detail";
+import type {
+  HomeZoneDetailDialogParams,
+  HomeZoneDetailUpdate,
+} from "./show-dialog-home-zone-detail";
 import {
   HOME_ZONE_ENTITY_ID,
   zoneColor,
 } from "../../../common/map/entity-map-colors";
 
 const SCHEMA = memoizeOne(
-  (icon: string, color: string) =>
+  (icon: string, color: string, region: boolean) =>
     [
       {
         name: "location",
         required: true,
         selector: { location: { radius: true, icon, color } },
       },
+      ...(region
+        ? ([
+            { name: "country", selector: { country: null } },
+            { name: "time_zone", required: true, selector: { timezone: {} } },
+          ] as const)
+        : []),
     ] as const
 );
 
 @customElement("dialog-home-zone-detail")
-class DialogHomeZoneDetail extends DirtyStateProviderMixin<HomeZoneMutableParams>()(
+class DialogHomeZoneDetail extends DirtyStateProviderMixin<HomeZoneDetailUpdate>()(
   LitElement
 ) {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @state() private _error?: Record<string, string>;
 
-  @state() private _data?: HomeZoneMutableParams;
+  @state() private _data?: HomeZoneDetailUpdate;
 
   @state() private _params?: HomeZoneDetailDialogParams;
 
@@ -52,6 +61,12 @@ class DialogHomeZoneDetail extends DirtyStateProviderMixin<HomeZoneMutableParams
       latitude: this.hass.config.latitude,
       longitude: this.hass.config.longitude,
       radius: this.hass.config.radius,
+      ...(params.region
+        ? {
+            country: this.hass.config.country,
+            time_zone: this.hass.config.time_zone,
+          }
+        : {}),
     };
     this._initDirtyTracking({ type: "deep" }, this._data);
     this._open = true;
@@ -79,9 +94,12 @@ class DialogHomeZoneDetail extends DirtyStateProviderMixin<HomeZoneMutableParams
     return html`
       <ha-dialog
         .open=${this._open}
-        header-title=${this.hass!.localize("ui.common.edit_item", {
-          name: this._data.name,
-        })}
+        header-title=${
+          this._params.title ??
+          this.hass!.localize("ui.common.edit_item", {
+            name: this._data.name,
+          })
+        }
         .preventScrimClose=${this.isDirtyState}
         @closed=${this._dialogClosed}
       >
@@ -91,7 +109,8 @@ class DialogHomeZoneDetail extends DirtyStateProviderMixin<HomeZoneMutableParams
           .schema=${SCHEMA(
             this.hass.states[HOME_ZONE_ENTITY_ID]?.attributes.icon ||
               "mdi:home",
-            zoneColor(HOME_ZONE_ENTITY_ID, false, [], getComputedStyle(this))
+            zoneColor(HOME_ZONE_ENTITY_ID, false, [], getComputedStyle(this)),
+            Boolean(this._params.region)
           )}
           .data=${this._formData(this._data)}
           .error=${this._error}
@@ -118,7 +137,7 @@ class DialogHomeZoneDetail extends DirtyStateProviderMixin<HomeZoneMutableParams
     `;
   }
 
-  private _formData = memoizeOne((data: HomeZoneMutableParams) => ({
+  private _formData = memoizeOne((data: HomeZoneDetailUpdate) => ({
     ...data,
     location: {
       latitude: data.latitude,
@@ -138,7 +157,13 @@ class DialogHomeZoneDetail extends DirtyStateProviderMixin<HomeZoneMutableParams
     this._updateDirtyState(value);
   }
 
-  private _computeLabel = (): string => "";
+  // The map needs no label; the region fields use the general settings' ones
+  private _computeLabel = ({ name }: { name: string }): string =>
+    name === "location"
+      ? ""
+      : this.hass.localize(
+          `ui.panel.config.core.section.core.core_config.${name}` as LocalizeKeys
+        );
 
   private async _updateEntry() {
     this._submitting = true;

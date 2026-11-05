@@ -378,6 +378,7 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
 
     const hasLights =
       hass.panels.light && findEntities(allEntities, lightsFilters).length > 0;
+    const hasPersons = allEntities.some((id) => id.startsWith("person."));
     const hasMediaPlayers =
       findEntities(allEntities, mediaPlayerFilter).length > 0;
     const hasClimate = hass.panels.climate && hasClimateEntities(hass);
@@ -429,6 +430,17 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
       string,
       () => LovelaceCardConfig | undefined
     > = {
+      persons: () =>
+        hasPersons
+          ? ({
+              type: "home-summary",
+              summary: "persons",
+              tap_action: {
+                action: "navigate",
+                navigation_path: "people",
+              },
+            } satisfies HomeSummaryCard)
+          : undefined,
       light: () =>
         hasLights
           ? ({

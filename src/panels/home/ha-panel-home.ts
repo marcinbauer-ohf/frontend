@@ -1,5 +1,5 @@
 import { ResizeController } from "@lit-labs/observers/resize-controller";
-import { mdiPencil } from "@mdi/js";
+import { mdiHomeEdit, mdiPencil } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
@@ -270,12 +270,13 @@ class PanelHome extends SubscribeMixin(LitElement) {
           icon: mdiPencil,
           labelKey: "ui.panel.lovelace.menu.edit_area",
           action: this._editArea,
+          text: true,
         },
       ];
     } else if (!path || path === "overview") {
       this._extraActionItems = [
         {
-          icon: mdiPencil,
+          icon: mdiHomeEdit,
           labelKey: "ui.panel.lovelace.menu.edit_overview",
           action: this._startEditing,
         },

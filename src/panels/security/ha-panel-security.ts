@@ -4,6 +4,8 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { debounce } from "../../common/util/debounce";
 import { deepEqual } from "../../common/util/deep-equal";
+import "../../components/ha-button";
+import "../../components/ha-svg-icon";
 import "../../components/ha-icon-button";
 import "../../components/ha-top-app-bar-fixed";
 import {
@@ -145,12 +147,21 @@ class PanelSecurity extends LitElement {
         <div slot="title">${this.hass.localize("panel.security")}</div>
         ${
           this.hass.user?.is_admin && this._config
-            ? html`<ha-icon-button
-                slot="actionItems"
-                .path=${mdiPencil}
-                .label=${this.hass.localize("ui.panel.security.editor.title")}
-                @click=${this._editSecurity}
-              ></ha-icon-button>`
+            ? this.narrow
+              ? html`<ha-icon-button
+                  slot="actionItems"
+                  .path=${mdiPencil}
+                  .label=${this.hass.localize("ui.panel.security.editor.title")}
+                  @click=${this._editSecurity}
+                ></ha-icon-button>`
+              : html`<ha-button
+                  slot="actionItems"
+                  appearance="plain"
+                  variant="neutral"
+                  @click=${this._editSecurity}
+                  ><ha-svg-icon slot="start" .path=${mdiPencil}></ha-svg-icon
+                  >${this.hass.localize("ui.panel.security.edit")}</ha-button
+                >`
             : nothing
         }
         ${
