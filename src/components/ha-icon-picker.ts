@@ -1,35 +1,23 @@
 import type { RenderItemFunction } from "@lit-labs/virtualizer/virtualize";
-import { mdiStarFourPoints } from "@mdi/js";
-import type { PropertyValues, TemplateResult } from "lit";
-import { LitElement, css, html, nothing } from "lit";
+import type { TemplateResult } from "lit";
+import { LitElement, css, html } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { consumeLocalize } from "../common/decorators/consume-context-entry";
 import { fireEvent } from "../common/dom/fire_event";
 import { caseInsensitiveStringCompare } from "../common/string/compare";
 import type { LocalizeFunc } from "../common/translations/localize";
-import { AITaskController } from "../data/ai_task_controller";
 import { customIcons } from "../data/custom_icons";
 import type {
   IconSuggestionContext,
-  IconSuggestionResult,
+  SuggestableIcon,
 } from "../data/icon_suggestion";
-import {
-  generateIconSuggestionTask,
-  normalizeSuggestedIcon,
-  SHOWN_SUGGESTION_COUNT,
-} from "../data/icon_suggestion";
+import { suggestIcons } from "../data/icon_suggestion";
 import type { ValueChangedEvent } from "../types";
-import "./ha-action-bar";
-import "./ha-button";
 import "./ha-combo-box-item";
 import "./ha-generic-picker";
 import type { HaGenericPicker } from "./ha-generic-picker";
 import "./ha-icon";
-import "./ha-section-title";
-import "./ha-svg-icon";
-import "./skeleton/ha-skeleton-icon";
-import "./skeleton/ha-skeleton-text";
 import type { PickerComboBoxItem } from "./ha-picker-combo-box";
 
 interface RankedIcon {
@@ -109,49 +97,8 @@ const loadCustomIconItems = async (
 };
 
 const SUGGESTION_PREFIX = "suggestion:";
-const SUGGESTION_STATUS_ID = "___suggestion_status___";
-const SUGGESTION_TITLE_ID = "___suggestion_title___";
-const SUGGESTION_SKELETON_ID = "___suggestion_skeleton___";
-
-const clearSuggestions = (ev: Event) => {
-  fireEvent(ev.target as HTMLElement, "clear-suggestions");
-};
-
-type SuggestionState =
-  | { status: "loading" }
-  | { status: "failed" }
-  | { status: "done"; icons: string[] };
 
 const rowRenderer: RenderItemFunction<PickerComboBoxItem> = (item) => {
-  if (item.id === SUGGESTION_TITLE_ID) {
-    // The "Suggested" title is a disabled row, so it can carry a clear
-    // button. The row blocks pointer events, the button takes them back.
-    return html`
-      <ha-section-title style="width: 100%">
-        ${item.primary}
-        <ha-button
-          style="margin-inline-start: auto; margin-inline-end: calc(-1 * var(--ha-space-2)); --ha-button-height: var(--ha-space-6); --wa-form-control-padding-inline: var(--ha-space-2); font-size: var(--ha-font-size-s); pointer-events: auto"
-          appearance="plain"
-          variant="neutral"
-          size="s"
-          @click=${clearSuggestions}
-        >
-          ${item.secondary}
-        </ha-button>
-      </ha-section-title>
-    `;
-  }
-  if (item.id === SUGGESTION_SKELETON_ID) {
-    return html`
-      <ha-combo-box-item role="progressbar" aria-label=${item.primary}>
-        <ha-skeleton-icon slot="start"></ha-skeleton-icon>
-        <ha-skeleton-text></ha-skeleton-text>
-      </ha-combo-box-item>
-    `;
-  }
-  if (item.id === SUGGESTION_STATUS_ID) {
-    return html`<ha-combo-box-item>${item.primary}</ha-combo-box-item>`;
-  }
   return html`
     <ha-combo-box-item>
       <ha-icon .icon=${item.icon ?? item.id} slot="start"></ha-icon>
@@ -178,44 +125,18 @@ export class HaIconPicker extends LitElement {
 
   @property({ type: Boolean }) public invalid = false;
 
-  // What the icon is for, so AI can suggest icons
+  // What the icon is for, so icons can be suggested for it
   @property({ attribute: false })
   public suggestionContext?: IconSuggestionContext;
 
   @state() @consumeLocalize() private _localize!: LocalizeFunc;
 
-  @state() private _suggestion?: SuggestionState;
-
   @query("ha-generic-picker") private _picker?: HaGenericPicker;
 
   private _getIconPickerItems = () =>
-    this._itemsWithSuggestions(ICONS, this._suggestion, this._localize);
-
-  // Only created for pickers that can suggest, the others never ask for AI
-  private _aiTask?: AITaskController;
-
-  protected willUpdate(changedProps: PropertyValues) {
-    super.willUpdate(changedProps);
-    if (this.suggestionContext && !this._aiTask) {
-      this._aiTask = new AITaskController(this);
-    }
-  }
-
-  protected updated(changedProps: PropertyValues) {
-    super.updated(changedProps);
-    if (changedProps.has("_suggestion")) {
-      this._picker?.refreshItems({
-        scrollToTop: true,
-        clearSearch: this._suggestion?.status === "loading",
-      });
-    } else if (changedProps.has("_localize") && this._suggestion) {
-      this._picker?.refreshItems();
-    }
-  }
+    this._itemsWithSuggestions(ICONS, this.suggestionContext, this._localize);
 
   protected render(): TemplateResult {
-    const canSuggest =
-      !!this.suggestionContext && !!this._aiTask?.canGenerateData;
     return html`
       <ha-generic-picker
         allow-custom-value
@@ -232,28 +153,8 @@ export class HaIconPicker extends LitElement {
         .value=${this._value}
         .searchFn=${this._filterIcons}
         @value-changed=${this._valueChanged}
-        @clear-suggestions=${this._clearSuggestions}
       >
         <slot name="start"></slot>
-        ${
-          canSuggest
-            ? html`<ha-action-bar slot="footer">
-                <ha-button
-                  appearance="filled"
-                  variant="neutral"
-                  size="s"
-                  ?loading=${this._suggestion?.status === "loading"}
-                  @click=${this._suggest}
-                >
-                  <ha-svg-icon
-                    slot="start"
-                    .path=${mdiStarFourPoints}
-                  ></ha-svg-icon>
-                  ${this._localize("ui.components.icon_picker.suggest")}
-                </ha-button>
-              </ha-action-bar>`
-            : nothing
-        }
       </ha-generic-picker>
     `;
   }
@@ -261,52 +162,36 @@ export class HaIconPicker extends LitElement {
   private _itemsWithSuggestions = memoizeOne(
     (
       icons: PickerComboBoxItem[],
-      suggestion: SuggestionState | undefined,
+      context: IconSuggestionContext | undefined,
       localize: LocalizeFunc
     ): (PickerComboBoxItem | string)[] => {
-      if (!suggestion) {
+      const suggested = context
+        ? suggestIcons(context, this._suggestableIcons(icons))
+        : [];
+      if (!suggested.length) {
         return icons;
       }
-      let rows: PickerComboBoxItem[];
-      if (suggestion.status === "loading") {
-        rows = [
-          {
-            id: SUGGESTION_SKELETON_ID,
-            primary: localize("ui.components.icon_picker.suggesting"),
-            disabled: true,
-          },
-        ];
-      } else if (suggestion.status === "done" && suggestion.icons.length) {
-        rows = suggestion.icons.map((icon) => ({
+      return [
+        localize("ui.components.icon_picker.suggested"),
+        ...suggested.map((icon) => ({
           id: `${SUGGESTION_PREFIX}${icon}`,
           primary: icon,
           icon,
-        }));
-      } else {
-        const status =
-          suggestion.status === "failed"
-            ? "suggestion_failed"
-            : "no_suggestions";
-        rows = [
-          {
-            id: SUGGESTION_STATUS_ID,
-            primary: localize(`ui.components.icon_picker.${status}`),
-            disabled: true,
-          },
-        ];
-      }
-      return [
-        {
-          id: SUGGESTION_TITLE_ID,
-          primary: localize("ui.components.icon_picker.suggested"),
-          secondary: localize("ui.common.clear"),
-          disabled: true,
-        },
-        ...rows,
+        })),
         localize("ui.components.icon_picker.all_icons"),
         ...icons,
       ];
     }
+  );
+
+  private _suggestableIcons = memoizeOne(
+    (icons: PickerComboBoxItem[]): SuggestableIcon[] =>
+      icons.map((item) => ({
+        id: item.id,
+        keywords: Object.entries(item.search_labels ?? {})
+          .filter(([key, value]) => key.startsWith("keyword") && value)
+          .map(([, value]) => value!),
+      }))
   );
 
   // Filter can take a significant chunk of frame (up to 3-5 ms)
@@ -359,33 +244,6 @@ export class HaIconPicker extends LitElement {
     ICONS_LOADED.then(() => this._picker?.refreshItems());
   }
 
-  private async _suggest() {
-    if (!this.suggestionContext || this._suggestion?.status === "loading") {
-      return;
-    }
-    this._suggestion = { status: "loading" };
-    try {
-      const task = generateIconSuggestionTask(this.suggestionContext);
-      const result =
-        await this._aiTask!.generateData<IconSuggestionResult>(task);
-      await ICONS_LOADED;
-      const existing = new Set(ICONS.map((item) => item.id));
-      const icons = (result.data.icons ?? [])
-        .map(normalizeSuggestedIcon)
-        .filter((icon) => existing.has(icon));
-      this._suggestion = {
-        status: "done",
-        icons: [...new Set(icons)].slice(0, SHOWN_SUGGESTION_COUNT),
-      };
-    } catch (_err) {
-      this._suggestion = { status: "failed" };
-    }
-  }
-
-  private _clearSuggestions() {
-    this._suggestion = undefined;
-  }
-
   private _valueChanged(ev: ValueChangedEvent<string>) {
     ev.stopPropagation();
     const value = ev.detail.value;
@@ -428,9 +286,5 @@ export class HaIconPicker extends LitElement {
 declare global {
   interface HTMLElementTagNameMap {
     "ha-icon-picker": HaIconPicker;
-  }
-
-  interface HASSDomEvents {
-    "clear-suggestions": undefined;
   }
 }

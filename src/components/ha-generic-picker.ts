@@ -349,7 +349,6 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
         .noSort=${this.noSort}
       >
         <slot name="search-actions" slot="search-actions"></slot>
-        <slot name="footer" slot="footer"></slot>
       </ha-picker-combo-box>
     `;
   }
