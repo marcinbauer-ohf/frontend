@@ -12774,6 +12774,24 @@
           "installed_without_set_up": "{name} is not set up from the user interface. Its documentation explains how to set it up and use it. Home Assistant loads it after a restart.",
           "view_documentation": "View documentation"
         },
+        "dialog_add": {
+          "title": "Marketplace",
+          "add": "Add",
+          "search": "Search the Marketplace",
+          "filter": "{filter}: {value}",
+          "all": "All",
+          "status": {
+            "available": "Not installed",
+            "installed": "Installed"
+          },
+          "types": {
+            "all": "Everything",
+            "integration": "Integrations",
+            "plugin": "Dashboard cards",
+            "theme": "Themes",
+            "template": "Templates"
+          }
+        },
         "discover": {
           "title": "Make Home Assistant yours",
           "intro": "Made by people in the community and shared with everyone. Here are some to start with, or browse everything.",

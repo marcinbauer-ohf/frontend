@@ -78,7 +78,9 @@ class HaMarketplaceRouter extends HassRouterPage {
     defaultPage: "browse",
     showLoading: true,
     beforeRender: (page: string) =>
-      !["_my_redirect", "repository", "repositories", ...TABS].includes(page)
+      !["_my_redirect", "add", "repository", "repositories", ...TABS].includes(
+        page
+      )
         ? "browse"
         : undefined,
     routes: {
@@ -89,6 +91,12 @@ class HaMarketplaceRouter extends HassRouterPage {
       discover: dashboard,
       browse: dashboard,
       installed: dashboard,
+      // Kept, so back from a repository finds the search and filters as left
+      add: {
+        tag: "ha-marketplace-add",
+        load: () => import("./dashboards/ha-marketplace-add"),
+        cache: true,
+      },
       repository: {
         tag: "ha-marketplace-repository-dashboard",
         load: () => import("./dashboards/ha-marketplace-repository-dashboard"),

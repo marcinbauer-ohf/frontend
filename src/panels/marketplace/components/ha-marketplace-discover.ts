@@ -7,7 +7,7 @@ import memoizeOne from "memoize-one";
 import { consume } from "../../../common/decorators/consume";
 import { transform } from "../../../common/decorators/transform";
 import { formatNumber } from "../../../common/number/format_number";
-import "../../../components/ha-card";
+import "../../../components/ha-icon-next";
 import "../../../components/ha-svg-icon";
 import {
   configContext,
@@ -109,11 +109,11 @@ export class HaMarketplaceDiscover extends LitElement {
                 ${localize("ui.panel.marketplace.discover.see_all")}
               </a>
             </div>
-            <ha-card outlined>
+            <div class="cards">
               ${section.repositories.map((repository) =>
                 this._renderRow(repository)
               )}
-            </ha-card>
+            </div>
           </section>`
       )}
     </div>`;
@@ -164,6 +164,7 @@ export class HaMarketplaceDiscover extends LitElement {
           ${formatNumber(repository.stars, locale, compact)}
         </span>
       </div>
+      <ha-icon-next></ha-icon-next>
     </div>`;
   }
 
@@ -213,16 +214,42 @@ export class HaMarketplaceDiscover extends LitElement {
           text-decoration: none;
         }
 
+        /* Cards like the add device or integration dialog's */
+        .cards {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-2);
+        }
+
         .row {
           position: relative;
           display: flex;
           align-items: center;
           gap: var(--ha-space-4);
           padding: var(--ha-space-3) var(--ha-space-4);
+          border: var(--ha-border-width-sm) solid
+            var(--ha-color-border-neutral-quiet);
+          border-radius: var(--ha-border-radius-lg);
+          background-color: var(--card-background-color);
         }
 
-        .row + .row {
-          border-top: var(--ha-border-width-sm) solid var(--divider-color);
+        .row:hover {
+          background-color: var(--ha-color-fill-neutral-quiet-hover);
+        }
+
+        .row:has(.name:focus-visible) {
+          outline: 2px solid var(--primary-color);
+          outline-offset: -2px;
+        }
+
+        .name:focus-visible {
+          outline: none;
+        }
+
+        /* Opens the repository's page, like the automation editor's tree */
+        ha-icon-next {
+          flex: none;
+          color: var(--ha-color-on-neutral-quiet);
         }
 
         .icon {

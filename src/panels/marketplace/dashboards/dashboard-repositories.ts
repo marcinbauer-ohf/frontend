@@ -160,7 +160,7 @@ export const statusFilterOfTab = (
   ];
 };
 
-const matchesFilters = (
+export const matchesFilters = (
   repository: RepositoryBase,
   filters: RepositoryFilters = {}
 ): boolean => {

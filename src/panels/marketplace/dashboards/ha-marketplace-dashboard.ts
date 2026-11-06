@@ -8,6 +8,7 @@ import {
   mdiDownload,
   mdiLinkPlus,
   mdiOpenInNew,
+  mdiPlus,
   mdiStar,
   mdiStore,
   mdiViewGridOutline,
@@ -498,7 +499,21 @@ export class HaMarketplaceDashboard extends LitElement {
     );
 
     // The toolbar slot does not line up what is in it, this row centres them
+    const add = this._i18n.localize("ui.panel.marketplace.dialog_add.add");
+
     return html`<div class="toolbar-actions" slot="toolbar-icon">
+      ${
+        this.narrow
+          ? html`<ha-icon-button
+              .label=${add}
+              .path=${mdiPlus}
+              @click=${this._add}
+            ></ha-icon-button>`
+          : html`<ha-button size="s" @click=${this._add}>
+              <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
+              ${add}
+            </ha-button>`
+      }
       ${
         this.narrow
           ? html`<ha-icon-button
@@ -936,6 +951,11 @@ export class HaMarketplaceDashboard extends LitElement {
       "_blank",
       "noreferrer=true"
     );
+  }
+
+  // Like adding a device or integration: browse, search and install
+  private _add() {
+    navigate("/marketplace/add");
   }
 
   private _addFromLink() {
