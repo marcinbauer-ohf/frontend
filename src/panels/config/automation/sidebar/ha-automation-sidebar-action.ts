@@ -21,6 +21,7 @@ import { customElement, property, query, state } from "lit/decorators";
 import { keyed } from "lit/directives/keyed";
 import { STRINGS_SEPARATOR_DOT } from "../../../../common/const";
 import { fireEvent } from "../../../../common/dom/fire_event";
+import { slugify } from "../../../../common/string/slugify";
 import { handleStructError } from "../../../../common/structs/handle-errors";
 import type { LocalizeKeys } from "../../../../common/translations/localize";
 import type { HaDropdownSelectEvent } from "../../../../components/ha-dropdown";
@@ -119,7 +120,18 @@ export default class HaAutomationSidebarAction extends LitElement {
         2
       );
 
+      // ponytail: mockup, same phone name lookup as describeAction
+      const phone = service.startsWith("mobile_app_")
+        ? Object.values(this.hass.devices).find(
+            (dev) =>
+              dev.name &&
+              slugify(dev.name) === service.slice("mobile_app_".length)
+          )
+        : undefined;
       const serviceName =
+        (domain === "notify" && phone
+          ? `Send a notification to ${phone.name}`
+          : undefined) ||
         this.hass.localize(
           `component.${domain}.services.${service}.name`,
           this.hass.services[domain]?.[service]?.description_placeholders

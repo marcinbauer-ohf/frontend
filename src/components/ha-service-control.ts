@@ -42,6 +42,7 @@ import type { HaSelector } from "./ha-selector/ha-selector";
 import "./ha-service-picker";
 import "./ha-service-section-icon";
 import "./ha-settings-row";
+import "./ha-notify-phone-editor";
 import "./ha-yaml-editor";
 import type { HaYamlEditor } from "./ha-yaml-editor";
 
@@ -504,7 +505,8 @@ export class HaServiceControl extends LitElement {
         : undefined;
 
     return html`${
-      this.hidePicker
+      // ponytail: mockup, a phone's notify action switches via its phone picker
+      this.hidePicker || this._value?.action?.startsWith("notify.mobile_app_")
         ? nothing
         : html`<ha-service-picker
             .value=${this._value?.action}
@@ -514,7 +516,10 @@ export class HaServiceControl extends LitElement {
           ></ha-service-picker>`
     }
     ${
-      this.hideDescription
+      // Core's text tells people to change the target in the integration,
+      // the phone picker below does that
+      this.hideDescription ||
+      this._value?.action?.startsWith("notify.mobile_app_")
         ? nothing
         : html`
             <div class="description">
@@ -682,6 +687,20 @@ export class HaServiceControl extends LitElement {
     if (fieldDataHasTemplate) {
       // Hold this selector type until the field is cleared
       this._stickySelector[dataField.key] = selector;
+    }
+
+    // ponytail: mockup, one editor replaces all fields of a phone's notify
+    // action. It renders in place of the first field, message.
+    if (domain === "notify" && serviceName?.startsWith("mobile_app_")) {
+      return dataField.key === "message"
+        ? html`<ha-notify-phone-editor
+            .hass=${this.hass}
+            .service=${serviceName}
+            .data=${this._value?.data}
+            .disabled=${this.disabled}
+            @value-changed=${this._notifyPhoneChanged}
+          ></ha-notify-phone-editor>`
+        : nothing;
     }
 
     const showOptional = showOptionalToggle(dataField);
@@ -917,6 +936,17 @@ export class HaServiceControl extends LitElement {
     }
     fireEvent(this, "value-changed", {
       value,
+    });
+  }
+
+  private _notifyPhoneChanged(
+    ev: CustomEvent<{
+      value: { action?: string; data?: Record<string, any> };
+    }>
+  ) {
+    ev.stopPropagation();
+    fireEvent(this, "value-changed", {
+      value: { ...this._value, ...ev.detail.value },
     });
   }
 

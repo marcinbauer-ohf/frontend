@@ -3,6 +3,7 @@ import { formatNumericDuration } from "../common/datetime/format_duration";
 import secondsToDuration from "../common/datetime/seconds_to_duration";
 import { formatListWithAnds } from "../common/string/format-list";
 import { isTemplate } from "../common/string/has-template";
+import { slugify } from "../common/string/slugify";
 import type { HomeAssistant } from "../types";
 import type { Condition } from "./automation";
 import { describeCondition, type DescribeOptions } from "./automation_i18n";
@@ -117,6 +118,17 @@ const tryDescribeAction = <T extends ActionType>(
 
     if (config.action) {
       const [domain, serviceName] = config.action.split(".", 2);
+      // ponytail: mockup. Core names the action "Send a notification via
+      // mobile_app_x", the phone's name reads better. Hardcoded English.
+      if (domain === "notify" && serviceName.startsWith("mobile_app_")) {
+        const slug = serviceName.slice("mobile_app_".length);
+        const device = Object.values(hass.devices).find(
+          (dev) => dev.name && slugify(dev.name) === slug
+        );
+        if (device) {
+          return `Send a notification to ${device.name}`;
+        }
+      }
       const descriptionPlaceholders =
         hass.services[domain]?.[serviceName]?.description_placeholders;
       const service =

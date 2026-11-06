@@ -176,6 +176,7 @@ export class HaNavigationPicker extends LitElement {
       <ha-generic-picker
         .value=${this._loading ? undefined : this.value}
         allow-custom-value
+        .label=${this.label}
         .placeholder=${this.label}
         .helper=${this.helper}
         .disabled=${this.disabled}
