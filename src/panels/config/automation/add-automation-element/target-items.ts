@@ -1,3 +1,4 @@
+import type { HassServiceTarget } from "home-assistant-js-websocket";
 import { computeDomain } from "../../../../common/entity/compute_domain";
 import { isNumericState } from "../../../../common/number/format_number";
 import { stringCompare } from "../../../../common/string/compare";
@@ -43,6 +44,36 @@ export const fetchTargetElementKeys = (
     : type === "condition"
       ? getConditionsForTarget(callWS, target)
       : getServicesForTarget(callWS, target);
+
+/**
+ * Targets a person's phones for notifications: the notify entities of the
+ * devices behind the person's device trackers. Undefined when it is not a
+ * person or none of the person's devices can be notified.
+ */
+// ponytail: the devices are resolved when the action is added, so the action
+// does not follow the person to a new phone. Needs core to target a person.
+export const getPersonNotifyTarget = (
+  target: SingleHassServiceTarget | undefined,
+  states: HomeAssistant["states"],
+  entities: HomeAssistant["entities"]
+): HassServiceTarget | undefined => {
+  const personId = target?.entity_id;
+  if (!personId || computeDomain(personId) !== "person") {
+    return undefined;
+  }
+  const trackers: string[] = states[personId]?.attributes.device_trackers ?? [];
+  const deviceIds = new Set(
+    trackers.map((id) => entities[id]?.device_id).filter(Boolean)
+  );
+  const notifyIds = Object.values(entities)
+    .filter(
+      (entity) =>
+        computeDomain(entity.entity_id) === "notify" &&
+        deviceIds.has(entity.device_id)
+    )
+    .map((entity) => entity.entity_id);
+  return notifyIds.length ? { entity_id: notifyIds } : undefined;
+};
 
 export const sortDomainsByCollection = (
   type: AddElementType,

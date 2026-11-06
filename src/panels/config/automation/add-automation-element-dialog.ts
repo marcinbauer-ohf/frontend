@@ -1,4 +1,5 @@
 import type { ContextType } from "@lit/context";
+import type { HassServiceTarget } from "home-assistant-js-websocket";
 import { mdiClose, mdiHelpCircleOutline } from "@mdi/js";
 import type { CSSResultGroup } from "lit";
 import { LitElement, css, html, nothing } from "lit";
@@ -96,6 +97,7 @@ import type { HaAutomationAddItems } from "./add-automation-element/ha-automatio
 import "./add-automation-element/ha-automation-add-search";
 import {
   fetchTargetElementKeys,
+  getPersonNotifyTarget,
   getTargetSections,
 } from "./add-automation-element/target-items";
 import {
@@ -679,13 +681,9 @@ class DialogAddAutomationElement extends DialogMixin<AddAutomationElementDialogP
                             this._handleTimeLocationGroupSelected
                           }
                           .narrow=${this._narrow}
-                          .timeLocationLabel=${
-                            type !== "action"
-                              ? localize(
-                                  "ui.panel.config.automation.editor.other"
-                                )
-                              : undefined
-                          }
+                          .timeLocationLabel=${localize(
+                            "ui.panel.config.automation.editor.other"
+                          )}
                           .timeLocationGroups=${this._getTimeLocationGroups(
                             sources
                           )}
@@ -1091,6 +1089,17 @@ class DialogAddAutomationElement extends DialogMixin<AddAutomationElementDialogP
     this._targetElementKeys = undefined;
     this._loadItemsError = false;
 
+    // A person has no actions of their own, notify their phones instead.
+    if (
+      type === "action" &&
+      computeDomain(target.entity_id ?? "") === "person"
+    ) {
+      this._targetElementKeys = this._getPersonNotifyTarget(target)
+        ? ["notify.send_message"]
+        : [];
+      return;
+    }
+
     try {
       const keys = await fetchTargetElementKeys(this._api.callWS, type, target);
       if (this._selectedTarget === target) {
@@ -1232,17 +1241,34 @@ class DialogAddAutomationElement extends DialogMixin<AddAutomationElementDialogP
     this._add(ev.detail.value);
   }
 
+  private _getPersonNotifyTarget(target?: SingleHassServiceTarget) {
+    return getPersonNotifyTarget(
+      target,
+      this._states,
+      this._registries.entities
+    );
+  }
+
   private _selected(ev: ValueChangedEvent<string>) {
     const target =
       this._tab === "targets" && isTargetWithId(this._selectedTarget)
         ? this._selectedTarget
         : undefined;
-    this._add(ev.detail.value, target);
+    // A person is remembered as the target, but their phones get notified
+    const addTarget =
+      this.params!.type === "action"
+        ? (this._getPersonNotifyTarget(target) ?? target)
+        : target;
+    this._add(ev.detail.value, target, addTarget);
   }
 
-  private _add(key: string, target?: SingleHassServiceTarget) {
+  private _add(
+    key: string,
+    target?: SingleHassServiceTarget,
+    addTarget: HassServiceTarget | undefined = target
+  ) {
     this._rememberSelection(key, target);
-    this.params!.add(key, target);
+    this.params!.add(key, addTarget);
     this.closeDialog();
   }
 

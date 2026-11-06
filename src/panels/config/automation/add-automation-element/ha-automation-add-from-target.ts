@@ -89,7 +89,7 @@ import { targetExists } from "../target/target_exists";
 import type { AddAutomationElementListItem } from "./types";
 
 // All person entities are also listed under "People" in the "Other" section
-// next to time and sun (triggers/conditions only), wherever they are assigned.
+// next to time and sun, wherever they are assigned.
 const PERSON_TARGET = `person${TARGET_SEPARATOR}`;
 
 interface Level1Entries {
