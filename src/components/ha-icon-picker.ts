@@ -20,11 +20,14 @@ import {
   SHOWN_SUGGESTION_COUNT,
 } from "../data/icon_suggestion";
 import type { ValueChangedEvent } from "../types";
+import "./ha-action-bar";
+import "./ha-button";
 import "./ha-combo-box-item";
 import "./ha-generic-picker";
 import type { HaGenericPicker } from "./ha-generic-picker";
 import "./ha-icon";
-import "./ha-icon-button";
+import "./ha-section-title";
+import "./ha-svg-icon";
 import "./skeleton/ha-skeleton-icon";
 import "./skeleton/ha-skeleton-text";
 import type { PickerComboBoxItem } from "./ha-picker-combo-box";
@@ -107,7 +110,12 @@ const loadCustomIconItems = async (
 
 const SUGGESTION_PREFIX = "suggestion:";
 const SUGGESTION_STATUS_ID = "___suggestion_status___";
+const SUGGESTION_TITLE_ID = "___suggestion_title___";
 const SUGGESTION_SKELETON_ID = "___suggestion_skeleton___";
+
+const clearSuggestions = (ev: Event) => {
+  fireEvent(ev.target as HTMLElement, "clear-suggestions");
+};
 
 type SuggestionState =
   | { status: "loading" }
@@ -115,6 +123,24 @@ type SuggestionState =
   | { status: "done"; icons: string[] };
 
 const rowRenderer: RenderItemFunction<PickerComboBoxItem> = (item) => {
+  if (item.id === SUGGESTION_TITLE_ID) {
+    // The "Suggested" title is a disabled row, so it can carry a clear
+    // button. The row blocks pointer events, the button takes them back.
+    return html`
+      <ha-section-title style="width: 100%">
+        ${item.primary}
+        <ha-button
+          style="margin-inline-start: auto; margin-inline-end: calc(-1 * var(--ha-space-2)); --ha-button-height: var(--ha-space-6); --wa-form-control-padding-inline: var(--ha-space-2); font-size: var(--ha-font-size-s); pointer-events: auto"
+          appearance="plain"
+          variant="neutral"
+          size="s"
+          @click=${clearSuggestions}
+        >
+          ${item.secondary}
+        </ha-button>
+      </ha-section-title>
+    `;
+  }
   if (item.id === SUGGESTION_SKELETON_ID) {
     return html`
       <ha-combo-box-item role="progressbar" aria-label=${item.primary}>
@@ -206,17 +232,26 @@ export class HaIconPicker extends LitElement {
         .value=${this._value}
         .searchFn=${this._filterIcons}
         @value-changed=${this._valueChanged}
+        @clear-suggestions=${this._clearSuggestions}
       >
         <slot name="start"></slot>
         ${
           canSuggest
-            ? html`<ha-icon-button
-                slot="search-actions"
-                class=${this._suggestion?.status === "loading" ? "suggesting" : ""}
-                .path=${mdiStarFourPoints}
-                .label=${this._localize("ui.components.icon_picker.suggest")}
-                @click=${this._suggest}
-              ></ha-icon-button>`
+            ? html`<ha-action-bar slot="footer">
+                <ha-button
+                  appearance="filled"
+                  variant="neutral"
+                  size="s"
+                  ?loading=${this._suggestion?.status === "loading"}
+                  @click=${this._suggest}
+                >
+                  <ha-svg-icon
+                    slot="start"
+                    .path=${mdiStarFourPoints}
+                  ></ha-svg-icon>
+                  ${this._localize("ui.components.icon_picker.suggest")}
+                </ha-button>
+              </ha-action-bar>`
             : nothing
         }
       </ha-generic-picker>
@@ -261,7 +296,12 @@ export class HaIconPicker extends LitElement {
         ];
       }
       return [
-        localize("ui.components.icon_picker.suggested"),
+        {
+          id: SUGGESTION_TITLE_ID,
+          primary: localize("ui.components.icon_picker.suggested"),
+          secondary: localize("ui.common.clear"),
+          disabled: true,
+        },
         ...rows,
         localize("ui.components.icon_picker.all_icons"),
         ...icons,
@@ -342,6 +382,10 @@ export class HaIconPicker extends LitElement {
     }
   }
 
+  private _clearSuggestions() {
+    this._suggestion = undefined;
+  }
+
   private _valueChanged(ev: ValueChangedEvent<string>) {
     ev.stopPropagation();
     const value = ev.detail.value;
@@ -378,25 +422,15 @@ export class HaIconPicker extends LitElement {
       width: 100%;
       display: block;
     }
-    ha-icon-button.suggesting {
-      color: var(--primary-color);
-      animation: pulse 1.5s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      50% {
-        opacity: 0.4;
-      }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      ha-icon-button.suggesting {
-        animation: none;
-      }
-    }
   `;
 }
 
 declare global {
   interface HTMLElementTagNameMap {
     "ha-icon-picker": HaIconPicker;
+  }
+
+  interface HASSDomEvents {
+    "clear-suggestions": undefined;
   }
 }

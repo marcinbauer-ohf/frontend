@@ -1702,7 +1702,7 @@
         }
       },
       "icon_picker": {
-        "suggest": "Suggest icons with AI",
+        "suggest": "Suggest icons",
         "suggested": "Suggested",
         "all_icons": "All icons",
         "suggesting": "Suggesting icons",

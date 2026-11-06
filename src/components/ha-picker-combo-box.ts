@@ -208,6 +208,9 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
   @query('slot[name="search-actions"]')
   private _searchActionsSlot?: HTMLSlotElement;
 
+  @query('slot[name="footer"]')
+  private _footerSlot?: HTMLSlotElement;
+
   @state()
   @consume({ context: internationalizationContext, subscribe: true })
   private i18n?: ContextType<typeof internationalizationContext>;
@@ -411,6 +414,7 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
         ${this._plainList ? this._renderPlainList() : this._renderVirtualList()}
         ${this.renderScrollableFades()}
       </div>
+      <slot name="footer"></slot>
       <div class="visually-hidden" role="status">
         ${this._status ?? nothing}
       </div>`;
@@ -908,10 +912,11 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
   };
 
   private _pickItem = (ev: KeyboardEvent, newTab: boolean) => {
-    // Enter on a search action activates it, it does not pick a row
+    // Enter on a search or footer action activates it, it does not pick a row
+    const path = ev.composedPath();
     if (
-      this._searchActionsSlot &&
-      ev.composedPath().includes(this._searchActionsSlot)
+      (this._searchActionsSlot && path.includes(this._searchActionsSlot)) ||
+      (this._footerSlot && path.includes(this._footerSlot))
     ) {
       return;
     }
