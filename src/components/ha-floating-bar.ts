@@ -39,10 +39,11 @@ export class HaFloatingBar extends LitElement {
       /* A search in the bar is as round as its buttons */
       --ha-input-search-border-radius: var(--ha-border-radius-pill);
       pointer-events: auto;
-      animation: bar-enter 200ms ease-out;
+      /* Held back until the page has settled, hidden while it waits */
+      animation: bar-enter 350ms ease-out 200ms both;
     }
 
-    /* Arrives with the page: fades in quickly, rising from just below */
+    /* Arrives after the page: fades in, rising from just below */
     @keyframes bar-enter {
       from {
         opacity: 0;

@@ -300,6 +300,7 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
           this.hass.localize("ui.panel.config.automation.editor.default_name")
         }
       >
+        ${this._renderModeSwitch()}
         <ha-icon-button
           slot="toolbar-icon"
           .label=${this.hass.localize(
@@ -581,6 +582,9 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
       });
       this.currentEntityId = undefined;
       this.readOnly = false;
+      // A new automation starts with its details open, as narrow as they go
+      this._stepSidebarWidth = SIDEBAR_MIN_WIDTH;
+      this._infoOpen = true;
     }
 
     if (changedProps.has("entityId") && this.entityId) {
@@ -1037,8 +1041,8 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
   }
 
   // A draft of the editor's floating controls: undo and redo, the view
-  // (list, YAML or the coming node view), editing or traces, running the
-  // actions, and saving, which the editors leave to this bar.
+  // (list, YAML or the coming node view), running the actions, and saving,
+  // which the editors leave to this bar.
   private _renderFloatingBar(canRun: boolean) {
     const localize = this.hass.localize;
     const shortcutIcon = renderCtrlOrCmd(localize);
@@ -1048,31 +1052,10 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
       : this.mode === "yaml"
         ? "yaml"
         : "list";
-    return html`<ha-floating-bar slot="floating-bar">
-      <ha-button-toggle-group
-        class="mode-switch"
-        full-width
-        size="s"
-        variant="neutral"
-        .disabled=${!this.config?.id}
-        .buttons=${[
-          {
-            value: "edit",
-            label: localize("ui.common.edit"),
-          },
-          {
-            value: "traces",
-            label: localize("ui.panel.config.automation.editor.show_trace"),
-            // Nothing to show until the automation has run
-            disabled: !this._traceCount,
-            badge: this._traceCount
-              ? formatNumber(this._traceCount, this.hass.locale)
-              : undefined,
-          },
-        ]}
-        active="edit"
-        @value-changed=${this._editTracesChanged}
-      ></ha-button-toggle-group>
+    return html`<ha-floating-bar
+      slot="floating-bar"
+      class=${this.narrow ? "" : "hug"}
+    >
       <div class="floating-bar-row ${this.narrow ? "narrow" : ""}">
         <div class="tools">
           <ha-icon-button
@@ -1116,6 +1099,7 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
           <ha-button-toggle-group
             size="s"
             variant="neutral"
+            .showLabels=${!this.narrow}
             .buttons=${[
               {
                 value: "list",
@@ -1174,6 +1158,35 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
         </div>
       </div>
     </ha-floating-bar>`;
+  }
+
+  // Editing or traces, in the top bar, as on the trace page
+  private _renderModeSwitch() {
+    const localize = this.hass.localize;
+    return html`<ha-button-toggle-group
+      slot="toolbar-icon"
+      class="mode-switch"
+      size="s"
+      variant="neutral"
+      .disabled=${!this.config?.id}
+      .buttons=${[
+        {
+          value: "edit",
+          label: localize("ui.common.edit"),
+        },
+        {
+          value: "traces",
+          label: localize("ui.panel.config.automation.editor.show_trace"),
+          // Nothing to show until the automation has run
+          disabled: !this._traceCount,
+          badge: this._traceCount
+            ? formatNumber(this._traceCount, this.hass.locale)
+            : undefined,
+        },
+      ]}
+      active="edit"
+      @value-changed=${this._editTracesChanged}
+    ></ha-button-toggle-group>`;
   }
 
   private _viewChanged(ev: CustomEvent<{ value: string }>) {
@@ -1602,7 +1615,7 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
         :host {
           /* Room the floating bar takes over the bottom of the page, which
              the editors leave free and lift their save button above. */
-          --ha-floating-bar-height: 120px;
+          --ha-floating-bar-height: 76px;
         }
 
         /* The info pane: the details, then the options below them */
@@ -1614,13 +1627,19 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
           margin-top: var(--ha-space-2);
         }
 
-        /* The Edit and Traces choice stands apart from the tools below it. */
+        /* The Edit and Traces choice, before the top bar's icons */
         .mode-switch {
-          margin-bottom: var(--ha-space-2);
+          margin-inline-end: var(--ha-space-2);
         }
 
         .yaml-mode {
           padding-bottom: var(--ha-floating-bar-height);
+        }
+
+        /* On a wide screen the bar hugs its tools rather than stretching
+           across the page */
+        ha-floating-bar.hug {
+          flex: 0 1 auto;
         }
 
         .floating-bar-row,

@@ -17,6 +17,7 @@ import "./ha-svg-icon";
  * @attr {string} active - The value of the currently active button.
  * @attr {("s"|"m")} size - The size of the buttons in the group.
  * @attr {("brand"|"neutral"|"success"|"warning"|"danger")} variant - The variant of the buttons in the group.
+ * @attr {boolean} show-labels - Shows each button's label beside its icon.
  *
  * @fires value-changed - Dispatched when the active button changes.
  */
@@ -33,6 +34,9 @@ export class HaButtonToggleGroup extends LitElement {
 
   @property({ type: Boolean, reflect: true, attribute: "full-width" })
   public fullWidth = false;
+
+  @property({ type: Boolean, attribute: "show-labels" })
+  public showLabels = false;
 
   @property({ type: Boolean }) public disabled = false;
 
@@ -63,12 +67,18 @@ export class HaButtonToggleGroup extends LitElement {
               .appearance=${this.active === button.value ? "accent" : "filled"}
             >
               ${
-                button.iconPath
+                button.iconPath && this.showLabels
                   ? html`<ha-svg-icon
-                      aria-label=${button.label}
-                      .path=${button.iconPath}
-                    ></ha-svg-icon>`
-                  : button.label
+                        slot="start"
+                        .path=${button.iconPath}
+                      ></ha-svg-icon
+                      >${button.label}`
+                  : button.iconPath
+                    ? html`<ha-svg-icon
+                        aria-label=${button.label}
+                        .path=${button.iconPath}
+                      ></ha-svg-icon>`
+                    : button.label
               }
               ${
                 button.badge

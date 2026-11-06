@@ -212,6 +212,30 @@ export class HaAutomationTrace extends LitElement {
         .scrollable=${this.narrow}
       >
         ${
+          stateObj?.attributes.id
+            ? html`<ha-button-toggle-group
+                slot="toolbar-icon"
+                class="mode-switch"
+                size="s"
+                variant="neutral"
+                .buttons=${[
+                  {
+                    value: "edit",
+                    label: this.hass.localize("ui.common.edit"),
+                  },
+                  {
+                    value: "traces",
+                    label: this.hass.localize(
+                      "ui.panel.config.automation.editor.show_trace"
+                    ),
+                  },
+                ]}
+                active="traces"
+                @value-changed=${this._editTracesChanged}
+              ></ha-button-toggle-group>`
+            : nothing
+        }
+        ${
           this._trace
             ? html`<ha-icon-button
                 slot="toolbar-icon"
@@ -225,30 +249,6 @@ export class HaAutomationTrace extends LitElement {
             : nothing
         }
         <ha-floating-bar slot="floating-bar">
-          ${
-            stateObj?.attributes.id
-              ? html`<ha-button-toggle-group
-                  class="mode-switch"
-                  full-width
-                  size="s"
-                  variant="neutral"
-                  .buttons=${[
-                    {
-                      value: "edit",
-                      label: this.hass.localize("ui.common.edit"),
-                    },
-                    {
-                      value: "traces",
-                      label: this.hass.localize(
-                        "ui.panel.config.automation.editor.show_trace"
-                      ),
-                    },
-                  ]}
-                  active="traces"
-                  @value-changed=${this._editTracesChanged}
-                ></ha-button-toggle-group>`
-              : nothing
-          }
           <div class="bar-row">
             ${
               traces
@@ -769,12 +769,12 @@ export class HaAutomationTrace extends LitElement {
       css`
         :host {
           /* Room to scroll the panes out from under the floating bar. */
-          --trace-bar-room: 220px;
+          --trace-bar-room: 176px;
         }
 
-        /* The Edit and Traces choice stands apart from the controls below. */
+        /* The Edit and Traces choice, before the top bar's icons */
         .mode-switch {
-          margin-bottom: var(--ha-space-2);
+          margin-inline-end: var(--ha-space-2);
         }
 
         .bar-row {

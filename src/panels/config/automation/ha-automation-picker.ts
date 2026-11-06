@@ -65,6 +65,7 @@ import "../../../components/ha-filter-labels";
 import "../../../components/ha-filter-voice-assistants";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-svg-icon";
+import "../../../components/item/ha-row-item";
 import "../../../components/ha-switch";
 import type { HaSwitch } from "../../../components/ha-switch";
 import "../../../components/ha-tooltip";
@@ -780,7 +781,8 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
           isComponentLoaded(this.hass.config, "blueprint")
             ? html`<ha-dropdown
                 slot="fab"
-                placement="top-end"
+                class="create-menu"
+                placement="top"
                 @wa-select=${this._handleCreateAction}
               >
                 <ha-button slot="trigger" size="l">
@@ -789,23 +791,38 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
                     "ui.panel.config.automation.picker.add_automation"
                   )}
                 </ha-button>
-                <ha-dropdown-item value="create_new">
-                  <ha-svg-icon
-                    .path=${mdiPencilOutline}
-                    slot="icon"
-                  ></ha-svg-icon>
-                  ${this.hass.localize(
-                    "ui.panel.config.automation.dialog_new.create_empty"
-                  )}
+                <ha-dropdown-item
+                  value="create_new"
+                  class="create-option primary"
+                >
+                  <ha-row-item
+                    .headline=${this.hass.localize(
+                      "ui.panel.config.automation.dialog_new.create_empty"
+                    )}
+                  >
+                    <ha-svg-icon
+                      slot="start"
+                      class="create-option-icon"
+                      .path=${mdiPencilOutline}
+                    ></ha-svg-icon>
+                  </ha-row-item>
                 </ha-dropdown-item>
-                <ha-dropdown-item value="create_blueprint">
-                  <ha-svg-icon
-                    .path=${mdiPaletteSwatch}
-                    slot="icon"
-                  ></ha-svg-icon>
-                  ${this.hass.localize(
-                    "ui.panel.config.automation.dialog_new.create_blueprint"
-                  )}
+                <wa-divider></wa-divider>
+                <ha-dropdown-item
+                  value="create_blueprint"
+                  class="create-option"
+                >
+                  <ha-row-item
+                    .headline=${this.hass.localize(
+                      "ui.panel.config.automation.dialog_new.create_blueprint"
+                    )}
+                  >
+                    <ha-svg-icon
+                      slot="start"
+                      class="create-option-icon"
+                      .path=${mdiPaletteSwatch}
+                    ></ha-svg-icon>
+                  </ha-row-item>
                 </ha-dropdown-item>
               </ha-dropdown>`
             : html`<ha-button slot="fab" size="l" @click=${this._createNew}>
@@ -1669,6 +1686,39 @@ ${rejected
         ha-dropdown::part(menu),
         ha-dropdown::part(submenu) {
           --auto-size-available-width: calc(50vw - var(--ha-space-4));
+        }
+        /* The create menu, centred over the button. Starting from scratch
+           leads with a filled icon tile; starting from something, such as a
+           blueprint, follows a divider with a plain one. Corners are
+           concentric: the menu's radius is its options' plus its padding. */
+        ha-dropdown.create-menu::part(menu) {
+          --auto-size-available-width: calc(100vw - var(--ha-space-8));
+          min-width: 240px;
+          padding: var(--ha-space-3);
+          border-radius: var(--ha-border-radius-4xl);
+        }
+        .create-option {
+          padding: 0;
+          border-radius: var(--ha-border-radius-xl);
+        }
+        .create-option ha-row-item {
+          --ha-row-item-padding-block: var(--ha-space-2);
+          --ha-row-item-padding-inline: var(--ha-space-2);
+          --ha-row-item-gap: var(--ha-space-3);
+        }
+        .create-option-icon {
+          box-sizing: border-box;
+          width: 32px;
+          height: 32px;
+          padding: 6px;
+          --mdc-icon-size: 20px;
+          border-radius: var(--ha-border-radius-md);
+          background-color: var(--ha-color-fill-neutral-normal-resting);
+          color: var(--ha-color-on-neutral-normal);
+        }
+        .create-option.primary .create-option-icon {
+          background-color: var(--ha-color-fill-primary-loud-resting);
+          color: var(--ha-color-on-primary-loud);
         }
       `,
     ];
