@@ -22,7 +22,6 @@ import "./ha-switch";
 import "./ha-expansion-panel";
 import "./item/ha-list-item-base";
 import "./item/ha-list-item-button";
-import "./list/ha-grouped-list";
 import "./list/ha-list-base";
 import type { HaFormSchema, HaFormSelector } from "./ha-form/types";
 import "./ha-alert";
@@ -383,8 +382,7 @@ const unique = (options: OptionDef[]) =>
 // always shown as switches
 // Used by most rich notifications, so always shown instead of in the menu
 const ALWAYS_SHOWN = ["url", "clickAction", "image"];
-const inMenu = (option: OptionDef) =>
-  !isSwitch(option) && !ALWAYS_SHOWN.includes(option.name);
+const inMenu = (option: OptionDef) => !ALWAYS_SHOWN.includes(option.name);
 
 // Which devices an option works on: every device, or one platform only
 const platformOf = (option: OptionDef): Platform => {
@@ -406,14 +404,7 @@ const PLATFORM_NAMES: Record<Platform, string> = {
   android: "Android only",
   ios: "iPhone only",
 };
-const ALL_OPTIONS = unique(
-  [...ALL_FIELDS.android, ...ALL_FIELDS.ios].filter(
-    (option) => !isSwitch(option)
-  )
-);
-const ALL_SWITCHES = unique(
-  [...ALL_FIELDS.android, ...ALL_FIELDS.ios].filter(isSwitch)
-);
+const ALL_OPTIONS = unique([...ALL_FIELDS.android, ...ALL_FIELDS.ios]);
 
 const getPath = (value: Record<string, any>, path: string[]): unknown =>
   path.reduce<any>((obj, key) => obj?.[key], value);
@@ -426,6 +417,9 @@ const formatOption = (option: OptionDef, value: unknown) => {
     if (match && typeof match === "object") {
       return match.label;
     }
+  }
+  if (isSwitch(option)) {
+    return value ? "On" : "Off";
   }
   if ("color_rgb" in option.selector && typeof value === "string") {
     return html`<span class="swatch" style="background:${value}"></span
@@ -516,7 +510,7 @@ export class HaNotifyDataEditor extends LitElement {
           @value-changed=${this._platformChanged}
         ></ha-button-toggle-group>
       </div>
-      ${this._renderOptions()} ${this._renderSwitches()}
+      ${this._renderOptions()}
     </div>`;
   }
 
@@ -822,39 +816,6 @@ export class HaNotifyDataEditor extends LitElement {
         >`;
   }
 
-  // All switches are Android only. Shown unless the target is iOS, plus any
-  // switch that's already on
-  private _renderSwitches() {
-    const value = this.value ?? {};
-    const switches = ALL_SWITCHES.filter(
-      (option) => this._platform !== "ios" || getPath(value, option.path)
-    );
-    if (!switches.length) {
-      return nothing;
-    }
-    return html`<ha-grouped-list .header=${PLATFORM_NAMES.android}>
-      ${switches.map(
-        (option) =>
-          html`<ha-list-item-base>
-            <div slot="headline">${option.label}</div>
-            <ha-switch
-              slot="end"
-              .checked=${!!getPath(value, option.path)}
-              .disabled=${this.disabled}
-              .path=${option.path}
-              @change=${this._switchChanged}
-            ></ha-switch>
-          </ha-list-item-base>`
-      )}
-    </ha-grouped-list>`;
-  }
-
-  private _switchChanged(ev: Event) {
-    const input = ev.currentTarget as HTMLInputElement & { path: string[] };
-    // Off removes the option, the app's default
-    this._setPath(input.path, input.checked || undefined);
-  }
-
   private _criticalChanged(ev: Event) {
     const on = (ev.currentTarget as HTMLInputElement).checked;
     // Off removes every key the switch set, for either phone type
@@ -869,6 +830,11 @@ export class HaNotifyDataEditor extends LitElement {
     const key = ev.detail.item.value;
     const option = ALL_OPTIONS.find((opt) => opt.path.join(".") === key);
     if (!option) {
+      return;
+    }
+    // An on/off option has nothing to fill in, adding it turns it on
+    if (isSwitch(option)) {
+      this._setPath(option.path, true);
       return;
     }
     await this._optionDialog(option, "Add");
@@ -911,7 +877,12 @@ export class HaNotifyDataEditor extends LitElement {
     }
     this._setPath(
       option.path,
-      isColor ? rgb2hex(result.value as [number, number, number]) : result.value
+      isColor
+        ? rgb2hex(result.value as [number, number, number])
+        : // Off is the app's default, so it removes the option
+          isSwitch(option) && !result.value
+          ? undefined
+          : result.value
     );
   }
 
