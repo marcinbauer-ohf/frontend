@@ -37,11 +37,10 @@ import "./input/ha-input";
 
 type Platform = "both" | "android" | "ios";
 
-// Stand-ins for translations: one string, \n starts the description line
-const EMPTY_BUTTONS =
-  "No notification actions\nAdd notification actions to let people answer from the notification.";
-const EMPTY_OPTIONS =
-  "No options\nAdd options to change how the notification looks and behaves.";
+// Stand-ins for translations. Only what each is for, the add button below
+// already says what to do.
+const EMPTY_BUTTONS = "Let people answer right from the notification.";
+const EMPTY_OPTIONS = "Change how the notification looks and behaves.";
 
 const LABELS: Record<string, string> = {
   action: "Button ID",
@@ -1096,7 +1095,6 @@ export class HaNotifyDataEditor extends LitElement {
     }
     .empty p {
       margin: 0;
-      white-space: pre-line;
     }
     ha-input {
       --ha-input-padding-bottom: 0;
