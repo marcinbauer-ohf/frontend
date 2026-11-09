@@ -691,11 +691,23 @@ export class HaServiceControl extends LitElement {
 
     // ponytail: mockup, one editor replaces all fields of a phone's notify
     // action. It renders in place of the first field, message.
-    if (domain === "notify" && serviceName?.startsWith("mobile_app_")) {
+    // A person targeted by send_message gets the same editor, without the
+    // phone picker, as the target picker above shows the person.
+    const personTarget =
+      domain === "notify" &&
+      serviceName === "send_message" &&
+      ensureArray(this._value?.target?.entity_id ?? []).some(
+        (entityId) => computeDomain(entityId) === "person"
+      );
+    if (
+      personTarget ||
+      (domain === "notify" && serviceName?.startsWith("mobile_app_"))
+    ) {
       return dataField.key === "message"
         ? html`<ha-notify-phone-editor
             .hass=${this.hass}
-            .service=${serviceName}
+            .service=${personTarget ? undefined : serviceName}
+            .hidePhone=${personTarget}
             .data=${this._value?.data}
             .disabled=${this.disabled}
             @value-changed=${this._notifyPhoneChanged}

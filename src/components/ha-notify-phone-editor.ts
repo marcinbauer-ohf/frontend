@@ -1,5 +1,5 @@
 import type { HassServiceTarget } from "home-assistant-js-websocket";
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { ensureArray } from "../common/array/ensure-array";
@@ -30,7 +30,11 @@ export class HaNotifyPhoneEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   /** The notify action, e.g. mobile_app_pixel_9 */
-  @property({ attribute: false }) public service!: string;
+  @property({ attribute: false }) public service?: string;
+
+  /** Hides the phone picker, when the target picker shows the target */
+  @property({ type: Boolean, attribute: "hide-phone" }) public hidePhone =
+    false;
 
   @property({ attribute: false }) public data?: Record<string, any>;
 
@@ -39,15 +43,19 @@ export class HaNotifyPhoneEditor extends LitElement {
   protected render() {
     const deviceId = this._deviceId(this.hass.devices, this.service);
     return html`
-      <div class="field">
-        <ha-selector
-          .hass=${this.hass}
-          .selector=${PHONE_SELECTOR}
-          .value=${deviceId ? { device_id: deviceId } : {}}
-          .disabled=${this.disabled}
-          @value-changed=${this._phoneChanged}
-        ></ha-selector>
-      </div>
+      ${
+        this.hidePhone
+          ? nothing
+          : html`<div class="field">
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${PHONE_SELECTOR}
+                .value=${deviceId ? { device_id: deviceId } : {}}
+                .disabled=${this.disabled}
+                @value-changed=${this._phoneChanged}
+              ></ha-selector>
+            </div>`
+      }
       <div class="inputs">
         <ha-input
           .label=${"Title"}
@@ -76,7 +84,7 @@ export class HaNotifyPhoneEditor extends LitElement {
   }
 
   private _deviceId = memoizeOne(
-    (devices: HomeAssistant["devices"], service: string) =>
+    (devices: HomeAssistant["devices"], service?: string) =>
       Object.values(devices).find(
         (device) => device.name && serviceForDevice(device.name) === service
       )?.id
