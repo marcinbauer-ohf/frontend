@@ -1,18 +1,16 @@
 import "@home-assistant/webawesome/dist/components/divider/divider";
 import { mdiCctv, mdiClose, mdiImage, mdiPlus } from "@mdi/js";
-import type { PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../common/dom/fire_event";
 import { hasTemplate } from "../common/string/has-template";
 import { slugify } from "../common/string/slugify";
-import type { HomeAssistant, ToggleButton } from "../types";
+import type { HomeAssistant } from "../types";
 import { showFormDialog } from "../dialogs/form/show-form-dialog";
 import type { ObjectSelector, SelectOption, Selector } from "../data/selector";
 import { hex2rgb, rgb2hex } from "../common/color/convert-color";
 import "./ha-button";
-import "./ha-button-toggle-group";
 import "./ha-dropdown";
 import type { HaDropdownSelectEvent } from "./ha-dropdown";
 import "./ha-dropdown-item";
@@ -299,11 +297,7 @@ const CRITICAL_ANDROID: PathValue[] = [
   [["channel"], "alarm_stream"],
   [["importance"], "high"],
 ];
-const CRITICAL: Record<Platform, PathValue[]> = {
-  ios: CRITICAL_IOS,
-  android: CRITICAL_ANDROID,
-  both: [...CRITICAL_IOS, ...CRITICAL_ANDROID],
-};
+const CRITICAL: PathValue[] = [...CRITICAL_IOS, ...CRITICAL_ANDROID];
 const isCritical = (value: Record<string, any>) =>
   value.push?.sound?.critical === 1 || value.channel === "alarm_stream";
 
@@ -392,13 +386,6 @@ const platformOf = (option: OptionDef): Platform => {
   return has("both") ? "both" : has("android") ? "android" : "ios";
 };
 
-// Which options are offered, set from the targeted device
-const PLATFORM_OPTIONS: ToggleButton[] = [
-  { value: "both", label: "Any phone" },
-  { value: "android", label: "Android" },
-  { value: "ios", label: "iPhone" },
-];
-
 const PLATFORM_NAMES: Record<Platform, string> = {
   both: "Any device",
   android: "Android only",
@@ -454,38 +441,11 @@ const withButtonId = (
 export class HaNotifyDataEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
-  /** The notify action, e.g. mobile_app_pixel_9 */
-  @property({ attribute: false }) public service?: string;
-
-  /** The targeted phones, used over service when set */
-  @property({ attribute: false }) public deviceIds?: string[];
-
   @property({ attribute: false }) public value?: Record<string, any>;
 
   @property({ type: Boolean }) public disabled = false;
 
   @state() private _collapsed = new Set<string>();
-
-  @state() private _platform: Platform = "both";
-
-  protected willUpdate(changedProps: PropertyValues<this>) {
-    super.willUpdate(changedProps);
-    // Starts at the targeted phones' platform, "both" when it's unknown or
-    // they differ. The phones are compared by content, as they are a new
-    // array on every render, which must not undo a manual pick.
-    if (
-      !this.hasUpdated ||
-      changedProps.has("service") ||
-      (changedProps.has("deviceIds") &&
-        changedProps.get("deviceIds")?.join() !== this.deviceIds?.join())
-    ) {
-      this._platform = this._devicePlatform(
-        this.hass.devices,
-        this.service,
-        this.deviceIds
-      );
-    }
-  }
 
   protected render() {
     if (!formCanEdit(this.value)) {
@@ -496,49 +456,13 @@ export class HaNotifyDataEditor extends LitElement {
       </div>`;
     }
     // The core of a notification first, right under the message, then the
-    // phone type and the secondary options, each marked with the devices it
-    // works on
+    // secondary options, each marked with the phones it works on. Every key
+    // is written for both phones, each app ignores the other's.
     return html`<div class="content">
       ${this._renderAlwaysShown()} ${this._renderButtons()}
-      <div class="row">
-        <span>Options for</span>
-        <ha-button-toggle-group
-          size="s"
-          .buttons=${PLATFORM_OPTIONS}
-          .active=${this._platform}
-          .disabled=${this.disabled}
-          @value-changed=${this._platformChanged}
-        ></ha-button-toggle-group>
-      </div>
       ${this._renderOptions()}
     </div>`;
   }
-
-  // ponytail: matches the action name to the phone's name, which breaks when
-  // the phone is renamed. Falls back to "both".
-  private _devicePlatform = memoizeOne(
-    (
-      devices: HomeAssistant["devices"],
-      service?: string,
-      deviceIds?: string[]
-    ): Platform => {
-      const slug = service?.replace(/^mobile_app_/, "");
-      const phones = deviceIds?.length
-        ? deviceIds.map((id) => devices[id]).filter(Boolean)
-        : Object.values(devices)
-            .filter((dev) => slug && dev.name && slugify(dev.name) === slug)
-            .slice(0, 1);
-      if (!phones.length) {
-        return "both";
-      }
-      const apple = phones.filter((dev) => dev.manufacturer === "Apple");
-      return apple.length === phones.length
-        ? "ios"
-        : apple.length
-          ? "both"
-          : "android";
-    }
-  );
 
   // Like the target picker: a collapsible group whose rows open an editor
   // and have a remove button, or the activity panel's empty state
@@ -599,8 +523,8 @@ export class HaNotifyDataEditor extends LitElement {
 
   private _renderAlwaysShown() {
     const value = this.value ?? {};
-    // Android calls it clickAction; "both" writes url and mirrors it
-    const tapKey = this._platform === "android" ? "clickAction" : "url";
+    // Written as url and mirrored to Android's clickAction
+    const tapKey = "url";
     return html`
       <ha-selector
         .hass=${this.hass}
@@ -723,29 +647,18 @@ export class HaNotifyDataEditor extends LitElement {
     const value = this.value ?? {};
     // Every platform's options that are set, so none are hidden. Fields
     // shown above the list are left out of it
-    const shown = [
-      "image",
-      ...(this._platform === "android" ? ["clickAction"] : ["url"]),
-      ...(this._platform === "both" ? ["clickAction"] : []),
-    ];
+    const shown = ["image", "url", "clickAction"];
     // The critical alert switch owns its keys while it's on
     if (isCritical(value)) {
-      shown.push(...CRITICAL.both.map(([path]) => path.join(".")));
+      shown.push(...CRITICAL.map(([path]) => path.join(".")));
     }
     const set = ALL_OPTIONS.filter(
       (option) =>
         !shown.includes(option.path.join(".")) &&
         getPath(value, option.path) !== undefined
     );
-    // Grouped by the devices they work on, the other platform's group
-    // hidden when the target is known
+    // Grouped by the phones they work on
     const groups = (["both", "android", "ios"] as Platform[])
-      .filter(
-        (group) =>
-          group === "both" ||
-          this._platform === "both" ||
-          group === this._platform
-      )
       .map((group) => ({
         group,
         options: ALL_OPTIONS.filter(
@@ -806,10 +719,9 @@ export class HaNotifyDataEditor extends LitElement {
     </div>`;
   }
 
-  // A tag on an option that only works on one platform, unless the target
-  // is that platform
+  // A tag on an option that only works on one platform
   private _platformTag(platform: Platform) {
-    return platform === "both" || platform === this._platform
+    return platform === "both"
       ? nothing
       : html`<span class="tag"
           >${platform === "android" ? "Android" : "iPhone"}</span
@@ -818,11 +730,9 @@ export class HaNotifyDataEditor extends LitElement {
 
   private _criticalChanged(ev: Event) {
     const on = (ev.currentTarget as HTMLInputElement).checked;
-    // Off removes every key the switch set, for either phone type
+    // Sets, or on off removes, the keys for both phones
     this._setPaths(
-      (on ? CRITICAL[this._platform] : CRITICAL.both).map(
-        ([path, item]): PathValue => [path, on ? item : undefined]
-      )
+      CRITICAL.map(([path, item]): PathValue => [path, on ? item : undefined])
     );
   }
 
@@ -890,7 +800,7 @@ export class HaNotifyDataEditor extends LitElement {
     const fields =
       // iOS's button fields are a superset, Android leaves out its own
       (
-        SCHEMAS[this._platform === "android" ? "android" : "ios"].find(
+        SCHEMAS.ios.find(
           (item) => item.name === "actions"
         ) as HaFormSelector & { selector: ObjectSelector }
       ).selector.object!.fields!;
@@ -905,9 +815,7 @@ export class HaNotifyDataEditor extends LitElement {
       submitText,
       computeLabel: (schema) =>
         `${LABELS[schema.name] ?? schema.name}${
-          schema.name === "destructive" && this._platform === "both"
-            ? " (iPhone only)"
-            : ""
+          schema.name === "destructive" ? " (iPhone only)" : ""
         }`,
       computeHelper: (schema) => DESCRIPTIONS[schema.name],
     });
@@ -968,18 +876,11 @@ export class HaNotifyDataEditor extends LitElement {
       }
       parent[path[path.length - 1]] = fieldValue;
     }
-    if (this._platform === "both") {
-      for (const [key, mirror] of Object.entries(MIRRORED)) {
-        value[mirror] = value[key];
-      }
+    for (const [key, mirror] of Object.entries(MIRRORED)) {
+      value[mirror] = value[key];
     }
     const cleaned = dropEmpty(value);
     this._fire(Object.keys(cleaned).length ? cleaned : undefined);
-  }
-
-  private _platformChanged(ev: CustomEvent<{ value: Platform }>) {
-    ev.stopPropagation();
-    this._platform = ev.detail.value;
   }
 
   private _fire(value: Record<string, any> | undefined) {
@@ -989,12 +890,6 @@ export class HaNotifyDataEditor extends LitElement {
   static styles = css`
     :host {
       display: block;
-    }
-    .row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--ha-space-4);
     }
     .tag {
       margin-inline-start: var(--ha-space-2);

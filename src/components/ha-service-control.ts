@@ -43,7 +43,6 @@ import "./ha-service-picker";
 import "./ha-service-section-icon";
 import "./ha-settings-row";
 import "./ha-notify-phone-editor";
-import { getPersonNotifyTarget } from "../panels/config/automation/add-automation-element/target-items";
 import "./ha-yaml-editor";
 import type { HaYamlEditor } from "./ha-yaml-editor";
 
@@ -721,7 +720,6 @@ export class HaServiceControl extends LitElement {
             .hass=${this.hass}
             .service=${personTarget ? undefined : serviceName}
             .hidePhone=${personTarget}
-            .deviceIds=${personTarget ? this._personPhones() : undefined}
             .data=${this._value?.data}
             .disabled=${this.disabled}
             @value-changed=${this._notifyPhoneChanged}
@@ -973,25 +971,6 @@ export class HaServiceControl extends LitElement {
         (entityId) => computeDomain(entityId) === "person"
       )
     );
-  }
-
-  // The phones of the targeted people: the devices of their notify entities
-  private _personPhones(): string[] {
-    const ids = ensureArray(this._value?.target?.entity_id ?? []).flatMap(
-      (entityId) =>
-        ensureArray(
-          getPersonNotifyTarget(
-            { entity_id: entityId },
-            this.hass.states,
-            this.hass.entities
-          )?.entity_id ?? []
-        )
-    );
-    return [
-      ...new Set(
-        ids.map((id) => this.hass.entities[id]?.device_id).filter(Boolean)
-      ),
-    ] as string[];
   }
 
   private _notifyPhoneChanged(

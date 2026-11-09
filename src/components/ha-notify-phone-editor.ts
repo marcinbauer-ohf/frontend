@@ -36,9 +36,6 @@ export class HaNotifyPhoneEditor extends LitElement {
   @property({ type: Boolean, attribute: "hide-phone" }) public hidePhone =
     false;
 
-  /** The targeted phones, when the target picker shows the target */
-  @property({ attribute: false }) public deviceIds?: string[];
-
   @property({ attribute: false }) public data?: Record<string, any>;
 
   @property({ type: Boolean }) public disabled = false;
@@ -78,8 +75,6 @@ export class HaNotifyPhoneEditor extends LitElement {
       </div>
       <ha-notify-data-editor
         .hass=${this.hass}
-        .service=${this.service}
-        .deviceIds=${this.deviceIds}
         .value=${this.data?.data}
         .disabled=${this.disabled}
         @value-changed=${this._dataChanged}
