@@ -1,5 +1,4 @@
 import type { ContextType } from "@lit/context";
-import type { HassServiceTarget } from "home-assistant-js-websocket";
 import { mdiClose, mdiHelpCircleOutline } from "@mdi/js";
 import type { CSSResultGroup } from "lit";
 import { LitElement, css, html, nothing } from "lit";
@@ -1254,21 +1253,14 @@ class DialogAddAutomationElement extends DialogMixin<AddAutomationElementDialogP
       this._tab === "targets" && isTargetWithId(this._selectedTarget)
         ? this._selectedTarget
         : undefined;
-    // A person is remembered as the target, but their phones get notified
-    const addTarget =
-      this.params!.type === "action"
-        ? (this._getPersonNotifyTarget(target) ?? target)
-        : target;
-    this._add(ev.detail.value, target, addTarget);
+    // ponytail: mockup, the person stays the target. Core can't notify a
+    // person yet, so running this action fails until it can.
+    this._add(ev.detail.value, target);
   }
 
-  private _add(
-    key: string,
-    target?: SingleHassServiceTarget,
-    addTarget: HassServiceTarget | undefined = target
-  ) {
+  private _add(key: string, target?: SingleHassServiceTarget) {
     this._rememberSelection(key, target);
-    this.params!.add(key, addTarget);
+    this.params!.add(key, target);
     this.closeDialog();
   }
 

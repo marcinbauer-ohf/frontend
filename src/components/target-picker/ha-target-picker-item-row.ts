@@ -300,7 +300,8 @@ export class HaTargetPickerItemRow extends LitElement {
     // deleted (or filtered out), fall back to the plain "not found" state.
     const canMigrate = !!replacement?.candidates.length;
 
-    const showEntities = this.type !== "entity" && !notFound;
+    const showEntities =
+      (this.type !== "entity" || !!this._entries) && !notFound;
 
     const entries = this.parentEntries || this._entries;
 
@@ -781,7 +782,21 @@ export class HaTargetPickerItemRow extends LitElement {
     const requestId = ++this._lastFetch;
     this._fetchedEntries = undefined;
     if (this.type === "entity") {
-      this._entries = undefined;
+      // ponytail: mockup, a person is shown as a group of its device
+      // trackers, read once when the row is set up
+      this._entries =
+        computeDomain(this.itemId) === "person"
+          ? {
+              referenced_areas: [],
+              referenced_devices: [],
+              referenced_entities:
+                this._states[this.itemId]?.attributes.device_trackers ?? [],
+              missing_areas: [],
+              missing_devices: [],
+              missing_floors: [],
+              missing_labels: [],
+            }
+          : undefined;
       this._statistic = undefined;
       if (isExternalStatistic(this.itemId)) {
         try {
