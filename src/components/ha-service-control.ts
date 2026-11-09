@@ -427,6 +427,18 @@ export class HaServiceControl extends LitElement {
     return false;
   }
 
+  // ponytail: mockup of a core change, send_message also takes people
+  private _withPeople = memoizeOne(
+    (target: TargetSelector): TargetSelector =>
+      ({
+        ...target,
+        entity: [
+          ...ensureArray((target as TargetSelector["target"])?.entity ?? []),
+          { domain: "person" },
+        ],
+      }) as TargetSelector
+  );
+
   private _targetSelector = memoizeOne(
     (targetSelector: TargetSelector | null | undefined, value) => {
       if (!value || (typeof value === "object" && !Object.keys(value).length)) {
@@ -503,7 +515,9 @@ export class HaServiceControl extends LitElement {
     const targetSelector =
       serviceData && "target" in serviceData
         ? this._targetSelector(
-            serviceData.target as TargetSelector,
+            this._value?.action === "notify.send_message"
+              ? this._withPeople(serviceData.target as TargetSelector)
+              : (serviceData.target as TargetSelector),
             this._value?.target
           )
         : undefined;
