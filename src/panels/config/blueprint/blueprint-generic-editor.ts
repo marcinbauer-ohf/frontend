@@ -41,6 +41,10 @@ export abstract class HaBlueprintGenericEditor extends LitElement {
 
   @property({ type: Boolean, reflect: true }) public narrow = false;
 
+  // Only the inputs, without the card's header and blueprint picker, for a
+  // dialog that already picked the blueprint
+  @property({ type: Boolean, reflect: true }) public embedded = false;
+
   @state() protected _blueprints?: Blueprints;
 
   protected firstUpdated(changedProps: PropertyValues<this>) {
@@ -131,11 +135,15 @@ export abstract class HaBlueprintGenericEditor extends LitElement {
       <ha-card
         outlined
         class="blueprint"
-        .header=${this.hass.localize(
-          "ui.panel.config.automation.editor.blueprint.header"
-        )}
+        .header=${
+          this.embedded
+            ? undefined
+            : this.hass.localize(
+                "ui.panel.config.automation.editor.blueprint.header"
+              )
+        }
       >
-        <div class="blueprint-picker-container">
+        <div class="blueprint-picker-container" ?hidden=${this.embedded}>
           ${
             this._blueprints
               ? Object.keys(this._blueprints).length
@@ -353,6 +361,9 @@ export abstract class HaBlueprintGenericEditor extends LitElement {
         ha-card.blueprint {
           margin: 0 auto;
           margin-bottom: 64px;
+        }
+        :host([embedded]) ha-card.blueprint {
+          margin-bottom: 0;
         }
         .padding {
           padding: 16px;

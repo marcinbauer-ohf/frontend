@@ -107,10 +107,10 @@ export class EnergyGridSettings extends LitElement {
               "ui.panel.config.energy.grid.grid_connections"
             )}
           </h3>
-          ${
-            gridSources.length > 0
-              ? html`
-                  <div class="items-container">
+          <div class="items-container">
+            ${
+              gridSources.length > 0
+                ? html`
                     ${gridSources.map((source, idx) => {
                       // At least one of import/export/power must exist (enforced by validation)
                       const primaryStat = (source.stat_energy_from ||
@@ -174,16 +174,14 @@ export class EnergyGridSettings extends LitElement {
                         </div>
                       `;
                     })}
-                  </div>
-                `
-              : nothing
-          }
+                  `
+                : html`<div class="empty">
+                    ${this.hass.localize("ui.panel.config.energy.grid.no_connections")}
+                  </div>`
+            }
+          </div>
           <div class="row">
-            <ha-button
-              @click=${this._addSource}
-              appearance=${this.pane ? "plain" : "filled"}
-              size="s"
-            >
+            <ha-button @click=${this._addSource} appearance="filled" size="s">
               <ha-svg-icon .path=${mdiPlus} slot="start"></ha-svg-icon>
               ${this.hass.localize(
                 "ui.panel.config.energy.grid.add_connection"
@@ -196,10 +194,10 @@ export class EnergyGridSettings extends LitElement {
               "ui.panel.config.energy.grid.grid_carbon_footprint"
             )}
           </h3>
-          ${
-            this._co2ConfigEntry
-              ? html`
-                  <div class="items-container">
+          <div class="items-container">
+            ${
+              this._co2ConfigEntry
+                ? html`
                     <div class="row" .entry=${this._co2ConfigEntry}>
                       <img
                         alt=""
@@ -228,13 +226,20 @@ export class EnergyGridSettings extends LitElement {
                         .path=${mdiDelete}
                       ></ha-icon-button>
                     </div>
-                  </div>
-                `
+                  `
+                : html`<div class="empty">
+                    ${this.hass.localize("ui.panel.config.energy.grid.no_co2_signal")}
+                  </div>`
+            }
+          </div>
+          ${
+            this._co2ConfigEntry
+              ? nothing
               : html`
                   <div class="row">
                     <ha-button
                       @click=${this._addCO2Sensor}
-                      appearance=${this.pane ? "plain" : "filled"}
+                      appearance="filled"
                       size="s"
                     >
                       <ha-svg-icon .path=${mdiPlus} slot="start"></ha-svg-icon>

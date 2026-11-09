@@ -7,6 +7,7 @@ import { goBack } from "../common/navigate";
 import { haStyleScrollbar } from "../resources/styles";
 import "./ha-icon-button-arrow-prev";
 import "./ha-menu-button";
+import "./ha-top-search";
 
 const PASSIVE_EVENT_OPTIONS = { passive: true } as const;
 
@@ -41,7 +42,25 @@ export const haTopAppBarFixedStyles = css`
   }
 
   .top-app-bar.scrolled:not(.pane-header) {
-    box-shadow: var(--ha-box-shadow-s);
+    box-shadow: var(--ha-top-app-bar-scrolled-shadow, var(--ha-box-shadow-s));
+  }
+
+  /* In the framed desktop layout the scrolled shadow falls inside the
+     rounded canvas below the bar instead of across the whole bar. */
+  .top-app-bar::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    inset-inline-start: 0;
+    inset-inline-end: var(--ha-panel-frame-gutter, 0px);
+    height: var(--ha-border-radius-xl);
+    border-radius: var(--ha-border-radius-xl) var(--ha-border-radius-xl) 0 0;
+    pointer-events: none;
+    transition: box-shadow var(--ha-animation-duration-normal) ease;
+  }
+
+  .top-app-bar.scrolled:not(.pane-header)::after {
+    box-shadow: var(--ha-top-app-bar-canvas-shadow, none);
   }
 
   .row {
@@ -107,6 +126,13 @@ export const haTopAppBarFixedStyles = css`
     justify-content: flex-end;
   }
 
+  /* Desktop: the title and the actions take equal room on each side so the
+     search sits in the middle. */
+  .row:has(ha-top-search) #navigation,
+  .row:has(ha-top-search) .section.end {
+    flex: 1 1 0;
+  }
+
   .title {
     display: block;
     min-width: 0;
@@ -139,6 +165,65 @@ export const haTopAppBarFixedStyles = css`
 
   :host([narrow]) .top-app-bar-fixed-adjust {
     padding-left: var(--safe-area-inset-left);
+  }
+
+  /* While a side pane is open the page is framed the way the home
+     dashboard frames itself while editing: the canvas gives up its end side
+     and gets a primary border, and the pane sits on the chrome beside it.
+     The frame paints the chrome colour around the canvas, above the content
+     so it scrolls under the rounded edge. On a phone the pane is a bottom
+     sheet of its own and the canvas keeps its width. */
+  #side-pane,
+  .frame {
+    display: none;
+  }
+  :host([has-side-pane]) {
+    --ha-top-app-bar-side-pane-space: calc(
+      var(--ha-side-pane-width, 360px) +
+        var(--ha-panel-frame-gutter, var(--ha-space-2))
+    );
+  }
+  :host([has-side-pane][narrow]) {
+    --ha-top-app-bar-side-pane-space: 0px;
+  }
+  :host([has-side-pane]) .frame {
+    display: block;
+    position: fixed;
+    z-index: 2;
+    pointer-events: none;
+    top: calc(
+      var(--total-top-app-bar-height, 0px) + var(--safe-area-inset-top, 0px)
+    );
+    bottom: var(--safe-area-inset-bottom, 0px);
+    inset-inline-start: var(--ha-sidebar-width, 0px);
+    inset-inline-end: calc(
+      var(--safe-area-inset-right, 0px) + var(--ha-top-app-bar-side-pane-space)
+    );
+    border: 2px solid var(--primary-color);
+    border-radius: var(--ha-border-radius-xl);
+    box-shadow: 0 0 0 100vmax var(--app-header-background-color);
+  }
+  :host([has-side-pane][narrow]) .frame {
+    inset-inline-start: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  :host([has-side-pane]) .top-app-bar-fixed-adjust {
+    inset-inline-end: var(--ha-top-app-bar-side-pane-space);
+  }
+  :host([has-side-pane]:not([narrow])) #side-pane {
+    display: flex;
+    position: fixed;
+    z-index: 3;
+    top: calc(
+      var(--total-top-app-bar-height, 0px) + var(--safe-area-inset-top, 0px)
+    );
+    bottom: var(--safe-area-inset-bottom, 0px);
+    inset-inline-end: var(--safe-area-inset-right, 0px);
+    width: var(--ha-side-pane-width, 360px);
+  }
+  :host([has-side-pane][narrow]) #side-pane {
+    display: block;
   }
 `;
 
@@ -183,7 +268,11 @@ export class HaTopAppBarFixed extends LitElement {
   }
 
   protected render() {
-    return html`${this._renderHeader()}${this._renderContent()}`;
+    return html`${this._renderHeader()}${this._renderContent()}
+      <div class="frame"></div>
+      <div id="side-pane">
+        <slot name="side-pane" @slotchange=${this._sidePaneChanged}></slot>
+      </div>`;
   }
 
   override connectedCallback() {
@@ -229,6 +318,11 @@ export class HaTopAppBarFixed extends LitElement {
           ${
             !paneHeader && this.centerTitle
               ? html`<section class="section center">${title}</section>`
+              : nothing
+          }
+          ${
+            !paneHeader && !this.centerTitle && !this.narrow
+              ? html`<ha-top-search></ha-top-search>`
               : nothing
           }
           <section class="section end" id="actions" role="toolbar">
@@ -338,6 +432,14 @@ export class HaTopAppBarFixed extends LitElement {
           node.nodeType !== Node.TEXT_NODE || Boolean(node.textContent?.trim())
       );
   };
+
+  // The content makes room for a side pane while the page fills that slot
+  private _sidePaneChanged(ev: HASSDomCurrentTargetEvent<HTMLSlotElement>) {
+    this.toggleAttribute(
+      "has-side-pane",
+      ev.currentTarget.assignedElements({ flatten: true }).length > 0
+    );
+  }
 
   private _updateSubRowHeight = () => {
     const subRowHeight = this._hasSubRow

@@ -2,8 +2,12 @@ import {
   mdiBell,
   mdiCellphoneCog,
   mdiCog,
+  mdiEyeOff,
   mdiMenu,
   mdiMenuOpen,
+  mdiOpenInNew,
+  mdiPencil,
+  mdiRobot,
 } from "@mdi/js";
 import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
@@ -11,11 +15,15 @@ import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import memoizeOne from "memoize-one";
+import { isComponentLoaded } from "../common/config/is_component_loaded";
 import { fireEvent } from "../common/dom/fire_event";
 import { stringCompare } from "../common/string/compare";
 import { computeRTL } from "../common/util/compute_rtl";
 import { throttle } from "../common/util/throttle";
-import { subscribeFrontendUserData } from "../data/frontend";
+import {
+  saveFrontendUserData,
+  subscribeFrontendUserData,
+} from "../data/frontend";
 import type { ActionHandlerEvent } from "../data/lovelace/action_handler";
 import {
   FIXED_PANELS,
@@ -37,8 +45,13 @@ import { actionHandler } from "../panels/lovelace/common/directives/action-handl
 import { haStyleScrollbar } from "../resources/styles";
 import type { HomeAssistant, PanelInfo, Route } from "../types";
 import { isMobileClient } from "../util/is_mobile";
+import { navigate } from "../common/navigate";
 import "./animation/ha-fade-in";
+import type { HaDropdown, HaDropdownSelectEvent } from "./ha-dropdown";
+import "./ha-dropdown";
+import "./ha-dropdown-item";
 import "./ha-icon";
+import { mdiHomeAssistant } from "../resources/home-assistant-logo-svg";
 import "./ha-icon-button";
 import "./ha-spinner";
 import "./ha-svg-icon";
@@ -184,6 +197,13 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
 
   @state() private _hiddenPanels?: string[];
 
+  // Panel whose right-click menu is open.
+  @state() private _menuPanel?: PanelInfo;
+
+  @query("#panel-menu") private _panelMenu?: HaDropdown;
+
+  private _openingMenu = false;
+
   private _unsubPersistentNotifications: UnsubscribeFunc | undefined;
 
   @query(".before-spacer") private _scrollableList?: HTMLDivElement;
@@ -238,19 +258,22 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
     // prettier-ignore
     return html`
       ${this._renderHeader()}
-      ${this._renderAllPanels(selectedPanel)}`;
+      ${this._renderAllPanels(selectedPanel)}
+      ${this._renderPanelMenu()}`;
   }
 
   protected shouldUpdate(changedProps: PropertyValues): boolean {
     if (
       changedProps.has("expanded") ||
       changedProps.has("narrow") ||
+      changedProps.has("route") ||
       changedProps.has("alwaysExpand") ||
       changedProps.has("_updatesCount") ||
       changedProps.has("_issuesCount") ||
       changedProps.has("_notifications") ||
       changedProps.has("_hiddenPanels") ||
       changedProps.has("_panelOrder") ||
+      changedProps.has("_menuPanel") ||
       changedProps.has("_contentScrolled") ||
       changedProps.has("_contentScrollable")
     ) {
@@ -345,11 +368,20 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           ? html`
               <ha-icon-button
                 .label=${this.hass.localize("ui.sidebar.sidebar_toggle")}
-                .path=${
-                  this.hass.dockedSidebar === "docked" ? mdiMenuOpen : mdiMenu
-                }
+                class="logo-toggle"
                 @action=${this._toggleSidebar}
-              ></ha-icon-button>
+              >
+                <ha-svg-icon
+                  class="logo"
+                  .path=${mdiHomeAssistant}
+                ></ha-svg-icon>
+                <ha-svg-icon
+                  class="menu-icon"
+                  .path=${
+                    this.hass.dockedSidebar === "docked" ? mdiMenuOpen : mdiMenu
+                  }
+                ></ha-svg-icon>
+              </ha-icon-button>
             `
           : nothing
       }
@@ -408,6 +440,7 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
         ${renderList(
       html`<slot name="main-navigation">
         ${this._renderPanels(beforeSpacer, selectedPanel)}
+        ${this._renderAutomations()}
       </slot>`,
       "before-spacer",
       true
@@ -448,17 +481,22 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
     const urlPath = panel.url_path;
     const icon = getPanelIcon(panel);
     const iconPath = getPanelIconPath(panel);
+    const iconEl = iconPath
+      ? html`<ha-svg-icon slot="start" .path=${iconPath}></ha-svg-icon>`
+      : html`<ha-icon slot="start" .icon=${icon}></ha-icon>`;
 
     return html`
       <ha-list-item-button
         .href=${`/${urlPath}`}
         id="sidebar-panel-${urlPath}"
         class=${classMap({ selected: isSelected })}
+        data-panel=${urlPath}
+        @contextmenu=${this._openPanelMenu}
       >
         ${
-          iconPath
-            ? html`<ha-svg-icon slot="start" .path=${iconPath}></ha-svg-icon>`
-            : html`<ha-icon slot="start" .icon=${icon}></ha-icon>`
+          panel.component_name === "app"
+            ? html`<span slot="start" class="app-icon">${iconEl}</span>`
+            : iconEl
         }
         <span class="item-text" slot="headline">${title}</span>
       </ha-list-item-button>
@@ -474,11 +512,41 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
     return html`<div class="spacer" disabled></div>`;
   }
 
+  private get _isAutomationsSelected() {
+    return this.route?.path.startsWith("/config/automation") ?? false;
+  }
+
+  private _renderAutomations() {
+    if (
+      !this.hass.user?.is_admin ||
+      !isComponentLoaded(this.hass.config, "automation")
+    ) {
+      return nothing;
+    }
+    const title = this.hass.localize("ui.panel.config.automation.caption");
+    return html`
+      <ha-list-item-button
+        class=${classMap({ selected: this._isAutomationsSelected })}
+        href="/config/automation"
+        id="sidebar-automations"
+      >
+        <ha-svg-icon slot="start" .path=${mdiRobot}></ha-svg-icon>
+        <span class="item-text" slot="headline">${title}</span>
+      </ha-list-item-button>
+      ${
+        !this.alwaysExpand
+          ? this._renderToolTip("sidebar-automations", title)
+          : nothing
+      }
+    `;
+  }
+
   private _renderConfiguration(selectedPanel: string) {
     if (!this.hass.user?.is_admin) {
       return nothing;
     }
-    const isSelected = selectedPanel === "config";
+    const isSelected =
+      selectedPanel === "config" && !this._isAutomationsSelected;
     return html`
       <ha-list-item-button
         class="configuration ${classMap({ selected: isSelected })}"
@@ -628,6 +696,116 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
     </ha-tooltip>`;
   }
 
+  private _renderPanelMenu() {
+    const panel = this._menuPanel;
+    const isAdmin = this.hass.user?.is_admin;
+    const canHide =
+      panel && panel.url_path !== getDefaultPanelUrlPath(this.hass);
+    return html`<ha-dropdown
+      id="panel-menu"
+      placement="right-start"
+      @wa-select=${this._handlePanelMenuSelect}
+      @wa-after-show=${this._panelMenuOpened}
+      @wa-after-hide=${this._panelMenuClosed}
+    >
+      ${
+        panel
+          ? html`
+              <ha-dropdown-item value="new_tab">
+                <ha-svg-icon slot="icon" .path=${mdiOpenInNew}></ha-svg-icon>
+                ${this.hass.localize("ui.sidebar.panel_menu.open_in_new_tab")}
+              </ha-dropdown-item>
+              ${
+                isAdmin && panel.component_name === "lovelace"
+                  ? html`<ha-dropdown-item value="dashboard_settings">
+                      <ha-svg-icon slot="icon" .path=${mdiCog}></ha-svg-icon>
+                      ${this.hass.localize(
+                        "ui.sidebar.panel_menu.dashboard_settings"
+                      )}
+                    </ha-dropdown-item>`
+                  : nothing
+              }
+              ${
+                isAdmin && panel.component_name === "app" && panel.config?.addon
+                  ? html`<ha-dropdown-item value="app_settings">
+                      <ha-svg-icon slot="icon" .path=${mdiCog}></ha-svg-icon>
+                      ${this.hass.localize("ui.sidebar.panel_menu.app_settings")}
+                    </ha-dropdown-item>`
+                  : nothing
+              }
+              ${
+                canHide
+                  ? html`<ha-dropdown-item value="hide">
+                      <ha-svg-icon slot="icon" .path=${mdiEyeOff}></ha-svg-icon>
+                      ${this.hass.localize(
+                        "ui.sidebar.panel_menu.hide_from_sidebar"
+                      )}
+                    </ha-dropdown-item>`
+                  : nothing
+              }
+              <ha-dropdown-item value="edit_sidebar">
+                <ha-svg-icon slot="icon" .path=${mdiPencil}></ha-svg-icon>
+                ${this.hass.localize("ui.sidebar.edit_sidebar")}
+              </ha-dropdown-item>
+            `
+          : nothing
+      }
+    </ha-dropdown>`;
+  }
+
+  private async _openPanelMenu(ev: MouseEvent) {
+    const item = ev.currentTarget as HTMLElement;
+    const panel = this.hass.panels[item.dataset.panel!];
+    if (!panel || !this._panelMenu) {
+      return;
+    }
+    ev.preventDefault();
+    this._openingMenu = true;
+    this._menuPanel = panel;
+    await this.updateComplete;
+    this._panelMenu.anchorElement = item as HTMLButtonElement;
+    this._panelMenu.open = true;
+  }
+
+  private _panelMenuOpened = () => {
+    this._openingMenu = false;
+  };
+
+  private _panelMenuClosed = () => {
+    // changing the anchorElement triggers a close event, ignore it
+    if (this._openingMenu || !this._panelMenu) {
+      return;
+    }
+    this._panelMenu.anchorElement = undefined;
+  };
+
+  private async _handlePanelMenuSelect(ev: HaDropdownSelectEvent) {
+    const panel = this._menuPanel;
+    if (!panel) {
+      return;
+    }
+    switch (ev.detail.item.value) {
+      case "new_tab":
+        window.open(`/${panel.url_path}`, "_blank");
+        break;
+      case "dashboard_settings":
+        navigate("/config/lovelace/dashboards");
+        break;
+      case "app_settings":
+        navigate(`/config/app/${panel.config!.addon}/info`);
+        break;
+      case "hide":
+        await saveFrontendUserData(this.hass.connection, "sidebar", {
+          panelOrder: this._panelOrder ?? [],
+          hiddenPanels: [...(this._hiddenPanels ?? []), panel.url_path],
+        });
+        break;
+      case "edit_sidebar":
+        showEditSidebarDialog(this);
+        break;
+    }
+  }
+
   private _handleExternalAppConfiguration(ev: Event) {
     ev.preventDefault();
     this.hass.auth.external!.fireMessage({
@@ -712,6 +890,15 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
         }
         .menu ha-icon-button {
           color: var(--sidebar-icon-color);
+        }
+        .logo-toggle .menu-icon,
+        .logo-toggle:hover .logo,
+        .logo-toggle:focus-visible .logo {
+          display: none;
+        }
+        .logo-toggle:hover .menu-icon,
+        .logo-toggle:focus-visible .menu-icon {
+          display: inline-flex;
         }
         .title {
           margin-left: 3px;
@@ -819,6 +1006,25 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           color: var(--sidebar-icon-color);
         }
 
+        .app-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: var(--ha-space-6);
+          height: var(--ha-space-6);
+          flex-shrink: 0;
+          border-radius: var(--ha-border-radius-md);
+          background-color: var(--sidebar-icon-color);
+          --mdc-icon-size: 16px;
+        }
+        .app-icon ha-icon,
+        .app-icon ha-svg-icon {
+          color: var(--sidebar-background-color, var(--card-background-color));
+        }
+        ha-list-item-button.selected .app-icon {
+          background-color: var(--sidebar-selected-icon-color);
+        }
+
         ha-list-item-button.selected ha-svg-icon[slot="start"],
         ha-list-item-button.selected ha-icon[slot="start"] {
           color: var(--sidebar-selected-icon-color);
@@ -896,7 +1102,7 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           pointer-events: none;
         }
 
-        .menu ha-icon-button {
+        .logo-toggle .menu-icon {
           transform: scaleX(var(--scale-direction));
         }
 

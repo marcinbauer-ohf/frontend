@@ -4,6 +4,7 @@ import {
   mdiCommentEditOutline,
   mdiCommentTextOutline,
   mdiDelete,
+  mdiDotsHorizontal,
   mdiDotsVertical,
   mdiPlaylistEdit,
   mdiPlusCircleMultipleOutline,
@@ -24,6 +25,7 @@ import { capitalizeFirstLetter } from "../../../../common/string/capitalize-firs
 import { truncateWithEllipsis } from "../../../../common/string/truncate-with-ellipsis";
 import type { LocalizeFunc } from "../../../../common/translations/localize";
 import "../../../../components/automation/ha-automation-row";
+import "../../../../components/automation/ha-automation-collapsible";
 import type { HaAutomationRow } from "../../../../components/automation/ha-automation-row";
 import "../../../../components/ha-card";
 import "../../../../components/ha-dropdown";
@@ -219,6 +221,17 @@ export default class HaAutomationOptionRow extends LitElement {
     const note = getRowNote(this.option?.note);
 
     return html`
+      ${
+        this.option
+          ? html`<div slot="leading-icon" class="option-badge">
+              ${this.index + 1}
+            </div>`
+          : html`<ha-svg-icon
+              slot="leading-icon"
+              class="option-badge"
+              .path=${mdiDotsHorizontal}
+            ></ha-svg-icon>`
+      }
       <h3 slot="header">
         ${
           this.option
@@ -333,7 +346,7 @@ export default class HaAutomationOptionRow extends LitElement {
                 </ha-dropdown-item>
 
                 ${
-                  !this.optionsInSidebar
+                  !this.optionsInSidebar || this.narrow
                     ? html`
                         <ha-dropdown-item
                           value="move_up"
@@ -427,16 +440,25 @@ export default class HaAutomationOptionRow extends LitElement {
         card: !this.optionsInSidebar,
         indent: this.optionsInSidebar,
         selected: this._selected,
-        hidden: this.optionsInSidebar && this._collapsed,
       })}
     >
+      ${
+        this.optionsInSidebar
+          ? html`<button
+              class="collapse-rail"
+              tabindex="-1"
+              aria-hidden="true"
+              @click=${this._toggleCollapse}
+            ></button>`
+          : nothing
+      }
       ${
         this.option
           ? html`
               <h4 class="top">
                 ${this.hass.localize(
                   "ui.panel.config.automation.editor.actions.type.choose.conditions"
-                )}:
+                )}
               </h4>
               <ha-automation-condition
                 .conditions=${ensureArray<string | Condition>(
@@ -454,7 +476,7 @@ export default class HaAutomationOptionRow extends LitElement {
       <h4 class=${this.option ? "" : "top"}>
         ${this.hass.localize(
           "ui.panel.config.automation.editor.actions.type.choose.sequence"
-        )}:
+        )}
       </h4>
       <ha-automation-action
         .actions=${
@@ -482,6 +504,7 @@ export default class HaAutomationOptionRow extends LitElement {
           this.optionsInSidebar
             ? html`<ha-automation-row
                 left-chevron
+                building-block
                 .collapsed=${this._collapsed}
                 .selected=${this._selected}
                 .sortSelected=${this.sortSelected}
@@ -502,7 +525,22 @@ export default class HaAutomationOptionRow extends LitElement {
         }
       </ha-card>
 
-      ${this.optionsInSidebar ? this._renderContent() : nothing}
+      ${
+        this.optionsInSidebar
+          ? html`<ha-automation-collapsible
+              .collapsed=${this._collapsed}
+              .count=${
+                (
+                  ensureArray(
+                    this.option ? this.option.sequence : this.defaultActions
+                  ) ?? []
+                ).length
+              }
+              @toggle-collapsed=${this._toggleCollapse}
+              >${this._renderContent()}</ha-automation-collapsible
+            >`
+          : nothing
+      }
     `;
   }
 
@@ -775,7 +813,9 @@ export default class HaAutomationOptionRow extends LitElement {
     this._actionElement?.collapseAll();
   }
 
-  private _toggleCollapse() {
+  private _toggleCollapse(ev?: Event) {
+    // Nested blocks fire the same event; only the nearest row may act on it
+    ev?.stopPropagation();
     this._collapsed = !this._collapsed;
   }
 
@@ -790,11 +830,29 @@ export default class HaAutomationOptionRow extends LitElement {
       overflowStyles,
       indentStyle,
       css`
-        h4 {
-          color: var(--ha-color-text-secondary);
+        /* The option's position in the badge: options run top to bottom and
+           the first match wins, so the number is the one fact that is its
+           own. The default option gets an ellipsis: everything else. Sits in
+           the rotated building-block badge, so it is rotated back. */
+        .option-badge {
+          --mdc-icon-size: var(--ha-space-4);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: var(--ha-space-4);
+          height: var(--ha-space-4);
+          color: var(--white-color);
+          font-size: var(--ha-font-size-xs);
+          font-weight: var(--ha-font-weight-bold);
+          line-height: 1;
+          transform: rotate(-45deg);
         }
         h4 {
-          margin-bottom: 8px;
+          color: var(--ha-color-text-secondary);
+          font-size: var(--ha-font-size-m);
+          /* inset like the section empty states; tight to the rows below */
+          margin: var(--ha-space-3) 0 var(--ha-space-1) var(--ha-space-3);
+          margin-inline-start: var(--ha-space-3);
         }
         h4.top {
           margin-top: 0;

@@ -1,12 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SecurityFrontendSystemData } from "../../../../src/data/frontend";
-import type { EditSecurityDialogParams } from "../../../../src/panels/security/dialogs/show-dialog-edit-security";
 import type { HomeAssistantInternationalization } from "../../../../src/types";
-import "../../../../src/panels/security/dialogs/dialog-edit-security";
+import "../../../../src/panels/security/components/security-editor-pane";
 import { createMockHass } from "../../../fixtures/hass";
 
-interface TestEditSecurityDialog extends HTMLElement {
-  params: EditSecurityDialogParams;
+interface TestSecurityEditorPane extends HTMLElement {
+  config: SecurityFrontendSystemData;
   _i18n: HomeAssistantInternationalization;
   isDirtyState: boolean;
   connectedCallback(): void;
@@ -15,7 +14,7 @@ interface TestEditSecurityDialog extends HTMLElement {
 }
 
 const alertEntitiesChanged = (
-  dialog: TestEditSecurityDialog,
+  dialog: TestSecurityEditorPane,
   ev: CustomEvent
 ) =>
   (
@@ -25,17 +24,14 @@ const alertEntitiesChanged = (
     >
   )["_alertEntitiesChanged"](ev);
 
-describe("dialog-edit-security", () => {
+describe("security-editor-pane", () => {
   const createDialog = (config: SecurityFrontendSystemData = {}) => {
     const hass = createMockHass();
     const dialog = document.createElement(
-      "dialog-edit-security"
-    ) as unknown as TestEditSecurityDialog;
+      "security-editor-pane"
+    ) as unknown as TestSecurityEditorPane;
     dialog._i18n = hass;
-    dialog.params = {
-      config,
-      saveConfig: vi.fn(),
-    };
+    dialog.config = config;
     dialog.performUpdate = vi.fn();
     dialog.connectedCallback();
     return dialog;

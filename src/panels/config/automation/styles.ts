@@ -60,6 +60,24 @@ export const rowStyles = css`
     position: absolute;
   }
 
+  /*
+   * The overflow menu is revealed on hover so a resting list stays quiet. Only
+   * on pointer devices: without hover there is no way to bring it back, and it
+   * is the only route to move up/down now that the drag handle is gone.
+   * Opacity rather than visibility, so the button keeps its place in the layout
+   * and stays reachable by keyboard, which :focus-within then reveals.
+   */
+  @media (hover: hover) {
+    ha-dropdown[slot="icons"] {
+      opacity: 0;
+      transition: opacity var(--ha-animation-duration-fast, 100ms) ease-in-out;
+    }
+    :host(:hover) ha-dropdown[slot="icons"],
+    :host(:focus-within) ha-dropdown[slot="icons"] {
+      opacity: 1;
+    }
+  }
+
   .icon-badge-wrapper {
     position: relative;
     display: inline-flex;
@@ -142,24 +160,59 @@ export const editorStyles = css`
 `;
 
 export const indentStyle = css`
+  /*
+   * The frame colour sits between the quiet and normal border tokens: quiet
+   * disappears on the editor's low surface and normal is too heavy. A
+   * translucent layer of the text colour rather than a neutral step, so it
+   * inverts with the theme (see the chips for the same reasoning).
+   */
+  :host {
+    --ha-automation-frame-color: rgba(var(--rgb-primary-text-color), 0.2);
+  }
   .card-content.indent,
   .selector-row,
   :host([indent]) ha-form {
+    position: relative;
     margin-inline-start: 12px;
     padding-top: 12px;
     padding-bottom: 16px;
     padding-inline-start: 16px;
     padding-inline-end: 0px;
-    border-inline-start: 2px solid var(--ha-color-border-neutral-quiet);
-    border-bottom: 2px solid var(--ha-color-border-neutral-quiet);
+    /* Transparent: the frame is drawn by ::before so its bottom line can stop
+       short of the right edge, but the borders keep the box's geometry */
+    border-inline-start: 2px solid transparent;
+    border-bottom: 2px solid transparent;
+    background-clip: padding-box;
     border-radius: var(--ha-border-radius-square);
     border-end-start-radius: var(--ha-border-radius-lg);
+  }
+  /* The frame: an L that ends where the rows' corner rounding starts, like
+     the collapsed stand-in */
+  .card-content.indent::before,
+  .selector-row::before,
+  :host([indent]) ha-form::before {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    top: 0;
+    bottom: -2px;
+    inset-inline-start: -2px;
+    inset-inline-end: var(--ha-card-border-radius, var(--ha-border-radius-lg));
+    border-inline-start: 2px solid var(--ha-automation-frame-color);
+    border-bottom: 2px solid var(--ha-automation-frame-color);
+    border-end-start-radius: var(--ha-border-radius-lg);
+    transition: border-color var(--ha-animation-duration-instant);
+  }
+  .card-content.indent.selected::before,
+  :host([selected]) .card-content.indent::before,
+  .selector-row.parent-selected::before,
+  :host([selected]) ha-form::before {
+    border-color: var(--primary-color);
   }
   .card-content.indent.selected,
   :host([selected]) .card-content.indent,
   .selector-row.parent-selected,
   :host([selected]) ha-form {
-    border-color: var(--primary-color);
     background: var(--ha-color-fill-primary-quiet-resting);
     background: linear-gradient(
       to right,
@@ -167,6 +220,48 @@ export const indentStyle = css`
       var(--ha-color-fill-primary-quiet-resting) 80%,
       rgba(var(--rgb-primary-color), 0) 100%
     );
+  }
+  /*
+   * The indent frame doubles as the collapse control, the counterpart of the
+   * collapsed stack below a folded block. The button spans the content box
+   * but only its two pseudo-elements take pointer events: wide, transparent
+   * strips centred on the vertical line and on the bottom line, so the whole
+   * frame including the corner is clickable without covering the content.
+   * Hovering paints the frame itself in the primary colour.
+   */
+  .collapse-rail {
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: none;
+    pointer-events: none;
+  }
+  .collapse-rail::before,
+  .collapse-rail::after {
+    content: "";
+    position: absolute;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  /* the vertical line: 2px border sits just outside the padding box */
+  .collapse-rail::before {
+    top: 0;
+    bottom: calc(-1 * var(--ha-space-2) - 2px);
+    inset-inline-start: calc(-1 * var(--ha-space-2) - 2px);
+    width: calc(var(--ha-space-4) + 2px);
+  }
+  /* the bottom line, corner included; reaches down through the gap to the
+     next row, like the collapsed stand-in does */
+  .collapse-rail::after {
+    inset-inline-start: calc(-1 * var(--ha-space-2) - 2px);
+    inset-inline-end: 0;
+    bottom: calc(-1 * var(--ha-space-4) - 2px);
+    height: calc(var(--ha-space-6) + 2px);
+  }
+  .card-content.indent:has(> .collapse-rail:hover)::before {
+    border-color: var(--primary-color);
   }
 `;
 
@@ -200,7 +295,10 @@ export const manualEditorStyles = css`
       var(--ha-automation-editor-max-width) -
         ${CONTENT_MIN_WIDTH}px - var(--ha-sidebar-width, 0px)
     );
-    --sidebar-gap: var(--ha-space-4);
+    /* Clear of the canvas frame beside the sidebar */
+    --sidebar-gap: calc(
+      var(--ha-space-4) + var(--ha-panel-frame-gutter, var(--ha-space-2))
+    );
   }
 
   .fab-positioner {
@@ -227,7 +325,10 @@ export const manualEditorStyles = css`
 
   .content {
     padding-top: var(--ha-space-3);
-    padding-bottom: max(var(--safe-area-inset-bottom), 32px);
+    padding-bottom: calc(
+      max(var(--safe-area-inset-bottom), 32px) +
+        var(--ha-floating-bar-height, 0px)
+    );
     transition: padding-bottom 180ms ease-in-out;
   }
 
@@ -269,9 +370,62 @@ export const manualEditorStyles = css`
     display: none;
   }
 
+  /* The info pane sits exactly where the sidebar for a selected row does. */
+  .info-pane {
+    position: fixed;
+    top: calc(var(--header-height) + 16px);
+    height: calc(-81px + 100vh - var(--safe-area-inset-top, 0px));
+    height: calc(-81px + 100dvh - var(--safe-area-inset-top, 0px));
+    width: var(--sidebar-width);
+    display: block;
+    z-index: 6;
+  }
+
+  .info-pane ::slotted(*) {
+    height: calc(100% - var(--safe-area-inset-top, 0px));
+    margin-top: var(--safe-area-inset-top, 0px);
+  }
+
   .sidebar-positioner {
     display: flex;
     justify-content: flex-end;
+  }
+
+  /* On a wide screen an open sidebar sits on the chrome beside the canvas,
+     the way the dashboard editor's pane does: from the toolbar down to the
+     bar at the bottom, and the canvas gives up its end side and gets a
+     primary frame. The frame paints the chrome colour around the canvas,
+     above the content, so the content scrolls under its rounded edge. */
+  .has-sidebar ha-automation-sidebar,
+  .has-sidebar .info-pane {
+    top: calc(var(--header-height) + var(--safe-area-inset-top, 0px));
+    bottom: var(--safe-area-inset-bottom, 0px);
+    inset-inline-end: var(--safe-area-inset-right, 0px);
+    height: auto;
+    margin-top: 0;
+  }
+  .has-sidebar .info-pane ::slotted(*) {
+    height: 100%;
+    margin-top: 0;
+  }
+  .frame {
+    display: none;
+  }
+  .has-sidebar .frame {
+    display: block;
+    position: fixed;
+    z-index: 1;
+    pointer-events: none;
+    top: calc(var(--header-height) + var(--safe-area-inset-top, 0px));
+    bottom: var(--safe-area-inset-bottom, 0px);
+    inset-inline-start: var(--ha-sidebar-width, 0px);
+    inset-inline-end: calc(
+      var(--safe-area-inset-right, 0px) + var(--sidebar-width) +
+        var(--ha-panel-frame-gutter, var(--ha-space-2))
+    );
+    border: 2px solid var(--primary-color);
+    border-radius: var(--ha-border-radius-xl);
+    box-shadow: 0 0 0 100vmax var(--app-header-background-color);
   }
 
   .description {
@@ -308,24 +462,8 @@ export const automationRowsStyles = css`
   ha-automation-action-row,
   ha-automation-option-row {
     scroll-margin-bottom: var(--automation-bottom-sheet-height, 0px);
-  }
-  .handle {
-    padding: 4px;
     cursor: move; /* fallback if grab cursor is unsupported */
     cursor: grab;
-    border-radius: var(--ha-border-radius-pill);
-  }
-  .handle:focus {
-    outline: var(--wa-focus-ring);
-    background: var(--ha-color-fill-neutral-quiet-resting);
-  }
-  .handle.active {
-    outline: var(--wa-focus-ring);
-    background: var(--ha-color-fill-neutral-normal-active);
-  }
-  .handle ha-svg-icon {
-    pointer-events: none;
-    height: 24px;
   }
   .buttons {
     display: flex;
@@ -375,5 +513,50 @@ export const overflowStyles = css`
     .shortcut-placeholder {
       display: none;
     }
+  }
+`;
+
+/* The Edit and Traces choice on the automation editor and its traces:
+   a pill floating centred over the top of the content, its tabs styled
+   like the segments of a data table page such as Devices. A page with a
+   sidebar inside its content sets --ha-floating-bar-inset-end to clear it. */
+export const modeSwitchStyles = css`
+  .mode-switch-positioner {
+    position: sticky;
+    top: var(--ha-space-3);
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    margin-top: var(--ha-space-3);
+    padding-inline: var(--ha-space-4)
+      calc(var(--ha-floating-bar-inset-end, 0px) + var(--ha-space-4));
+    pointer-events: none;
+  }
+  .mode-switch-pill {
+    display: flex;
+    padding: var(--ha-space-1);
+    border-radius: var(--ha-border-radius-pill);
+    background: var(--card-background-color);
+    box-shadow: var(--ha-box-shadow-l);
+    pointer-events: auto;
+  }
+  .mode-switch {
+    --ha-tab-active-text-color: var(--primary-color);
+    --ha-tab-track-color: transparent;
+    --ha-tab-indicator-color: transparent;
+  }
+  .mode-switch::part(nav) {
+    padding: 0;
+  }
+  .mode-switch ha-tab-group-tab {
+    height: 40px;
+  }
+  .mode-switch ha-tab-group-tab::part(base) {
+    height: 100%;
+    padding: 0 var(--ha-space-4);
+    border-radius: var(--ha-border-radius-pill);
+  }
+  .mode-switch ha-tab-group-tab[active]::part(base) {
+    background: var(--ha-color-fill-primary-quiet-resting);
   }
 `;

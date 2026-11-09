@@ -4,7 +4,6 @@ import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { consume } from "../../../common/decorators/consume";
 import { fireEvent } from "../../../common/dom/fire_event";
-import { addDistanceToCoord } from "../../../common/location/add_distance_to_coord";
 import "../../../components/ha-dialog-footer";
 import "../../../components/ha-dialog";
 import "../../../components/ha-form/ha-form";
@@ -16,6 +15,13 @@ import { DirtyStateProviderMixin } from "../../../mixins/dirty-state-provider-mi
 import { haStyleDialog } from "../../../resources/styles";
 import type { HomeAssistant } from "../../../types";
 import type { ZoneDetailDialogParams } from "./show-dialog-zone-detail";
+import {
+  isZoneValid,
+  newZoneData,
+  zoneFormSchema,
+  zoneFromFormData,
+  zoneToFormData,
+} from "./zone-form";
 import {
   nextZoneColor,
   zoneColor,
@@ -50,25 +56,11 @@ class DialogZoneDetail extends DirtyStateProviderMixin<ZoneMutableParams>()(
     if (this._params.entry) {
       this._data = this._params.entry;
     } else {
-      const initConfig = getZoneEditorInitData();
-      const [latitude, longitude] =
-        initConfig?.latitude !== undefined &&
-        initConfig?.longitude !== undefined
-          ? [initConfig.latitude, initConfig.longitude]
-          : (this._params.location ??
-            addDistanceToCoord(
-              [this.hass.config.latitude, this.hass.config.longitude],
-              Math.random() * 500 * (Math.random() < 0.5 ? -1 : 1),
-              Math.random() * 500 * (Math.random() < 0.5 ? -1 : 1)
-            ));
-      this._data = {
-        latitude,
-        longitude,
-        name: initConfig?.name || "",
-        icon: initConfig?.icon || "mdi:map-marker",
-        passive: false,
-        radius: 100,
-      };
+      this._data = newZoneData(
+        [this.hass.config.latitude, this.hass.config.longitude],
+        getZoneEditorInitData(),
+        this._params.location
+      );
     }
     this._initDirtyTracking({ type: "deep" }, this._data);
     this._open = true;
@@ -88,20 +80,7 @@ class DialogZoneDetail extends DirtyStateProviderMixin<ZoneMutableParams>()(
     if (!this._params || !this._data) {
       return nothing;
     }
-    const nameInvalid = this._data.name.trim() === "";
-    const iconInvalid = Boolean(
-      this._data.icon && !this._data.icon.trim().includes(":")
-    );
-    const latInvalid = String(this._data.latitude) === "";
-    const lngInvalid = String(this._data.longitude) === "";
-    const radiusInvalid = String(this._data.radius) === "";
-
-    const valid =
-      !nameInvalid &&
-      !iconInvalid &&
-      !latInvalid &&
-      !lngInvalid &&
-      !radiusInvalid;
+    const valid = isZoneValid(this._data);
 
     // From the registry context, so a deep link opening before the registry
     // loads still resolves the color
@@ -135,8 +114,8 @@ class DialogZoneDetail extends DirtyStateProviderMixin<ZoneMutableParams>()(
         <ha-form
           autofocus
           .hass=${this.hass}
-          .schema=${this._schema(this._data.icon, color, this._data.name)}
-          .data=${this._formData(this._data)}
+          .schema=${zoneFormSchema(this._data.icon, color, this._data.name)}
+          .data=${zoneToFormData(this._data)}
           .error=${this._error}
           .computeLabel=${this._computeLabel}
           class=${this._data.passive ? "passive" : ""}
@@ -192,58 +171,14 @@ class DialogZoneDetail extends DirtyStateProviderMixin<ZoneMutableParams>()(
         : undefined
   );
 
-  private _schema = memoizeOne(
-    (icon?: string, color?: string, name?: string) =>
-      [
-        {
-          name: "name",
-          required: true,
-          selector: {
-            text: {},
-          },
-        },
-        {
-          name: "icon",
-          required: false,
-          selector: {
-            icon: {},
-          },
-        },
-        {
-          name: "location",
-          required: true,
-          selector: { location: { radius: true, icon, color, name } },
-        },
-        { name: "passive_note", type: "constant" },
-        { name: "passive", selector: { boolean: {} } },
-      ] as const
-  );
-
-  private _formData = memoizeOne((data: ZoneMutableParams) => ({
-    ...data,
-    location: {
-      latitude: data.latitude,
-      longitude: data.longitude,
-      radius: data.radius,
-    },
-  }));
-
   private _valueChanged(ev: CustomEvent) {
     this._error = undefined;
-    const value = { ...ev.detail.value };
-    value.latitude = value.location.latitude;
-    value.longitude = value.location.longitude;
-    value.radius = value.location.radius;
-    delete value.location;
-    if (!value.icon) {
-      delete value.icon;
-    }
-    this._data = value;
-    this._updateDirtyState(value);
+    this._data = zoneFromFormData(ev.detail.value);
+    this._updateDirtyState(this._data);
   }
 
   private _computeLabel = (
-    entry: SchemaUnion<ReturnType<typeof this._schema>>
+    entry: SchemaUnion<ReturnType<typeof zoneFormSchema>>
   ): string => this.hass.localize(`ui.panel.config.zone.detail.${entry.name}`);
 
   private async _updateEntry() {

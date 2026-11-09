@@ -23,7 +23,7 @@ export interface CheckConfigResult {
 }
 
 export const saveCoreConfig = (
-  hass: HomeAssistant,
+  hass: Pick<HomeAssistant, "callWS">,
   values: Partial<ConfigUpdateValues>
 ) =>
   hass.callWS<undefined>({

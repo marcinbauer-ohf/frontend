@@ -25,10 +25,7 @@ import {
   subMonths,
 } from "date-fns";
 import type { ContextType } from "@lit/context";
-import type {
-  HassConfig,
-  UnsubscribeFunc,
-} from "home-assistant-js-websocket";
+import type { HassConfig, UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -62,7 +59,6 @@ import type {
 import "../../../components/ha-button";
 import "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
-import "../../../components/ha-ripple";
 import "../../../components/ha-spinner";
 import "../../../components/ha-svg-icon";
 import {
@@ -330,7 +326,7 @@ export class HuiEnergyPeriodSelector extends LitElement {
       >
         <div class="backdrop"></div>
         <div class="content">
-          <section class="date-picker-icon">
+          <section class="date-range">
             <ha-date-range-picker
               .startDate=${this._startDate}
               .endDate=${this._endDate || new Date()}
@@ -340,81 +336,17 @@ export class HuiEnergyPeriodSelector extends LitElement {
               @preset-selected=${this._presetSelected}
               @toggle=${this._handleDatepickerToggle}
               minimal
+              .buttonLabel=${this._rangeLabel(
+                simpleRange,
+                Boolean(showSubtitleYear),
+                Boolean(showBothYear)
+              )}
               backdrop
               .popoverPlacement=${this._getDatePickerPlacement(
                 this.verticalOpeningDirection,
                 this.openingDirection
               )}
             ></ha-date-range-picker>
-          </section>
-          <section class="date-range" @click=${this._openDatePicker}>
-            <ha-ripple></ha-ripple>
-            <div class="header-title">
-              ${
-                simpleRange === "year"
-                  ? html`${formatDateYear(
-                      this._startDate,
-                      this._i18n.locale,
-                      this._hassConfig
-                    )}`
-                  : html`${
-                      simpleRange === "12month" ||
-                      simpleRange === "months" ||
-                      simpleRange === "quarter"
-                        ? html`${formatDateMonthShort(
-                            this._startDate,
-                            this._i18n.locale,
-                            this._hassConfig
-                          )}&ndash;${formatDateMonthShort(
-                            this._endDate || new Date(),
-                            this._i18n.locale,
-                            this._hassConfig
-                          )}`
-                        : html`${
-                            simpleRange === "month"
-                              ? html`${formatDateMonth(
-                                  this._startDate,
-                                  this._i18n.locale,
-                                  this._hassConfig
-                                )}`
-                              : simpleRange === "day"
-                                ? html`${formatDateVeryShort(
-                                    this._startDate,
-                                    this._i18n.locale,
-                                    this._hassConfig
-                                  )}`
-                                : html`${formatDateVeryShort(
-                                    this._startDate,
-                                    this._i18n.locale,
-                                    this._hassConfig
-                                  )}&ndash;${formatDateVeryShort(
-                                    this._endDate || new Date(),
-                                    this._i18n.locale,
-                                    this._hassConfig
-                                  )}`
-                          }`
-                    }`
-              }
-            </div>
-            ${
-              showSubtitleYear
-                ? html`<div class="header-subtitle">
-                    ${formatDateYear(
-                      this._startDate,
-                      this._i18n.locale,
-                      this._hassConfig
-                    )}${
-                      showBothYear
-                        ? html`&ndash;${formatDateYear(
-                            this._endDate || new Date(),
-                            this._i18n.locale,
-                            this._hassConfig
-                          )}`
-                        : ``
-                    }
-                  </div>`
-                : nothing
-            }
             <ha-spinner
               class=${classMap({
                 "loading-indicator": true,
@@ -561,18 +493,39 @@ export class HuiEnergyPeriodSelector extends LitElement {
     }
   );
 
-  private get _datePicker(): HaDateRangePicker | undefined {
-    return this.shadowRoot!.querySelector("ha-date-range-picker") ?? undefined;
-  }
-
   private _handleIconOverflowMenuOpened(ev: Event) {
     ev.stopPropagation();
   }
 
-  private _openDatePicker(ev: Event) {
-    const datePicker = this._datePicker;
-    if (datePicker) datePicker.open();
-    ev.stopPropagation();
+  // The range as one line: the calendar button's label
+  private _rangeLabel(
+    simpleRange: string,
+    showYear: boolean,
+    showBothYears: boolean
+  ): string {
+    const locale = this._i18n.locale;
+    const config = this._hassConfig;
+    const start = this._startDate!;
+    const end = this._endDate || new Date();
+    const range =
+      simpleRange === "year"
+        ? formatDateYear(start, locale, config)
+        : simpleRange === "12month" ||
+            simpleRange === "months" ||
+            simpleRange === "quarter"
+          ? `${formatDateMonthShort(start, locale, config)}–${formatDateMonthShort(end, locale, config)}`
+          : simpleRange === "month"
+            ? formatDateMonth(start, locale, config)
+            : simpleRange === "day"
+              ? formatDateVeryShort(start, locale, config)
+              : `${formatDateVeryShort(start, locale, config)}–${formatDateVeryShort(end, locale, config)}`;
+    if (!showYear) {
+      return range;
+    }
+    const years = showBothYears
+      ? `${formatDateYear(start, locale, config)}–${formatDateYear(end, locale, config)}`
+      : formatDateYear(start, locale, config);
+    return `${range} ${years}`;
   }
 
   private _updateCollectionPeriod() {
@@ -842,43 +795,16 @@ export class HuiEnergyPeriodSelector extends LitElement {
       align-items: center;
       box-sizing: border-box;
     }
-    .date-picker-icon {
-      flex: none;
-      min-width: var(--ha-space-2);
-      height: 100%;
-      display: flex;
-      flex-direction: row;
-    }
+    /* The calendar and the range are one button; it gives way first */
     .date-range {
       flex: 1;
-      padding: 2px var(--ha-space-2) 2px 0px;
       display: flex;
-      flex-direction: column;
-      justify-content: center;
-      min-height: var(--ha-space-10);
+      align-items: center;
       min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      cursor: pointer;
       position: relative;
     }
-    .header-title {
-      font-size: var(--ha-font-size-xl);
-      line-height: var(--ha-line-height-condensed);
-      font-weight: var(--ha-font-weight-medium);
-      color: var(--primary-text-color);
-    }
-    .header-subtitle {
-      font-size: var(--ha-font-size-m);
-      line-height: var(--ha-line-height-condensed);
-      color: var(--secondary-text-color);
-    }
-    :host([narrow]) .header-title {
-      font-size: var(--ha-font-size-m);
-    }
-    :host([narrow]) .header-subtitle {
-      font-size: var(--ha-font-size-s);
+    ha-date-range-picker {
+      min-width: 0;
     }
     .date-actions {
       flex: none;
@@ -909,13 +835,6 @@ export class HuiEnergyPeriodSelector extends LitElement {
       margin-inline-end: initial;
       flex-shrink: 0;
       --ha-button-theme-color: currentColor;
-    }
-    ha-ripple {
-      border-radius: var(--ha-card-border-radius, var(--ha-border-radius-lg));
-    }
-    :host([narrow]) ha-date-range-picker::part(range-input) {
-      --ha-icon-button-size: 24px;
-      --mdc-icon-size: 16px;
     }
     .backdrop {
       position: fixed;

@@ -49,6 +49,23 @@ export const energyCardStyles = css`
     border-top: 1px solid var(--divider-color);
     margin: 24px calc(var(--ha-space-4) * -1);
   }
+  .empty {
+    padding: var(--ha-space-2) var(--ha-space-3);
+    font-size: var(--ha-font-size-m);
+    color: var(--secondary-text-color);
+  }
+  /* Grouped list rows keep their regular height with 32px actions */
+  ha-grouped-list ha-icon-button {
+    --ha-icon-button-size: 32px;
+    --mdc-icon-size: 20px;
+  }
+  ha-grouped-list .handle {
+    color: var(--secondary-text-color);
+  }
+  :host([pane]) ha-grouped-list {
+    display: block;
+    margin-bottom: var(--ha-space-3);
+  }
   .items-container {
     border: 1px solid var(--ha-color-border-neutral-quiet);
     border-radius: var(--ha-border-radius-lg);
@@ -104,7 +121,10 @@ export const energyCardStyles = css`
     margin-inline-end: var(--ha-space-3);
     color: var(--secondary-text-color);
   }
-  :host([pane]) ha-button ha-svg-icon {
+  /* The add buttons sit in a .row too; keep their icon in the button's own
+     color and spacing rather than the row icons' ones. */
+  .row ha-button ha-svg-icon,
+  :host([pane]) .row ha-button ha-svg-icon {
     margin: 0;
     color: inherit;
   }

@@ -739,17 +739,22 @@ export class HatScriptGraph extends LitElement {
         --hat-graph-node-size: ${NODE_SIZE}px;
         --hat-graph-branch-height: ${BRANCH_HEIGHT}px;
       }
+      /* The graph sits in the middle of the space it has; auto margins
+         keep a graph larger than that scrollable from its start. */
       .graph-scroll {
         grid-area: 1 / 1;
         overflow: auto;
         min-width: 0;
         min-height: 0;
+        display: flex;
+        flex-direction: column;
       }
       .graph-container {
         display: flex;
         flex-direction: column;
         align-items: center;
         min-width: fit-content;
+        margin-block: auto;
       }
       .repeat-sequence {
         padding-inline: var(--ha-space-2);
@@ -779,9 +784,11 @@ export class HatScriptGraph extends LitElement {
         backdrop-filter: blur(8px);
         border-radius: var(--ha-border-radius-pill);
       }
+      /* Space around the graph; the block margins stay auto (above), which
+         centres it vertically. */
       .parent {
-        margin-left: 8px;
-        margin-top: 16px;
+        padding-inline-start: 8px;
+        padding-block: 16px;
       }
       .error {
         padding: 16px;

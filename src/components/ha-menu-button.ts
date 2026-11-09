@@ -13,7 +13,9 @@ import {
   uiContext,
 } from "../data/context";
 import { subscribeNotifications } from "../data/persistent_notification";
+import { mdiHomeAssistant } from "../resources/home-assistant-logo-svg";
 import "./ha-icon-button";
+import "./ha-svg-icon";
 import { consumeLocalize } from "../common/decorators/consume-context-entry";
 import type { LocalizeFunc } from "../common/translations/localize";
 
@@ -75,9 +77,11 @@ class HaMenuButton extends LitElement {
     return html`
       <ha-icon-button
         .label=${this._localize("ui.sidebar.sidebar_toggle")}
-        .path=${mdiMenu}
         @click=${this._toggleMenu}
-      ></ha-icon-button>
+      >
+        <ha-svg-icon class="logo" .path=${mdiHomeAssistant}></ha-svg-icon>
+        <ha-svg-icon class="menu-icon" .path=${mdiMenu}></ha-svg-icon>
+      </ha-icon-button>
       ${hasNotifications ? html`<div class="dot"></div>` : ""}
     `;
   }
@@ -139,6 +143,15 @@ class HaMenuButton extends LitElement {
   static styles = css`
     :host {
       position: relative;
+    }
+    .menu-icon,
+    ha-icon-button:hover .logo,
+    ha-icon-button:focus-visible .logo {
+      display: none;
+    }
+    ha-icon-button:hover .menu-icon,
+    ha-icon-button:focus-visible .menu-icon {
+      display: inline-flex;
     }
     .dot {
       pointer-events: none;

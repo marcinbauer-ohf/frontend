@@ -15,9 +15,12 @@ import {
 } from "../../common/url/query-params";
 import { debounce } from "../../common/util/debounce";
 import { deepEqual } from "../../common/util/deep-equal";
+import type { LocalizeKeys } from "../../common/translations/localize";
 import "../../components/ha-button";
+import "../../components/entity/ha-entity-picker";
+import "../../components/ha-summary-editor-pane";
+import "./components/home-area-editor-pane";
 import "../../components/ha-svg-icon";
-import { updateAreaRegistryEntry } from "../../data/area/area_registry";
 import { updateDeviceRegistryEntry } from "../../data/device/device_registry";
 import {
   fetchFrontendSystemData,
@@ -36,11 +39,10 @@ import type {
   ValueChangedEvent,
 } from "../../types";
 import { showToast } from "../../util/toast";
-import { showAreaRegistryDetailDialog } from "../config/areas/show-dialog-area-registry-detail";
 import { showDeviceRegistryDetailDialog } from "../config/devices/device-registry-detail/show-dialog-device-registry-detail";
 import { showAddIntegrationDialog } from "../config/integrations/show-add-integration-dialog";
 import "../lovelace/hui-root";
-import type { ExtraActionItem } from "../lovelace/hui-root";
+import type { EditAction } from "../lovelace/hui-root";
 import {
   checkStrategyShouldRegenerate,
   generateLovelaceDashboardStrategy,
@@ -53,6 +55,18 @@ import {
 } from "./components/home-editor-pane";
 import { showNewOverviewDialog } from "./dialogs/show-dialog-new-overview";
 import { hasLegacyOverviewPanel } from "../../data/panel";
+
+const SUBVIEW_EDIT_KEYS = {
+  "media-players": "ui.panel.home.edit_view.media_players",
+  automations: "ui.panel.home.edit_view.automations",
+  "other-devices": "ui.panel.home.edit_view.other_devices",
+  people: "ui.panel.home.edit_view.people",
+  weather: "ui.panel.home.edit_view.weather",
+} as const satisfies Record<string, LocalizeKeys>;
+
+type SubviewPath = keyof typeof SUBVIEW_EDIT_KEYS;
+
+const WEATHER_DOMAINS = ["weather"];
 
 @customElement("ha-panel-home")
 class PanelHome extends SubscribeMixin(LitElement) {
@@ -70,9 +84,13 @@ class PanelHome extends SubscribeMixin(LitElement) {
 
   @state() private _securityConfig: SecurityFrontendSystemData = {};
 
-  @state() private _extraActionItems?: ExtraActionItem[];
-
   @state() private _editing = false;
+
+  // The area whose editor pane is open
+  @state() private _editingArea?: string;
+
+  // A summary view whose pane is open
+  @state() private _editingSubview?: Exclude<SubviewPath, "people">;
 
   @state() private _editView?: EditorView;
 
@@ -136,7 +154,11 @@ class PanelHome extends SubscribeMixin(LitElement) {
     }
 
     if (changedProps.has("route")) {
-      this._updateExtraActionItems();
+      // The area pane belongs to the area view it was opened on
+      if (this.route?.path !== changedProps.get("route")?.path) {
+        this._editingArea = undefined;
+        this._editingSubview = undefined;
+      }
       this._applyEditLink();
     }
 
@@ -192,7 +214,6 @@ class PanelHome extends SubscribeMixin(LitElement) {
       .catch(() => undefined);
     void import("../lovelace/views/hui-sections-view").catch(() => undefined);
 
-    this._updateExtraActionItems();
     this._loadConfigPromise = this._loadConfig();
     await this._loadConfigPromise;
     this._setLovelace();
@@ -255,42 +276,60 @@ class PanelHome extends SubscribeMixin(LitElement) {
     this._setLovelace();
   }
 
-  private _updateExtraActionItems() {
+  // Home edit on the overview; a pencil on views with their own pane
+  private _editAction(): EditAction | null {
+    if (!this.hass.user?.is_admin || this.hass.kioskMode) {
+      return null;
+    }
     const path = this.route?.path?.split("/")[1];
+    if (!path || path === "overview") {
+      return {
+        icon: mdiHomeEdit,
+        label: "ui.panel.lovelace.menu.edit_overview",
+        action: this._startEditing,
+      };
+    }
+    if (path.startsWith("areas-")) {
+      return {
+        icon: mdiPencil,
+        label: "ui.panel.lovelace.menu.edit_area",
+        action: this._editArea,
+      };
+    }
+    if (path in SUBVIEW_EDIT_KEYS) {
+      const subview = path as SubviewPath;
+      return {
+        icon: mdiPencil,
+        label: SUBVIEW_EDIT_KEYS[subview],
+        action: () => this._editSubview(subview),
+      };
+    }
+    return null;
+  }
 
-    // The pane's close button is the way out of editing
-    if (this._editing) {
-      this._extraActionItems = undefined;
+  private _editArea = async () => {
+    const areaId = this.route?.path?.split("/")[1]?.replace("areas-", "");
+    if (!areaId || !this.hass.areas[areaId]) {
       return;
     }
+    await this.hass.loadFragmentTranslation("config");
+    this._editingArea = areaId;
+  };
 
-    if (path?.startsWith("areas-")) {
-      this._extraActionItems = [
-        {
-          icon: mdiPencil,
-          labelKey: "ui.panel.lovelace.menu.edit_area",
-          action: this._editArea,
-          text: true,
-        },
-      ];
-    } else if (!path || path === "overview") {
-      this._extraActionItems = [
-        {
-          icon: mdiHomeEdit,
-          labelKey: "ui.panel.lovelace.menu.edit_overview",
-          action: this._startEditing,
-        },
-      ];
-    } else {
-      this._extraActionItems = undefined;
+  private _editSubview(subview: SubviewPath) {
+    // People lives in the home editor; the rest get a summary pane
+    if (subview === "people") {
+      this._editView = "people";
+      this._startEditing();
+      return;
     }
+    this._editingSubview = subview;
   }
 
   private _startEditing = async () => {
     // The pane opens the floor and area dialogs, which live in the config panel
     await this.hass.loadFragmentTranslation("config");
     this._editing = true;
-    this._updateExtraActionItems();
   };
 
   // A link such as /home?edit=areas opens the editor on that view. The panel
@@ -322,33 +361,24 @@ class PanelHome extends SubscribeMixin(LitElement) {
     this._applyEditLink();
   }
 
+  private _weatherEntityChanged(ev: ValueChangedEvent<string | undefined>) {
+    ev.stopPropagation();
+    this._saveConfig({
+      ...this._config,
+      weather_entity: ev.detail.value || undefined,
+    });
+  }
+
   private _stopEditing = () => {
     this._editing = false;
     this._editView = undefined;
-    this._updateExtraActionItems();
+    this._editingArea = undefined;
+    this._editingSubview = undefined;
   };
 
   private _editorChanged(ev: ValueChangedEvent<HomeFrontendSystemData>) {
     this._saveConfig(ev.detail.value);
   }
-
-  private _editArea = async () => {
-    const path = this.route?.path?.split("/")[1];
-    if (!path?.startsWith("areas-")) {
-      return;
-    }
-    const areaId = path.replace("areas-", "");
-    const area = this.hass.areas[areaId];
-    if (!area) {
-      return;
-    }
-    await this.hass.loadFragmentTranslation("config");
-    showAreaRegistryDetailDialog(this, {
-      entry: area,
-      updateEntry: (values) =>
-        updateAreaRegistryEntry(this.hass, areaId, values),
-    });
-  };
 
   private _handleLLCustomEvent = (ev: Event) => {
     const detail = (ev as CustomEvent).detail;
@@ -405,9 +435,10 @@ class PanelHome extends SubscribeMixin(LitElement) {
         .lovelace=${this._lovelace}
         .route=${this.route}
         .panel=${this.panel}
-        no-edit
-        .editing=${this._editing}
-        .extraActionItems=${this._extraActionItems}
+        .editing=${
+          this._editing || !!this._editingArea || !!this._editingSubview
+        }
+        .editAction=${this._editAction()}
         @ll-custom=${this._handleLLCustomEvent}
         @side-pane-closed=${this._stopEditing}
         style=${huiRootStyle}
@@ -422,7 +453,37 @@ class PanelHome extends SubscribeMixin(LitElement) {
                 .narrow=${this.narrow}
                 @value-changed=${this._editorChanged}
               ></home-editor-pane>`
-            : nothing
+            : this._editingArea
+              ? html`<home-area-editor-pane
+                  slot="side-pane"
+                  .hass=${this.hass}
+                  .areaId=${this._editingArea}
+                  .narrow=${this.narrow}
+                ></home-area-editor-pane>`
+              : this._editingSubview === "weather"
+                ? html`<ha-summary-editor-pane
+                    slot="side-pane"
+                    .heading=${this.hass.localize(SUBVIEW_EDIT_KEYS.weather)}
+                    .narrow=${this.narrow}
+                    ><ha-entity-picker
+                      .hass=${this.hass}
+                      .label=${this.hass.localize(
+                        "ui.panel.home.editor.weather_entity"
+                      )}
+                      .value=${this._config?.weather_entity}
+                      .includeDomains=${WEATHER_DOMAINS}
+                      @value-changed=${this._weatherEntityChanged}
+                    ></ha-entity-picker
+                  ></ha-summary-editor-pane>`
+                : this._editingSubview
+                  ? html`<ha-summary-editor-pane
+                      slot="side-pane"
+                      .heading=${this.hass.localize(
+                        SUBVIEW_EDIT_KEYS[this._editingSubview]
+                      )}
+                      .narrow=${this.narrow}
+                    ></ha-summary-editor-pane>`
+                  : nothing
         }
       </hui-root>
     `;
@@ -485,6 +546,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
         hide_welcome_message: this._config?.hide_welcome_message,
         hide_suggested_entities: this._config?.hide_suggested_entities,
         shortcuts: this._config?.shortcuts,
+        weather_entity: this._config?.weather_entity,
       },
     };
   }

@@ -2,15 +2,12 @@ import "@home-assistant/webawesome/dist/components/divider/divider";
 import type { ContextType } from "@lit/context";
 import type { HassEntities } from "home-assistant-js-websocket";
 import {
-  mdiCheckCircleOutline,
-  mdiCompassOutline,
   mdiDotsVertical,
   mdiDownload,
   mdiLinkPlus,
   mdiOpenInNew,
   mdiStar,
   mdiStore,
-  mdiViewGridOutline,
 } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
@@ -56,7 +53,10 @@ import type { HaIconButton } from "../../../components/ha-icon-button";
 import type { LocalizeFunc } from "../../../common/translations/localize";
 import "../../../components/ha-svg-icon";
 import type { PageNavigation } from "../../../layouts/hass-tabs-subpage";
-import type { HaTabsSubpageDataTable } from "../../../layouts/hass-tabs-subpage-data-table";
+import type {
+  DataTableSegment,
+  HaTabsSubpageDataTable,
+} from "../../../layouts/hass-tabs-subpage-data-table";
 import type { HomeAssistantUI, Route } from "../../../types";
 import { showMarketplaceAddFromLink } from "../tools/add-from-link";
 import "../components/ha-marketplace-discover";
@@ -126,29 +126,20 @@ export type MarketplaceTab = "discover" | "browse" | "installed";
 
 const compact = { notation: "compact" } as const;
 
-const marketplaceTabs = (
-  localize: LocalizeFunc,
-  updates: number
-): PageNavigation[] => [
+const marketplaceTabs = [
   {
-    translationKey: "ui.panel.marketplace.tabs.discover",
     path: "/marketplace/discover",
-    iconPath: mdiCompassOutline,
+    translationKey: "ui.panel.marketplace.tabs.discover",
   },
   {
-    translationKey: "ui.panel.marketplace.tabs.browse",
     path: "/marketplace/browse",
-    iconPath: mdiViewGridOutline,
+    translationKey: "ui.panel.marketplace.tabs.browse",
   },
   {
-    translationKey: "ui.panel.marketplace.tabs.installed",
     path: "/marketplace/installed",
-    iconPath: mdiCheckCircleOutline,
-    badge: updates
-      ? localize("ui.panel.marketplace.tabs.updates", { count: updates })
-      : undefined,
+    translationKey: "ui.panel.marketplace.tabs.installed",
   },
-];
+] as const;
 
 // The installed tab lists what is installed, the others everything
 const repositoriesOfTab = (
@@ -330,24 +321,31 @@ export class HaMarketplaceDashboard extends LitElement {
         this._states ?? {}
       )
     );
-    const tabs = this._tabs(
-      this._i18n.localize,
-      marketplaceRepositories.filter((repository) => repository.pending_upgrade)
-        .length
-    );
+    const updates = marketplaceRepositories.filter(
+      (repository) => repository.pending_upgrade
+    ).length;
 
+    // The tabs are segments in the table's toolbar, the page keeps one name
+    const page = this._page(this._i18n.localize);
+    const segments = this._segments(this._i18n.localize, updates);
+
+    // Discover has nothing to search or filter, its sections are the body
     if (this.tab === "discover") {
-      return html`<hass-tabs-subpage
-        .tabs=${tabs}
+      return html`<hass-tabs-subpage-data-table
+        .tabs=${page}
         .narrow=${this.narrow}
         .route=${this.route}
         back-path="/config"
+        .segments=${segments}
+        .activeSegment=${`/marketplace/${this.tab}`}
+        @segment-changed=${this._segmentChanged}
+        no-tools
+        no-search
+        has-fab
+        .renderBody=${this._renderDiscover}
       >
-        ${this._renderToolbar()}
-        <ha-marketplace-discover
-          .marketplace=${this.marketplace}
-        ></ha-marketplace-discover>
-      </hass-tabs-subpage>`;
+        ${this._renderToolbar()}${this._renderFab()}
+      </hass-tabs-subpage-data-table>`;
     }
 
     const filters = this._filtersOfTab(this._filters, this.tab);
@@ -358,7 +356,11 @@ export class HaMarketplaceDashboard extends LitElement {
     );
 
     return html`<hass-tabs-subpage-data-table
-        .tabs=${tabs}
+        .tabs=${page}
+        .segments=${segments}
+        .activeSegment=${`/marketplace/${this.tab}`}
+        @segment-changed=${this._segmentChanged}
+        has-fab
         .columns=${this._columns(
           this._i18n.localize,
           this.narrow,
@@ -404,7 +406,7 @@ export class HaMarketplaceDashboard extends LitElement {
         @search-changed=${this._tableSettings.searchChanged}
         @sorting-changed=${this._tableSettings.sortingChanged}
       >
-        ${this._renderToolbar()}
+        ${this._renderToolbar()}${this._renderFab()}
         ${
           this.tab === "installed"
             ? html`<ha-assist-chip
@@ -493,30 +495,8 @@ export class HaMarketplaceDashboard extends LitElement {
       (repository) => repository.new
     );
 
-    const addFromLink = this._i18n.localize(
-      "ui.panel.marketplace.tabs.add_from_link"
-    );
-
     // The toolbar slot does not line up what is in it, this row centres them
     return html`<div class="toolbar-actions" slot="toolbar-icon">
-      ${
-        this.narrow
-          ? html`<ha-icon-button
-              class="add-from-link"
-              .label=${addFromLink}
-              .path=${mdiLinkPlus}
-              @click=${this._addFromLink}
-            ></ha-icon-button>`
-          : html`<ha-button
-              class="add-from-link"
-              appearance="outlined"
-              size="s"
-              @click=${this._addFromLink}
-            >
-              <ha-svg-icon slot="start" .path=${mdiLinkPlus}></ha-svg-icon>
-              ${addFromLink}
-            </ha-button>`
-      }
       <ha-dropdown @wa-select=${this._handleMenuAction}>
         <ha-icon-button
           slot="trigger"
@@ -540,7 +520,35 @@ export class HaMarketplaceDashboard extends LitElement {
     </div>`;
   }
 
-  private _tabs = memoize(marketplaceTabs);
+  private _renderFab() {
+    return html`<ha-button slot="fab" size="l" @click=${this._addFromLink}>
+      <ha-svg-icon slot="start" .path=${mdiLinkPlus}></ha-svg-icon>
+      ${this._i18n.localize("ui.panel.marketplace.tabs.add_from_link")}
+    </ha-button>`;
+  }
+
+  private _renderDiscover = () =>
+    html`<ha-marketplace-discover
+      .marketplace=${this.marketplace}
+    ></ha-marketplace-discover>`;
+
+  private _segmentChanged(ev: CustomEvent<{ value: string }>) {
+    navigate(ev.detail.value);
+  }
+
+  private _page = memoize((localize: LocalizeFunc): PageNavigation[] => [
+    { path: "/marketplace", name: localize("ui.panel.marketplace.title") },
+  ]);
+
+  // The installed tab counts its updates
+  private _segments = memoize(
+    (localize: LocalizeFunc, updates: number): DataTableSegment[] =>
+      marketplaceTabs.map((tab) => ({
+        value: tab.path,
+        label: localize(tab.translationKey),
+        count: tab.path === "/marketplace/installed" ? updates : undefined,
+      }))
+  );
 
   private _repositoriesOfTab = memoize(repositoriesOfTab);
 

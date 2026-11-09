@@ -17,7 +17,9 @@ import { fireEvent } from "../../common/dom/fire_event";
 import { configContext, internationalizationContext } from "../../data/context";
 import type { HomeAssistantConfig } from "../../types";
 import "../ha-bottom-sheet";
+import "../ha-button";
 import "../ha-icon-button";
+import "../ha-svg-icon";
 import "../ha-icon-button-next";
 import "../ha-icon-button-prev";
 import "../ha-textarea";
@@ -121,6 +123,12 @@ export class HaDateRangePicker extends LitElement {
   @property({ type: Boolean }) public disabled = false;
 
   @property({ type: Boolean }) public minimal = false;
+
+  /**
+   * With minimal, the range to show beside the calendar icon, making the
+   * icon one button with it.
+   */
+  @property({ attribute: "button-label" }) public buttonLabel?: string;
 
   @property({ attribute: "extended-presets", type: Boolean })
   public extendedPresets = false;
@@ -238,6 +246,19 @@ export class HaDateRangePicker extends LitElement {
    * popover anchors to.
    */
   protected _renderField() {
+    if (this.minimal && this.buttonLabel) {
+      return html`<ha-button
+        appearance="plain"
+        variant="neutral"
+        @click=${this._openPicker}
+        .disabled=${this.disabled}
+        id="field"
+      >
+        <ha-svg-icon slot="start" .path=${mdiCalendar}></ha-svg-icon>
+        ${this.buttonLabel}
+      </ha-button>`;
+    }
+
     if (this.minimal) {
       return html`<ha-icon-button
         @click=${this._openPicker}

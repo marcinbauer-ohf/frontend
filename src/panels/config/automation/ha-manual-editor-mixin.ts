@@ -2,7 +2,7 @@ import { mdiContentSave } from "@mdi/js";
 import {
   html,
   type LitElement,
-  type nothing,
+  nothing,
   type PropertyValues,
   type TemplateResult,
 } from "lit";
@@ -54,6 +54,17 @@ export const ManualEditorMixin = <TConfig>(
 
     @property({ type: Boolean }) public saving = false;
 
+    /** For a page that offers saving itself, such as in its floating bar. */
+    @property({ type: Boolean, attribute: "hide-save-button" })
+    public hideSaveButton = false;
+
+    /**
+     * Shows the page's info pane, slotted in as `info-pane`, where the
+     * sidebar for a selected row goes. The two take turns.
+     */
+    @property({ type: Boolean, attribute: "info-open" })
+    public infoOpen = false;
+
     @property({ attribute: false }) public config!: TConfig;
 
     @consume({ context: dirtyStateContext, subscribe: true })
@@ -72,15 +83,18 @@ export const ManualEditorMixin = <TConfig>(
 
     @state() private _bottomSheetHeight?: number;
 
+    // Shared with the editor's info pane, so a resize of either applies to both
     @storage({
       key: "automation-sidebar-width",
       state: false,
-      subscribe: false,
+      subscribe: true,
     })
     protected sidebarWidthPx = SIDEBAR_DEFAULT_WIDTH;
 
     @query("ha-automation-sidebar")
     protected sidebarElement?: HaAutomationSidebar;
+
+    @query(".info-pane") private _infoPaneElement?: HTMLElement;
 
     declare protected collapsableElements?: NodeListOf<
       Element & {
@@ -114,10 +128,12 @@ export const ManualEditorMixin = <TConfig>(
     }
 
     protected render() {
+      const showInfo = this.infoOpen && !this.sidebarConfig;
+      const hasSidebar = !!this.sidebarConfig || showInfo;
       return html`
         <div
           class=${classMap({
-            "has-sidebar": this.sidebarConfig && !this.narrow,
+            "has-sidebar": hasSidebar && !this.narrow,
           })}
         >
           <div
@@ -135,19 +151,27 @@ export const ManualEditorMixin = <TConfig>(
               <slot name="alerts"></slot>
               ${this.renderContent()}
             </div>
-            <div class="fab-positioner">
-              <ha-button
-                slot="fab"
-                size="l"
-                class=${this.dirty ? "dirty" : ""}
-                .disabled=${this.saving}
-                @click=${this.saveConfig}
-              >
-                <ha-svg-icon slot="start" .path=${mdiContentSave}></ha-svg-icon>
-                ${this.hass.localize("ui.common.save")}
-              </ha-button>
-            </div>
+            ${
+              this.hideSaveButton
+                ? nothing
+                : html`<div class="fab-positioner">
+                    <ha-button
+                      slot="fab"
+                      size="l"
+                      class=${this.dirty ? "dirty" : ""}
+                      .disabled=${this.saving}
+                      @click=${this.saveConfig}
+                    >
+                      <ha-svg-icon
+                        slot="start"
+                        .path=${mdiContentSave}
+                      ></ha-svg-icon>
+                      ${this.hass.localize("ui.common.save")}
+                    </ha-button>
+                  </div>`
+            }
           </div>
+          <div class="frame"></div>
           <div class="sidebar-positioner">
             <ha-automation-sidebar
               tabindex="-1"
@@ -164,6 +188,18 @@ export const ManualEditorMixin = <TConfig>(
               @sidebar-reset-size=${this.resetSidebarWidth}
               @bottom-sheet-resized=${this._handleBottomSheetResized}
             ></ha-automation-sidebar>
+            ${
+              showInfo
+                ? html`<div
+                    class="info-pane"
+                    @sidebar-resized=${this.resizeSidebar}
+                    @sidebar-resizing-stopped=${this.stopResizeSidebar}
+                    @sidebar-reset-size=${this.resetSidebarWidth}
+                  >
+                    <slot name="info-pane"></slot>
+                  </div>`
+                : nothing
+            }
           </div>
         </div>
       `;
@@ -181,6 +217,16 @@ export const ManualEditorMixin = <TConfig>(
       if (expanded === "1") {
         this.clearParam("expanded");
         this.expandAll();
+      }
+    }
+
+    protected updated(changedProps: PropertyValues<this>): void {
+      super.updated(changedProps);
+      if ((changedProps as Map<PropertyKey, unknown>).has("sidebarWidthPx")) {
+        this.style.setProperty(
+          "--sidebar-dynamic-width",
+          `${this.sidebarWidthPx}px`
+        );
       }
     }
 
@@ -331,7 +377,9 @@ export const ManualEditorMixin = <TConfig>(
       // set initial resize width to add / reduce delta from it
       if (!this._prevSidebarWidthPx) {
         this._prevSidebarWidthPx =
-          this.sidebarElement?.clientWidth || SIDEBAR_DEFAULT_WIDTH;
+          this.sidebarElement?.clientWidth ||
+          this._infoPaneElement?.clientWidth ||
+          SIDEBAR_DEFAULT_WIDTH;
       }
 
       const widthPx = delta + this._prevSidebarWidthPx;

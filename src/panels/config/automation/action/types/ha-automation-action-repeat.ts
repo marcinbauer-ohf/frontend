@@ -218,28 +218,20 @@ export class HaRepeatAction extends LitElement implements ActionElement {
           "ui.panel.config.automation.editor.actions.type.repeat.type.count.label"
         );
       case "while":
-        return (
-          this.hass.localize(
-            "ui.panel.config.automation.editor.actions.type.repeat.type.while.conditions"
-          ) + ":"
+        return this.hass.localize(
+          "ui.panel.config.automation.editor.actions.type.repeat.type.while.conditions"
         );
       case "until":
-        return (
-          this.hass.localize(
-            "ui.panel.config.automation.editor.actions.type.repeat.type.until.conditions"
-          ) + ":"
+        return this.hass.localize(
+          "ui.panel.config.automation.editor.actions.type.repeat.type.until.conditions"
         );
       case "for_each":
-        return (
-          this.hass.localize(
-            "ui.panel.config.automation.editor.actions.type.repeat.type.for_each.items"
-          ) + ":"
+        return this.hass.localize(
+          "ui.panel.config.automation.editor.actions.type.repeat.type.for_each.items"
         );
       case "sequence":
-        return (
-          this.hass.localize(
-            "ui.panel.config.automation.editor.actions.type.repeat.sequence"
-          ) + ":"
+        return this.hass.localize(
+          "ui.panel.config.automation.editor.actions.type.repeat.sequence"
         );
     }
     return "";

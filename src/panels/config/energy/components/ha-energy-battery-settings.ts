@@ -86,10 +86,10 @@ export class EnergyBatterySettings extends LitElement {
               ></ha-energy-validation-result>
             `
           )}
-          ${
-            batterySources.length > 0
-              ? html`
-                  <div class="items-container">
+          <div class="items-container">
+            ${
+              batterySources.length > 0
+                ? html`
                     ${batterySources.map((source) => {
                       const toEntityState =
                         this.hass.states[source.stat_energy_to];
@@ -150,16 +150,14 @@ export class EnergyBatterySettings extends LitElement {
                         </div>
                       `;
                     })}
-                  </div>
-                `
-              : ""
-          }
+                  `
+                : html`<div class="empty">
+                    ${this.hass.localize("ui.panel.config.energy.battery.no_battery_systems")}
+                  </div>`
+            }
+          </div>
           <div class="row">
-            <ha-button
-              @click=${this._addSource}
-              appearance=${this.pane ? "plain" : "filled"}
-              size="s"
-            >
+            <ha-button @click=${this._addSource} appearance="filled" size="s">
               <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
               ${this.hass.localize(
                 "ui.panel.config.energy.battery.add_battery_system"

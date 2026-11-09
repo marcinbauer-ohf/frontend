@@ -1,4 +1,5 @@
 import "@home-assistant/webawesome/dist/components/divider/divider";
+import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import { ResizeController } from "@lit-labs/observers/resize-controller";
 import {
   mdiCancel,
@@ -21,6 +22,7 @@ import { consume } from "../../../common/decorators/consume";
 import { storage } from "../../../common/decorators/storage";
 import type { HASSDomEvent } from "../../../common/dom/fire_event";
 import { fireEvent } from "../../../common/dom/fire_event";
+import { withViewTransition } from "../../../common/util/view-transition";
 import { computeDeviceNameDisplay } from "../../../common/entity/compute_device_name";
 import { computeEntityEntryName } from "../../../common/entity/compute_entity_name_display";
 import { computeFloorName } from "../../../common/entity/compute_floor_name";
@@ -63,6 +65,7 @@ import "../../../components/ha-filter-labels";
 import "../../../components/ha-filter-states";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-state-icon";
+import "../../../components/item/ha-row-item";
 import { createAreaRegistryEntry } from "../../../data/area/area_registry";
 import type { ConfigEntry, SubEntry } from "../../../data/config_entries";
 import { getSubEntries, sortConfigEntries } from "../../../data/config_entries";
@@ -95,16 +98,24 @@ import {
   showConfirmationDialog,
 } from "../../../dialogs/generic/show-dialog-box";
 import { showMoreInfoDialog } from "../../../dialogs/more-info/show-ha-more-info-dialog";
-import {
-  deviceCardEntities,
-  resolveDeviceCardEntities,
-} from "../../lovelace/cards/device/device-card-entities";
-import "../../lovelace/cards/hui-card";
-import type { DeviceCardConfig } from "../../lovelace/cards/types";
+import { resolveDeviceCardEntities } from "../../lovelace/cards/device/device-card-entities";
 import "../../../layouts/hass-tabs-subpage-data-table";
+import "./ha-devices-dashboard-body";
+import type {
+  DevicesSegment,
+  DiscoveredFlow,
+} from "./ha-devices-dashboard-body";
+import {
+  DISCOVERY_SOURCES,
+  localizeConfigFlowTitle,
+  subscribeConfigFlowInProgress,
+} from "../../../data/config_flow";
+import type { DataEntryFlowProgress } from "../../../data/data_entry_flow";
+import { SubscribeMixin } from "../../../mixins/subscribe-mixin";
 import type { HaTabsSubpageDataTable } from "../../../layouts/hass-tabs-subpage-data-table";
 import type { PageNavigation } from "../../../layouts/hass-tabs-subpage";
-import { haStyle } from "../../../resources/styles";
+import { fabCreateMenuStyles, haStyle } from "../../../resources/styles";
+import { computeDomain } from "../../../common/entity/compute_domain";
 import type { HomeAssistant, Route } from "../../../types";
 import { brandsUrl } from "../../../util/brands-url";
 import { showAreaRegistryDetailDialog } from "../areas/show-dialog-area-registry-detail";
@@ -115,12 +126,34 @@ import {
   getLabelsTableColumn,
   getModifiedAtTableColumn,
 } from "../common/data-table-columns";
-import "../integrations/ha-integration-overflow-menu";
 import { showAddIntegrationDialog } from "../integrations/show-add-integration-dialog";
 import { showHelperDetailDialog } from "../helpers/show-dialog-helper-detail";
 import { showLabelDetailDialog } from "../labels/show-dialog-label-detail";
 
 // The one tab names the page; there is nothing to switch to
+// Device-less entities that aren't things in the home: people, places and
+// logic. They have their own pages, so they don't belong in this list.
+const NOT_DEVICE_DOMAINS = new Set([
+  "ai_task",
+  "automation",
+  "conversation",
+  "person",
+  "persistent_notification",
+  "scene",
+  "script",
+  "stt",
+  "sun",
+  "tts",
+  "wake_word",
+  "zone",
+]);
+
+const SEGMENT_LABELS = {
+  devices: "ui.panel.config.devices.picker.your_devices",
+  discovered: "ui.panel.config.integrations.discovered",
+  ignored: "ui.panel.config.integrations.ignore.ignored",
+} as const;
+
 const DEVICES_TABS: PageNavigation[] = [
   {
     path: "/devices",
@@ -138,7 +171,7 @@ interface DeviceRowData extends DeviceRegistryEntry {
 }
 
 @customElement("ha-config-devices-dashboard")
-export class HaConfigDeviceDashboard extends LitElement {
+export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @property({ type: Boolean }) public narrow = false;
@@ -200,6 +233,48 @@ export class HaConfigDeviceDashboard extends LitElement {
 
   @storage({ key: "devices-view", state: true, subscribe: false })
   private _view: "cards" | "table" = "cards";
+
+  @state() private _segment: DevicesSegment = "devices";
+
+  @state() private _discovered: DiscoveredFlow[] = [];
+
+  // ponytail: refetches the titles of every flow on each change, fine for the
+  // handful of discovered devices a home has
+  public hassSubscribe(): (UnsubscribeFunc | Promise<UnsubscribeFunc>)[] {
+    if (!this.hass.user?.is_admin) {
+      return [];
+    }
+    let flows: DataEntryFlowProgress[] = [];
+    return [
+      subscribeConfigFlowInProgress(this.hass, async (messages) => {
+        // An empty update, or one with null types, is a full refresh
+        if (!messages.length || messages.some((m) => m.type === null)) {
+          flows = [];
+        }
+        for (const message of messages) {
+          flows =
+            message.type === "removed"
+              ? flows.filter((flow) => flow.flow_id !== message.flow_id)
+              : DISCOVERY_SOURCES.includes(message.flow.context.source)
+                ? [...flows, message.flow]
+                : flows;
+        }
+        const current = flows;
+        const localize = current.length
+          ? await this.hass.loadBackendTranslation(
+              "config",
+              current.map((flow) => flow.handler)
+            )
+          : this.hass.localize;
+        if (current === flows) {
+          this._discovered = current.map((flow) => ({
+            ...flow,
+            localized_title: localizeConfigFlowTitle(localize, flow),
+          }));
+        }
+      }),
+    ];
+  }
 
   @storage({ key: "devices-table-sort", state: false, subscribe: false })
   private _activeSorting?: SortingChangedEvent;
@@ -641,6 +716,7 @@ export class HaConfigDeviceDashboard extends LitElement {
         for (const entity of entities) {
           if (
             entity.device_id ||
+            NOT_DEVICE_DOMAINS.has(computeDomain(entity.entity_id)) ||
             (!showDisabled && entity.disabled_by) ||
             (integrationFilter?.length &&
               !integrationFilter.includes(entity.platform))
@@ -653,7 +729,11 @@ export class HaConfigDeviceDashboard extends LitElement {
         // Entities without a unique id are not in the registry at all
         const registered = new Set(entities.map((entity) => entity.entity_id));
         for (const entityId of Object.keys(this.hass.states)) {
-          if (!registered.has(entityId) && !integrationFilter?.length) {
+          if (
+            !registered.has(entityId) &&
+            !integrationFilter?.length &&
+            !NOT_DEVICE_DOMAINS.has(computeDomain(entityId))
+          ) {
             virtualGroups.set(entityId, [
               {
                 entity_id: entityId,
@@ -683,6 +763,7 @@ export class HaConfigDeviceDashboard extends LitElement {
           kind: localize("ui.panel.config.devices.data_table.kind_virtual"),
           name: first?.name ?? entry?.title ?? key,
           area: first?.area,
+          area_id: first?.area_id,
           domains: [domain],
           integration: domainToName(localize, domain),
           config_entry_id: entry?.entry_id,
@@ -723,6 +804,7 @@ export class HaConfigDeviceDashboard extends LitElement {
       name,
       entity_search: `${name} ${entity.entity_id}`,
       area: entity.area_id ? areas[entity.area_id]?.name : undefined,
+      area_id: entity.area_id ?? undefined,
       disabled_by: entity.disabled_by,
       labels: [],
       label_entries: [],
@@ -1086,47 +1168,79 @@ export class HaConfigDeviceDashboard extends LitElement {
         @row-click=${this._handleRowClicked}
         clickable
         has-fab
-        .renderCard=${this._view === "cards" ? this._renderCard : undefined}
-        class=${classMap({ narrow: this.narrow, cards: this._view === "cards" })}
+        .segments=${(["devices", "discovered", "ignored"] as const).map(
+          (value) => ({
+            value,
+            label: this.hass.localize(SEGMENT_LABELS[value]),
+            count:
+              value === "discovered"
+                ? this._discovered.length
+                : value === "ignored"
+                  ? this.entries?.filter((entry) => entry.source === "ignore")
+                      .length
+                  : undefined,
+          })
+        )}
+        .activeSegment=${this._segment}
+        @segment-changed=${this._segmentChanged}
+        .noTools=${this._segment !== "devices"}
+        .renderBody=${
+          this._view === "cards" || this._segment !== "devices"
+            ? this._renderBody
+            : undefined
+        }
+        class=${classMap({
+          narrow: this.narrow,
+          cards: this._view === "cards" || this._segment !== "devices",
+        })}
       >
         <ha-icon-button
-          slot="toolbar-icon"
+          slot="toolbar-action"
           .path=${this._view === "cards" ? mdiTableLarge : mdiViewGridOutline}
           .label=${this.hass.localize(
             `ui.panel.config.devices.picker.${this._view === "cards" ? "show_table" : "show_cards"}`
           )}
           @click=${this._toggleView}
         ></ha-icon-button>
-        <ha-integration-overflow-menu
-          .hass=${this.hass}
-          slot="toolbar-icon"
-        ></ha-integration-overflow-menu>
-        <ha-dropdown slot="fab" @wa-select=${this._handleAdd}>
+        <ha-dropdown
+          slot="fab"
+          class="create-menu"
+          placement="top"
+          .distance=${8}
+          @wa-select=${this._handleAdd}
+        >
           <ha-button slot="trigger" size="l">
             <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
             ${this.hass.localize("ui.panel.config.devices.add_device")}
           </ha-button>
-          <ha-dropdown-item value="device">
-            <ha-svg-icon slot="icon" .path=${mdiDevices}></ha-svg-icon>
-            <div class="add-item">
-              ${this.hass.localize("ui.panel.config.devices.add.device")}
-              <span class="secondary">
-                ${this.hass.localize(
-                  "ui.panel.config.devices.add.device_description"
-                )}
-              </span>
-            </div>
+          <ha-dropdown-item value="device" class="create-option primary">
+            <ha-row-item
+              .headline=${this.hass.localize("ui.panel.config.devices.add.device")}
+              .supportingText=${this.hass.localize(
+                "ui.panel.config.devices.add.device_description"
+              )}
+            >
+              <ha-svg-icon
+                slot="start"
+                class="create-option-icon"
+                .path=${mdiDevices}
+              ></ha-svg-icon>
+            </ha-row-item>
           </ha-dropdown-item>
-          <ha-dropdown-item value="virtual">
-            <ha-svg-icon slot="icon" .path=${mdiShapeOutline}></ha-svg-icon>
-            <div class="add-item">
-              ${this.hass.localize("ui.panel.config.devices.add.virtual")}
-              <span class="secondary">
-                ${this.hass.localize(
-                  "ui.panel.config.devices.add.virtual_description"
-                )}
-              </span>
-            </div>
+          <wa-divider></wa-divider>
+          <ha-dropdown-item value="virtual" class="create-option">
+            <ha-row-item
+              .headline=${this.hass.localize("ui.panel.config.devices.add.virtual")}
+              .supportingText=${this.hass.localize(
+                "ui.panel.config.devices.add.virtual_description"
+              )}
+            >
+              <ha-svg-icon
+                slot="start"
+                class="create-option-icon"
+                .path=${mdiShapeOutline}
+              ></ha-svg-icon>
+            </ha-row-item>
           </ha-dropdown-item>
         </ha-dropdown>
         ${
@@ -1202,17 +1316,12 @@ export class HaConfigDeviceDashboard extends LitElement {
                   slot="selection-bar"
                   @wa-select=${this._handleBulkLabel}
                 >
-                  <ha-assist-chip
-                    slot="trigger"
-                    .label=${this.hass.localize(
+                  <ha-button appearance="filled" variant="brand" slot="trigger">
+                    <ha-svg-icon slot="end" .path=${mdiMenuDown}></ha-svg-icon>
+                    ${this.hass.localize(
                       "ui.panel.config.automation.picker.bulk_actions.add_label"
-                    )}
+                    )}</ha-button
                   >
-                    <ha-svg-icon
-                      slot="trailing-icon"
-                      .path=${mdiMenuDown}
-                    ></ha-svg-icon>
-                  </ha-assist-chip>
                   ${this._renderLabelItems()}
                 </ha-dropdown>
 
@@ -1223,17 +1332,19 @@ export class HaConfigDeviceDashboard extends LitElement {
                         slot="selection-bar"
                         @wa-select=${this._handleBulkArea}
                       >
-                        <ha-assist-chip
+                        <ha-button
+                          appearance="filled"
+                          variant="brand"
                           slot="trigger"
-                          .label=${this.hass.localize(
-                            "ui.panel.config.devices.picker.bulk_actions.move_area"
-                          )}
                         >
                           <ha-svg-icon
-                            slot="trailing-icon"
+                            slot="end"
                             .path=${mdiMenuDown}
                           ></ha-svg-icon>
-                        </ha-assist-chip>
+                          ${this.hass.localize(
+                            "ui.panel.config.devices.picker.bulk_actions.move_area"
+                          )}</ha-button
+                        >
                         ${this._renderAreaItems()}
                       </ha-dropdown>`
                 }`
@@ -1242,17 +1353,16 @@ export class HaConfigDeviceDashboard extends LitElement {
         <ha-dropdown slot="selection-bar" @wa-select=${this._handleBulkAction}>
           ${
             this.narrow
-              ? html`<ha-assist-chip
-                  .label=${this.hass.localize(
-                    "ui.panel.config.automation.picker.bulk_action"
-                  )}
+              ? html`<ha-button
+                  appearance="filled"
+                  variant="brand"
                   slot="trigger"
                 >
-                  <ha-svg-icon
-                    slot="trailing-icon"
-                    .path=${mdiMenuDown}
-                  ></ha-svg-icon>
-                </ha-assist-chip>`
+                  <ha-svg-icon slot="end" .path=${mdiMenuDown}></ha-svg-icon>
+                  ${this.hass.localize(
+                    "ui.panel.config.automation.picker.bulk_action"
+                  )}</ha-button
+                >`
               : html`<ha-icon-button
                   .path=${mdiDotsVertical}
                   .label=${this.hass.localize(
@@ -1383,47 +1493,27 @@ export class HaConfigDeviceDashboard extends LitElement {
     );
   }
 
+  // Cards and table share one card, so only its contents crossfade
   private _toggleView() {
-    this._view = this._view === "cards" ? "table" : "cards";
+    withViewTransition(() => {
+      this._view = this._view === "cards" ? "table" : "cards";
+    });
   }
 
-  private _cardConfigs = new Map<string, DeviceCardConfig>();
-
-  // A Lovelace card is rebuilt whenever its config object changes, so each
-  // row keeps the one it was first given
-  private _cardConfig(row: DataTableRowData): DeviceCardConfig {
-    const entityIds: string[] = row.virtual
-      ? row.entity_id
-        ? [row.entity_id]
-        : (row.subRows ?? []).map((child) => child.entity_id)
-      : [];
-    const key = `${row.id}|${entityIds.join(",")}`;
-    let config = this._cardConfigs.get(key);
-    if (!config) {
-      // Only the primary entity: the rest of the device lives in its more info
-      if (row.virtual) {
-        config = { type: "device", entity: entityIds[0], name: row.name };
-      } else {
-        const hero = this._deviceHero(row.id);
-        config = {
-          type: "device",
-          device: row.id,
-          entity: hero,
-          hidden_entities: deviceCardEntities(this.hass, row.id).filter(
-            (entityId) => entityId !== hero
-          ),
-        };
-      }
-      this._cardConfigs.set(key, config);
-    }
-    return config;
-  }
-
-  private _renderCard = (row: DataTableRowData) =>
-    html`<hui-card
+  private _renderBody = (rows: DataTableRowData[], groupColumn?: string) =>
+    html`<ha-devices-dashboard-body
       .hass=${this.hass}
-      .config=${this._cardConfig(row)}
-    ></hui-card>`;
+      .rows=${rows}
+      .groupColumn=${groupColumn}
+      .entries=${this.entries}
+      .segment=${this._segment}
+      .filter=${this._filter}
+      .discovered=${this._discovered}
+    ></ha-devices-dashboard-body>`;
+
+  private _segmentChanged(ev: CustomEvent<{ value: string }>) {
+    this._segment = ev.detail.value as DevicesSegment;
+  }
 
   private _handleSearchChange(ev: CustomEvent) {
     this._filter = ev.detail.value;
@@ -1670,6 +1760,7 @@ ${rejected
       css`
         :host {
           display: block;
+          height: 100%;
         }
         hass-tabs-subpage-data-table {
           --data-table-row-height: 60px;
@@ -1680,12 +1771,6 @@ ${rejected
         hass-tabs-subpage-data-table.cards {
           --data-table-background-color: transparent;
           --data-table-border-width: 0;
-          /* At most four columns: a card is never narrower than a quarter
-             of the row, less its share of the gaps */
-          --ha-data-table-card-min-width: max(
-            280px,
-            calc(25% - var(--ha-space-3))
-          );
         }
         .clear {
           color: var(--primary-color);
@@ -1694,9 +1779,6 @@ ${rejected
           text-transform: uppercase;
           direction: var(--direction);
         }
-        ha-assist-chip {
-          --ha-assist-chip-container-shape: 10px;
-        }
         ha-alert ha-skeleton-text {
           --ha-skeleton-text-width: 100px;
         }
@@ -1704,21 +1786,13 @@ ${rejected
         ha-dropdown::part(submenu) {
           --auto-size-available-width: calc(50vw - var(--ha-space-4));
         }
-        .add-item {
-          display: flex;
-          flex-direction: column;
-          white-space: normal;
-        }
-        .add-item .secondary,
         .secondary {
           color: var(--secondary-text-color);
           font-size: var(--ha-font-size-s);
         }
-        ha-dropdown ha-assist-chip {
-          --ha-assist-chip-trailing-space: 8px;
-        }
       `,
       haStyle,
+      fabCreateMenuStyles,
     ];
   }
 }

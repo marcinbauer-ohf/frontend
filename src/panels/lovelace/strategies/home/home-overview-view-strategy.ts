@@ -28,15 +28,12 @@ import { hasClimateEntities } from "../../../climate/strategies/climate-view-str
 import type {
   AreaCardConfig,
   ConditionalCardConfig,
-  DiscoveredDevicesCardConfig,
   EmptyStateCardConfig,
   HeadingCardConfig,
   HomeSummaryCard,
   MarkdownCardConfig,
-  RepairsCardConfig,
   ShortcutCardConfig,
   TileCardConfig,
-  UpdatesCardConfig,
 } from "../../cards/types";
 import { computeFavoriteCardConfig } from "../helpers/favorite-cards";
 import {
@@ -50,6 +47,7 @@ import type { CommonControlsSectionStrategyConfig } from "../usage_prediction/co
 import { generateLovelaceSectionStrategy } from "../get-strategy";
 import { HOME_SUMMARIES_FILTERS } from "./helpers/home-summaries";
 import { OTHER_DEVICES_FILTERS } from "./helpers/other-devices-filters";
+import { findWeatherEntity } from "./home-weather-view-strategy";
 
 export interface HomeOverviewViewStrategyConfig {
   type: "home-overview";
@@ -59,6 +57,7 @@ export interface HomeOverviewViewStrategyConfig {
   hide_welcome_message?: boolean;
   hide_suggested_entities?: boolean;
   shortcuts?: ShortcutItem[];
+  weather_entity?: string;
 }
 
 const energyPreferencesPromises = new WeakMap<
@@ -364,18 +363,6 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
       )
     );
 
-    const maintenanceFilters = HOME_SUMMARIES_FILTERS.maintenance.map(
-      (filter) =>
-        generateEntityFilter(
-          hass.states,
-          hass.entities,
-          hass.devices,
-          hass.areas,
-          hass.floors,
-          filter
-        )
-    );
-
     const hasLights =
       hass.panels.light && findEntities(allEntities, lightsFilters).length > 0;
     const hasPersons = allEntities.some((id) => id.startsWith("person."));
@@ -385,9 +372,6 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
     const hasSecurity =
       hass.panels.security &&
       findEntities(allEntities, securityFilters).length > 0;
-    const hasMaintenance =
-      hass.panels.maintenance &&
-      findEntities(allEntities, maintenanceFilters).length > 0;
 
     const alertEntities = config.alert_entities ?? [];
     const alertSeverityEntities = filterSecurityAlertEntities(
@@ -400,21 +384,7 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
       conditions: computeDefaultSecurityAlertVisibility(alertEntity.entity),
     }));
 
-    const weatherFilter = generateEntityFilter(
-      hass.states,
-      hass.entities,
-      hass.devices,
-      hass.areas,
-      hass.floors,
-      {
-        domain: "weather",
-        entity_category: "none",
-      }
-    );
-
-    const weatherEntity = Object.keys(hass.states)
-      .filter(weatherFilter)
-      .sort()[0];
+    const weatherEntity = findWeatherEntity(hass, config.weather_entity);
 
     const energyPrefs = await preloadHomeEnergyPreferences(hass);
     energyPreferencesPromises.delete(hass.connection);
@@ -437,7 +407,7 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
               summary: "persons",
               tap_action: {
                 action: "navigate",
-                navigation_path: "people",
+                navigation_path: "/map?historyBack=1",
               },
             } satisfies HomeSummaryCard)
           : undefined,
@@ -501,19 +471,6 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
             navigation_path: "automations",
           },
         }) satisfies HomeSummaryCard,
-      maintenance: () =>
-        hasMaintenance
-          ? ({
-              type: "home-summary",
-              summary: "maintenance",
-              tap_action: {
-                action: "navigate",
-                navigation_path: config.home_panel
-                  ? "/maintenance?historyBack=1&backPath=/home"
-                  : "/maintenance?historyBack=1",
-              },
-            } satisfies HomeSummaryCard)
-          : undefined,
       weather: () =>
         weatherEntity
           ? {
@@ -525,6 +482,10 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
               show_name: true,
               show_state: true,
               state_content: ["temperature", "state"],
+              tap_action: {
+                action: "navigate",
+                navigation_path: "weather",
+              },
             }
           : undefined,
       energy: () =>
@@ -541,32 +502,6 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
             } satisfies HomeSummaryCard)
           : undefined,
     };
-
-    const attentionCards: LovelaceCardConfig[] = [
-      // Repairs card - only visible to admins, hides when empty
-      {
-        type: "repairs",
-        hide_empty: true,
-        tap_action: {
-          action: "navigate",
-          navigation_path: "/config/repairs?historyBack=1",
-        },
-      } satisfies RepairsCardConfig,
-      // Updates card - only visible to admins, hides when empty
-      {
-        type: "updates",
-        hide_empty: true,
-        tap_action: {
-          action: "navigate",
-          navigation_path: "/config/updates?historyBack=1",
-        },
-      } satisfies UpdatesCardConfig,
-      // Discovered devices card - only visible to admins, hides when empty
-      {
-        type: "discovered-devices",
-        hide_empty: true,
-      } satisfies DiscoveredDevicesCardConfig,
-    ];
 
     const summaryCards: LovelaceCardConfig[] = [];
     for (const item of resolveShortcutItems(config.shortcuts)) {
@@ -606,8 +541,7 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
           }
         : undefined;
 
-    // The summaries are badges at the top of the page; the admin attention
-    // cards stay cards in a first section that hides when they are empty.
+    // The summaries are badges at the top of the page.
     const badges: LovelaceBadgeConfig[] = [
       ...(alertsBadge ? [alertsBadge] : []),
       ...summaryCards.map((card) =>
@@ -616,15 +550,6 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
           : card
       ),
     ];
-
-    const attentionSection: LovelaceSectionConfig = {
-      type: "grid",
-      column_span: maxColumns,
-      cards: attentionCards.map((card) => ({
-        ...card,
-        grid_options: { columns: 6 },
-      })),
-    };
 
     const emptyStateCard = {
       type: "empty-state",
@@ -708,12 +633,9 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
         : undefined;
 
     const sections = (
-      [
-        emptyStateSection,
-        attentionSection,
-        favoritesSection,
-        ...floorsSections,
-      ] satisfies (LovelaceSectionRawConfig | undefined)[]
+      [emptyStateSection, favoritesSection, ...floorsSections] satisfies (
+        LovelaceSectionRawConfig | undefined
+      )[]
     ).filter(Boolean) as LovelaceSectionRawConfig[];
 
     return {

@@ -3,7 +3,6 @@ import {
   mdiDelete,
   mdiWater,
   mdiDragHorizontalVariant,
-  mdiPencil,
   mdiPlus,
 } from "@mdi/js";
 import type { CSSResultGroup, TemplateResult } from "lit";
@@ -11,6 +10,7 @@ import { css, html, LitElement, nothing } from "lit";
 import { repeat } from "lit/directives/repeat";
 import { customElement, property } from "lit/decorators";
 import { fireEvent } from "../../../../common/dom/fire_event";
+import { stopPropagation } from "../../../../common/dom/stop_propagation";
 import { computeAreaName } from "../../../../common/entity/compute_area_name";
 import { getEntityAreaId } from "../../../../common/entity/context/get_entity_context";
 import "../../../../components/ha-card";
@@ -19,6 +19,8 @@ import "../../../../components/ha-icon-button";
 import "../../../../components/ha-sortable";
 import "../../../../components/ha-svg-icon";
 import "../../../../components/ha-tooltip";
+import "../../../../components/item/ha-list-item-button";
+import "../../../../components/list/ha-grouped-list";
 import type {
   DeviceConsumptionEnergyPreference,
   EnergyPreferences,
@@ -92,58 +94,29 @@ export class EnergyDeviceSettingsWater extends LitElement {
               ></ha-energy-validation-result>
             `
           )}
-          ${
-            this.preferences.device_consumption_water.length > 0
-              ? html`
-                  <div class="items-container">
-                    <ha-sortable
-                      handle-selector=".handle"
-                      @item-moved=${this._itemMoved}
-                    >
-                      <div class="devices">
-                        ${repeat(
-                          this.preferences.device_consumption_water,
-                          (device) => device.stat_consumption,
-                          (device, index) => html`
-                            <div class="row" .device=${device}>
-                              <div class="handle">
-                                <ha-svg-icon
-                                  .path=${mdiDragHorizontalVariant}
-                                ></ha-svg-icon>
-                              </div>
-                              ${this._renderName(device)}
-                              ${this._renderIssueIndicator(
-                                this.validationResult?.device_consumption_water[
-                                  index
-                                ],
-                                index
-                              )}
-                              <ha-icon-button
-                                .label=${this.hass.localize("ui.common.edit")}
-                                @click=${this._editDevice}
-                                .path=${mdiPencil}
-                              ></ha-icon-button>
-                              <ha-icon-button
-                                .label=${this.hass.localize("ui.common.delete")}
-                                @click=${this._deleteDevice}
-                                .device=${device}
-                                .path=${mdiDelete}
-                              ></ha-icon-button>
-                            </div>
-                          `
-                        )}
-                      </div>
-                    </ha-sortable>
-                  </div>
-                `
-              : ""
-          }
+          <ha-sortable
+            handle-selector=".handle"
+            draggable-selector="ha-list-item-button"
+            @item-moved=${this._itemMoved}
+          >
+            <ha-grouped-list>
+              ${
+                this.preferences.device_consumption_water.length > 0
+                  ? repeat(
+                      this.preferences.device_consumption_water,
+                      (device) => device.stat_consumption,
+                      (device, index) => this._renderDevice(device, index)
+                    )
+                  : html`<div class="empty">
+                      ${this.hass.localize(
+                        "ui.panel.config.energy.device_consumption_water.no_devices"
+                      )}
+                    </div>`
+              }
+            </ha-grouped-list>
+          </ha-sortable>
           <div class="row">
-            <ha-button
-              @click=${this._addDevice}
-              appearance=${this.pane ? "plain" : "filled"}
-              size="s"
-            >
+            <ha-button @click=${this._addDevice} appearance="filled" size="s">
               <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon
               >${this.hass.localize(
                 "ui.panel.config.energy.device_consumption_water.add_device"
@@ -155,7 +128,10 @@ export class EnergyDeviceSettingsWater extends LitElement {
     `;
   }
 
-  private _renderName(device: DeviceConsumptionEnergyPreference) {
+  private _renderDevice(
+    device: DeviceConsumptionEnergyPreference,
+    index: number
+  ) {
     const name = computeEnergyLabel(
       this.hass.states,
       this.hass.formatEntityName,
@@ -169,17 +145,30 @@ export class EnergyDeviceSettingsWater extends LitElement {
       this.hass.devices
     );
     const area = areaId ? this.hass.areas[areaId] : undefined;
-    const areaName = area ? computeAreaName(area) : undefined;
-    return html`
-      <div class="content">
-        <span class="label">${name}</span>
-        ${
-          areaName
-            ? html`<span class="label secondary">${areaName}</span>`
-            : nothing
-        }
-      </div>
-    `;
+    return html`<ha-list-item-button
+      .device=${device}
+      .headline=${name}
+      .supportingText=${area ? computeAreaName(area) : undefined}
+      @click=${this._editDevice}
+    >
+      <ha-svg-icon
+        slot="start"
+        class="handle"
+        .path=${mdiDragHorizontalVariant}
+        @click=${stopPropagation}
+      ></ha-svg-icon>
+      ${this._renderIssueIndicator(
+        this.validationResult?.device_consumption_water[index],
+        index
+      )}
+      <ha-icon-button
+        slot="end"
+        .label=${this.hass.localize("ui.common.delete")}
+        @click=${this._deleteDevice}
+        .device=${device}
+        .path=${mdiDelete}
+      ></ha-icon-button>
+    </ha-list-item-button>`;
   }
 
   private _renderIssueIndicator(
@@ -198,12 +187,13 @@ export class EnergyDeviceSettingsWater extends LitElement {
     const id = `issue-icon-${index}`;
     return html`
       <ha-svg-icon
+        slot="end"
         id=${id}
         class="issue-icon"
         .path=${mdiAlertCircle}
         aria-label=${label}
       ></ha-svg-icon>
-      <ha-tooltip .for=${id} placement="top">${label}</ha-tooltip>
+      <ha-tooltip slot="end" .for=${id} placement="top">${label}</ha-tooltip>
     `;
   }
 
@@ -224,7 +214,7 @@ export class EnergyDeviceSettingsWater extends LitElement {
 
   private _editDevice(ev) {
     const origDevice: DeviceConsumptionEnergyPreference =
-      ev.currentTarget.closest(".row").device;
+      ev.currentTarget.device;
     showEnergySettingsDeviceWaterDialog(this, {
       statsMetadata: this.statsMetadata,
       device: { ...origDevice },
@@ -271,6 +261,7 @@ export class EnergyDeviceSettingsWater extends LitElement {
   }
 
   private async _deleteDevice(ev) {
+    ev.stopPropagation();
     const deviceToDelete: DeviceConsumptionEnergyPreference =
       ev.currentTarget.device;
 
@@ -307,22 +298,6 @@ export class EnergyDeviceSettingsWater extends LitElement {
       haStyle,
       energyCardStyles,
       css`
-        .row {
-          height: 58px;
-        }
-        .content {
-          display: flex;
-          flex-direction: column;
-        }
-        .label {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .label.secondary {
-          color: var(--secondary-text-color);
-          font-size: 0.9em;
-        }
         .handle {
           cursor: move; /* fallback if grab cursor is unsupported */
           cursor: grab;

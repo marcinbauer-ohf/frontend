@@ -9,14 +9,13 @@ import { consume } from "../../../common/decorators/consume";
 import { transform } from "../../../common/decorators/transform";
 import "../../../components/ha-badge";
 import "../../../components/ha-icon";
+import type { StackPerson } from "../../../components/user/ha-person-stack";
 import "../../../components/user/ha-person-stack";
 import { statesContext } from "../../../data/context";
-import type { BasePerson } from "../../../data/person";
 import { HuiHomeSummaryCard } from "../cards/hui-home-summary-card";
 import { actionHandler } from "../common/directives/action-handler-directive";
 import { hasAction } from "../common/has-action";
 import {
-  getSummaryLabel,
   HOME_SUMMARIES_COLORS,
   HOME_SUMMARIES_ICONS,
 } from "../strategies/home/helpers/home-summaries";
@@ -35,7 +34,7 @@ export class HuiHomeSummaryBadge
   // unrelated state changes keep the same array and skip a render
   @state()
   @consume({ context: statesContext, subscribe: true })
-  @transform<HassEntities, BasePerson[]>({
+  @transform<HassEntities, StackPerson[]>({
     transformer: function (this: HuiHomeSummaryBadge, states) {
       if (this._config?.summary !== "persons") {
         return undefined;
@@ -48,15 +47,16 @@ export class HuiHomeSummaryBadge
     },
     watch: ["_config"],
   })
-  private _persons?: BasePerson[];
+  private _persons?: StackPerson[];
 
   // People at home first, the rest after
-  private _people = memoizeOne((...stateObjs: HassEntity[]): BasePerson[] =>
+  private _people = memoizeOne((...stateObjs: HassEntity[]): StackPerson[] =>
     [...stateObjs]
       .sort((a, b) => Number(b.state === "home") - Number(a.state === "home"))
       .map((s) => ({
         name: s.attributes.friendly_name ?? s.entity_id,
         picture: s.attributes.entity_picture,
+        away: s.state !== "home",
       }))
   );
 
@@ -68,7 +68,7 @@ export class HuiHomeSummaryBadge
     const summary = config.summary;
     const isAlert = summary === "alerts";
     const color = computeCssColor(HOME_SUMMARIES_COLORS[summary]);
-    const label = getSummaryLabel(this._i18n.localize, summary);
+    const label = this._summaryLabel();
     const content = this._summaryState;
 
     return html`
@@ -103,8 +103,16 @@ export class HuiHomeSummaryBadge
 
   static styles = [
     css`
+      /* Label at a card's secondary text size, value at its primary size */
+      ha-badge {
+        --ha-badge-size: 48px;
+        --ha-badge-icon-size: 24px;
+        --ha-badge-label-font-size: var(--ha-font-size-s);
+        --ha-badge-label-line-height: var(--ha-line-height-condensed);
+        --ha-badge-font-size: var(--ha-font-size-m);
+      }
       ha-person-stack {
-        --ha-person-stack-size: 20px;
+        --ha-person-stack-size: 24px;
         --ha-person-stack-overlap: var(--ha-space-1);
         --ha-person-stack-ring-color: var(
           --ha-card-background,

@@ -21,7 +21,6 @@ import {
 } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { ifDefined } from "lit/directives/if-defined";
-import { repeat } from "lit/directives/repeat";
 import { join } from "lit/directives/join";
 import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
@@ -196,11 +195,15 @@ export class HaDataTable extends LitElement {
   @property({ attribute: false }) public columnOrder?: string[];
 
   /**
-   * Renders each row as a card instead of a table row. Search, sort and
-   * grouping stay the same, only the body becomes a card grid.
+   * Replaces the table body. It gets the searched, filtered and sorted rows
+   * plus the group column, and lays them out itself.
    */
-  @property({ attribute: false }) public renderCard?: (
-    row: DataTableRowData
+  /** Renders the custom body without rows too, when it shows other items. */
+  @property({ attribute: false }) public alwaysRenderBody = false;
+
+  @property({ attribute: false }) public renderBody?: (
+    rows: DataTableRowData[],
+    groupColumn?: string
   ) => TemplateResult | typeof nothing;
 
   @state() private _filterable = false;
@@ -485,26 +488,24 @@ export class HaDataTable extends LitElement {
 
     const filteredDataLength = this._filteredData?.length || 0;
 
-    const items = this._filteredData
-      ? this._groupData(
-          // A card shows a device whole, so its entity rows stay folded
-          this.renderCard
-            ? this._filteredData
-            : this._withChildren(
-                this._filteredData,
-                this._expandedRows,
-                this._filter
-              ),
-          this._i18n?.localize,
-          this._i18n?.locale,
-          this.appendRow,
-          this.groupColumn,
-          this.groupOrder,
-          this._collapsedGroups,
-          this.sortColumn,
-          this.sortDirection
-        )
-      : [];
+    const items =
+      this._filteredData && !this.renderBody
+        ? this._groupData(
+            this._withChildren(
+              this._filteredData,
+              this._expandedRows,
+              this._filter
+            ),
+            this._i18n?.localize,
+            this._i18n?.locale,
+            this.appendRow,
+            this.groupColumn,
+            this.groupOrder,
+            this._collapsedGroups,
+            this.sortColumn,
+            this.sortDirection
+          )
+        : [];
 
     return html`
       <div class="mdc-data-table">
@@ -527,9 +528,9 @@ export class HaDataTable extends LitElement {
           class="mdc-data-table__table ${classMap({
             "auto-height": this.autoHeight,
           })}"
-          role=${this.renderCard ? "group" : "table"}
+          role=${this.renderBody ? "group" : "table"}
           aria-rowcount=${ifDefined(
-            this.renderCard
+            this.renderBody
               ? undefined
               : this._countRows(items) + (this.loadError ? 2 : 1)
           )}
@@ -540,10 +541,10 @@ export class HaDataTable extends LitElement {
           })}
         >
           ${
-            this.renderCard
-              ? // Cards have no column headers, but the narrow toolbar still
-                // slots in here
-                html`<div class="mdc-data-table__header-row cards-header-row">
+            this.renderBody
+              ? // A custom body has no column headers, but the narrow toolbar
+                // still slots in here
+                html`<div class="mdc-data-table__header-row body-header-row">
                   <slot name="header-row"></slot>
                 </div>`
               : html`
@@ -682,7 +683,8 @@ export class HaDataTable extends LitElement {
               : nothing
           }
           ${
-            !this._filteredData?.length
+            !this._filteredData?.length &&
+            !(this.alwaysRenderBody && this.renderBody && this._filteredData)
               ? this.loading ||
                 !this._filteredData ||
                 (this.data.length && !this._filteredDataSourceLength)
@@ -771,8 +773,14 @@ export class HaDataTable extends LitElement {
                         </div>
                       </div>
                     `
-              : this.renderCard
-                ? this._renderCards(items)
+              : this.renderBody
+                ? html`<div
+                    class="mdc-data-table__content scroller ha-scrollbar custom-body"
+                    tabindex="0"
+                    @scroll=${this._saveScrollPos}
+                  >
+                    ${this.renderBody(this._filteredData!, this.groupColumn)}
+                  </div>`
                 : html`
                     <lit-virtualizer
                       scroller
@@ -813,24 +821,6 @@ export class HaDataTable extends LitElement {
         </div>
       </div>
     `;
-  }
-
-  private _renderCards(items: DataTableRowData[]) {
-    return html`<div
-      class="mdc-data-table__content scroller ha-scrollbar cards"
-      tabindex="0"
-      @scroll=${this._saveScrollPos}
-    >
-      ${repeat(items, this._keyFunction, (item) =>
-        item.empty
-          ? nothing
-          : item.append
-            ? html`<div class="mdc-data-table__row group-header-row">
-                ${item.content}
-              </div>`
-            : this.renderCard!(item)
-      )}
-    </div>`;
   }
 
   private _keyFunction = (row: DataTableRowData) => row?.[this.id] || row;
@@ -1750,6 +1740,15 @@ export class HaDataTable extends LitElement {
           );
         }
 
+        /* A custom body ends with the same room as the table's empty row, to
+           scroll its last items out from under a floating bar */
+        .custom-body {
+          padding-bottom: var(
+            --data-table-empty-row-height,
+            var(--safe-area-inset-bottom, 0px)
+          );
+        }
+
         .mdc-data-table__row ~ .mdc-data-table__row {
           border-top: 1px solid var(--divider-color);
         }
@@ -2226,30 +2225,9 @@ export class HaDataTable extends LitElement {
           overflow: overlay !important;
         }
 
-        .cards {
-          display: grid;
-          grid-template-columns: repeat(
-            auto-fill,
-            minmax(var(--ha-data-table-card-min-width, 280px), 1fr)
-          );
-          gap: var(--ha-space-3);
-          padding: var(--ha-space-3);
-          align-content: start;
-          align-items: start;
-        }
-
-        .cards .group-header-row {
-          grid-column: 1 / -1;
-        }
-
-        .cards-header-row {
+        .body-header-row {
           height: auto;
           border-bottom: none;
-        }
-
-        .cards > :not(.group-header-row) {
-          content-visibility: auto;
-          contain-intrinsic-size: auto 160px;
         }
 
         .mdc-data-table__row,

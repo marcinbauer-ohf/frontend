@@ -47,7 +47,7 @@ export const fetchPersons = (hass: HomeAssistant) =>
   }>({ type: "person/list" });
 
 export const createPerson = (
-  hass: HomeAssistant,
+  hass: Pick<HomeAssistant, "callWS">,
   values: PersonMutableParams
 ) =>
   hass.callWS<Person>({

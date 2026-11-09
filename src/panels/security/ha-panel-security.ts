@@ -4,8 +4,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { debounce } from "../../common/util/debounce";
 import { deepEqual } from "../../common/util/deep-equal";
-import "../../components/ha-button";
-import "../../components/ha-svg-icon";
+import "../../components/ha-add-menu";
 import "../../components/ha-icon-button";
 import "../../components/ha-top-app-bar-fixed";
 import {
@@ -20,7 +19,7 @@ import type { HomeAssistant } from "../../types";
 import { showToast } from "../../util/toast";
 import { generateLovelaceViewStrategy } from "../lovelace/strategies/get-strategy";
 import type { Lovelace } from "../lovelace/types";
-import { showEditSecurityDialog } from "./dialogs/show-dialog-edit-security";
+import "./components/security-editor-pane";
 import "../lovelace/views/hui-view";
 import "../lovelace/views/hui-view-container";
 import "../lovelace/views/hui-view-background";
@@ -43,6 +42,8 @@ class PanelSecurity extends LitElement {
 
   @state() private _config?: SecurityFrontendSystemData;
 
+  @state() private _editing = false;
+
   @state() private _searchParms = new URLSearchParams(window.location.search);
 
   private _childPanelReady?: ChildPanelReady;
@@ -55,6 +56,9 @@ class PanelSecurity extends LitElement {
     super.willUpdate(changedProps);
     // Initial setup
     if (!this.hasUpdated) {
+      // An ?edit link opens the pane straight away
+      this._editing =
+        this._searchParms.has("edit") && !!this.hass.user?.is_admin;
       this._setup();
       return;
     }
@@ -142,27 +146,24 @@ class PanelSecurity extends LitElement {
     return html`
       <ha-top-app-bar-fixed
         .narrow=${this.narrow}
+        @side-pane-closed=${this._stopEditing}
         .backButton=${this._searchParms.has("historyBack")}
       >
         <div slot="title">${this.hass.localize("panel.security")}</div>
         ${
-          this.hass.user?.is_admin && this._config
-            ? this.narrow
-              ? html`<ha-icon-button
-                  slot="actionItems"
-                  .path=${mdiPencil}
-                  .label=${this.hass.localize("ui.panel.security.editor.title")}
-                  @click=${this._editSecurity}
-                ></ha-icon-button>`
-              : html`<ha-button
-                  slot="actionItems"
-                  appearance="plain"
-                  variant="neutral"
-                  @click=${this._editSecurity}
-                  ><ha-svg-icon slot="start" .path=${mdiPencil}></ha-svg-icon
-                  >${this.hass.localize("ui.panel.security.edit")}</ha-button
-                >`
-            : nothing
+          this._editing
+            ? nothing
+            : html`<ha-add-menu slot="actionItems" .hass=${this.hass}
+                >${
+                  this.hass.user?.is_admin
+                    ? html`<ha-icon-button
+                        .label=${this.hass.localize("ui.panel.security.edit")}
+                        .path=${mdiPencil}
+                        @click=${this._startEditing}
+                      ></ha-icon-button>`
+                    : nothing
+                }</ha-add-menu
+              >`
         }
         ${
           this._lovelace
@@ -178,6 +179,16 @@ class PanelSecurity extends LitElement {
                   ></hui-view
                 ></hui-view-container>
               `
+            : nothing
+        }
+        ${
+          this._editing && this._config
+            ? html`<security-editor-pane
+                slot="side-pane"
+                .config=${this._config}
+                .saveConfig=${this._saveConfig}
+                .narrow=${this.narrow}
+              ></security-editor-pane>`
             : nothing
         }
       </ha-top-app-bar-fixed>
@@ -223,19 +234,17 @@ class PanelSecurity extends LitElement {
     };
   }
 
-  private _editSecurity = () => {
-    if (!this.hass.user?.is_admin || !this._config) {
-      return;
-    }
-    showEditSecurityDialog(this, {
-      config: this._config,
-      saveConfig: async (config) => {
-        await this._saveConfig(config);
-      },
-    });
+  private _startEditing = () => {
+    this._editing = true;
   };
 
-  private async _saveConfig(config: SecurityFrontendSystemData): Promise<void> {
+  private _stopEditing = () => {
+    this._editing = false;
+  };
+
+  private _saveConfig = async (
+    config: SecurityFrontendSystemData
+  ): Promise<void> => {
     try {
       await saveFrontendSystemData(this.hass.connection, "security", config);
       this._config = config;
@@ -253,7 +262,7 @@ class PanelSecurity extends LitElement {
       message: this.hass.localize("ui.common.successfully_saved"),
     });
     await this._setLovelace();
-  }
+  };
 
   static get styles(): CSSResultGroup {
     return [

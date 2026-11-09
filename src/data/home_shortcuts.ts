@@ -21,7 +21,6 @@ export const DEFAULT_SUMMARY_KEYS = [
   "security",
   "media_players",
   "automations",
-  "maintenance",
   "weather",
   "energy",
 ] as const;

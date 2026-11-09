@@ -84,10 +84,10 @@ export class EnergyWaterSettings extends LitElement {
               ></ha-energy-validation-result>
             `
           )}
-          ${
-            waterSources.length > 0
-              ? html`
-                  <div class="items-container">
+          <div class="items-container">
+            ${
+              waterSources.length > 0
+                ? html`
                     ${waterSources.map((source) => {
                       const entityState =
                         this.hass.states[source.stat_energy_from];
@@ -130,16 +130,14 @@ export class EnergyWaterSettings extends LitElement {
                         </div>
                       `;
                     })}
-                  </div>
-                `
-              : ""
-          }
+                  `
+                : html`<div class="empty">
+                    ${this.hass.localize("ui.panel.config.energy.water.no_water_sources")}
+                  </div>`
+            }
+          </div>
           <div class="row">
-            <ha-button
-              @click=${this._addSource}
-              appearance=${this.pane ? "plain" : "filled"}
-              size="s"
-            >
+            <ha-button @click=${this._addSource} appearance="filled" size="s">
               <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon
               >${this.hass.localize(
                 "ui.panel.config.energy.water.add_water_source"

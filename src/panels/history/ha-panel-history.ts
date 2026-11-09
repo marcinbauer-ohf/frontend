@@ -40,6 +40,7 @@ import {
   DEFAULT_CHART_WIDTH,
   MIN_TIME_BETWEEN_UPDATES,
 } from "../../components/chart/ha-chart-base";
+import "../../components/ha-add-menu";
 import "../../components/chart/ha-chart-zoom-slider";
 import "../../components/chart/state-history-charts";
 import type { StateHistoryCharts } from "../../components/chart/state-history-charts";
@@ -212,6 +213,14 @@ class HaPanelHistory extends LitElement {
         <h1 class="page-title" slot="title">
           ${this.hass.localize("panel.history")}
         </h1>
+        ${
+          this.narrow
+            ? nothing
+            : html`<ha-add-menu
+                slot="actionItems"
+                .hass=${this.hass}
+              ></ha-add-menu>`
+        }
         <ha-dropdown slot="actionItems" @wa-select=${this._handleMenuAction}>
           <ha-icon-button
             slot="trigger"

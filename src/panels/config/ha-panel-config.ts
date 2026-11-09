@@ -39,9 +39,9 @@ class HaPanelConfig extends HassRouterPage {
 
   protected routerOptions: RouterOptions = {
     defaultPage: "dashboard",
-    // People are edited in the home page's editor now
+    // People and their logins are edited in the home page's editor now
     beforeRender: (page) => {
-      if (page === "person") {
+      if (page === "person" || page === "users") {
         navigate(homeEditorPath("people"), { replace: true });
       }
       return undefined;

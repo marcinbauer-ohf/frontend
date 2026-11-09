@@ -14,6 +14,7 @@ import { computeRTLDirection } from "../common/util/compute_rtl";
 import { isComponentLoaded } from "../common/config/is_component_loaded";
 import "../components/ha-drawer";
 import "../components/ha-svg-icon";
+import "../components/ha-system-status";
 import { narrowViewportContext } from "../data/context";
 import { showNotificationDrawer } from "../dialogs/notifications/show-notification-drawer";
 import { showVoiceCommandDialog } from "../dialogs/voice-command-dialog/show-ha-voice-command-dialog";
@@ -115,17 +116,20 @@ export class HomeAssistantMain extends LitElement {
                     : nothing
                 }
               </button>
-              <div class="clock">
-                <span class="time"
-                  >${formatTime(this._now, this.hass.locale, this.hass.config)}</span
-                >
-                <span class="date"
-                  >${formatDateWeekdayDay(
-                    this._now,
-                    this.hass.locale,
-                    this.hass.config
-                  )}</span
-                >
+              <div class="status">
+                <ha-system-status .hass=${this.hass}></ha-system-status>
+                <div class="clock">
+                  <span class="time"
+                    >${formatTime(this._now, this.hass.locale, this.hass.config)}</span
+                  >
+                  <span class="date"
+                    >${formatDateWeekdayDay(
+                      this._now,
+                      this.hass.locale,
+                      this.hass.config
+                    )}</span
+                  >
+                </div>
               </div>
             </div>`
           : nothing
@@ -292,6 +296,8 @@ export class HomeAssistantMain extends LitElement {
           var(--ha-panel-frame-bottom)
       );
       --safe-area-content-inset-right: var(--safe-area-inset-right);
+      --ha-top-app-bar-scrolled-shadow: none;
+      --ha-top-app-bar-canvas-shadow: inset 0 3px 3px -2px rgba(0, 0, 0, 0.15);
     }
     :host(:not([modal])) partial-panel-resolver::after {
       content: "";
@@ -339,6 +345,12 @@ export class HomeAssistantMain extends LitElement {
       padding-inline-start: 0;
       box-sizing: border-box;
       color: var(--app-header-text-color, var(--primary-text-color));
+    }
+    /* System status sits beside the clock, as on a desktop OS. */
+    .status {
+      display: flex;
+      align-items: center;
+      gap: var(--ha-space-2);
     }
     .clock {
       display: flex;

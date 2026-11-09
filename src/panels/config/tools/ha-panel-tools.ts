@@ -1,9 +1,10 @@
 import { mdiDotsVertical } from "@mdi/js";
 import type { CSSResultGroup, TemplateResult, PropertyValues } from "lit";
-import { css, html, LitElement } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import { isNavigationClick } from "../../../common/dom/is-navigation-click";
 import { navigate } from "../../../common/navigate";
+import "../../../components/ha-add-menu";
 import "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
 import "../../../components/ha-icon-button";
@@ -75,6 +76,14 @@ class PanelTools extends LitElement {
         <div slot="title">
           ${this.hass.localize("ui.panel.config.dashboard.tools.main")}
         </div>
+        ${
+          this.narrow
+            ? nothing
+            : html`<ha-add-menu
+                slot="actionItems"
+                .hass=${this.hass}
+              ></ha-add-menu>`
+        }
         <ha-dropdown slot="actionItems" @wa-select=${this._handleMenuAction}>
           <ha-icon-button
             slot="trigger"

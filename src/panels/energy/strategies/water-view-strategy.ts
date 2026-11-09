@@ -32,14 +32,6 @@ export class WaterViewStrategy extends ReactiveElement {
       type: "sections",
       max_columns: 3,
       sections: [{ type: "grid", cards: [], column_span: 3 }],
-      footer: {
-        card: {
-          type: "energy-date-selection",
-          collection_key: collectionKey,
-          opening_direction: "right",
-          vertical_opening_direction: "up",
-        },
-      },
     };
 
     const energyCollection = getEnergyDataCollection(hass.connection, {

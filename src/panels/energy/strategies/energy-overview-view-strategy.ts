@@ -27,14 +27,6 @@ export class EnergyOverviewViewStrategy extends ReactiveElement {
       sections: [],
       dense_section_placement: true,
       max_columns: 3,
-      footer: {
-        card: {
-          type: "energy-date-selection",
-          collection_key: collectionKey,
-          opening_direction: "right",
-          vertical_opening_direction: "up",
-        },
-      },
     };
 
     const energyCollection = getEnergyDataCollection(hass.connection, {

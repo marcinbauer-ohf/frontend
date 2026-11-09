@@ -1,9 +1,13 @@
+import { mdiPencil } from "@mdi/js";
 import type { CSSResultGroup, PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { debounce } from "../../common/util/debounce";
 import { deepEqual } from "../../common/util/deep-equal";
 import type { LovelaceStrategyViewConfig } from "../../data/lovelace/config/view";
+import "../../components/ha-add-menu";
+import "../../components/ha-icon-button";
+import "../../components/ha-summary-editor-pane";
 import { ChildPanelReady } from "../../layouts/panel-ready";
 import { haStyle } from "../../resources/styles";
 import type { HomeAssistant } from "../../types";
@@ -30,6 +34,8 @@ class PanelClimate extends LitElement {
 
   @state() private _lovelace?: Lovelace;
 
+  @state() private _editing = false;
+
   @state() private _searchParams = new URLSearchParams(window.location.search);
 
   private _childPanelReady?: ChildPanelReady;
@@ -38,6 +44,9 @@ class PanelClimate extends LitElement {
     super.willUpdate(changedProps);
     // Initial setup
     if (!this.hasUpdated) {
+      // An ?edit link opens the pane straight away
+      this._editing =
+        this._searchParams.has("edit") && !!this.hass.user?.is_admin;
       this._setup();
       return;
     }
@@ -94,9 +103,35 @@ class PanelClimate extends LitElement {
     return html`
       <ha-top-app-bar-fixed
         .narrow=${this.narrow}
+        @side-pane-closed=${this._stopEditing}
         .backButton=${this._searchParams.has("historyBack")}
       >
         <div slot="title">${this.hass.localize("panel.climate")}</div>
+        ${
+          this._editing
+            ? nothing
+            : html`<ha-add-menu slot="actionItems" .hass=${this.hass}
+                >${
+                  this.hass.user?.is_admin
+                    ? html`<ha-icon-button
+                        .label=${this.hass.localize("ui.panel.climate.edit")}
+                        .path=${mdiPencil}
+                        @click=${this._startEditing}
+                      ></ha-icon-button>`
+                    : nothing
+                }</ha-add-menu
+              >`
+        }
+        ${
+          // Nothing to configure yet; the pane is where it will go
+          this._editing
+            ? html`<ha-summary-editor-pane
+                slot="side-pane"
+                .heading=${this.hass.localize("ui.panel.climate.edit")}
+                .narrow=${this.narrow}
+              ></ha-summary-editor-pane>`
+            : nothing
+        }
         ${
           this._lovelace
             ? html`
@@ -116,6 +151,14 @@ class PanelClimate extends LitElement {
       </ha-top-app-bar-fixed>
     `;
   }
+
+  private _startEditing = () => {
+    this._editing = true;
+  };
+
+  private _stopEditing = () => {
+    this._editing = false;
+  };
 
   private async _setLovelace() {
     const viewConfig = await generateLovelaceViewStrategy(

@@ -17,6 +17,10 @@ import {
 import type { HomeAreaViewStrategyConfig } from "./home-area-view-strategy";
 import type { HomeOtherDevicesViewStrategyConfig } from "./home-other-devices-view-strategy";
 import type { HomeOverviewViewStrategyConfig } from "./home-overview-view-strategy";
+import {
+  findWeatherEntity,
+  type HomeWeatherViewStrategyConfig,
+} from "./home-weather-view-strategy";
 
 export interface HomeDashboardStrategyConfig {
   type: "home";
@@ -28,6 +32,7 @@ export interface HomeDashboardStrategyConfig {
   shortcuts?: ShortcutItem[];
   /** Area views show one device card per device instead of entity tiles. */
   device_cards?: boolean;
+  weather_entity?: string;
 }
 
 @customElement("home-dashboard-strategy")
@@ -121,6 +126,22 @@ export class HomeDashboardStrategy extends ReactiveElement {
       icon: "mdi:devices",
     } satisfies LovelaceViewRawConfig;
 
+    const weatherEntity = findWeatherEntity(hass, config.weather_entity);
+    const weatherView = weatherEntity
+      ? ({
+          title: hass.localize(
+            "ui.panel.lovelace.strategy.home.summary_list.weather"
+          ),
+          path: "weather",
+          subview: true,
+          strategy: {
+            type: "home-weather",
+            entity: weatherEntity,
+          } satisfies HomeWeatherViewStrategyConfig,
+          icon: "mdi:weather-partly-cloudy",
+        } satisfies LovelaceViewRawConfig)
+      : undefined;
+
     return {
       views: [
         {
@@ -134,6 +155,7 @@ export class HomeDashboardStrategy extends ReactiveElement {
             hide_welcome_message: config.hide_welcome_message,
             hide_suggested_entities: config.hide_suggested_entities,
             shortcuts: config.shortcuts,
+            weather_entity: config.weather_entity,
           } satisfies HomeOverviewViewStrategyConfig,
         },
         ...areaViews,
@@ -141,6 +163,7 @@ export class HomeDashboardStrategy extends ReactiveElement {
         mediaPlayersView,
         automationsView,
         otherDevicesView,
+        ...(weatherView ? [weatherView] : []),
       ],
     };
   }

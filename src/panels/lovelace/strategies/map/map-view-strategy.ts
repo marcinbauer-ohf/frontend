@@ -5,7 +5,19 @@ import type { HomeAssistant } from "../../../../types";
 import type { MapCardConfig } from "../../cards/types";
 import type { LovelaceStrategyDependency } from "../types";
 
-export interface MapViewStrategyConfig {
+/** The map card options the map dashboard's editor pane sets */
+export type MapStrategyOptions = Pick<
+  MapCardConfig,
+  | "theme_mode"
+  | "map_style"
+  | "hours_to_show"
+  | "cluster"
+  | "show_zone_radius"
+  | "fit_zones"
+  | "scale_ruler"
+>;
+
+export interface MapViewStrategyConfig extends MapStrategyOptions {
   type: "map";
 }
 
@@ -14,7 +26,7 @@ export class MapViewStrategy extends ReactiveElement {
   static registryDependencies: readonly LovelaceStrategyDependency[] = [];
 
   static async generate(
-    _config: MapViewStrategyConfig,
+    { type: _type, ...options }: MapViewStrategyConfig,
     hass: HomeAssistant
   ): Promise<LovelaceViewConfig> {
     return {
@@ -26,6 +38,7 @@ export class MapViewStrategy extends ReactiveElement {
           type: "map",
           auto_fit: true,
           show_all: true,
+          ...options,
         } as MapCardConfig,
       ],
     };

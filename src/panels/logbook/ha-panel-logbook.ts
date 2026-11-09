@@ -32,6 +32,7 @@ import {
 } from "../../common/url/search-params";
 import { deepEqual } from "../../common/util/deep-equal";
 import { shallowEqual } from "../../common/util/shallow-equal";
+import "../../components/ha-add-menu";
 import "../../components/date-picker/ha-date-range-nav";
 import "../../components/ha-button";
 import "../../components/ha-dropdown";
@@ -145,6 +146,14 @@ export class HaPanelLogbook extends LitElement {
       >
         <div slot="title">${this.hass.localize("panel.logbook")}</div>
 
+        ${
+          this.narrow
+            ? nothing
+            : html`<ha-add-menu
+                slot="actionItems"
+                .hass=${this.hass}
+              ></ha-add-menu>`
+        }
         <ha-dropdown slot="actionItems" @wa-select=${this._handleMenuAction}>
           <ha-icon-button
             slot="trigger"

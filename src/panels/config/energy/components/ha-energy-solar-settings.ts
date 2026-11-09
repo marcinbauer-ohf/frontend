@@ -88,10 +88,10 @@ export class EnergySolarSettings extends LitElement {
               ></ha-energy-validation-result>
             `
           )}
-          ${
-            solarSources.length > 0
-              ? html`
-                  <div class="items-container">
+          <div class="items-container">
+            ${
+              solarSources.length > 0
+                ? html`
                     ${solarSources.map((source) => {
                       const entityState =
                         this.hass.states[source.stat_energy_from];
@@ -140,17 +140,19 @@ export class EnergySolarSettings extends LitElement {
                         </div>
                       `;
                     })}
-                  </div>
-                `
-              : ""
-          }
+                  `
+                : html`<div class="empty">
+                    ${this.hass.localize("ui.panel.config.energy.solar.no_solar_production")}
+                  </div>`
+            }
+          </div>
           ${
             this.info
               ? html`
                   <div class="row">
                     <ha-button
                       @click=${this._addSource}
-                      appearance=${this.pane ? "plain" : "filled"}
+                      appearance="filled"
                       size="s"
                     >
                       <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>

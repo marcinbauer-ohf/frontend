@@ -59,9 +59,15 @@ class PersonBadge extends LitElement {
       width: 100%;
       height: 100%;
       border-radius: var(--ha-picture-border-radius);
-      background-color: var(--light-primary-color);
+      background-color: var(
+        --ha-person-badge-background-color,
+        var(--light-primary-color)
+      );
       text-decoration: none;
-      color: var(--text-light-primary-color, var(--primary-text-color));
+      color: var(
+        --ha-person-badge-color,
+        var(--text-light-primary-color, var(--primary-text-color))
+      );
       overflow: hidden;
       font-size: var(--person-badge-font-size, var(--ha-font-size-m));
     }

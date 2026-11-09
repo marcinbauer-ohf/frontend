@@ -29,6 +29,7 @@ import "../../../components/ha-icon-button";
 import "../../../components/ha-settings-row";
 import "../../../components/ha-sortable";
 import "../../../components/ha-svg-icon";
+import "../../../components/list/ha-grouped-list";
 import { computeDefaultSecurityAlertSeverity } from "../strategies/security-alerts";
 import {
   createSecurityEntityFilter,
@@ -47,6 +48,9 @@ type SecurityEditorContext = SecurityEntityContext & {
 export class SecurityAlertsEditor extends LitElement {
   @property({ attribute: false })
   public alertEntities: SecurityAlertEntityConfig[] = [];
+
+  /** Shown in the empty frame; without it an empty list renders nothing. */
+  @property({ attribute: "empty-label" }) public emptyLabel?: string;
 
   @state()
   @consume({ context: statesContext, subscribe: true })
@@ -80,15 +84,27 @@ export class SecurityAlertsEditor extends LitElement {
 
   protected render() {
     return html`
-      <ha-sortable handle-selector=".handle" @item-moved=${this._moved}>
-        <div class="alert-list">
-          ${repeat(
-            this.alertEntities,
-            (alertEntity) => alertEntity.entity,
-            (alertEntity, index) => this._renderAlertEntity(alertEntity, index)
-          )}
-        </div>
-      </ha-sortable>
+      ${
+        !this.alertEntities.length
+          ? this.emptyLabel
+            ? html`<ha-grouped-list>
+                <div class="empty">${this.emptyLabel}</div>
+              </ha-grouped-list>`
+            : nothing
+          : html`<ha-sortable
+              handle-selector=".handle"
+              @item-moved=${this._moved}
+            >
+              <ha-grouped-list>
+                ${repeat(
+                  this.alertEntities,
+                  (alertEntity) => alertEntity.entity,
+                  (alertEntity, index) =>
+                    this._renderAlertEntity(alertEntity, index)
+                )}
+              </ha-grouped-list>
+            </ha-sortable>`
+      }
       <ha-entity-picker
         add-button
         .addButtonLabel=${this._i18n.localize(
@@ -223,15 +239,17 @@ export class SecurityAlertsEditor extends LitElement {
     :host {
       display: block;
     }
-    .alert-list {
-      display: flex;
-      flex-direction: column;
-      gap: var(--ha-space-2);
-    }
     .alert-row {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       gap: var(--ha-space-2);
+      padding: var(--ha-space-1) var(--ha-row-item-padding-inline);
+      background: var(--card-background-color);
+    }
+    .empty {
+      padding: var(--ha-space-2) var(--ha-row-item-padding-inline);
+      font-size: var(--ha-font-size-m);
+      color: var(--secondary-text-color);
     }
     .handle {
       cursor: grab;
@@ -239,14 +257,13 @@ export class SecurityAlertsEditor extends LitElement {
       flex-shrink: 0;
       display: flex;
       align-items: center;
-      min-height: 48px;
     }
     ha-settings-row {
       flex: 1;
       min-width: 0;
       padding: 0;
       gap: var(--ha-space-3);
-      min-height: 48px;
+      min-height: 40px;
       --settings-row-prefix-display: contents;
       --settings-row-content-display: contents;
       --settings-row-body-padding-top: var(--ha-space-1);
@@ -274,7 +291,7 @@ export class SecurityAlertsEditor extends LitElement {
     }
     ha-control-select-menu {
       width: 118px;
-      --control-select-menu-height: 42px;
+      --control-select-menu-height: 36px;
     }
   `;
 }

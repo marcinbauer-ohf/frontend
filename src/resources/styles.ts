@@ -269,3 +269,40 @@ export const baseEntrypointStyles = css`
     width: 100vw;
   }
 `;
+
+/** The menu behind a page's add FAB, as on the automations page. */
+export const fabCreateMenuStyles = css`
+  /* The create menu, centred over the button. Starting from scratch
+       leads with a filled icon tile; starting from something, such as a
+       blueprint, follows a divider with a plain one. Corners are
+       concentric: the menu's radius is its options' plus its padding. */
+  ha-dropdown.create-menu::part(menu) {
+    --auto-size-available-width: calc(100vw - var(--ha-space-8));
+    min-width: 240px;
+    padding: var(--ha-space-3);
+    border-radius: var(--ha-border-radius-4xl);
+  }
+  .create-option {
+    padding: 0;
+    border-radius: var(--ha-border-radius-xl);
+  }
+  .create-option ha-row-item {
+    --ha-row-item-padding-block: var(--ha-space-2);
+    --ha-row-item-padding-inline: var(--ha-space-2);
+    --ha-row-item-gap: var(--ha-space-3);
+  }
+  .create-option-icon {
+    box-sizing: border-box;
+    width: 32px;
+    height: 32px;
+    padding: 6px;
+    --mdc-icon-size: 20px;
+    border-radius: var(--ha-border-radius-md);
+    background-color: var(--ha-color-fill-neutral-normal-resting);
+    color: var(--ha-color-on-neutral-normal);
+  }
+  .create-option.primary .create-option-icon {
+    background-color: var(--ha-color-fill-primary-loud-resting);
+    color: var(--ha-color-on-primary-loud);
+  }
+`;

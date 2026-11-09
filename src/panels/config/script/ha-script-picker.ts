@@ -566,17 +566,12 @@ class HaScriptPicker extends SubscribeMixin(LitElement) {
                   slot="selection-bar"
                   @wa-select=${this._handleBulkCategory}
                 >
-                  <ha-assist-chip
-                    slot="trigger"
-                    .label=${this.hass.localize(
+                  <ha-button appearance="filled" variant="brand" slot="trigger">
+                    <ha-svg-icon slot="end" .path=${mdiMenuDown}></ha-svg-icon>
+                    ${this.hass.localize(
                       "ui.panel.config.automation.picker.bulk_actions.move_category"
-                    )}
+                    )}</ha-button
                   >
-                    <ha-svg-icon
-                      slot="trailing-icon"
-                      .path=${mdiMenuDown}
-                    ></ha-svg-icon>
-                  </ha-assist-chip>
                   ${this._renderCategoryItems()}
                 </ha-dropdown>
                 ${
@@ -586,17 +581,19 @@ class HaScriptPicker extends SubscribeMixin(LitElement) {
                         slot="selection-bar"
                         @wa-select=${this._handleBulkLabel}
                       >
-                        <ha-assist-chip
+                        <ha-button
+                          appearance="filled"
+                          variant="brand"
                           slot="trigger"
-                          .label=${this.hass.localize(
-                            "ui.panel.config.automation.picker.bulk_actions.add_label"
-                          )}
                         >
                           <ha-svg-icon
-                            slot="trailing-icon"
+                            slot="end"
                             .path=${mdiMenuDown}
                           ></ha-svg-icon>
-                        </ha-assist-chip>
+                          ${this.hass.localize(
+                            "ui.panel.config.automation.picker.bulk_actions.add_label"
+                          )}</ha-button
+                        >
                         ${this._renderLabelItems()}
                       </ha-dropdown>`
                 }
@@ -607,17 +604,19 @@ class HaScriptPicker extends SubscribeMixin(LitElement) {
                         slot="selection-bar"
                         @wa-select=${this._handleBulkArea}
                       >
-                        <ha-assist-chip
+                        <ha-button
+                          appearance="filled"
+                          variant="brand"
                           slot="trigger"
-                          .label=${this.hass.localize(
-                            "ui.panel.config.devices.picker.bulk_actions.move_area"
-                          )}
                         >
                           <ha-svg-icon
-                            slot="trailing-icon"
+                            slot="end"
                             .path=${mdiMenuDown}
                           ></ha-svg-icon>
-                        </ha-assist-chip>
+                          ${this.hass.localize(
+                            "ui.panel.config.devices.picker.bulk_actions.move_area"
+                          )}</ha-button
+                        >
                         ${this._renderAreaItems()}
                       </ha-dropdown>`
                 }`
@@ -631,17 +630,19 @@ class HaScriptPicker extends SubscribeMixin(LitElement) {
               >
                 ${
                   this.narrow
-                    ? html`<ha-assist-chip
-                        .label=${this.hass.localize(
-                          "ui.panel.config.automation.picker.bulk_action"
-                        )}
+                    ? html`<ha-button
+                        appearance="filled"
+                        variant="brand"
                         slot="trigger"
                       >
                         <ha-svg-icon
-                          slot="trailing-icon"
+                          slot="end"
                           .path=${mdiMenuDown}
                         ></ha-svg-icon>
-                      </ha-assist-chip>`
+                        ${this.hass.localize(
+                          "ui.panel.config.automation.picker.bulk_action"
+                        )}</ha-button
+                      >`
                     : html`<ha-icon-button
                         .path=${mdiDotsVertical}
                         .label=${this.hass.localize(
@@ -1357,15 +1358,9 @@ ${rejected
           white-space: normal;
           overflow: visible;
         }
-        ha-assist-chip {
-          --ha-assist-chip-container-shape: 10px;
-        }
         ha-dropdown::part(menu),
         ha-dropdown::part(submenu) {
           --auto-size-available-width: calc(50vw - var(--ha-space-4));
-        }
-        ha-dropdown ha-assist-chip {
-          --ha-assist-chip-trailing-space: 8px;
         }
       `,
     ];

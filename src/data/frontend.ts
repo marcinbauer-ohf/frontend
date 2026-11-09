@@ -37,6 +37,8 @@ export interface HomeFrontendSystemData {
   hide_welcome_message?: boolean;
   hide_suggested_entities?: boolean;
   shortcuts?: ShortcutItem[];
+  /** The weather entity the overview and weather view show. */
+  weather_entity?: string;
 }
 
 export type SecurityAlertSeverity = "alert" | "warning";

@@ -18,6 +18,8 @@ export class HaTraceTimeline extends LitElement {
 
   @property({ attribute: false }) public selected!: NodeInfo;
 
+  @property({ type: Boolean }) public narrow = false;
+
   protected render(): TemplateResult {
     return html`
       <hat-trace-timeline
@@ -25,6 +27,7 @@ export class HaTraceTimeline extends LitElement {
         .trace=${this.trace}
         .logbookEntries=${this.logbookEntries}
         .selectedPath=${this.selected.path}
+        .narrow=${this.narrow}
         allow-pick
       >
       </hat-trace-timeline>

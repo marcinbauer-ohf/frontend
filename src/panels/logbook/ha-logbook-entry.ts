@@ -10,6 +10,7 @@ import { formatTimeWithSeconds } from "../../common/datetime/format_time";
 import { useAmPm } from "../../common/datetime/use_am_pm";
 import { fireEvent } from "../../common/dom/fire_event";
 import "../../components/ha-icon-next";
+import "../../components/ha-svg-icon";
 import "../../components/ha-tooltip";
 import { UNAVAILABLE } from "../../data/entity/entity";
 import type { LogbookEntry } from "../../data/logbook";
@@ -47,10 +48,24 @@ declare global {
 }
 
 @customElement("ha-logbook-entry")
-class HaLogbookEntry extends LitElement {
+export class HaLogbookEntry extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
-  @property({ attribute: false }) public item!: LogbookEntry;
+  /**
+   * The logbook record to show. Without one, the row shows its slotted
+   * content with `when` and `iconPath`, such as a step of a trace, in the
+   * same layout as the records around it.
+   */
+  @property({ attribute: false }) public item?: LogbookEntry;
+
+  /** Without an item: when it happened, in milliseconds. */
+  @property({ attribute: false }) public when?: number;
+
+  /** Without an item: the icon in the node. */
+  @property({ attribute: false }) public iconPath?: string;
+
+  /** Highlights the row and its node, such as the step being looked at. */
+  @property({ type: Boolean, reflect: true }) public selected = false;
 
   @property({ attribute: false }) public userIdToName: Record<string, string> =
     {};
@@ -78,11 +93,17 @@ class HaLogbookEntry extends LitElement {
   @property({ type: Boolean, attribute: "show-cause" }) public showCause =
     false;
 
+  /** A plain dot for the node, also beside the time column. */
+  @property({ type: Boolean, attribute: "dot-node" }) public dotNode = false;
+
   // Reading custom properties forces a style recalc, costly to repeat per row
   // while scrolling — resolve once and cache.
   private _computedStyle?: CSSStyleDeclaration;
 
   protected render() {
+    if (!this.item) {
+      return this._renderSlotted();
+    }
     const entry = this.item;
     const seenEntityIds: string[] = [];
 
@@ -95,7 +116,7 @@ class HaLogbookEntry extends LitElement {
     const hideName = this.nameDetail === "none";
     const layout: EntryLayout =
       !this.narrow && !this.noIcon ? "timeline" : hideName ? "inline" : "list";
-    const node = layout === "timeline" ? "icon" : "dot";
+    const node = layout === "timeline" && !this.dotNode ? "icon" : "dot";
 
     const renderedTime = formatTimeWithSeconds(
       new Date(item.when),
@@ -160,8 +181,77 @@ class HaLogbookEntry extends LitElement {
     `;
   }
 
+  // A row of slotted content: the time, a node with the given icon, and the
+  // content, laid out and railed like a record
+  private _renderSlotted() {
+    const layout: EntryLayout = this.narrow ? "list" : "timeline";
+    const renderedTime = this.when
+      ? formatTimeWithSeconds(
+          new Date(this.when),
+          this.hass.locale,
+          this.hass.config
+        )
+      : "";
+    const clickable = !this.noDetail;
+    const style = this.nodeColor
+      ? styleMap({ "--node-color": this.nodeColor })
+      : nothing;
+    return html`
+      <div
+        class="entry slotted ${classMap({
+          [`layout-${layout}`]: true,
+          [`node-${layout === "timeline" && !this.dotNode ? "icon" : "dot"}`]: true,
+          "last-of-day": this.lastOfDay,
+          "time-am-pm": useAmPm(this.hass.locale),
+          clickable,
+          selected: this.selected,
+        })}"
+        role=${ifDefined(clickable ? "button" : undefined)}
+        tabindex=${ifDefined(clickable ? "0" : undefined)}
+        @keydown=${this._rowKeydown}
+      >
+        ${
+          layout === "timeline"
+            ? html`<div class="time">
+                <span class="time-content">${renderedTime}</span>
+              </div>`
+            : nothing
+        }
+        <div
+          class="node ${classMap({
+            "rail-trim-top": this.firstOfDay,
+            "rail-trim-bottom": this.lastOfDay,
+          })}"
+        >
+          ${
+            layout === "timeline" && !this.dotNode
+              ? html`<div class="node-glyph" style=${style}>
+                  <ha-svg-icon .path=${this.iconPath}></ha-svg-icon>
+                </div>`
+              : html`<span class="dot" style=${style}></span>`
+          }
+        </div>
+        <div class="body">
+          <div class="content">
+            <div class="primary">
+              <span class="primary-text"><slot></slot></span>
+              ${
+                layout === "timeline"
+                  ? nothing
+                  : html`<span class="trailing">
+                      <span class="time-chip">${renderedTime}</span>
+                    </span>`
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // A slotted row is handled by its list, which listens for the click
   private _rowClicked() {
-    if (this.noDetail) {
+    if (this.noDetail || !this.item) {
       return;
     }
     fireEvent(this, "logbook-entry-selected", { item: this.item });
@@ -175,6 +265,10 @@ class HaLogbookEntry extends LitElement {
       return;
     }
     ev.preventDefault();
+    if (!this.item) {
+      this.click();
+      return;
+    }
     this._rowClicked();
   }
 
@@ -376,7 +470,7 @@ class HaLogbookEntry extends LitElement {
   private _renderNode(item: LogbookItem, layout: EntryLayout) {
     const stateObj =
       item.glyph.type === "state" ? item.glyph.stateObj : undefined;
-    const isUnavailable = this.item.state === UNAVAILABLE;
+    const isUnavailable = this.item!.state === UNAVAILABLE;
     const domain = stateObj ? computeDomain(stateObj.entity_id) : undefined;
     const isEnumDomain =
       domain === "select" ||
@@ -385,15 +479,18 @@ class HaLogbookEntry extends LitElement {
     const useGraphColor = this.graphColor || !isEnumDomain;
     const color =
       this.nodeColor ??
-      (layout === "inline" && !isUnavailable && this.item.state && useGraphColor
+      (layout === "inline" &&
+      !isUnavailable &&
+      this.item!.state &&
+      useGraphColor
         ? computeTimelineColor(
-            this.item.state,
+            this.item!.state,
             (this._computedStyle ??= getComputedStyle(this)),
             stateObj
           )
         : nodeColor(item.category, stateObj));
     const style = color ? styleMap({ "--node-color": color }) : nothing;
-    if (layout !== "timeline") {
+    if (layout !== "timeline" || this.dotNode) {
       return html`<span
         class="dot ${classMap({ unavailable: isUnavailable })}"
         style=${style}
@@ -402,7 +499,7 @@ class HaLogbookEntry extends LitElement {
     const unavailable =
       item.glyph.type === "state" && item.glyph.stateObj.state === UNAVAILABLE;
     return html`<div class="node-glyph" style=${style}>
-      ${renderLogbookGlyph(this.hass, this.item, item.glyph)}
+      ${renderLogbookGlyph(this.hass, this.item!, item.glyph)}
       ${unavailable ? html`<span class="node-badge"></span>` : nothing}
     </div>`;
   }
@@ -536,17 +633,17 @@ class HaLogbookEntry extends LitElement {
            --dot-pos = padding-block (8px) + half normal line-height (12px) = 20px.
            Matches .content's padding-top + headline center — no dependency on
            track height, so Firefox grid-track sizing quirks don't affect it. */
-        .entry.node-dot:not(.layout-inline) .node {
+        .entry.node-dot.layout-list .node {
           --dot-pos: 20px;
           justify-content: flex-start;
           padding-top: calc(var(--dot-pos) - 5px);
         }
 
-        .entry.node-dot:not(.layout-inline) .node::before {
+        .entry.node-dot.layout-list .node::before {
           bottom: calc(100% - var(--dot-pos) + 9px);
         }
 
-        .entry.node-dot:not(.layout-inline) .node::after {
+        .entry.node-dot.layout-list .node::after {
           top: calc(var(--dot-pos) + 9px);
         }
 
@@ -623,6 +720,17 @@ class HaLogbookEntry extends LitElement {
           height: 10px;
           border-radius: var(--ha-border-radius-circle);
           background-color: var(--node-color);
+        }
+
+        /* The step being looked at, in a trace */
+        .entry.selected {
+          --node-color: var(--primary-color);
+          background-color: rgba(var(--rgb-primary-color), 0.08);
+        }
+
+        .entry.selected .node-glyph,
+        .entry.selected .dot {
+          --node-color: var(--primary-color);
         }
 
         .dot.unavailable {

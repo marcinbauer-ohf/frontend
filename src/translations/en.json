@@ -281,8 +281,9 @@
         "count_maintenance_issues_unavailable_battery_entities": "{count} {count, plural,\n one {unavailable device}\n other {unavailable devices}\n}",
         "count_maintenance_problem_issues": "{count} {count, plural,\n one {problem}\n other {problems}\n}",
         "all_maintenance_good": "All good",
-        "count_persons_home": "{count} {count, plural,\n one {person}\n other {people}\n} home",
-        "nobody_home": "No one home"
+        "persons_label": "At home",
+        "count_persons_home": "{count} {count, plural,\n one {person}\n other {people}\n}",
+        "nobody_home": "Nobody"
       },
       "toggle-group": {
         "all_off": "All off",
@@ -573,6 +574,10 @@
       "last": "Last"
     },
     "components": {
+      "summary_editor_pane": {
+        "empty": "Nothing to set up yet",
+        "empty_description": "Options for this page will show up here."
+      },
       "safe_area_tool": {
         "title": "Safe area",
         "presets": {
@@ -2881,7 +2886,13 @@
       "migrate_to_user_data": "This will change the sidebar on all the devices you are logged in to. To create a sidebar per device, you should use a different user for that device.",
       "default": "default",
       "reset_to_defaults": "Reset to defaults",
-      "reset_confirmation": "Are you sure you want to reset the sidebar to its default configuration? This will restore the original order and visibility of all panels."
+      "reset_confirmation": "Are you sure you want to reset the sidebar to its default configuration? This will restore the original order and visibility of all panels.",
+      "panel_menu": {
+        "open_in_new_tab": "Open in new tab",
+        "dashboard_settings": "Dashboard settings",
+        "app_settings": "App settings",
+        "hide_from_sidebar": "Hide from sidebar"
+      }
     },
     "panel": {
       "app": {
@@ -2897,12 +2908,23 @@
       },
       "home": {
         "editor": {
+          "weather_entity": "Weather entity",
+          "area": {
+            "no_sensors": "No sensors chosen",
+            "area_settings": "Area settings",
+            "area_settings_description": "Devices, automations, and everything else in this area",
+            "delete": "Delete area"
+          },
           "title": "Customize home",
           "home": "Home",
           "home_name": "Home name",
           "people": "People",
           "people_count": "{count} {count, plural,\n  one {person}\n  other {people}\n}",
           "people_yaml": "Set up in YAML",
+          "logins_without_person": "Logins without a person",
+          "logins_count": "{count} {count, plural,\n  one {login}\n  other {logins}\n}",
+          "logins_without_person_description": "Accounts that can log in but aren't linked to anyone in your home",
+          "no_logins_without_person": "Every login belongs to a person",
           "overview_page_header": "On this page",
           "home_setup_header": "Your home",
           "favorites_and_suggested": "Favorite and suggested devices",
@@ -2935,6 +2957,13 @@
             "color": "Color"
           }
         },
+        "edit_view": {
+          "media_players": "Edit media players",
+          "automations": "Edit automations",
+          "other_devices": "Edit devices",
+          "people": "Edit people",
+          "weather": "Edit weather"
+        },
         "new_overview_dialog": {
           "title": "Welcome to your new overview",
           "description": "The overview dashboard has been redesigned to give you a better experience managing your smart home.",
@@ -2953,6 +2982,15 @@
           "learn_more": "Learn more"
         }
       },
+      "climate": {
+        "edit": "Edit climate"
+      },
+      "light": {
+        "edit": "Edit lights"
+      },
+      "maintenance": {
+        "edit": "Edit maintenance"
+      },
       "security": {
         "edit": "Edit security",
         "editor": {
@@ -2964,6 +3002,9 @@
           "active_alert_entities": "Active alert entities",
           "active_alert_entities_description": "Display any entities that require attention.",
           "add_alert_entity": "Add entity",
+          "no_favorites": "[%key:ui::panel::home::editor::no_favorites%]",
+          "no_alert_entities": "No alert entities yet",
+          "entities_count": "[%key:ui::panel::home::editor::favorites_count%]",
           "severity": {
             "label": "Severity",
             "alert": "Alert",
@@ -3052,6 +3093,14 @@
           "voice_assistants": {
             "main": "Voice assistants",
             "secondary": "Manage your voice assistants"
+          },
+          "history": {
+            "main": "History",
+            "secondary": "Compare entity history across devices and areas"
+          },
+          "logbook": {
+            "main": "Activity",
+            "secondary": "Everything that happened across your home"
           },
           "energy": {
             "main": "Energy",
@@ -4725,7 +4774,9 @@
                 "cost_number": "Use a static price",
                 "cost_number_input": "Price"
               }
-            }
+            },
+            "no_connections": "No grid connections added yet",
+            "no_co2_signal": "No carbon footprint source added yet"
           },
           "solar": {
             "title": "Solar panels",
@@ -4749,7 +4800,8 @@
               "dont_forecast_production": "Don't forecast production",
               "forecast_production": "Forecast production",
               "add_forecast": "Add forecast"
-            }
+            },
+            "no_solar_production": "No solar production added yet"
           },
           "battery": {
             "title": "Home battery storage",
@@ -4783,7 +4835,8 @@
               "power_to": "Charge power",
               "helper_sensor_note": "Home Assistant will create a helper sensor entity for this option.",
               "helper_sensor_in_use": "Currently using helper {entity}"
-            }
+            },
+            "no_battery_systems": "No battery systems added yet"
           },
           "gas": {
             "title": "Gas consumption",
@@ -4813,7 +4866,8 @@
               "gas_usage": "Gas consumption",
               "gas_flow_rate": "Gas flow rate",
               "flow_rate_para": "Optionally pick a sensor which measures the gas flow rate in either of {unit}."
-            }
+            },
+            "no_gas_sources": "No gas sources added yet"
           },
           "water": {
             "title": "Water consumption",
@@ -4840,7 +4894,8 @@
               "water_usage": "Water consumption",
               "water_flow_rate": "Water flow rate",
               "flow_rate_para": "Optionally pick a sensor which measures the water flow rate in either of {unit}."
-            }
+            },
+            "no_water_sources": "No water sources added yet"
           },
           "device_consumption": {
             "title": "Individual electrical devices",
@@ -4859,7 +4914,8 @@
               "included_in_device": "Upstream device",
               "included_in_device_helper": "If this device is already counted by another device (such as a smart switch measured by a smart breaker), selecting the upstream device prevents duplicate energy tracking.",
               "no_upstream_devices": "No eligible upstream devices"
-            }
+            },
+            "no_devices": "No devices added yet"
           },
           "device_consumption_water": {
             "title": "Individual water devices",
@@ -4876,7 +4932,8 @@
               "included_in_device": "Upstream device",
               "included_in_device_helper": "If this device is already counted by another device (such as a water meter measured by the main water supply), selecting the upstream device prevents duplicate water tracking.",
               "no_upstream_devices": "No eligible upstream devices"
-            }
+            },
+            "no_devices": "No devices added yet"
           }
         },
         "helpers": {
@@ -5574,6 +5631,13 @@
             "pick_automation": "Pick automation to edit",
             "no_automations": "We couldn't find any automations",
             "add_automation": "Create automation",
+            "show_cards": "[%key:ui::panel::config::devices::picker::show_cards%]",
+            "show_table": "[%key:ui::panel::config::devices::picker::show_table%]",
+            "state_filter": {
+              "enabled": "[%key:ui::panel::config::automation::editor::info_pane::enabled%]",
+              "disabled": "[%key:ui::panel::config::automation::picker::disabled%]"
+            },
+            "edit": "Edit automations",
             "only_editable": "Only automations in automations.yaml are editable.",
             "dev_only_editable": "Only automations that have a unique ID assigned are debuggable.",
             "edit_automation": "Edit automation",
@@ -5628,7 +5692,17 @@
               "community": "By the community",
               "homeassistant": "By Home Assistant"
             },
-            "discover_blueprint_tip": "Discover more community blueprints"
+            "discover_blueprint_tip": "Discover more community blueprints",
+            "search": "Search blueprints",
+            "from_scratch": "From scratch",
+            "browse": "Blueprints",
+            "all_blueprints": "All blueprints",
+            "no_blueprints": "You don't have any blueprints yet",
+            "source": {
+              "homeassistant": "Home Assistant",
+              "community": "Community",
+              "local": "Yours"
+            }
           },
           "editor": {
             "enable": "[%key:ui::common::enable%]",
@@ -5647,6 +5721,21 @@
             "run": "Run actions",
             "rename": "[%key:ui::panel::config::automation::editor::triggers::rename%]",
             "show_trace": "Traces",
+            "info_pane": {
+              "title": "Info",
+              "add_details": "Add details",
+              "description": "[%key:ui::panel::config::automation::editor::description::label%]",
+              "category": "[%key:ui::components::category-picker::category%]",
+              "labels": "Labels",
+              "area": "Area",
+              "status": "Automation status",
+              "enabled": "Enabled",
+              "disabled": "Disabled",
+              "mode": "Automation mode"
+            },
+            "view_list": "List",
+            "view_yaml": "YAML",
+            "view_nodes": "Nodes",
             "show_info": "More info",
             "default_name": "New automation",
             "missing_name": "Cannot save automation without a name",
@@ -5786,7 +5875,7 @@
             "triggers": {
               "name": "Triggers",
               "header": "When",
-              "description": "A trigger is a specific event happening in or around your home, for example: ''When the sun sets''. Any trigger added here will start your automation.",
+              "description": "Triggers start this automation when something happens.",
               "learn_more": "Learn more about triggers",
               "triggered": "Triggered",
               "add": "Add trigger",
@@ -6096,7 +6185,7 @@
             "conditions": {
               "name": "Conditions",
               "header": "And if",
-              "description": "All conditions added here need to be satisfied for the automation to run. A condition can be satisfied or not at any given time, for example: ''If {user} is home''. You can use building blocks to create more complex conditions.",
+              "description": "Conditions filter when this automation runs (optional).",
               "learn_more": "Learn more about conditions",
               "add": "Add condition",
               "empty_search": {
@@ -6295,8 +6384,8 @@
             },
             "actions": {
               "name": "Actions",
-              "header": "Then do",
-              "description": "All actions added here will be performed in sequence when the automation runs. An action usually controls one of your areas, devices, or entities, for example: 'Turn on the lights'. You can use building blocks to create more complex sequences of actions.",
+              "header": "Then",
+              "description": "Actions run each time this automation triggers.",
               "learn_more": "Learn more about actions",
               "add": "Add action",
               "empty_search": {
@@ -6596,6 +6685,10 @@
             "no_traces_found": "No traces found",
             "trace_no_longer_available": "Chosen trace is no longer available",
             "enter_downloaded_trace": "Enter downloaded trace",
+            "run_history": "Run history",
+            "latest": "Latest",
+            "import_trace": "Import trace",
+            "load_stored_trace": "Load stored trace",
             "graph": {
               "node_label": "{description}, {state}",
               "state": {
@@ -6636,6 +6729,19 @@
               "not_triggered": "This trigger evaluated a relevant change but did not trigger the automation. The reason is shown in the result below.",
               "no_logbook_entries": "No activity found for this step.",
               "no_variables_changed": "No variables changed",
+              "technical_details": "Technical details",
+              "result_data": "Result data",
+              "outcome": "Result",
+              "when": "When",
+              "outcome_failed": "Failed",
+              "outcome_passed": "Passed",
+              "outcome_not_passed": "Did not pass",
+              "outcome_started": "Started the automation",
+              "outcome_not_started": "Did not start the automation",
+              "outcome_option": "Ran option {number}",
+              "outcome_default_option": "Ran the default actions",
+              "outcome_done": "Done",
+              "activity": "What happened",
               "unable_to_find_config": "Unable to find config"
             },
             "messages": {
@@ -6802,7 +6908,17 @@
               "community": "[%key:ui::panel::config::automation::dialog_new::blueprint_source::community%]",
               "homeassistant": "[%key:ui::panel::config::automation::dialog_new::blueprint_source::homeassistant%]"
             },
-            "discover_blueprint_tip": "[%key:ui::panel::config::automation::dialog_new::discover_blueprint_tip%]"
+            "discover_blueprint_tip": "[%key:ui::panel::config::automation::dialog_new::discover_blueprint_tip%]",
+            "search": "[%key:ui::panel::config::automation::dialog_new::search%]",
+            "from_scratch": "[%key:ui::panel::config::automation::dialog_new::from_scratch%]",
+            "browse": "[%key:ui::panel::config::automation::dialog_new::browse%]",
+            "all_blueprints": "[%key:ui::panel::config::automation::dialog_new::all_blueprints%]",
+            "no_blueprints": "[%key:ui::panel::config::automation::dialog_new::no_blueprints%]",
+            "source": {
+              "homeassistant": "[%key:ui::panel::config::automation::dialog_new::source::homeassistant%]",
+              "community": "[%key:ui::panel::config::automation::dialog_new::source::community%]",
+              "local": "[%key:ui::panel::config::automation::dialog_new::source::local%]"
+            }
           },
           "editor": {
             "alias": "Name",
@@ -7520,6 +7636,10 @@
           "picker": {
             "search": "Search {number} {number, plural,\n  one {device}\n  other {devices}\n}",
             "show_cards": "Show as cards",
+            "your_devices": "Your devices",
+            "no_discovered": "No discovered devices",
+            "no_area": "[%key:ui::components::device-picker::no_area%]",
+            "other_areas": "[%key:ui::panel::config::areas::picker::other_areas%]",
             "show_table": "Show as table",
             "state": "Status",
             "bulk_actions": {
@@ -9978,6 +10098,7 @@
             "unnamed_device": "Unnamed device",
             "others": "Others",
             "scenes": "Scenes",
+            "scripts": "Scripts",
             "automations": "Automations",
             "favorites": "Favorites",
             "welcome_title": "No devices here yet",
@@ -10106,7 +10227,10 @@
               "activity_unavailable": "Activity couldn't be loaded",
               "entered": "Entered",
               "left": "Left",
-              "people_in_zone": "{count, plural, =0 {No one here} one {{count} person} other {{count} people}}"
+              "people_in_zone": "{count, plural, =0 {No one here} one {{count} person} other {{count} people}}",
+              "manage_people": "Manage people",
+              "manage_devices": "Manage devices",
+              "manage_zones": "Manage zones"
             }
           },
           "energy": {
@@ -10279,6 +10403,22 @@
           "add_person_success": "Person added",
           "add_person_action": "View persons",
           "add_person": "Add person",
+          "add_device_description": "Connect a new device or service",
+          "create_automation_description": "Make your home react on its own",
+          "create_area_description": "Group devices by room",
+          "add_person_description": "Track who is home",
+          "show_more": "Show more",
+          "show_less": "Show less",
+          "create_scene": "Create scene",
+          "create_script": "Create script",
+          "create_helper": "Create helper",
+          "create_floor": "Create floor",
+          "create_zone": "Create zone",
+          "create_label": "Create label",
+          "create_dashboard": "Create dashboard",
+          "add_user": "Add user",
+          "add_tag": "Add tag",
+          "import_blueprint": "Import blueprint",
           "edit_overview": "Edit home",
           "edit_energy": "Edit energy",
           "edit_area": "Edit area"
@@ -12111,6 +12251,28 @@
               "favorite_entities": "Favorite devices",
               "add_favorite_entity": "Add favorite",
               "device_cards": "Show devices as device cards"
+            },
+            "map": {
+              "title": "Map settings",
+              "on_map": "On the map",
+              "add_zone": "Add zone",
+              "settings": "Settings",
+              "appearance_helper": "Theme, map style, and how zones are drawn",
+              "markers_helper": "Path history and grouping",
+              "edit_people": "People",
+              "edit_people_helper": "Add or remove the people in your home",
+              "edit_devices": "Devices",
+              "edit_devices_helper": "Manage the devices that report a location",
+              "markers": "Markers",
+              "history": "Path history",
+              "history_helper": "Draw the route each tracked entity took",
+              "hours": "{count, plural,\n one {Last hour}\n other {Last # hours}\n}",
+              "off": "Off",
+              "zones": "Zones",
+              "zone_radius_helper": "Always draw the area each zone covers",
+              "take_control": "Take control",
+              "take_control_helper": "Turn the map into a dashboard you edit card by card. It stops updating automatically.",
+              "save_failed": "Couldn't save the map settings"
             }
           },
           "view": {
@@ -12953,12 +13115,12 @@
         "load_failed": "The Marketplace could not load its data: {error}",
         "warning": {
           "title": "Before you install from the Marketplace",
-          "intro": "Marketplace items are made by community contributors and are not reviewed by the Home\u00a0Assistant project. Treat them like plugins for any other software.",
+          "intro": "Marketplace items are made by community contributors and are not reviewed by the Home Assistant project. Treat them like plugins for any other software.",
           "risks_title": "Anything you install can",
           "risks": {
             "internet": "Connect to the internet",
             "data": "Share your data with others",
-            "stability": "Slow down or crash Home\u00a0Assistant"
+            "stability": "Slow down or crash Home Assistant"
           },
           "mindful_title": "So be mindful",
           "mindful": {
@@ -13089,7 +13251,6 @@
           "discover": "Discover",
           "browse": "Browse",
           "installed": "Installed",
-          "updates": "{count, plural,\n  one {# update}\n  other {# updates}\n}",
           "add_from_link": "Add from link"
         },
         "repository": {

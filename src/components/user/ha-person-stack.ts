@@ -3,13 +3,18 @@ import { customElement, property } from "lit/decorators";
 import type { BasePerson } from "../../data/person";
 import "./ha-person-badge";
 
+/** A person in the stack; `away` ones are shown greyed out. */
+export interface StackPerson extends BasePerson {
+  away?: boolean;
+}
+
 /**
  * Overlapping person avatars, up to `max`, then a "+N" for the rest. Each
  * avatar is ringed in `--ha-person-stack-ring-color` so the edges read.
  */
 @customElement("ha-person-stack")
 export class HaPersonStack extends LitElement {
-  @property({ attribute: false }) public persons: BasePerson[] = [];
+  @property({ attribute: false }) public persons: StackPerson[] = [];
 
   @property({ type: Number }) public max = 4;
 
@@ -17,12 +22,17 @@ export class HaPersonStack extends LitElement {
     if (!this.persons.length) {
       return nothing;
     }
+    const shown = this.persons.slice(0, this.max);
     const rest = this.persons.length - this.max;
-    return html`${this.persons
-      .slice(0, this.max)
-      .map(
-        (person) => html`<ha-person-badge .person=${person}></ha-person-badge>`
-      )}
+    // The first avatar sits on top, each later one tucks underneath it
+    return html`${shown.map(
+      (person, i) =>
+        html`<ha-person-badge
+          class=${person.away ? "away" : ""}
+          style="z-index: ${shown.length - i}"
+          .person=${person}
+        ></ha-person-badge>`
+    )}
     ${rest > 0 ? html`<span class="more">+${rest}</span>` : nothing}`;
   }
 
@@ -34,6 +44,7 @@ export class HaPersonStack extends LitElement {
     }
     ha-person-badge,
     .more {
+      position: relative;
       width: var(--ha-person-stack-size, 28px);
       height: var(--ha-person-stack-size, 28px);
       flex-shrink: 0;
@@ -42,6 +53,12 @@ export class HaPersonStack extends LitElement {
         var(--ha-person-stack-ring-color, var(--card-background-color));
       --person-badge-font-size: var(--ha-font-size-xs);
       --ha-person-badge-font-size-long: var(--ha-font-size-xs);
+    }
+    /* Solid colours, not opacity, so overlapping avatars don't show through */
+    ha-person-badge.away {
+      filter: grayscale(1);
+      --ha-person-badge-background-color: var(--secondary-background-color);
+      --ha-person-badge-color: var(--secondary-text-color);
     }
     * + * {
       margin-inline-start: calc(

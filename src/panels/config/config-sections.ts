@@ -5,9 +5,11 @@ import {
   mdiBluetooth,
   mdiCableData,
   mdiCellphoneCog,
+  mdiChartBox,
   mdiCog,
   mdiDatabase,
   mdiFlask,
+  mdiFormatListBulletedType,
   mdiHammer,
   mdiInformationOutline,
   mdiLabel,
@@ -160,6 +162,20 @@ export const configSections: Record<string, PageNavigation[]> = {
       iconColor: "#3263C3",
       adminOnly: true,
     },
+    {
+      path: "/history",
+      translationKey: "history",
+      iconPath: mdiChartBox,
+      iconColor: "#0277BD",
+      component: "history",
+    },
+    {
+      path: "/logbook",
+      translationKey: "logbook",
+      iconPath: mdiFormatListBulletedType,
+      iconColor: "#6A1B9A",
+      component: "logbook",
+    },
   ],
   connectivity: [
     {
@@ -283,15 +299,6 @@ export const configSections: Record<string, PageNavigation[]> = {
     },
   ],
   dashboard_3: [
-    {
-      path: "/config/users",
-      translationKey: "users",
-      iconPath: mdiBadgeAccountHorizontal,
-      iconColor: "#5A87FA",
-      component: "users",
-      core: true,
-      adminOnly: true,
-    },
     {
       path: "/config/system",
       translationKey: "system",

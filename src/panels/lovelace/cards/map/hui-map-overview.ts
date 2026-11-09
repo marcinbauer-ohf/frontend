@@ -24,6 +24,8 @@ import type {
   HASSDomEvent,
 } from "../../../../common/dom/fire_event";
 import { fireEvent } from "../../../../common/dom/fire_event";
+import { navigate } from "../../../../common/navigate";
+import { homeEditorPath } from "../../../../common/url/home-query-params";
 import { computeDomain } from "../../../../common/entity/compute_domain";
 import { computeStateDomain } from "../../../../common/entity/compute_state_domain";
 import {
@@ -34,6 +36,7 @@ import {
   HOME_ZONE_ENTITY_ID,
   zoneColor,
 } from "../../../../common/map/entity-map-colors";
+import "../../../../components/ha-button";
 import "../../../../components/ha-icon-button";
 import "../../../../components/ha-icon-button-prev";
 import "../../../../components/ha-icon-next";
@@ -76,6 +79,13 @@ import { personActivity, zoneActivity } from "./map-activity";
 
 export type OverviewTab = "people" | "devices" | "zones";
 
+// Where each tab's items are managed, as in the map settings pane
+const MANAGE_PATHS: Record<OverviewTab, string> = {
+  people: homeEditorPath("people"),
+  devices: "/config/devices/dashboard",
+  zones: "/config/zone?historyBack=1",
+};
+
 const ACTIVITY_HOURS = 24;
 const ACTIVITY_INITIAL_ENTRIES = 5;
 
@@ -83,6 +93,8 @@ declare global {
   interface HASSDomEvents {
     "map-overview-select": { entityId?: string };
     "map-overview-tab": { tab: OverviewTab };
+    /** Cancelled by a host that manages zones itself. */
+    "map-manage-zones": undefined;
     /**
      * Rendered size, so the host keeps controls and focused markers clear of
      * it. The phone sheet also sends the height markers are framed for, the
@@ -590,7 +602,36 @@ export class HuiMapOverview extends LitElement {
           `
         )}
       </ha-grouped-list>
+      ${
+        !__DEMO__ && this._user?.is_admin
+          ? html`<ha-button
+              class="manage"
+              size="s"
+              appearance="plain"
+              data-tab=${tab}
+              @click=${this._handleManage}
+            >
+              ${this._i18n.localize(
+                `ui.panel.lovelace.cards.map.overview.manage_${tab}`
+              )}
+            </ha-button>`
+          : nothing
+      }
     `;
+  }
+
+  private _handleManage(ev: Event) {
+    const tab = (ev.currentTarget as HTMLElement).dataset.tab as OverviewTab;
+    // The map dashboard manages zones in its own settings; anywhere else the
+    // event goes unanswered and the zones page opens
+    if (
+      tab === "zones" &&
+      fireEvent(this, "map-manage-zones", undefined, { cancelable: true })
+        .defaultPrevented
+    ) {
+      return;
+    }
+    navigate(MANAGE_PATHS[tab]);
   }
 
   // In the pane the name is the heading, so the summary takes focus instead
@@ -894,6 +935,9 @@ export class HuiMapOverview extends LitElement {
     .no-location,
     .empty {
       color: var(--secondary-text-color);
+    }
+    ha-button.manage {
+      align-self: flex-start;
     }
     .show-more {
       color: var(--primary-color);

@@ -35,17 +35,20 @@ export interface ZoneMutableParams {
 export const computeZoneTrackerState = (zone: HassEntity): string =>
   zone.entity_id === HOME_ZONE_ENTITY_ID ? "home" : computeStateName(zone);
 
-export const fetchZones = (hass: HomeAssistant) =>
+export const fetchZones = (hass: Pick<HomeAssistant, "callWS">) =>
   hass.callWS<Zone[]>({ type: "zone/list" });
 
-export const createZone = (hass: HomeAssistant, values: ZoneMutableParams) =>
+export const createZone = (
+  hass: Pick<HomeAssistant, "callWS">,
+  values: ZoneMutableParams
+) =>
   hass.callWS<Zone>({
     type: "zone/create",
     ...values,
   });
 
 export const updateZone = (
-  hass: HomeAssistant,
+  hass: Pick<HomeAssistant, "callWS">,
   zoneId: string,
   updates: Partial<ZoneMutableParams>
 ) =>
@@ -55,7 +58,10 @@ export const updateZone = (
     ...updates,
   });
 
-export const deleteZone = (hass: HomeAssistant, zoneId: string) =>
+export const deleteZone = (
+  hass: Pick<HomeAssistant, "callWS">,
+  zoneId: string
+) =>
   hass.callWS({
     type: "zone/delete",
     zone_id: zoneId,

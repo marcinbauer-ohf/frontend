@@ -6,6 +6,8 @@ import {
   generateEntityFilter,
 } from "../../../../common/entity/entity_filter";
 import { clamp } from "../../../../common/number/clamp";
+import { computeDomain } from "../../../../common/entity/compute_domain";
+import { findRelated, type RelatedResult } from "../../../../data/search";
 import type { LovelaceBadgeConfig } from "../../../../data/lovelace/config/badge";
 import type { LovelaceSectionRawConfig } from "../../../../data/lovelace/config/section";
 import type { LovelaceViewConfig } from "../../../../data/lovelace/config/view";
@@ -267,53 +269,26 @@ export class HomeAreaViewStrategy extends ReactiveElement {
       ? maintenance
       : Object.values(partialEntitiesBySummary).flat();
 
-    // Scenes section
-    const sceneFilter = generateEntityFilter(
-      hass.states,
-      hass.entities,
-      hass.devices,
-      hass.areas,
-      hass.floors,
-      {
-        domain: "scene",
-        entity_category: "none",
-      }
+    // Scenes, scripts and automations: the ones assigned to the area, plus
+    // the ones that reference it or its devices and entities.
+    const related = await findRelated(hass, "area", config.area).catch(
+      () => ({}) as RelatedResult
     );
-    const scenes = areaEntities.filter(sceneFilter);
-
-    if (scenes.length > 0) {
-      sections.push({
-        type: "grid",
-        cards: [
-          {
-            type: "heading",
-            heading: hass.localize("ui.panel.lovelace.strategy.home.scenes"),
-            icon: "mdi:palette",
-            tap_action: hass.user?.is_admin
-              ? {
-                  action: "navigate",
-                  navigation_path: "/config/scene/dashboard",
-                }
-              : undefined,
-          } satisfies HeadingCardConfig,
-          ...scenes.map(computeTileCard),
-        ],
-      });
-    }
-
-    // Automations section
-    const automationFilter = generateEntityFilter(
-      hass.states,
-      hass.entities,
-      hass.devices,
-      hass.areas,
-      hass.floors,
-      {
-        domain: "automation",
-        entity_category: "none",
-      }
-    );
-    const automations = areaEntities.filter(automationFilter);
+    const routineEntities = (domain: "scene" | "script" | "automation") =>
+      [
+        ...new Set([
+          ...areaEntities.filter((id) => computeDomain(id) === domain),
+          ...(related[domain] ?? []),
+        ]),
+      ].filter(
+        (id) =>
+          id in hass.states &&
+          !hass.entities[id]?.hidden &&
+          !hass.entities[id]?.entity_category
+      );
+    const scenes = routineEntities("scene");
+    const scripts = routineEntities("script");
+    const automations = routineEntities("automation");
 
     // Rest of entities grouped by device
     const otherEntities = areaEntities.filter(
@@ -452,31 +427,17 @@ export class HomeAreaViewStrategy extends ReactiveElement {
       sections.push(...deviceSections);
     }
 
-    // Show automations last, if they exist
-    if (automations.length > 0) {
-      sections.push({
-        type: "grid",
-        cards: [
-          {
-            type: "heading",
-            heading: hass.localize(
-              "ui.panel.lovelace.strategy.home.automations"
-            ),
-            icon: "mdi:robot",
-            tap_action: hass.user?.is_admin
-              ? {
-                  action: "navigate",
-                  navigation_path: "/config/automation/dashboard",
-                }
-              : undefined,
-          } satisfies HeadingCardConfig,
-          ...automations.map(computeTileCard),
-        ],
-      });
-    }
+    const routineGroups = [
+      { key: "scenes", icon: "mdi:palette", entities: scenes },
+      { key: "scripts", icon: "mdi:script-text", entities: scripts },
+      { key: "automations", icon: "mdi:robot", entities: automations },
+    ] as const;
 
     // No sections, show empty state
-    if (sections.length === 0) {
+    if (
+      sections.length === 0 &&
+      !routineGroups.some((g) => g.entities.length)
+    ) {
       return {
         type: "panel",
         cards: [
@@ -533,6 +494,34 @@ export class HomeAreaViewStrategy extends ReactiveElement {
     // Take the full width if there is only one section to avoid narrow header on desktop
     if (sections.length === 1) {
       sections[0].column_span = 2;
+    }
+
+    if (routineGroups.some((g) => g.entities.length)) {
+      sections.push({
+        type: "grid",
+        column_span: maxColumns,
+        background: { color: "primary", opacity: 12 },
+        cards: routineGroups.flatMap(({ key, icon, entities }) =>
+          entities.length
+            ? [
+                {
+                  type: "heading",
+                  heading: hass.localize(
+                    `ui.panel.lovelace.strategy.home.${key}`
+                  ),
+                  icon,
+                  tap_action: hass.user?.is_admin
+                    ? {
+                        action: "navigate",
+                        navigation_path: `/config/${key.slice(0, -1)}/dashboard`,
+                      }
+                    : undefined,
+                } satisfies HeadingCardConfig,
+                ...entities.map(computeTileCard),
+              ]
+            : []
+        ),
+      });
     }
 
     return {

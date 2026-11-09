@@ -433,6 +433,14 @@ export class HuiHomeSummaryCard extends LitElement implements LovelaceCard {
     return "";
   }
 
+  // The persons summary says who is at home, not just "People"
+  protected _summaryLabel(): string {
+    const summary = this._config!.summary;
+    return summary === "persons"
+      ? this._i18n!.localize("ui.card.home-summary.persons_label")
+      : getSummaryLabel(this._i18n!.localize, summary);
+  }
+
   protected render() {
     if (!this._config || !this._i18n) {
       return nothing;
@@ -453,7 +461,7 @@ export class HuiHomeSummaryCard extends LitElement implements LovelaceCard {
       this._energyData
     );
 
-    const label = getSummaryLabel(this._i18n.localize, summary);
+    const label = this._summaryLabel();
     const icon = HOME_SUMMARIES_ICONS[summary];
 
     return html`

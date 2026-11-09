@@ -35,6 +35,7 @@ import { copyToClipboard } from "../../../../common/util/copy-clipboard";
 import "../../../../components/automation/ha-automation-condition-live-test";
 import "../../../../components/automation/ha-automation-condition-summary";
 import "../../../../components/automation/ha-automation-row";
+import "../../../../components/automation/ha-automation-collapsible";
 import type { HaAutomationRow } from "../../../../components/automation/ha-automation-row";
 import "../../../../components/automation/ha-automation-row-event-chip";
 import "../../../../components/ha-alert";
@@ -508,19 +509,30 @@ export default class HaAutomationConditionRow extends LitElement {
       ${
         this.optionsInSidebar &&
         CONDITION_BUILDING_BLOCKS.includes(this.condition.condition)
-          ? html`<ha-automation-condition-editor
-              class=${this._collapsed ? "hidden" : ""}
-              .hass=${this.hass}
-              .condition=${this.condition}
-              .disabled=${this.disabled}
-              .uiSupported=${this._uiSupported(
-                this._getType(this.condition, this.conditionDescriptions)
-              )}
-              indent
-              .selected=${this._selected}
-              .narrow=${this.narrow}
-              @value-changed=${this._onValueChange}
-            ></ha-automation-condition-editor>`
+          ? html`<ha-automation-collapsible
+              .collapsed=${this._collapsed}
+              .count=${
+                (
+                  ensureArray(
+                    (this.condition as { conditions?: unknown }).conditions
+                  ) ?? []
+                ).length
+              }
+              @toggle-collapsed=${this._toggleCollapse}
+            >
+              <ha-automation-condition-editor
+                .hass=${this.hass}
+                .condition=${this.condition}
+                .disabled=${this.disabled}
+                .uiSupported=${this._uiSupported(
+                  this._getType(this.condition, this.conditionDescriptions)
+                )}
+                indent
+                .selected=${this._selected}
+                .narrow=${this.narrow}
+                @value-changed=${this._onValueChange}
+              ></ha-automation-condition-editor>
+            </ha-automation-collapsible>`
           : nothing
       }
     `;
@@ -972,7 +984,9 @@ export default class HaAutomationConditionRow extends LitElement {
       customElements.get(`ha-automation-condition-${type}`) !== undefined
   );
 
-  private _toggleCollapse() {
+  private _toggleCollapse(ev?: Event) {
+    // Nested blocks fire the same event; only the nearest row may act on it
+    ev?.stopPropagation();
     this._collapsed = !this._collapsed;
   }
 

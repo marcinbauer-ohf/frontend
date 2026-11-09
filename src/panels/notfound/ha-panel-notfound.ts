@@ -51,7 +51,6 @@ class HaPanelNotFound extends LitElement {
         .lovelace=${this._lovelace}
         .route=${this.route}
         .panel=${this.panel}
-        no-edit
       ></hui-root>
     `;
   }

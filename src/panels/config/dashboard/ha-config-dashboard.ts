@@ -12,6 +12,7 @@ import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import { ctrlOrCmdLabel } from "../../../common/keyboard/ctrl-or-cmd";
+import "../../../components/ha-add-menu";
 import "../../../components/ha-card";
 import "../../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
@@ -246,17 +247,30 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
       <ha-top-app-bar-fixed .narrow=${this.narrow}>
         <div slot="title">${this.hass.localize("panel.config")}</div>
 
-        <ha-icon-button
-          slot="actionItems"
-          id="button-quick-bar"
-          .label=${quickBarLabel}
-          .path=${mdiMagnify}
-          hide-title
-          @click=${this._showQuickBar}
-        ></ha-icon-button>
-        <ha-tooltip placement="bottom" for="button-quick-bar"
-          >${quickBarLabel}</ha-tooltip
-        >
+        ${
+          // Desktop toolbars show the search in the middle
+          this.narrow
+            ? html`<ha-icon-button
+                  slot="actionItems"
+                  id="button-quick-bar"
+                  .label=${quickBarLabel}
+                  .path=${mdiMagnify}
+                  hide-title
+                  @click=${this._showQuickBar}
+                ></ha-icon-button>
+                <ha-tooltip placement="bottom" for="button-quick-bar"
+                  >${quickBarLabel}</ha-tooltip
+                >`
+            : nothing
+        }
+        ${
+          this.narrow
+            ? nothing
+            : html`<ha-add-menu
+                slot="actionItems"
+                .hass=${this.hass}
+              ></ha-add-menu>`
+        }
         <ha-dropdown slot="actionItems" @wa-select=${this._handleMenuAction}>
           <ha-icon-button
             slot="trigger"

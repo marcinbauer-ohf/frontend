@@ -1,6 +1,6 @@
 import "@home-assistant/webawesome/dist/components/button-group/button-group";
 import type { TemplateResult } from "lit";
-import { css, html, LitElement } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import { fireEvent } from "../common/dom/fire_event";
 import type { ToggleButton } from "../types";
@@ -17,6 +17,7 @@ import "./ha-svg-icon";
  * @attr {string} active - The value of the currently active button.
  * @attr {("s"|"m")} size - The size of the buttons in the group.
  * @attr {("brand"|"neutral"|"success"|"warning"|"danger")} variant - The variant of the buttons in the group.
+ * @attr {boolean} show-labels - Shows each button's label beside its icon.
  *
  * @fires value-changed - Dispatched when the active button changes.
  */
@@ -33,6 +34,9 @@ export class HaButtonToggleGroup extends LitElement {
 
   @property({ type: Boolean, reflect: true, attribute: "full-width" })
   public fullWidth = false;
+
+  @property({ type: Boolean, attribute: "show-labels" })
+  public showLabels = false;
 
   @property({ type: Boolean }) public disabled = false;
 
@@ -59,16 +63,27 @@ export class HaButtonToggleGroup extends LitElement {
               .value=${button.value}
               @click=${this._handleClick}
               .title=${button.label}
-              .disabled=${this.disabled}
+              .disabled=${this.disabled || !!button.disabled}
               .appearance=${this.active === button.value ? "accent" : "filled"}
             >
               ${
-                button.iconPath
+                button.iconPath && this.showLabels
                   ? html`<ha-svg-icon
-                      aria-label=${button.label}
-                      .path=${button.iconPath}
-                    ></ha-svg-icon>`
-                  : button.label
+                        slot="start"
+                        .path=${button.iconPath}
+                      ></ha-svg-icon
+                      >${button.label}`
+                  : button.iconPath
+                    ? html`<ha-svg-icon
+                        aria-label=${button.label}
+                        .path=${button.iconPath}
+                      ></ha-svg-icon>`
+                    : button.label
+              }
+              ${
+                button.badge
+                  ? html`<span slot="end" class="badge">${button.badge}</span>`
+                  : nothing
               }
             </ha-button>`
         )}
@@ -101,6 +116,20 @@ export class HaButtonToggleGroup extends LitElement {
 
     :host([full-width]) ha-button {
       flex: 1;
+    }
+
+    .badge {
+      box-sizing: border-box;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 var(--ha-space-1);
+      border-radius: var(--ha-border-radius-pill);
+      background-color: var(--ha-color-fill-primary-loud-resting);
+      color: var(--ha-color-on-primary-loud);
+      font-size: var(--ha-font-size-xs);
+      font-weight: var(--ha-font-weight-medium);
+      line-height: 18px;
+      text-align: center;
     }
   `;
 }

@@ -1,4 +1,5 @@
 import {
+  mdiAccountKey,
   mdiDelete,
   mdiDotsVertical,
   mdiDragHorizontalVariant,
@@ -42,6 +43,7 @@ import {
   updateAreaRegistryEntry,
 } from "../../../data/area/area_registry";
 import { saveCoreConfig } from "../../../data/core";
+import { updatePanel } from "../../../data/panel";
 import {
   createPerson,
   deletePerson,
@@ -50,10 +52,14 @@ import {
   updatePerson,
 } from "../../../data/person";
 import {
+  deleteUser,
   fetchUsers,
   SYSTEM_GROUP_ID_ADMIN,
+  updateUser,
   type User,
 } from "../../../data/user";
+import { showAddUserDialog } from "../../config/users/show-dialog-add-user";
+import { showUserDetailDialog } from "../../config/users/show-dialog-user-detail";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import { stringCompare } from "../../../common/string/compare";
 import "../../../components/user/ha-person-badge";
@@ -93,6 +99,7 @@ export const HOME_EDITOR_VIEWS = [
   "areas",
   "summaries",
   "people",
+  "logins",
 ] as const;
 
 export type EditorView = (typeof HOME_EDITOR_VIEWS)[number];
@@ -103,6 +110,7 @@ const VIEW_TITLE: Record<EditorView, LocalizeKeys> = {
   areas: "ui.panel.home.editor.floors_and_areas",
   summaries: "ui.panel.home.editor.summaries",
   people: "ui.panel.home.editor.people",
+  logins: "ui.panel.home.editor.logins_without_person",
 };
 
 /**
@@ -205,6 +213,8 @@ export class HomeEditorPane extends LitElement {
         return this._renderFloors();
       case "people":
         return this._renderPeople();
+      case "logins":
+        return this._renderLogins();
       case "summaries":
         return html`<home-shortcuts-editor
           .hass=${this.hass}
@@ -291,6 +301,13 @@ export class HomeEditorPane extends LitElement {
               )
             : nothing
         }
+        ${this._renderSectionRow(
+          "areas",
+          localize("ui.panel.home.editor.floors_and_areas_count", {
+            floors: hierarchy.floors.length,
+            areas: Object.keys(this.hass.areas).length,
+          })
+        )}
         <ha-list-item-button
           .headline=${localize("ui.panel.home.editor.location_and_region")}
           .supportingText=${this._regionSummary(
@@ -300,13 +317,6 @@ export class HomeEditorPane extends LitElement {
           )}
           @click=${this._editLocation}
         ></ha-list-item-button>
-        ${this._renderSectionRow(
-          "areas",
-          localize("ui.panel.home.editor.floors_and_areas_count", {
-            floors: hierarchy.floors.length,
-            areas: Object.keys(this.hass.areas).length,
-          })
-        )}
       </ha-grouped-list>
     `;
   }
@@ -390,7 +400,129 @@ export class HomeEditorPane extends LitElement {
             </ha-grouped-list>`
           : nothing
       }
+      ${this._renderLoginsRow()}
     `;
+  }
+
+  // Logins no person links to, which used to live on the Users page
+  private _loginsWithoutPerson() {
+    const linked = new Set(
+      [...this._persons!.storage, ...this._persons!.config].map(
+        (person) => person.user_id
+      )
+    );
+    return (this._users ?? []).filter(
+      (user) => !user.system_generated && !linked.has(user.id)
+    );
+  }
+
+  private _renderLoginsRow() {
+    return html`<ha-grouped-list>
+      ${this._renderSectionRow(
+        "logins",
+        this.hass.localize("ui.panel.home.editor.logins_count", {
+          count: this._loginsWithoutPerson().length,
+        })
+      )}
+    </ha-grouped-list>`;
+  }
+
+  private _renderLogins() {
+    if (!this._persons) {
+      return nothing;
+    }
+    const localize = this.hass.localize;
+    const logins = this._loginsWithoutPerson();
+    return html`
+      <p class="intro">
+        ${localize("ui.panel.home.editor.logins_without_person_description")}
+      </p>
+      <ha-grouped-list>
+        ${
+          logins.length
+            ? logins.map(
+                (user) =>
+                  html`<ha-list-item-button
+                    .user=${user}
+                    .headline=${user.name}
+                    .supportingText=${user.username ?? undefined}
+                    @click=${this._editUser}
+                  >
+                    <ha-svg-icon
+                      slot="start"
+                      .path=${mdiAccountKey}
+                    ></ha-svg-icon>
+                  </ha-list-item-button>`
+              )
+            : html`<div class="empty">
+                ${localize("ui.panel.home.editor.no_logins_without_person")}
+              </div>`
+        }
+      </ha-grouped-list>
+      <ha-button
+        class="add"
+        size="s"
+        appearance="filled"
+        @click=${this._addUser}
+      >
+        <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
+        ${localize("ui.panel.config.users.picker.add_user")}
+      </ha-button>
+    `;
+  }
+
+  private _addUser() {
+    showAddUserDialog(this, {
+      userAddedCallback: (user) => {
+        if (user) {
+          this._users = [...(this._users ?? []), user];
+        }
+      },
+    });
+  }
+
+  private _editUser(ev: Event) {
+    const entry = (ev.currentTarget as HTMLElement & { user: User }).user;
+    const localize = this.hass.localize;
+    showUserDetailDialog(this, {
+      entry,
+      replaceEntry: (newEntry: User) => {
+        this._users = this._users!.map((u) =>
+          u.id === newEntry.id ? newEntry : u
+        );
+      },
+      updateEntry: async (values) => {
+        const updated = await updateUser(this.hass, entry.id, values);
+        this._users = this._users!.map((u) =>
+          u.id === entry.id ? updated.user : u
+        );
+      },
+      removeEntry: async () => {
+        if (
+          !(await showConfirmationDialog(this, {
+            title: localize(
+              "ui.panel.config.users.editor.confirm_user_deletion_title",
+              { name: entry.name }
+            ),
+            text: localize(
+              "ui.panel.config.users.editor.confirm_user_deletion_text"
+            ),
+            dismissText: localize("ui.common.cancel"),
+            confirmText: localize("ui.common.delete"),
+            destructive: true,
+          }))
+        ) {
+          return false;
+        }
+        try {
+          await deleteUser(this.hass, entry.id);
+          this._users = this._users!.filter((u) => u.id !== entry.id);
+          return true;
+        } catch (_err: unknown) {
+          return false;
+        }
+      },
+    });
   }
 
   // Owner, administrator or user, from the person's login; none without one
@@ -414,8 +546,9 @@ export class HomeEditorPane extends LitElement {
     this._view = (ev.currentTarget as any).view as EditorView;
   }
 
+  // Logins open from People, so back returns there
   private _showHome() {
-    this._view = "home";
+    this._view = this._view === "logins" ? "people" : "home";
   }
 
   // Floors are the groups and areas their rows, the way the target picker
@@ -725,6 +858,7 @@ export class HomeEditorPane extends LitElement {
     const trimmed = name?.trim();
     if (trimmed && trimmed !== this.hass.config.location_name) {
       saveCoreConfig(this.hass, { location_name: trimmed });
+      updatePanel(this.hass, "home", { title: trimmed });
     }
   }
 

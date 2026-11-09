@@ -123,10 +123,10 @@ export class HaBadge extends LitElement {
       white-space: nowrap;
     }
     .label {
-      font-size: var(--ha-font-size-xs);
+      font-size: var(--ha-badge-label-font-size, var(--ha-font-size-xs));
       font-style: normal;
       font-weight: var(--ha-font-weight-medium);
-      line-height: 10px;
+      line-height: var(--ha-badge-label-line-height, 10px);
       letter-spacing: 0.1px;
       color: var(--secondary-text-color);
     }

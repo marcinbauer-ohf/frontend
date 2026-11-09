@@ -1,17 +1,11 @@
 import {
-  mdiAccount,
   mdiCommentProcessingOutline,
-  mdiDevices,
   mdiDotsVertical,
   mdiMagnify,
-  mdiHomeEdit,
   mdiPencil,
-  mdiPlus,
   mdiRedo,
   mdiRefresh,
-  mdiRobot,
   mdiShape,
-  mdiSofa,
   mdiUndo,
 } from "@mdi/js";
 import { ContextProvider } from "@lit/context";
@@ -21,7 +15,6 @@ import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { ifDefined } from "lit/directives/if-defined";
 import memoizeOne from "memoize-one";
-import { homeEditorPath } from "../../common/url/home-query-params";
 import { isComponentLoaded } from "../../common/config/is_component_loaded";
 import { UndoRedoController } from "../../common/controllers/undo-redo-controller";
 import { fireEvent, type HASSDomEvent } from "../../common/dom/fire_event";
@@ -40,6 +33,8 @@ import {
 } from "../../common/url/search-params";
 import { debounce } from "../../common/util/debounce";
 import { afterNextRender } from "../../common/util/render-status";
+import "../../components/ha-add-menu";
+import "../../components/ha-top-search";
 import "../../components/ha-button";
 import type { HaDropdownSelectEvent } from "../../components/ha-dropdown";
 import "../../components/ha-dropdown";
@@ -52,7 +47,6 @@ import "../../components/ha-svg-icon";
 import "../../components/ha-tab-group";
 import "../../components/ha-tab-group-tab";
 import "../../components/ha-tooltip";
-import { createAreaRegistryEntry } from "../../data/area/area_registry";
 import type {
   LovelaceConfig,
   LovelaceRawConfig,
@@ -71,8 +65,6 @@ import {
 } from "../../data/lovelace/dashboard";
 import { fetchLovelaceInfo } from "../../data/lovelace/resource";
 import { DEFAULT_PANEL, getPanelTitle } from "../../data/panel";
-import { createPerson } from "../../data/person";
-import { showListItemsDialog } from "../../dialogs/dialog-list-items/show-list-items-dialog";
 import {
   showAlertDialog,
   showConfirmationDialog,
@@ -82,14 +74,10 @@ import { showVoiceCommandDialog } from "../../dialogs/voice-command-dialog/show-
 import { haStyle } from "../../resources/styles";
 import { handleBackClick } from "../../layouts/back-navigation";
 import { ChildPanelReady } from "../../layouts/panel-ready";
-import type { HomeAssistant, PanelInfo } from "../../types";
+import type { HomeAssistant, PanelInfo, ValueChangedEvent } from "../../types";
 import { documentationUrl } from "../../util/documentation-url";
 import { isMobileClient } from "../../util/is_mobile";
 import { showToast } from "../../util/toast";
-import { showAreaRegistryDetailDialog } from "../config/areas/show-dialog-area-registry-detail";
-import { showNewAutomationDialog } from "../config/automation/show-dialog-new-automation";
-import { showAddIntegrationDialog } from "../config/integrations/show-add-integration-dialog";
-import { showPersonDetailDialog } from "../config/person/show-dialog-person-detail";
 import { selectedCardContext } from "./common/context";
 import type { DashboardEditorAction } from "./editor/hui-dashboard-editor-pane";
 import "./editor/hui-dashboard-editor-pane";
@@ -104,6 +92,7 @@ import { showSaveDialog } from "./editor/show-save-config-dialog";
 import { showEditViewDialog } from "./editor/view-editor/show-edit-view-dialog";
 import { getLovelaceStrategy } from "./strategies/get-strategy";
 import { isLegacyStrategyConfig } from "./strategies/legacy-strategy";
+import type { MapViewStrategyConfig } from "./strategies/map/map-view-strategy";
 import type { Lovelace } from "./types";
 import "./views/hui-view";
 import type { HUIView } from "./views/hui-view";
@@ -115,29 +104,8 @@ interface ActionItem {
   icon: string;
   key: LocalizeKeys;
   overflowAction?: any;
-  buttonAction?: any;
   visible: boolean | undefined;
-  overflow: boolean;
-  overflow_can_promote?: boolean;
   suffix?: string;
-  subItems?: SubActionItem[];
-  /** Shown as a labeled button instead of an icon when not narrow. */
-  text?: boolean;
-}
-
-export interface ExtraActionItem {
-  icon: string;
-  labelKey: LocalizeKeys;
-  action: () => void;
-  text?: boolean;
-}
-
-interface SubActionItem {
-  icon: string;
-  key: LocalizeKeys;
-  overflowAction?: any;
-  action?: any;
-  visible: boolean | undefined;
 }
 
 interface UndoStackItem {
@@ -148,6 +116,12 @@ interface UndoStackItem {
 const SWIPE_EDGE = 24; // px
 const SWIPE_DISTANCE = 60; // px
 const SWIPE_DURATION = 600; // ms
+
+export interface EditAction {
+  icon: string;
+  label: LocalizeKeys;
+  action: () => void;
+}
 
 @customElement("hui-root")
 class HUIRoot extends LitElement {
@@ -164,10 +138,6 @@ class HUIRoot extends LitElement {
     prefix: string;
   };
 
-  @property({ attribute: false }) public extraActionItems?: ExtraActionItem[];
-
-  @property({ type: Boolean, attribute: "no-edit" }) public noEdit = false;
-
   /**
    * Panel-driven editing (the home panel edits itself, not the Lovelace
    * config): frames the canvas and makes room for a pane in the `side-pane`
@@ -176,15 +146,30 @@ class HUIRoot extends LitElement {
    */
   @property({ type: Boolean, reflect: true }) public editing = false;
 
+  /**
+   * Replaces the edit button beside the plus, for panels that edit
+   * something other than the Lovelace config. `null` hides it.
+   */
+  @property({ attribute: false }) public editAction?: EditAction | null;
+
   @property({ attribute: false }) public backButton = false;
 
   @property({ attribute: false }) public backPath?: string;
+
+  /**
+   * Controls a panel shows after the view tabs, in the same floating bar,
+   * like the energy dashboard's date selector.
+   */
+  @property({ attribute: false }) public viewTabsEnd?: TemplateResult;
 
   @state() private _curView?: number | "hass-unused-entities";
 
   @state() private _resourceMode: "yaml" | "storage" = "storage";
 
   @state() private _cardEditor?: CardPaneEditorParams;
+
+  // The map dashboard edits its strategy options in a pane, not in edit mode
+  @state() private _mapEditing = false;
 
   // The registry entry whose settings the editor pane edits in place
   @state() private _dashboard?: LovelaceDashboard;
@@ -223,209 +208,70 @@ class HUIRoot extends LitElement {
 
   private _renderActionItems(): TemplateResult | typeof nothing {
     // Editing keeps its actions at the bottom of the pane
-    if (this.editing || this._editMode) {
+    if (this.editing || this._editMode || this._mapEditing) {
       return nothing;
     }
 
     const result: TemplateResult[] = [];
 
     const isLovelaceDashboard = this.panel?.component_name === "lovelace";
-
     const items: ActionItem[] = [
-      {
-        icon: mdiPlus,
-        key: "ui.panel.lovelace.menu.add",
-        visible: this.hass.user?.is_admin && !this.hass.kioskMode,
-        overflow: this.narrow,
-        subItems: [
-          {
-            icon: mdiDevices,
-            key: "ui.panel.lovelace.menu.add_device",
-            visible: true,
-            action: this._addDevice,
-            overflowAction: this._addDevice,
-          },
-          {
-            icon: mdiRobot,
-            key: "ui.panel.lovelace.menu.create_automation",
-            visible: true,
-            action: this._createAutomation,
-          },
-          {
-            icon: mdiSofa,
-            key: "ui.panel.lovelace.menu.create_area",
-            visible: true,
-            action: this._createArea,
-            overflowAction: this._createArea,
-          },
-          {
-            icon: mdiAccount,
-            key: "ui.panel.lovelace.menu.add_person",
-            visible: true,
-            action: this._addPerson,
-            overflowAction: this._addPerson,
-          },
-        ],
-      },
       {
         icon: mdiCommentProcessingOutline,
         key: "ui.panel.lovelace.menu.assist_tooltip",
-        buttonAction: this._showVoiceCommandDialog,
         overflowAction: this._showVoiceCommandDialog,
         suffix:
           this.hass.enableShortcuts && !isMobileClient ? "(A)" : undefined,
         visible: this.narrow && this._conversation(this.hass.config.components),
-        overflow: true,
       },
       {
         icon: mdiMagnify,
         key: "ui.panel.lovelace.menu.search_home_assistant",
-        buttonAction: this._showQuickBar,
         overflowAction: this._showQuickBar,
         suffix:
           this.hass.enableShortcuts && !isMobileClient
             ? `(${ctrlOrCmdLabel(this.hass.localize)} + K)`
             : undefined,
         visible: !this.hass.kioskMode && this.narrow,
-        overflow: true,
       },
       {
         icon: mdiRefresh,
         key: "ui.common.refresh",
         overflowAction: this._handleRefresh,
         visible: this._yamlMode,
-        overflow: true,
       },
       {
         icon: mdiShape,
         key: "ui.panel.lovelace.unused_entities.title",
         overflowAction: this._handleUnusedEntities,
         visible: this._yamlMode,
-        overflow: true,
       },
       {
         icon: mdiRefresh,
         key: "ui.panel.lovelace.menu.reload_resources",
         overflowAction: this._handleReloadResources,
         visible: this._resourceMode === "yaml" && isLovelaceDashboard,
-        overflow: true,
-      },
-      // Built-in dashboards name what they edit; custom ones keep the pencil
-      {
-        icon: mdiPencil,
-        key:
-          this.panel?.component_name === "energy"
-            ? "ui.panel.lovelace.menu.edit_energy"
-            : "ui.panel.lovelace.menu.configure_ui",
-        text: !isLovelaceDashboard,
-        overflowAction: this._enableEditMode,
-        buttonAction: this._enableEditMode,
-        visible:
-          this.hass!.user?.is_admin &&
-          !this.hass!.config.recovery_mode &&
-          !this.hass.kioskMode &&
-          !this.noEdit,
-        overflow: true,
-        overflow_can_promote: true,
       },
     ];
 
-    // Add extra action items from parent components
-    if (this.extraActionItems) {
-      this.extraActionItems.forEach((extraItem) => {
-        items.push({
-          icon: extraItem.icon,
-          key: extraItem.labelKey,
-          buttonAction: extraItem.action,
-          overflowAction: extraItem.action,
-          visible: true,
-          overflow: this.narrow,
-          text: extraItem.text,
-        });
-      });
-    }
-
-    const overflowItems = items.filter((i) => i.visible && i.overflow);
-    const overflowCanPromote =
-      overflowItems.length === 1 && overflowItems[0].overflow_can_promote;
-    const buttonItems = items.filter(
-      (i) => i.visible && (!i.overflow || overflowCanPromote)
+    const overflowItems = items.filter((i) => i.visible);
+    // The plus and the edit button show on every dashboard
+    const edit = this._editAction();
+    result.push(
+      html`<ha-add-menu .hass=${this.hass}
+        >${
+          edit
+            ? html`<ha-icon-button
+                .label=${this.hass.localize(edit.label)}
+                .path=${edit.icon}
+                @click=${edit.action}
+              ></ha-icon-button>`
+            : nothing
+        }</ha-add-menu
+      >`
     );
 
-    const grouped: TemplateResult[] = [];
-    buttonItems.forEach((item, index) => {
-      const label = [this.hass!.localize(item.key), item.suffix].join(" ");
-      const button = item.subItems
-        ? html`
-            <ha-dropdown
-              slot="actionItems"
-              @wa-select=${this._handleSubItemSelect}
-              placement="bottom-end"
-            >
-              <ha-icon-button
-                .id="button-${index}"
-                .path=${item.icon}
-                slot="trigger"
-                .label=${label}
-                class=${classMap({ primary: item.icon === mdiPlus })}
-                hide-title
-              ></ha-icon-button>
-              ${item.subItems
-                .filter((subItem) => subItem.visible)
-                .map(
-                  (subItem) => html`
-                    <ha-dropdown-item .value=${subItem.key} .data=${subItem}>
-                      <ha-svg-icon slot="icon" .path=${subItem.icon}>
-                      </ha-svg-icon>
-                      ${this.hass!.localize(subItem.key)}
-                    </ha-dropdown-item>
-                  `
-                )}
-            </ha-dropdown>
-            <ha-tooltip placement="bottom" .for="button-${index}">
-              ${label}
-            </ha-tooltip>
-          `
-        : item.text && !this.narrow
-          ? html`<ha-button
-              slot="actionItems"
-              appearance="plain"
-              variant="neutral"
-              @click=${item.buttonAction}
-            >
-              <ha-svg-icon slot="start" .path=${item.icon}></ha-svg-icon>
-              ${label}
-            </ha-button>`
-          : html`
-              <ha-icon-button
-                slot="actionItems"
-                .id="button-${index}"
-                .path=${item.icon}
-                .label=${label}
-                hide-title
-                @click=${item.buttonAction}
-              ></ha-icon-button>
-              <ha-tooltip placement="bottom" .for="button-${index}">
-                ${label}
-              </ha-tooltip>
-            `;
-      if (
-        !this.narrow &&
-        (item.icon === mdiPlus ||
-          item.icon === mdiPencil ||
-          item.icon === mdiHomeEdit ||
-          item.text)
-      ) {
-        grouped.push(button);
-      } else {
-        result.push(button);
-      }
-    });
-    if (grouped.length) {
-      result.push(html`<div class="group">${grouped}</div>`);
-    }
-
-    if (overflowItems.length && !overflowCanPromote) {
+    if (overflowItems.length) {
       result.push(html`
         <ha-dropdown
           slot="actionItems"
@@ -451,25 +297,25 @@ class HUIRoot extends LitElement {
     return html`${result}`;
   }
 
-  private _renderSearch() {
-    if (this.narrow || this.hass.kioskMode) {
-      return nothing;
+  private _editAction(): EditAction | null | undefined {
+    if (this.editAction !== undefined) {
+      return this.editAction;
     }
-    const hint =
-      this.hass.enableShortcuts && !isMobileClient
-        ? `${ctrlOrCmdLabel(this.hass.localize)} + K`
-        : undefined;
-    return html`
-      <button class="search" @click=${this._showQuickBar}>
-        <ha-svg-icon .path=${mdiMagnify}></ha-svg-icon>
-        <span class="search-label"
-          >${this.hass.localize(
-            "ui.panel.lovelace.menu.search_home_assistant"
-          )}</span
-        >
-        ${hint ? html`<span class="search-hint">${hint}</span>` : nothing}
-      </button>
-    `;
+    if (
+      !this.hass.user?.is_admin ||
+      this.hass.config.recovery_mode ||
+      this.hass.kioskMode
+    ) {
+      return null;
+    }
+    return {
+      icon: mdiPencil,
+      label:
+        this.panel?.component_name === "energy"
+          ? "ui.panel.lovelace.menu.edit_energy"
+          : "ui.panel.lovelace.menu.configure_ui",
+      action: this._enableEditMode,
+    };
   }
 
   protected render(): TemplateResult {
@@ -548,13 +394,16 @@ class HUIRoot extends LitElement {
 
     const isSubview = curViewConfig?.subview;
     const hasTabViews = views.filter((view) => !view.subview).length > 1;
+    const showTabs = hasTabViews && !isSubview;
+    const tabsEnd = isSubview ? undefined : this.viewTabsEnd;
 
     return html`
       <div
         class=${classMap({
-          framed: this.editing || this._editMode,
+          framed: this.editing || this._editMode || this._mapEditing,
+          "map-editing": this._mapEditing,
           narrow: this.narrow,
-          "has-tabs": hasTabViews && !isSubview,
+          "has-tabs": showTabs || Boolean(tabsEnd),
         })}
       >
         <div class="header">
@@ -582,7 +431,7 @@ class HUIRoot extends LitElement {
                       : (views[0]?.title ?? dashboardTitle)
                 }
               </div>
-              ${this._renderSearch()}
+              ${this.narrow ? nothing : html`<ha-top-search></ha-top-search>`}
               <div class="action-items">${this._renderActionItems()}</div>
             </div>
           </slot>
@@ -595,13 +444,24 @@ class HUIRoot extends LitElement {
           .theme=${curViewConfig?.theme}
           id="view"
           @ll-edit-card-in-pane=${this._editCardInPane}
+          @map-manage-zones=${this._mapManageZones}
         >
           <hui-view-background .hass=${this.hass} .background=${background}>
           </hui-view-background>
         </hui-view-container>
         ${
-          hasTabViews && !isSubview
-            ? html`<div class="view-tabs">${tabs}</div>`
+          showTabs || tabsEnd
+            ? html`<div class="view-tabs">
+                <div class="view-tabs-bar">
+                  ${showTabs ? tabs : nothing}
+                  ${
+                    showTabs && tabsEnd
+                      ? html`<span class="view-tabs-divider"></span>`
+                      : nothing
+                  }
+                  ${tabsEnd ? html`<div class="view-tabs-end">${tabsEnd}</div>` : nothing}
+                </div>
+              </div>`
             : nothing
         }
         ${
@@ -667,7 +527,17 @@ class HUIRoot extends LitElement {
                     @dashboard-editor-settings=${this._dashboardSettingsChanged}
                     @dashboard-editor-background=${this._backgroundChanged}
                   ></hui-dashboard-editor-pane>`
-                : html`<slot name="side-pane"></slot>`
+                : this._mapEditing &&
+                    isStrategyDashboard(this.lovelace!.rawConfig)
+                  ? html`<map-strategy-editor-pane
+                      .hass=${this.hass}
+                      .config=${this.lovelace!.rawConfig.strategy}
+                      .narrow=${this.narrow}
+                      @value-changed=${this._mapConfigChanged}
+                      @map-take-control=${this._mapTakeControl}
+                      @side-pane-closed=${this._closeMapEditor}
+                    ></map-strategy-editor-pane>`
+                  : html`<slot name="side-pane"></slot>`
           }
         </div>
       </div>
@@ -737,8 +607,9 @@ class HUIRoot extends LitElement {
     const searchParams = extractSearchParamsObject();
     if (searchParams.edit === "1") {
       this._clearParam("edit");
-      if (this.hass!.user?.is_admin && this.lovelace!.mode === "storage") {
-        this.lovelace!.setEditMode(true);
+      // Editing has no toolbar button; the link is its way in
+      if (this.hass!.user?.is_admin) {
+        this._enableEditMode();
       }
     } else if (searchParams.conversation === "1") {
       this._clearParam("conversation");
@@ -939,64 +810,6 @@ class HUIRoot extends LitElement {
     return curViewConfig?.subview ? this.route!.prefix : undefined;
   }
 
-  private _addDevice = async () => {
-    await this.hass.loadFragmentTranslation("config");
-    showAddIntegrationDialog(this, { navigateToResult: true });
-  };
-
-  private _createAutomation = async () => {
-    await this.hass.loadFragmentTranslation("config");
-    showNewAutomationDialog(this, { mode: "automation" });
-  };
-
-  private _createArea = async () => {
-    await this.hass.loadFragmentTranslation("config");
-    showAreaRegistryDetailDialog(this, {
-      createEntry: async (values) => {
-        const area = await createAreaRegistryEntry(this.hass, values);
-        if (isStrategyDashboard(this.lovelace!.rawConfig)) {
-          fireEvent(this, "config-refresh");
-        }
-        showToast(this, {
-          message: this.hass.localize(
-            "ui.panel.lovelace.menu.create_area_success"
-          ),
-          action: {
-            action: () => {
-              navigate(`/config/areas/area/${area.area_id}`);
-            },
-            text: this.hass.localize(
-              "ui.panel.lovelace.menu.create_area_action"
-            ),
-          },
-        });
-      },
-    });
-  };
-
-  private _addPerson = async () => {
-    await this.hass.loadFragmentTranslation("config");
-    showPersonDetailDialog(this, {
-      users: [],
-      createEntry: async (values) => {
-        await createPerson(this.hass!, values);
-        showToast(this, {
-          message: this.hass.localize(
-            "ui.panel.lovelace.menu.add_person_success"
-          ),
-          action: {
-            action: () => {
-              navigate(homeEditorPath("people"));
-            },
-            text: this.hass.localize(
-              "ui.panel.lovelace.menu.add_person_action"
-            ),
-          },
-        });
-      },
-    });
-  };
-
   private _handleRawEditor = () => {
     this.lovelace!.enableFullEditMode();
   };
@@ -1028,6 +841,11 @@ class HUIRoot extends LitElement {
       isStrategyDashboard(this.lovelace!.rawConfig) &&
       !isLegacyStrategyConfig(this.lovelace!.rawConfig.strategy)
     ) {
+      if (this.lovelace!.rawConfig.strategy.type === "map") {
+        await import("./strategies/map/map-strategy-editor-pane");
+        this._mapEditing = true;
+        return;
+      }
       const strategyClass = await getLovelaceStrategy(
         "dashboard",
         this.lovelace!.rawConfig.strategy.type
@@ -1062,6 +880,50 @@ class HUIRoot extends LitElement {
       return;
     }
     this.lovelace!.setEditMode(true);
+  };
+
+  // The overview's "Manage zones" opens the map's settings, which list them
+  private _mapManageZones = async (ev: Event) => {
+    const config = this.lovelace!.rawConfig;
+    if (
+      this._yamlMode ||
+      !isStrategyDashboard(config) ||
+      isLegacyStrategyConfig(config.strategy) ||
+      config.strategy.type !== "map"
+    ) {
+      return;
+    }
+    ev.preventDefault();
+    await import("./strategies/map/map-strategy-editor-pane");
+    this._mapEditing = true;
+  };
+
+  private _mapConfigChanged = async (
+    ev: ValueChangedEvent<MapViewStrategyConfig>
+  ) => {
+    ev.stopPropagation();
+    try {
+      await this.lovelace!.saveConfig({ strategy: ev.detail.value });
+    } catch (_err) {
+      showToast(this, {
+        message: this.hass.localize(
+          "ui.panel.lovelace.editor.strategy.map.save_failed"
+        ),
+      });
+    }
+  };
+
+  private _mapTakeControl = () => {
+    this._mapEditing = false;
+    showSaveDialog(this, {
+      lovelace: this.lovelace!,
+      mode: "storage",
+      narrow: this.narrow!,
+    });
+  };
+
+  private _closeMapEditor = () => {
+    this._mapEditing = false;
   };
 
   private _handleHelp = () => {
@@ -1559,33 +1421,11 @@ class HUIRoot extends LitElement {
     this._undoRedoController.redo();
   }
 
-  private _handleSubItemSelect(
-    ev: HaDropdownSelectEvent<SubActionItem["key"], SubActionItem>
-  ) {
-    const subItem = ev.detail.item.data;
-    if (subItem?.action) {
-      subItem.action();
-    } else if (subItem?.overflowAction) {
-      subItem.overflowAction();
-    }
-  }
-
   private _handleOverflowItemSelect(
     ev: HaDropdownSelectEvent<ActionItem["key"], ActionItem>
   ) {
     const item = ev.detail.item.data;
-    if (item?.subItems) {
-      const title = [this.hass!.localize(item.key), item.suffix].join(" ");
-      showListItemsDialog(this, {
-        title: title,
-        mode: this.narrow ? "bottom-sheet" : "dialog",
-        items: item.subItems!.map((si) => ({
-          iconPath: si.icon,
-          label: this.hass!.localize(si.key),
-          action: si.action,
-        })),
-      });
-    } else if (item?.overflowAction) {
+    if (item?.overflowAction) {
       item.overflowAction();
     }
   }
@@ -1655,49 +1495,12 @@ class HUIRoot extends LitElement {
         /* Desktop: the title and the actions take equal room on each side so
            the search sits in the middle, and the plus and edit buttons share
            one rounded surface. */
-        .toolbar:has(.search) > .main-title,
-        .search ~ .action-items {
+        .toolbar:has(ha-top-search) > .main-title,
+        ha-top-search ~ .action-items {
           flex: 1 1 0;
         }
-        .search ~ .action-items {
+        ha-top-search ~ .action-items {
           justify-content: flex-end;
-        }
-        .search {
-          display: flex;
-          align-items: center;
-          gap: var(--ha-space-2);
-          width: min(480px, 40vw);
-          height: 40px;
-          padding: 0 var(--ha-space-3);
-          border: none;
-          border-radius: var(--ha-border-radius-pill);
-          background: var(--ha-color-fill-neutral-quiet-resting);
-          color: var(--secondary-text-color);
-          font: inherit;
-          font-size: var(--ha-font-size-m);
-          cursor: pointer;
-        }
-        .search:hover {
-          background: var(--ha-color-fill-neutral-quiet-hover);
-        }
-        .search-label {
-          flex: 1;
-          text-align: start;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .search-hint {
-          font-size: var(--ha-font-size-s);
-          opacity: 0.7;
-        }
-        .group {
-          display: flex;
-          align-items: center;
-          border-radius: var(--ha-border-radius-pill);
-          background: var(--ha-color-fill-neutral-quiet-resting);
-        }
-        ha-icon-button.primary {
-          color: var(--ha-color-on-primary-normal);
         }
         /* The view tabs float as a pill centered over the top of the
            canvas; the view starts below it so the first cards are not
@@ -1737,10 +1540,14 @@ class HUIRoot extends LitElement {
           inset-inline-start: var(--ha-space-4);
           inset-inline-end: var(--ha-space-4);
         }
-        ha-tab-group {
-          --ha-tab-active-text-color: var(--primary-color);
-          --ha-tab-track-color: transparent;
-          --ha-tab-indicator-color: transparent;
+        /* One row, like the devices page's toolbar: on a phone the
+           controls scroll sideways rather than wrap */
+        .view-tabs-bar {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-1);
+          overflow-x: auto;
+          scrollbar-width: none;
           pointer-events: auto;
           min-width: 0;
           max-width: 100%;
@@ -1750,6 +1557,33 @@ class HUIRoot extends LitElement {
           background: var(--card-background-color);
           color: var(--primary-text-color);
           box-shadow: var(--ha-box-shadow-l, 0 4px 16px rgba(0, 0, 0, 0.16));
+        }
+        .view-tabs-divider {
+          align-self: stretch;
+          width: 1px;
+          margin: var(--ha-space-2) var(--ha-space-1);
+          background: var(--divider-color);
+        }
+        .view-tabs-divider {
+          flex-shrink: 0;
+        }
+        /* Sized here: the selector measures its own width to lay itself
+           out, and folds its buttons into its menu when short of room */
+        .view-tabs-end {
+          flex: 0 0 auto;
+          width: 360px;
+          min-width: 0;
+        }
+        .narrow .view-tabs-end {
+          width: 280px;
+        }
+        ha-tab-group {
+          --ha-tab-active-text-color: var(--primary-color);
+          --ha-tab-track-color: transparent;
+          --ha-tab-indicator-color: transparent;
+          min-width: 0;
+          max-width: 100%;
+          border-radius: var(--ha-border-radius-pill);
           overflow: hidden;
         }
         ha-tab-group::part(nav) {
@@ -1850,9 +1684,31 @@ class HUIRoot extends LitElement {
         /* While editing, undo, redo and Done float at the bottom of the
            canvas like the energy dashboard's date picker, and the view gets
            room at its end so the last cards scroll clear of them. */
-        .framed:not(.narrow) hui-view-container {
+        .framed:not(.narrow):not(.map-editing) hui-view-container {
           --view-container-padding-bottom: calc(
             var(--hui-edit-toolbar-height) + 2 * var(--ha-space-4)
+          );
+        }
+        /* The map fills the canvas edge to edge, so clip it to the frame's
+           rounded shape. */
+        .map-editing:not(.narrow) hui-view-container {
+          clip-path: inset(
+            calc(var(--header-height, 56px) + var(--safe-area-inset-top, 0px))
+              calc(
+                var(--safe-area-inset-right, 0px) + var(--hui-side-pane-space)
+              )
+              var(--safe-area-inset-bottom, 0px) 0 round
+              var(--ha-border-radius-xl)
+          );
+        }
+        .map-editing:not(.narrow) hui-view-container:dir(rtl) {
+          clip-path: inset(
+            calc(var(--header-height, 56px) + var(--safe-area-inset-top, 0px)) 0
+              var(--safe-area-inset-bottom, 0px)
+              calc(
+                var(--safe-area-inset-right, 0px) + var(--hui-side-pane-space)
+              )
+              round var(--ha-border-radius-xl)
           );
         }
         /* A blue fade rises from the canvas's bottom edge behind the

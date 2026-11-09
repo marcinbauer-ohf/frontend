@@ -70,6 +70,9 @@ export class HaIconButton extends LitElement {
     :host {
       display: inline-block;
       outline: none;
+      /* Inherited text color is softened to match sidebar icons; an explicit
+         color set on ha-icon-button from outside still wins. */
+      color: color-mix(in srgb, currentColor 60%, transparent);
       --ha-button-height: var(--ha-icon-button-size, 48px);
     }
     ha-button {

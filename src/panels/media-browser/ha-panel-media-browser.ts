@@ -11,6 +11,7 @@ import { storage } from "../../common/decorators/storage";
 import type { HASSDomEvent } from "../../common/dom/fire_event";
 import { fireEvent } from "../../common/dom/fire_event";
 import { navigate } from "../../common/navigate";
+import "../../components/ha-add-menu";
 import "../../components/ha-dropdown";
 import "../../components/ha-dropdown-item";
 import "../../components/ha-icon-button";
@@ -116,6 +117,14 @@ class PanelMediaBrowser extends LitElement {
           .currentItem=${this._currentItem}
           @media-refresh=${this._refreshMedia}
         ></ha-media-manage-button>
+        ${
+          this.narrow
+            ? nothing
+            : html`<ha-add-menu
+                slot="actionItems"
+                .hass=${this.hass}
+              ></ha-add-menu>`
+        }
         <ha-dropdown slot="actionItems" @wa-select=${this._handleMenuAction}>
           <ha-icon-button
             slot="trigger"

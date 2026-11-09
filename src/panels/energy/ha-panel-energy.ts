@@ -14,7 +14,11 @@ import type { HomeAssistant, PanelInfo } from "../../types";
 import { generateLovelaceDashboardStrategy } from "../lovelace/strategies/get-strategy";
 import "../lovelace/hui-root";
 import type { Lovelace } from "../lovelace/types";
-import { DEFAULT_POWER_COLLECTION_KEY } from "../../data/energy";
+import {
+  DEFAULT_ENERGY_COLLECTION_KEY,
+  DEFAULT_POWER_COLLECTION_KEY,
+} from "../../data/energy";
+import "../lovelace/components/hui-energy-period-selector";
 import type { EnergyEditorView } from "./energy-editor-pane";
 import "./energy-editor-pane";
 
@@ -167,6 +171,7 @@ class PanelEnergy extends LitElement {
           sanitizeNavigationPath(this._searchParms.get("backPath")) || "/"
         }
         .editing=${Boolean(this._editing)}
+        .viewTabsEnd=${this._periodSelector()}
         @reload-energy-panel=${this._reloadConfig}
         @side-pane-closed=${this._stopEditing}
       >
@@ -185,6 +190,20 @@ class PanelEnergy extends LitElement {
     `;
   }
 
+  // The date and its arrows and menu sit after the view tabs. Every view
+  // has them but the live one and the setup wizard.
+  private _periodSelector() {
+    const view = this.route?.path?.split("/")[1];
+    if (view === "now" || view === "setup") {
+      return undefined;
+    }
+    return html`<hui-energy-period-selector
+      .collectionKey=${DEFAULT_ENERGY_COLLECTION_KEY}
+      vertical-opening-direction="down"
+      .allowCompare=${true}
+    ></hui-energy-period-selector>`;
+  }
+
   private async _setEditing(editMode: boolean) {
     if (!editMode) {
       this._stopEditing();
@@ -192,16 +211,8 @@ class PanelEnergy extends LitElement {
     }
     // The pane reuses the energy settings, which live in the config panel
     await this.hass.loadFragmentTranslation("config");
-    const viewPath = this.route?.path?.split("/")[1] || "";
-    const tabMap: Record<string, string> = {
-      overview: "electricity",
-      electricity: "electricity",
-      gas: "gas",
-      water: "water",
-      now: "electricity",
-    };
-    // Opens on the energy type of the view being looked at
-    this._editing = (tabMap[viewPath] || "electricity") as EnergyEditorView;
+    // Opens on the root list of energy types
+    this._editing = "energy";
   }
 
   private _stopEditing = () => {
@@ -218,7 +229,6 @@ class PanelEnergy extends LitElement {
       haStyle,
       css`
         :host {
-          --ha-view-sections-column-max-width: 100%;
           user-select: none;
         }
         .centered {

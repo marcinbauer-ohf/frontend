@@ -43,7 +43,7 @@ export class HaIfAction extends LitElement implements ActionElement {
       <h4>
         ${this.hass.localize(
           "ui.panel.config.automation.editor.actions.type.if.if"
-        )}:
+        )}
       </h4>
       <ha-automation-condition
         .conditions=${action.if ?? []}
@@ -57,7 +57,7 @@ export class HaIfAction extends LitElement implements ActionElement {
       <h4>
         ${this.hass.localize(
           "ui.panel.config.automation.editor.actions.type.if.then"
-        )}:
+        )}
       </h4>
       <ha-automation-action
         .actions=${action.then ?? []}
@@ -70,7 +70,7 @@ export class HaIfAction extends LitElement implements ActionElement {
       <h4>
         ${this.hass.localize(
           "ui.panel.config.automation.editor.actions.type.if.else"
-        )}:
+        )}
       </h4>
       <ha-automation-action
         .actions=${action.else || []}
@@ -133,8 +133,11 @@ export class HaIfAction extends LitElement implements ActionElement {
       haStyle,
       css`
         h4 {
-          color: var(--secondary-text-color);
-          margin-bottom: 8px;
+          color: var(--ha-color-text-secondary);
+          font-size: var(--ha-font-size-m);
+          /* inset like the section empty states; tight to the rows below */
+          margin: var(--ha-space-3) 0 var(--ha-space-1) var(--ha-space-3);
+          margin-inline-start: var(--ha-space-3);
         }
         h4:first-child {
           margin-top: 0;
