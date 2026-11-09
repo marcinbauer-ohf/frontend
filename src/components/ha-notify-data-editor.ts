@@ -386,8 +386,10 @@ const platformOf = (option: OptionDef): Platform => {
   return has("both") ? "both" : has("android") ? "android" : "ios";
 };
 
+const PLATFORMS: Platform[] = ["both", "android", "ios"];
+
 const PLATFORM_NAMES: Record<Platform, string> = {
-  both: "Any device",
+  both: "All phones",
   android: "Android only",
   ios: "iPhone only",
 };
@@ -466,21 +468,25 @@ export class HaNotifyDataEditor extends LitElement {
 
   // Like the target picker: a collapsible group whose rows open an editor
   // and have a remove button, or the activity panel's empty state
-  private _renderGroup(key: string, title: string, rows: unknown[]) {
-    const collapsed = this._collapsed.has(key);
+  private _renderGroups(
+    groups: { key: string; title: string; rows: unknown[] }[]
+  ) {
     return html`<div class="item-groups">
-      <ha-expansion-panel
-        left-chevron
-        .expanded=${!collapsed}
-        .groupKey=${key}
-        @expanded-changed=${this._groupToggled}
-      >
-        <div slot="header" class="heading">
-          ${title}
-          ${collapsed ? html`<span class="count">(${rows.length})</span>` : nothing}
-        </div>
-        <ha-list-base>${rows}</ha-list-base>
-      </ha-expansion-panel>
+      ${groups.map(({ key, title, rows }) => {
+        const collapsed = this._collapsed.has(key);
+        return html`<ha-expansion-panel
+          left-chevron
+          .expanded=${!collapsed}
+          .groupKey=${key}
+          @expanded-changed=${this._groupToggled}
+        >
+          <div slot="header" class="heading">
+            ${title}
+            ${collapsed ? html`<span class="count">(${rows.length})</span>` : nothing}
+          </div>
+          <ha-list-base>${rows}</ha-list-base>
+        </ha-expansion-panel>`;
+      })}
     </div>`;
   }
 
@@ -614,19 +620,21 @@ export class HaNotifyDataEditor extends LitElement {
     return html`<div class="section">
       ${
         buttons.length
-          ? this._renderGroup(
-              "buttons",
-              "Buttons",
-              buttons.map((button, index) =>
-                this._renderRow(
-                  button.title,
-                  button.action,
-                  { index },
-                  this._editButton,
-                  this._deleteButton
-                )
-              )
-            )
+          ? this._renderGroups([
+              {
+                key: "buttons",
+                title: "Buttons",
+                rows: buttons.map((button, index) =>
+                  this._renderRow(
+                    button.title,
+                    button.action,
+                    { index },
+                    this._editButton,
+                    this._deleteButton
+                  )
+                ),
+              },
+            ])
           : html`<div class="empty">
               <p>${EMPTY_BUTTONS}</p>
             </div>`
@@ -658,33 +666,36 @@ export class HaNotifyDataEditor extends LitElement {
         getPath(value, option.path) !== undefined
     );
     // Grouped by the phones they work on
-    const groups = (["both", "android", "ios"] as Platform[])
-      .map((group) => ({
-        group,
-        options: ALL_OPTIONS.filter(
-          (option) =>
-            inMenu(option) &&
-            platformOf(option) === group &&
-            getPath(value, option.path) === undefined
-        ),
-      }))
-      .filter(({ options }) => options.length);
+    const groups = PLATFORMS.map((group) => ({
+      group,
+      options: ALL_OPTIONS.filter(
+        (option) =>
+          inMenu(option) &&
+          platformOf(option) === group &&
+          getPath(value, option.path) === undefined
+      ),
+    })).filter(({ options }) => options.length);
     const addable = groups.length > 0;
     return html`<div class="section">
       ${
         set.length
-          ? this._renderGroup(
-              "options",
-              "Notification options",
-              set.map((option) =>
-                this._renderRow(
-                  html`${option.label}${this._platformTag(platformOf(option))}`,
-                  formatOption(option, getPath(value, option.path)),
-                  { option },
-                  this._editOption,
-                  this._deleteOption
-                )
-              )
+          ? // Grouped by the phones they work on, like the target picker
+            this._renderGroups(
+              PLATFORMS.map((platform) => ({
+                key: platform,
+                title: PLATFORM_NAMES[platform],
+                rows: set
+                  .filter((option) => platformOf(option) === platform)
+                  .map((option) =>
+                    this._renderRow(
+                      option.label,
+                      formatOption(option, getPath(value, option.path)),
+                      { option },
+                      this._editOption,
+                      this._deleteOption
+                    )
+                  ),
+              })).filter(({ rows }) => rows.length)
             )
           : html`<div class="empty">
               <p>${EMPTY_OPTIONS}</p>
@@ -717,15 +728,6 @@ export class HaNotifyDataEditor extends LitElement {
         )}
       </ha-dropdown>
     </div>`;
-  }
-
-  // A tag on an option that only works on one platform
-  private _platformTag(platform: Platform) {
-    return platform === "both"
-      ? nothing
-      : html`<span class="tag"
-          >${platform === "android" ? "Android" : "iPhone"}</span
-        >`;
   }
 
   private _criticalChanged(ev: Event) {
@@ -890,14 +892,6 @@ export class HaNotifyDataEditor extends LitElement {
   static styles = css`
     :host {
       display: block;
-    }
-    .tag {
-      margin-inline-start: var(--ha-space-2);
-      padding: 0 var(--ha-space-2);
-      border-radius: var(--ha-border-radius-pill);
-      background-color: var(--ha-color-fill-neutral-normal-resting);
-      color: var(--secondary-text-color);
-      font-size: var(--ha-font-size-s);
     }
     .content {
       display: flex;
