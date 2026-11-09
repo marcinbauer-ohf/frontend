@@ -118,15 +118,28 @@ const tryDescribeAction = <T extends ActionType>(
 
     if (config.action) {
       const [domain, serviceName] = config.action.split(".", 2);
-      // ponytail: mockup. Core names the action "Send a notification via
-      // mobile_app_x", the phone's name reads better. Hardcoded English.
-      if (domain === "notify" && serviceName.startsWith("mobile_app_")) {
-        const slug = serviceName.slice("mobile_app_".length);
-        const device = Object.values(hass.devices).find(
-          (dev) => dev.name && slugify(dev.name) === slug
-        );
-        if (device) {
-          return `Send a notification to ${device.name}`;
+      // ponytail: mockup, hardcoded English. A notification shows who gets
+      // it, the phone or the targeted people, and its title and message.
+      if (domain === "notify") {
+        const slug = serviceName.startsWith("mobile_app_")
+          ? serviceName.slice("mobile_app_".length)
+          : undefined;
+        const recipients = slug
+          ? Object.values(hass.devices)
+              .filter((dev) => dev.name && slugify(dev.name) === slug)
+              .map((dev) => dev.name!)
+          : ensureArray(config.target?.entity_id ?? []).map(
+              (id) => hass.states[id]?.attributes.friendly_name || id
+            );
+        const { title, message } = config.data ?? {};
+        const text = [title, message]
+          .filter((part) => typeof part === "string" && part)
+          .join(" – ");
+        if (recipients.length || text) {
+          const to = recipients.length
+            ? `Notify ${formatListWithAnds(hass.locale, recipients)}`
+            : "Send a notification";
+          return text ? `${to}: ${text}` : to;
         }
       }
       const descriptionPlaceholders =
