@@ -501,10 +501,11 @@ export class HaNotifyDataEditor extends LitElement {
         </ha-alert>
       </div>`;
     }
-    // The main fields first, right under the message, then the secondary
-    // options, each marked with the devices it works on
+    // The core of a notification first, right under the message, then the
+    // phone type and the secondary options, each marked with the devices it
+    // works on
     return html`<div class="content">
-      ${this._renderAlwaysShown()}
+      ${this._renderAlwaysShown()} ${this._renderButtons()}
       <div class="row">
         <span>Options for</span>
         <ha-button-toggle-group
@@ -515,8 +516,7 @@ export class HaNotifyDataEditor extends LitElement {
           @value-changed=${this._platformChanged}
         ></ha-button-toggle-group>
       </div>
-      ${this._renderButtons()} ${this._renderOptions()}
-      ${this._renderSwitches()}
+      ${this._renderOptions()} ${this._renderSwitches()}
     </div>`;
   }
 
