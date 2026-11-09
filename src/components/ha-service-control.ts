@@ -455,7 +455,10 @@ export class HaServiceControl extends LitElement {
       (serviceData?.fields.length && !serviceData.hasSelector.length) ||
       (serviceData &&
         Object.keys(this._value?.data || {}).some(
-          (key) => !serviceData!.hasSelector.includes(key)
+          (key) =>
+            !serviceData!.hasSelector.includes(key) &&
+            // send_message has no data field, the person editor adds one
+            !(key === "data" && this._isPersonNotify())
         ));
 
     const entityId =
@@ -694,12 +697,7 @@ export class HaServiceControl extends LitElement {
     // action. It renders in place of the first field, message.
     // A person targeted by send_message gets the same editor, without the
     // phone picker, as the target picker above shows the person.
-    const personTarget =
-      domain === "notify" &&
-      serviceName === "send_message" &&
-      ensureArray(this._value?.target?.entity_id ?? []).some(
-        (entityId) => computeDomain(entityId) === "person"
-      );
+    const personTarget = this._isPersonNotify();
     if (
       personTarget ||
       (domain === "notify" && serviceName?.startsWith("mobile_app_"))
@@ -951,6 +949,16 @@ export class HaServiceControl extends LitElement {
     fireEvent(this, "value-changed", {
       value,
     });
+  }
+
+  // ponytail: mockup, send_message to a person gets the phone editor
+  private _isPersonNotify() {
+    return (
+      this._value?.action === "notify.send_message" &&
+      ensureArray(this._value?.target?.entity_id ?? []).some(
+        (entityId) => computeDomain(entityId) === "person"
+      )
+    );
   }
 
   // The phones of the targeted people: the devices of their notify entities
