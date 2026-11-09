@@ -1107,7 +1107,24 @@
       },
       "icon_picker": {
         "suggested": "Suggested",
-        "all_icons": "All icons"
+        "more": "More",
+        "other": "Other",
+        "all_categories": "All categories",
+        "icon_count": "{count} {count, plural,\n one {icon}\n other {icons}\n}",
+        "categories": {
+          "home": "Home",
+          "devices": "Devices",
+          "media": "Media",
+          "weather": "Weather",
+          "nature": "Nature",
+          "places": "Places",
+          "transport": "Transport",
+          "food": "Food & drink",
+          "people": "People",
+          "security": "Security",
+          "tools": "Tools",
+          "sport": "Sport"
+        }
       },
       "area-filter": {
         "title": "Areas",

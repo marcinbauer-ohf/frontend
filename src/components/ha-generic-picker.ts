@@ -10,6 +10,7 @@ import {
   nothing,
   type CSSResultGroup,
   type PropertyValues,
+  type TemplateResult,
 } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { ifDefined } from "lit/directives/if-defined";
@@ -62,6 +63,12 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
   public rowRenderer?: RenderItemFunction<PickerComboBoxItem>;
 
   @property({ attribute: false })
+  public cellRenderer?: (cell: PickerComboBoxItem) => TemplateResult;
+
+  @property({ type: Number, attribute: "grid-columns" })
+  public gridColumns = 8;
+
+  @property({ attribute: false })
   public searchFn?: PickerComboBoxSearchFn<PickerComboBoxItem>;
 
   @property({ attribute: false })
@@ -102,6 +109,9 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
 
   @property({ attribute: "selected-section" }) public selectedSection?: string;
 
+  @property({ type: Boolean, attribute: "sections-jump" })
+  public sectionsJump = false;
+
   @property({ attribute: false }) public popoverAnchor?: Element | null;
 
   @property({ type: Boolean, attribute: "use-top-label" })
@@ -111,9 +121,6 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
   public customValueLabel?: string;
 
   @property({ type: Boolean, attribute: "no-sort" }) public noSort = false;
-
-  @property({ attribute: "pin-block" })
-  public pinBlock?: "start" | "center" | "end" | "nearest";
 
   // Skip the "unknown value" highlight and note for a value that is not in the
   // list but that the value renderer presents on its own.
@@ -339,6 +346,8 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
         .value=${this._selectedValue ?? this.value}
         @value-changed=${this._valueChanged}
         .rowRenderer=${this.rowRenderer}
+        .cellRenderer=${this.cellRenderer}
+        .gridColumns=${this.gridColumns}
         .notFoundLabel=${this.notFoundLabel}
         .emptyLabel=${this.emptyLabel}
         .getItems=${this.getItems}
@@ -347,10 +356,10 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
         .mode=${dialogMode ? "dialog" : "popover"}
         .sections=${this.sections}
         .selectedSection=${this.selectedSection}
+        .sectionsJump=${this.sectionsJump}
         .searchKeys=${this.searchKeys}
         .customValueLabel=${this.customValueLabel}
         .noSort=${this.noSort}
-        .pinBlock=${this.pinBlock}
       ></ha-picker-combo-box>
     `;
   }

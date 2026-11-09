@@ -1,6 +1,6 @@
 import type { RenderItemFunction } from "@lit-labs/virtualizer/virtualize";
 import type { PropertyValues, TemplateResult } from "lit";
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { consumeLocalize } from "../common/decorators/consume-context-entry";
@@ -19,6 +19,190 @@ interface RankedIcon {
   item: PickerComboBoxItem;
   rank: number;
 }
+
+const SUGGESTED_SECTION = "suggested";
+
+// Groups of the Material Design Icons tags, as they appear in the icons'
+// keywords. Icons of custom icon sets have no tags, they only show under all.
+const ICON_CATEGORIES = [
+  { id: "home", tags: ["home automation"] },
+  {
+    id: "devices",
+    tags: ["device tech", "cellphone phone", "battery", "printer"],
+  },
+  { id: "media", tags: ["audio", "music", "video movie", "photography"] },
+  { id: "weather", tags: ["weather"] },
+  { id: "nature", tags: ["nature", "agriculture", "animal"] },
+  { id: "places", tags: ["places"] },
+  {
+    id: "transport",
+    tags: [
+      "automotive",
+      "transportation + road",
+      "transportation + other",
+      "transportation + flying",
+      "transportation + water",
+    ],
+  },
+  { id: "food", tags: ["food drink"] },
+  { id: "people", tags: ["account user", "people family"] },
+  { id: "security", tags: ["lock"] },
+  { id: "tools", tags: ["hardware tools"] },
+  { id: "sport", tags: ["sport"] },
+] as const;
+
+// All Material Design Icons tags, named as on materialdesignicons.com
+const MDI_TAG_NAMES = [
+  "Account / User",
+  "Agriculture",
+  "Alert / Error",
+  "Alpha / Numeric",
+  "Animal",
+  "Arrange",
+  "Arrow",
+  "Audio",
+  "Automotive",
+  "Banking",
+  "Battery",
+  "Brand / Logo",
+  "Cellphone / Phone",
+  "Clothing",
+  "Cloud",
+  "Color",
+  "Currency",
+  "Database",
+  "Date / Time",
+  "Developer / Languages",
+  "Device / Tech",
+  "Drawing / Art",
+  "Edit / Modify",
+  "Emoji",
+  "Files / Folders",
+  "Food / Drink",
+  "Form",
+  "Gaming / RPG",
+  "Geographic Information System",
+  "Hardware / Tools",
+  "Health / Beauty",
+  "Holiday",
+  "Home Automation",
+  "Lock",
+  "Math",
+  "Medical / Hospital",
+  "Music",
+  "Nature",
+  "Navigation",
+  "Notification",
+  "People / Family",
+  "Photography",
+  "Places",
+  "Printer",
+  "Religion",
+  "Science",
+  "Settings",
+  "Shape",
+  "Shopping",
+  "Social Media",
+  "Sport",
+  "Text / Content / Format",
+  "Tooltip",
+  "Transportation + Flying",
+  "Transportation + Other",
+  "Transportation + Road",
+  "Transportation + Water",
+  "Vector",
+  "Video / Movie",
+  "View",
+  "Weather",
+];
+
+// The tags as the icon list's keywords hold them, see gen-icons-json.js
+const tagKeyword = (name: string) => name.toLowerCase().replace(/\s\/\s/g, " ");
+
+const TAG_LABELS = Object.fromEntries(
+  MDI_TAG_NAMES.map((name) => [tagKeyword(name), name])
+);
+
+const CURATED_TAGS: string[] = ICON_CATEGORIES.flatMap(({ tags }) => tags);
+
+// The tags of the curated categories first, the rest by name
+const ORDERED_TAGS = [
+  ...CURATED_TAGS,
+  ...Object.keys(TAG_LABELS).filter((tag) => !CURATED_TAGS.includes(tag)),
+];
+
+const OTHER_GROUP = "other";
+
+const MORE_SECTION = "more";
+
+const GRID_COLUMNS = 8;
+
+const iconTags = (item: PickerComboBoxItem): string[] =>
+  Object.entries(item.search_labels ?? {})
+    .filter(
+      (entry): entry is [string, string] =>
+        entry[0].startsWith("keyword") && entry[1] !== null
+    )
+    .map(([, keyword]) => keyword)
+    .filter((keyword) => keyword in TAG_LABELS);
+
+interface IconGroup {
+  tag: string;
+  items: PickerComboBoxItem[];
+}
+
+// Each icon goes in its first tag's group only, untagged icons in other
+const groupIcons = memoizeOne((icons: PickerComboBoxItem[]): IconGroup[] => {
+  const groups = new Map<string, PickerComboBoxItem[]>(
+    ORDERED_TAGS.map((tag) => [tag, []])
+  );
+  const other: PickerComboBoxItem[] = [];
+  for (const item of icons) {
+    const tag = iconTags(item)[0];
+    (tag ? groups.get(tag)! : other).push(item);
+  }
+  return [
+    ...[...groups].map(([tag, items]) => ({ tag, items })),
+    { tag: OTHER_GROUP, items: other },
+  ].filter((group) => group.items.length);
+});
+
+const suggestionItems = (icons: string[]): PickerComboBoxItem[] =>
+  icons.map((icon) => ({ id: icon, primary: icon, icon }));
+
+// Rows of the grid, each icon a cell of its own
+const toGridRows = (
+  key: string,
+  items: PickerComboBoxItem[]
+): PickerComboBoxItem[] => {
+  const rows: PickerComboBoxItem[] = [];
+  for (let i = 0; i < items.length; i += GRID_COLUMNS) {
+    rows.push({
+      id: `row:${key}:${i}`,
+      primary: "",
+      cells: items.slice(i, i + GRID_COLUMNS),
+    });
+  }
+  return rows;
+};
+
+const cellRenderer = (cell: PickerComboBoxItem) =>
+  html`<ha-icon .icon=${cell.icon ?? cell.id}></ha-icon>`;
+
+type IconPickerVariant = "a" | "b" | "c" | "d";
+
+// ponytail: prototype switch to compare the layouts, set
+// localStorage.iconPickerVariant and reload. Remove once one is chosen.
+const pickerVariant = (): IconPickerVariant => {
+  try {
+    const variant = localStorage.getItem("iconPickerVariant");
+    return variant === "a" || variant === "b" || variant === "d"
+      ? variant
+      : "c";
+  } catch {
+    return "c";
+  }
+};
 
 let ICONS: PickerComboBoxItem[] = [];
 let ICONS_LOADED = false;
@@ -87,7 +271,12 @@ const loadCustomIconItems = async (
 const rowRenderer: RenderItemFunction<PickerComboBoxItem> = (item) => html`
   <ha-combo-box-item>
     <ha-icon .icon=${item.icon ?? item.id} slot="start"></ha-icon>
-    ${item.icon ?? item.id}
+    <span slot="headline">${item.primary}</span>
+    ${
+      item.secondary
+        ? html`<span slot="supporting-text">${item.secondary}</span>`
+        : nothing
+    }
   </ha-combo-box-item>
 `;
 
@@ -115,24 +304,30 @@ export class HaIconPicker extends LitElement {
 
   @query("ha-generic-picker") private _picker?: HaGenericPicker;
 
-  private _getIconPickerItems = () =>
-    this._itemsWithSuggestions(ICONS, this.suggestedIcons, this._localize);
+  private _variant = pickerVariant();
+
+  // Drill-in variant: the open category, null for the list of categories and
+  // undefined for the default, the suggestions when there are some.
+  private _category?: string | null;
 
   protected updated(changedProps: PropertyValues) {
     super.updated(changedProps);
-    if (changedProps.has("suggestedIcons") || changedProps.has("_localize")) {
+    if (changedProps.has("suggestedIcons")) {
       this._picker?.refreshItems();
     }
   }
 
   protected render(): TemplateResult {
+    const hasSuggestions = !!this.suggestedIcons?.length;
+    const jump = this._variant === "c" || this._variant === "d";
     return html`
       <ha-generic-picker
         allow-custom-value
-        no-sort
-        .pinBlock=${
-          this.value && this.suggestedIcons?.includes(this.value)
-            ? "end"
+        .sections=${this._sections(ICONS, this._variant, hasSuggestions, this._localize)}
+        .sectionsJump=${jump}
+        .selectedSection=${
+          this._variant === "a" && hasSuggestions
+            ? SUGGESTED_SECTION
             : undefined
         }
         .getItems=${this._getIconPickerItems}
@@ -142,46 +337,261 @@ export class HaIconPicker extends LitElement {
         .errorMessage=${this.errorMessage}
         .invalid=${this.invalid}
         .rowRenderer=${rowRenderer}
+        .cellRenderer=${cellRenderer}
+        .gridColumns=${GRID_COLUMNS}
         .icon=${this._icon}
         .label=${this.label}
         .value=${this._value}
-        .searchFn=${this._filterIcons}
         @value-changed=${this._valueChanged}
+        @item-activated=${this._itemActivated}
+        @picker-closed=${this._pickerClosed}
       >
         <slot name="start"></slot>
       </ha-generic-picker>
     `;
   }
 
-  private _itemsWithSuggestions = memoizeOne(
+  private _sections = memoizeOne(
     (
       icons: PickerComboBoxItem[],
+      variant: IconPickerVariant,
+      hasSuggestions: boolean,
+      localize: LocalizeFunc
+    ) => {
+      if (variant === "b") {
+        return undefined;
+      }
+      const suggested = hasSuggestions
+        ? [
+            {
+              id: SUGGESTED_SECTION,
+              label: localize("ui.components.icon_picker.suggested"),
+            },
+            "separator" as const,
+          ]
+        : [];
+      if (variant === "a") {
+        return [
+          ...suggested,
+          ...ICON_CATEGORIES.map(({ id }) => ({
+            id,
+            label: localize(`ui.components.icon_picker.categories.${id}`),
+          })),
+          {
+            id: MORE_SECTION,
+            label: localize("ui.components.icon_picker.more"),
+          },
+        ];
+      }
+      // The chips jump to the section titles, so they have the same labels
+      return [
+        ...suggested,
+        ...groupIcons(icons).map(({ tag }) => ({
+          id: tag,
+          label: this._groupLabel(tag, localize),
+        })),
+      ];
+    }
+  );
+
+  private _groupLabel = (tag: string, localize: LocalizeFunc) =>
+    tag === OTHER_GROUP
+      ? localize("ui.components.icon_picker.other")
+      : TAG_LABELS[tag];
+
+  // The combo box leaves filtering to us when it shows section chips
+  private _getIconPickerItems = (
+    search?: string,
+    section?: string
+  ): (PickerComboBoxItem | string)[] => {
+    const filter = search?.trim() ?? "";
+    switch (this._variant) {
+      case "a":
+        return filter
+          ? this._filterIcons(filter, this._sectionIcons(ICONS, section))
+          : this._chipItems(
+              ICONS,
+              section,
+              this.suggestedIcons,
+              this._localize
+            );
+      case "b":
+        return filter
+          ? this._filterIcons(filter, ICONS)
+          : this._drillInItems(
+              ICONS,
+              this._openCategory(),
+              this.suggestedIcons,
+              this._localize
+            );
+      case "d":
+        return filter
+          ? toGridRows(`search:${filter}`, this._filterIcons(filter, ICONS))
+          : this._groupedItems(
+              ICONS,
+              this.suggestedIcons,
+              true,
+              this._localize
+            );
+      default:
+        return filter
+          ? this._filterIcons(filter, ICONS)
+          : this._groupedItems(
+              ICONS,
+              this.suggestedIcons,
+              false,
+              this._localize
+            );
+    }
+  };
+
+  // A: the chips filter, more shows the categories without a chip
+  private _sectionIcons(
+    icons: PickerComboBoxItem[],
+    section: string | undefined
+  ): PickerComboBoxItem[] {
+    if (section === SUGGESTED_SECTION) {
+      return suggestionItems(this.suggestedIcons ?? []);
+    }
+    if (section === MORE_SECTION) {
+      return groupIcons(icons)
+        .filter(({ tag }) => !CURATED_TAGS.includes(tag))
+        .flatMap(({ items }) => items);
+    }
+    const tags: readonly string[] | undefined = ICON_CATEGORIES.find(
+      ({ id }) => id === section
+    )?.tags;
+    if (!tags) {
+      return icons;
+    }
+    return icons.filter((item) =>
+      iconTags(item).some((tag) => tags.includes(tag))
+    );
+  }
+
+  private _chipItems = memoizeOne(
+    (
+      icons: PickerComboBoxItem[],
+      section: string | undefined,
+      _suggestedIcons: string[] | undefined,
+      localize: LocalizeFunc
+    ): (PickerComboBoxItem | string)[] =>
+      section === MORE_SECTION
+        ? groupIcons(icons)
+            .filter(({ tag }) => !CURATED_TAGS.includes(tag))
+            .flatMap(({ tag, items }) => [
+              this._groupLabel(tag, localize),
+              ...items,
+            ])
+        : this._sectionIcons(icons, section)
+  );
+
+  // B: a list of the categories, picking one shows its icons
+  private _openCategory() {
+    if (this._category !== undefined) {
+      return this._category;
+    }
+    return this.suggestedIcons?.length ? SUGGESTED_SECTION : null;
+  }
+
+  private _drillInItems = memoizeOne(
+    (
+      icons: PickerComboBoxItem[],
+      category: string | null,
       suggestedIcons: string[] | undefined,
       localize: LocalizeFunc
     ): (PickerComboBoxItem | string)[] => {
-      if (!suggestedIcons?.length) {
-        return icons;
+      const groups = groupIcons(icons);
+      if (category === null) {
+        const categoryRow = (
+          id: string,
+          label: string,
+          items: PickerComboBoxItem[]
+        ): PickerComboBoxItem => ({
+          id: `category:${id}`,
+          primary: label,
+          secondary: localize("ui.components.icon_picker.icon_count", {
+            count: items.length,
+          }),
+          icon: items[0].icon ?? items[0].id,
+          keepOpen: true,
+        });
+        return [
+          ...(suggestedIcons?.length
+            ? [
+                categoryRow(
+                  SUGGESTED_SECTION,
+                  localize("ui.components.icon_picker.suggested"),
+                  suggestionItems(suggestedIcons)
+                ),
+              ]
+            : []),
+          ...groups.map(({ tag, items }) =>
+            categoryRow(tag, this._groupLabel(tag, localize), items)
+          ),
+        ];
       }
-      const suggested = new Set(suggestedIcons);
+      const items =
+        category === SUGGESTED_SECTION
+          ? suggestionItems(suggestedIcons ?? [])
+          : (groups.find(({ tag }) => tag === category)?.items ?? []);
       return [
-        localize("ui.components.icon_picker.suggested"),
-        ...suggestedIcons.map((icon) => ({ id: icon, primary: icon, icon })),
-        localize("ui.components.icon_picker.all_icons"),
-        ...icons.filter((item) => !suggested.has(item.id)),
+        {
+          id: "category:",
+          primary: localize("ui.components.icon_picker.all_categories"),
+          icon: "mdi:arrow-left",
+          keepOpen: true,
+        },
+        category === SUGGESTED_SECTION
+          ? localize("ui.components.icon_picker.suggested")
+          : this._groupLabel(category, localize),
+        ...items,
+      ];
+    }
+  );
+
+  private _itemActivated(ev: CustomEvent<{ item: PickerComboBoxItem }>) {
+    const { id } = ev.detail.item;
+    if (!id.startsWith("category:")) {
+      return;
+    }
+    this._category = id.slice("category:".length) || null;
+    this._picker?.refreshItems();
+  }
+
+  private _pickerClosed() {
+    this._category = undefined;
+  }
+
+  // C and D: every category in one list, the chips jump to their title
+  private _groupedItems = memoizeOne(
+    (
+      icons: PickerComboBoxItem[],
+      suggestedIcons: string[] | undefined,
+      grid: boolean,
+      localize: LocalizeFunc
+    ): (PickerComboBoxItem | string)[] => {
+      const rows = (key: string, items: PickerComboBoxItem[]) =>
+        grid ? toGridRows(key, items) : items;
+      return [
+        ...(suggestedIcons?.length
+          ? [
+              localize("ui.components.icon_picker.suggested"),
+              ...rows(SUGGESTED_SECTION, suggestionItems(suggestedIcons)),
+            ]
+          : []),
+        ...groupIcons(icons).flatMap(({ tag, items }) => [
+          this._groupLabel(tag, localize),
+          ...rows(tag, items),
+        ]),
       ];
     }
   );
 
   // Filter can take a significant chunk of frame (up to 3-5 ms)
   private _filterIcons = memoizeOne(
-    (
-      filter: string,
-      filteredItems: PickerComboBoxItem[],
-      _allItems: PickerComboBoxItem[]
-    ): PickerComboBoxItem[] => {
+    (filter: string, iconItems: PickerComboBoxItem[]): PickerComboBoxItem[] => {
       const normalizedFilter = filter.toLowerCase().replace(/\s+/g, "-");
-      // The full list also holds the suggestions and their section titles
-      const iconItems = ICONS.length ? ICONS : filteredItems;
 
       if (!normalizedFilter.length) {
         return iconItems;
@@ -220,6 +630,7 @@ export class HaIconPicker extends LitElement {
   protected firstUpdated() {
     if (!ICONS_LOADED) {
       loadIcons().then(() => {
+        this.requestUpdate();
         this._picker?.refreshItems();
       });
     }
