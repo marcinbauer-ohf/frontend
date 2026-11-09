@@ -22,6 +22,7 @@ import "./ha-switch";
 import "./ha-expansion-panel";
 import "./item/ha-list-item-base";
 import "./item/ha-list-item-button";
+import "./list/ha-grouped-list";
 import "./list/ha-list-base";
 import type { HaFormSchema, HaFormSelector } from "./ha-form/types";
 import "./ha-alert";
@@ -807,24 +808,21 @@ export class HaNotifyDataEditor extends LitElement {
     if (!switches.length) {
       return nothing;
     }
-    return html`<div class="group">
-      <div class="group-header">${PLATFORM_NAMES.android}</div>
-      <ha-list-base>
-        ${switches.map(
-          (option) =>
-            html`<ha-list-item-base>
-              <div slot="headline">${option.label}</div>
-              <ha-switch
-                slot="end"
-                .checked=${!!getPath(value, option.path)}
-                .disabled=${this.disabled}
-                .path=${option.path}
-                @change=${this._switchChanged}
-              ></ha-switch>
-            </ha-list-item-base>`
-        )}
-      </ha-list-base>
-    </div>`;
+    return html`<ha-grouped-list .header=${PLATFORM_NAMES.android}>
+      ${switches.map(
+        (option) =>
+          html`<ha-list-item-base>
+            <div slot="headline">${option.label}</div>
+            <ha-switch
+              slot="end"
+              .checked=${!!getPath(value, option.path)}
+              .disabled=${this.disabled}
+              .path=${option.path}
+              @change=${this._switchChanged}
+            ></ha-switch>
+          </ha-list-item-base>`
+      )}
+    </ha-grouped-list>`;
   }
 
   private _switchChanged(ev: Event) {
@@ -1010,13 +1008,6 @@ export class HaNotifyDataEditor extends LitElement {
       background-color: var(--ha-color-fill-neutral-normal-resting);
       color: var(--secondary-text-color);
       font-size: var(--ha-font-size-s);
-    }
-    /* Same as the item groups' header */
-    .group-header {
-      background-color: var(--ha-color-surface-low);
-      padding: var(--ha-space-2) var(--ha-space-4);
-      font-weight: var(--ha-font-weight-bold);
-      color: var(--secondary-text-color);
     }
     .content {
       display: flex;
