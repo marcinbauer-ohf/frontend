@@ -397,15 +397,15 @@ const platformOf = (option: OptionDef): Platform => {
 
 // Which options are offered, set from the targeted device
 const PLATFORM_OPTIONS: ToggleButton[] = [
-  { value: "both", label: "Any" },
+  { value: "both", label: "Any phone" },
   { value: "android", label: "Android" },
-  { value: "ios", label: "iOS" },
+  { value: "ios", label: "iPhone" },
 ];
 
 const PLATFORM_NAMES: Record<Platform, string> = {
   both: "Any device",
   android: "Android only",
-  ios: "iOS only",
+  ios: "iPhone only",
 };
 const ALL_OPTIONS = unique(
   [...ALL_FIELDS.android, ...ALL_FIELDS.ios].filter(
@@ -464,6 +464,9 @@ export class HaNotifyDataEditor extends LitElement {
   /** The notify action, e.g. mobile_app_pixel_9 */
   @property({ attribute: false }) public service?: string;
 
+  /** The targeted phones, used over service when set */
+  @property({ attribute: false }) public deviceIds?: string[];
+
   @property({ attribute: false }) public value?: Record<string, any>;
 
   @property({ type: Boolean }) public disabled = false;
@@ -474,9 +477,20 @@ export class HaNotifyDataEditor extends LitElement {
 
   protected willUpdate(changedProps: PropertyValues<this>) {
     super.willUpdate(changedProps);
-    // Starts at the targeted device's platform, "both" when it's unknown
-    if (!this.hasUpdated || changedProps.has("service")) {
-      this._platform = this._devicePlatform(this.hass.devices, this.service);
+    // Starts at the targeted phones' platform, "both" when it's unknown or
+    // they differ. The phones are compared by content, as they are a new
+    // array on every render, which must not undo a manual pick.
+    if (
+      !this.hasUpdated ||
+      changedProps.has("service") ||
+      (changedProps.has("deviceIds") &&
+        changedProps.get("deviceIds")?.join() !== this.deviceIds?.join())
+    ) {
+      this._platform = this._devicePlatform(
+        this.hass.devices,
+        this.service,
+        this.deviceIds
+      );
     }
   }
 
@@ -493,7 +507,7 @@ export class HaNotifyDataEditor extends LitElement {
     return html`<div class="content">
       ${this._renderAlwaysShown()}
       <div class="row">
-        <span>Device type</span>
+        <span>Options for</span>
         <ha-button-toggle-group
           size="s"
           .buttons=${PLATFORM_OPTIONS}
@@ -510,15 +524,26 @@ export class HaNotifyDataEditor extends LitElement {
   // ponytail: matches the action name to the phone's name, which breaks when
   // the phone is renamed. Falls back to "both".
   private _devicePlatform = memoizeOne(
-    (devices: HomeAssistant["devices"], service?: string): Platform => {
+    (
+      devices: HomeAssistant["devices"],
+      service?: string,
+      deviceIds?: string[]
+    ): Platform => {
       const slug = service?.replace(/^mobile_app_/, "");
-      const device = Object.values(devices).find(
-        (dev) => dev.name && slugify(dev.name) === slug
-      );
-      if (!device) {
+      const phones = deviceIds?.length
+        ? deviceIds.map((id) => devices[id]).filter(Boolean)
+        : Object.values(devices)
+            .filter((dev) => slug && dev.name && slugify(dev.name) === slug)
+            .slice(0, 1);
+      if (!phones.length) {
         return "both";
       }
-      return device.manufacturer === "Apple" ? "ios" : "android";
+      const apple = phones.filter((dev) => dev.manufacturer === "Apple");
+      return apple.length === phones.length
+        ? "ios"
+        : apple.length
+          ? "both"
+          : "android";
     }
   );
 
@@ -794,7 +819,7 @@ export class HaNotifyDataEditor extends LitElement {
     return platform === "both" || platform === this._platform
       ? nothing
       : html`<span class="tag"
-          >${platform === "android" ? "Android" : "iOS"}</span
+          >${platform === "android" ? "Android" : "iPhone"}</span
         >`;
   }
 
@@ -911,7 +936,7 @@ export class HaNotifyDataEditor extends LitElement {
       computeLabel: (schema) =>
         `${LABELS[schema.name] ?? schema.name}${
           schema.name === "destructive" && this._platform === "both"
-            ? " (iOS only)"
+            ? " (iPhone only)"
             : ""
         }`,
       computeHelper: (schema) => DESCRIPTIONS[schema.name],
