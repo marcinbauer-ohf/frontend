@@ -38,7 +38,7 @@ type Platform = "both" | "android" | "ios";
 
 // Stand-ins for translations: one string, \n starts the description line
 const EMPTY_BUTTONS =
-  "No buttons\nAdd buttons to let people answer from the notification.";
+  "No notification actions\nAdd notification actions to let people answer from the notification.";
 const EMPTY_OPTIONS =
   "No options\nAdd options to change how the notification looks and behaves.";
 
@@ -695,7 +695,7 @@ export class HaNotifyDataEditor extends LitElement {
         @click=${this._addButton}
       >
         <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
-        Add button
+        Add notification action
       </ha-button>
     </div>`;
   }
@@ -922,7 +922,7 @@ export class HaNotifyDataEditor extends LitElement {
 
   private async _addButton() {
     const buttons = this.value?.actions ?? [];
-    const button = await this._buttonDialog("Add button", "Add");
+    const button = await this._buttonDialog("Add notification action", "Add");
     if (button) {
       this._setPath(["actions"], [...buttons, withButtonId(button, buttons)]);
     }
