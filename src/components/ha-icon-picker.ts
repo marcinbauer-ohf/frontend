@@ -1,4 +1,5 @@
 import type { RenderItemFunction } from "@lit-labs/virtualizer/virtualize";
+import { mdiShapeOutline } from "@mdi/js";
 import type { PropertyValues, TemplateResult } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
@@ -189,14 +190,18 @@ const toGridRows = (
 const cellRenderer = (cell: PickerComboBoxItem) =>
   html`<ha-icon .icon=${cell.icon ?? cell.id}></ha-icon>`;
 
-type IconPickerVariant = "a" | "b" | "c" | "d";
+type IconPickerVariant = "a" | "b" | "c" | "d" | "e" | "f";
 
 // ponytail: prototype switch to compare the layouts, set
 // localStorage.iconPickerVariant and reload. Remove once one is chosen.
 const pickerVariant = (): IconPickerVariant => {
   try {
     const variant = localStorage.getItem("iconPickerVariant");
-    return variant === "a" || variant === "b" || variant === "d"
+    return variant === "a" ||
+      variant === "b" ||
+      variant === "d" ||
+      variant === "e" ||
+      variant === "f"
       ? variant
       : "c";
   } catch {
@@ -306,9 +311,9 @@ export class HaIconPicker extends LitElement {
 
   private _variant = pickerVariant();
 
-  // Drill-in variant: the open category, null for the list of categories and
-  // undefined for the default, the suggestions when there are some.
-  private _category?: string | null;
+  // B and E: the open category, null for the list of categories and
+  // undefined for the default. B opens the suggestions by default, E all icons.
+  @state() private _category?: string | null;
 
   protected updated(changedProps: PropertyValues) {
     super.updated(changedProps);
@@ -319,12 +324,18 @@ export class HaIconPicker extends LitElement {
 
   protected render(): TemplateResult {
     const hasSuggestions = !!this.suggestedIcons?.length;
-    const jump = this._variant === "c" || this._variant === "d";
+    const jump =
+      this._variant === "c" || this._variant === "d" || this._variant === "f";
     return html`
       <ha-generic-picker
         allow-custom-value
         .sections=${this._sections(ICONS, this._variant, hasSuggestions, this._localize)}
         .sectionsJump=${jump}
+        .sectionsMenu=${
+          this._variant === "f"
+            ? this._localize("ui.components.icon_picker.browse_categories")
+            : undefined
+        }
         .selectedSection=${
           this._variant === "a" && hasSuggestions
             ? SUGGESTED_SECTION
@@ -339,6 +350,13 @@ export class HaIconPicker extends LitElement {
         .rowRenderer=${rowRenderer}
         .cellRenderer=${cellRenderer}
         .gridColumns=${GRID_COLUMNS}
+        .searchFn=${this._searchFn()}
+        .searchAction=${
+          this._variant === "e"
+            ? this._browseAction(this._category !== undefined, this._localize)
+            : undefined
+        }
+        @search-action=${this._browseToggled}
         .icon=${this._icon}
         .label=${this.label}
         .value=${this._value}
@@ -358,7 +376,7 @@ export class HaIconPicker extends LitElement {
       hasSuggestions: boolean,
       localize: LocalizeFunc
     ) => {
-      if (variant === "b") {
+      if (variant === "b" || variant === "e") {
         return undefined;
       }
       const suggested = hasSuggestions
@@ -422,9 +440,21 @@ export class HaIconPicker extends LitElement {
               ICONS,
               this._openCategory(),
               this.suggestedIcons,
+              false,
+              this._localize
+            );
+      case "e":
+        return this._category === undefined
+          ? this._groupedItems(ICONS, this.suggestedIcons, true, this._localize)
+          : this._drillInItems(
+              ICONS,
+              this._category,
+              this.suggestedIcons,
+              true,
               this._localize
             );
       case "d":
+      case "f":
         return filter
           ? toGridRows(`search:${filter}`, this._filterIcons(filter, ICONS))
           : this._groupedItems(
@@ -499,6 +529,7 @@ export class HaIconPicker extends LitElement {
       icons: PickerComboBoxItem[],
       category: string | null,
       suggestedIcons: string[] | undefined,
+      grid: boolean,
       localize: LocalizeFunc
     ): (PickerComboBoxItem | string)[] => {
       const groups = groupIcons(icons);
@@ -545,7 +576,7 @@ export class HaIconPicker extends LitElement {
         category === SUGGESTED_SECTION
           ? localize("ui.components.icon_picker.suggested")
           : this._groupLabel(category, localize),
-        ...items,
+        ...(grid ? toGridRows(category, items) : items),
       ];
     }
   );
@@ -562,6 +593,38 @@ export class HaIconPicker extends LitElement {
   private _pickerClosed() {
     this._category = undefined;
   }
+
+  // E: the button next to the search field opens the list of categories, and
+  // brings back all icons when a category list or category is open
+  private _browseAction = memoizeOne(
+    (browsing: boolean, localize: LocalizeFunc) => ({
+      label: localize(
+        browsing
+          ? "ui.components.icon_picker.all_icons"
+          : "ui.components.icon_picker.browse_categories"
+      ),
+      path: mdiShapeOutline,
+      selected: browsing,
+    })
+  );
+
+  private _browseToggled() {
+    this._category = this._category === undefined ? null : undefined;
+  }
+
+  // B and E don't pass sections, so the combo box searches its current rows.
+  // ponytail: replace its results with a search of all icons, drop once a
+  // variant is chosen and search goes through getItems again.
+  private _searchFn = memoizeOne(() =>
+    this._variant === "b" || this._variant === "e"
+      ? (search: string) => {
+          const icons = this._filterIcons(search, ICONS);
+          return this._variant === "e"
+            ? toGridRows(`search:${search}`, icons)
+            : icons;
+        }
+      : undefined
+  );
 
   // C and D: every category in one list, the chips jump to their title
   private _groupedItems = memoizeOne(

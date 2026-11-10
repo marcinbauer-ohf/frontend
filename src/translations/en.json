@@ -1110,6 +1110,8 @@
         "more": "More",
         "other": "Other",
         "all_categories": "All categories",
+        "browse_categories": "Categories",
+        "all_icons": "All icons",
         "icon_count": "{count} {count, plural,\n one {icon}\n other {icons}\n}",
         "categories": {
           "home": "Home",

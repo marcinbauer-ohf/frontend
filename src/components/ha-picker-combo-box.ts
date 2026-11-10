@@ -29,6 +29,7 @@ import {
   type HASSDomCurrentTargetEvent,
   type HASSDomEvent,
 } from "../common/dom/fire_event";
+import { stopPropagation } from "../common/dom/stop_propagation";
 import { ignoreRepeatedActivation } from "../common/keyboard/ignore-repeated-activation";
 import { caseInsensitiveStringCompare } from "../common/string/compare";
 import { debounce } from "../common/util/debounce";
@@ -43,6 +44,10 @@ import { loadVirtualizer } from "../resources/virtualizer";
 import { isTouch } from "../util/is_touch";
 import "./chips/ha-chip-set";
 import "./chips/ha-filter-chip";
+import "./ha-button";
+import "./ha-dropdown";
+import type { HaDropdownSelectEvent } from "./ha-dropdown";
+import "./ha-dropdown-item";
 import "./ha-combo-box-item";
 import "./ha-icon";
 import "./ha-icon-button";
@@ -190,6 +195,10 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
   @property({ type: Number, attribute: "grid-columns" })
   public gridColumns = 8;
 
+  /** A button next to the search field, fires `search-action`. */
+  @property({ attribute: false })
+  public searchAction?: { label: string; path: string; selected?: boolean };
+
   @property({ attribute: false })
   public notFoundLabel?: string | ((search: string) => string);
 
@@ -227,6 +236,9 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
   /** The section chips scroll to the section title with their label instead of filtering. */
   @property({ type: Boolean, attribute: "sections-jump" })
   public sectionsJump = false;
+
+  /** Show the jump sections as a menu next to the search field instead of chips, labelled with the section in view or this label. */
+  @property({ attribute: false }) public sectionsMenu?: string;
 
   @property({ type: Boolean, reflect: true }) public clearable = false;
 
@@ -280,6 +292,9 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
   // Rows from this index on are added by the combo box itself, like "Add custom
   // item", and belong to no section.
   private _sectionedItemsCount = 0;
+
+  // The list has section titles, so the one scrolled past sticks to the top
+  @state() private _hasSectionTitles = false;
 
   // Rows the combo box offers for any search, like "Add custom item" and the
   // additional items, are not search results.
@@ -399,16 +414,39 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
           "Search | Add custom value")
         : (this.i18n?.localize?.("ui.common.search") ?? "Search"));
 
-    return html`<ha-input-search
-        appearance="outlined"
-        .placeholder=${searchLabel}
-        @blur=${this._resetSelectedItem}
-        @input=${this._filterChanged}
-      >
-      </ha-input-search>
+    const search = html`<ha-input-search
+      appearance="outlined"
+      .placeholder=${searchLabel}
+      @blur=${this._resetSelectedItem}
+      @input=${this._filterChanged}
+    >
+    </ha-input-search>`;
+
+    const sectionsMenu = this._renderSectionsMenu();
+
+    return html`${
+        sectionsMenu
+          ? html`<div class="search-row">${search}${sectionsMenu}</div>`
+          : this.searchAction
+            ? html`<div class="search-row">
+                ${search}
+                <ha-button
+                  appearance=${this.searchAction.selected ? "filled" : "outlined"}
+                  variant=${this.searchAction.selected ? "brand" : "neutral"}
+                  @click=${this._searchActionClicked}
+                >
+                  <ha-svg-icon
+                    slot="start"
+                    .path=${this.searchAction.path}
+                  ></ha-svg-icon>
+                  ${this.searchAction.label}
+                </ha-button>
+              </div>`
+            : search
+      }
       ${this._renderSectionButtons()}
       ${
-        this.sections?.length
+        this._hasSectionTitles
           ? html`
               <div class="section-title-wrapper">
                 <ha-section-title
@@ -489,7 +527,7 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
         class=${classMap({
           list: true,
           scrolled: this._contentScrolled,
-          "with-sections": !!this.sections?.length,
+          "with-sections": this._hasSectionTitles,
         })}
         virtual-focus
         controlled
@@ -511,8 +549,46 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
     `;
   }
 
+  private _renderSectionsMenu() {
+    if (!this.sections?.length || this.sectionsMenu === undefined) {
+      return undefined;
+    }
+    // Keys stay in the menu, the list's arrow keys and Escape listen above it
+    return html`<ha-dropdown
+      @wa-select=${this._sectionMenuSelected}
+      @keydown=${stopPropagation}
+    >
+      <ha-button
+        slot="trigger"
+        appearance="outlined"
+        variant="neutral"
+        with-caret
+      >
+        ${this._sectionTitle ?? this.sectionsMenu}
+      </ha-button>
+      ${this.sections.map((section) =>
+        section === "separator"
+          ? nothing
+          : html`<ha-dropdown-item
+              .value=${section.id}
+              .selected=${this._sectionTitle === section.label}
+            >
+              ${section.label}
+            </ha-dropdown-item>`
+      )}
+    </ha-dropdown>`;
+  }
+
+  private _sectionMenuSelected(ev: HaDropdownSelectEvent) {
+    this._jumpToSection(ev.detail.item.value);
+  }
+
   private _renderSectionButtons() {
-    if (!this.sections || this.sections.length === 0) {
+    if (
+      !this.sections ||
+      this.sections.length === 0 ||
+      this.sectionsMenu !== undefined
+    ) {
       return nothing;
     }
 
@@ -553,7 +629,7 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
       this._virtualScrollElement = scrollElement;
       this.requestUpdate();
     }
-    if (this.sections?.length) {
+    if (this._hasSectionTitles) {
       const { first } = ev.detail;
       this._sectionTitle =
         !this._selectedSection && first < this._sectionedItemsCount
@@ -613,6 +689,8 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
     }
 
     this._sectionedItemsCount = items.length;
+    this._hasSectionTitles =
+      !!this.sections?.length || items.some((item) => typeof item === "string");
 
     if (!items.length && (!this.allowCustomValue || this.emptyLabel)) {
       items.push({ id: NO_ITEMS_AVAILABLE_ID, primary: "" });
@@ -801,6 +879,20 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
     this._applySearch(textfield.value ?? "");
   };
 
+  // The consumer swaps the items, so start over from the top with an empty
+  // search and give focus back to the field for the arrow keys
+  private _searchActionClicked() {
+    if (this._searchFieldElement) {
+      this._searchFieldElement.value = "";
+    }
+    this._search = "";
+    fireEvent(this, "search-action");
+    this.refreshItems();
+    this._resetSelectedItem();
+    this._resetListScroll();
+    this._searchFieldElement?.focus();
+  }
+
   private _applySearch(value: string) {
     const searchString = value.trim();
     this._search = searchString;
@@ -864,18 +956,7 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
       return;
     }
     if (this.sectionsJump) {
-      const label = this.sections?.find(
-        (entry) => entry !== "separator" && entry.id === section
-      );
-      const title = label && label !== "separator" ? label.label : undefined;
-      // Section titles are the string rows among the items
-      const index = (this._items as unknown[]).indexOf(title);
-      if (index !== -1) {
-        (this._list as HaListVirtualized | undefined)?.scrollToIndex(
-          index,
-          "start"
-        );
-      }
+      this._jumpToSection(section);
       return;
     }
     if (this._selectedSection === section) {
@@ -888,6 +969,27 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
 
     // Reset scroll position when filter changes
     this._resetListScroll();
+  }
+
+  // Scroll to the section's title, a search hides the titles so clear it first
+  private async _jumpToSection(section: string) {
+    this._resetSelectedItem();
+    if (this._search) {
+      this.setFieldValue("");
+      await this.updateComplete;
+    }
+    const entry = this.sections?.find(
+      (item) => item !== "separator" && item.id === section
+    );
+    const title = entry && entry !== "separator" ? entry.label : undefined;
+    // Section titles are the string rows among the items
+    const index = (this._items as unknown[]).indexOf(title);
+    if (index !== -1) {
+      (this._list as HaListVirtualized | undefined)?.scrollToIndex(
+        index,
+        "start"
+      );
+    }
   }
 
   private _registerKeyboardShortcuts() {
@@ -1147,6 +1249,23 @@ export class HaPickerComboBox extends ScrollableFadeMixin(LitElement) {
           padding: 0 var(--ha-space-4) var(--ha-space-3);
         }
 
+        .search-row {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+          padding: 0 var(--ha-space-3) var(--ha-space-3);
+        }
+
+        :host([mode="dialog"]) .search-row {
+          padding: 0 var(--ha-space-4) var(--ha-space-3);
+        }
+
+        .search-row ha-input-search {
+          flex: 1;
+          min-width: 0;
+          padding: 0;
+        }
+
         .list-wrapper {
           position: relative;
           flex: 0 1 auto;
@@ -1285,5 +1404,6 @@ declare global {
   interface HASSDomEvents {
     "index-selected": PickerComboBoxIndexSelectedDetail;
     "item-activated": { item: PickerComboBoxItem };
+    "search-action": undefined;
   }
 }

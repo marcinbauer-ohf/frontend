@@ -69,6 +69,11 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
   public gridColumns = 8;
 
   @property({ attribute: false })
+  public searchAction?: { label: string; path: string; selected?: boolean };
+
+  @property({ attribute: false }) public sectionsMenu?: string;
+
+  @property({ attribute: false })
   public searchFn?: PickerComboBoxSearchFn<PickerComboBoxItem>;
 
   @property({ attribute: false })
@@ -348,6 +353,7 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
         .rowRenderer=${this.rowRenderer}
         .cellRenderer=${this.cellRenderer}
         .gridColumns=${this.gridColumns}
+        .searchAction=${this.searchAction}
         .notFoundLabel=${this.notFoundLabel}
         .emptyLabel=${this.emptyLabel}
         .getItems=${this.getItems}
@@ -357,6 +363,7 @@ export class HaGenericPicker extends PickerMixin(LitElement) {
         .sections=${this.sections}
         .selectedSection=${this.selectedSection}
         .sectionsJump=${this.sectionsJump}
+        .sectionsMenu=${this.sectionsMenu}
         .searchKeys=${this.searchKeys}
         .customValueLabel=${this.customValueLabel}
         .noSort=${this.noSort}
