@@ -18,7 +18,7 @@ import "../../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
 import "../../../components/ha-dropdown-item";
 import "../../../components/ha-icon-button";
-import "../../../components/ha-icon-next";
+import "../../../components/ha-icon-button-next";
 import "../../../components/ha-svg-icon";
 import "../../../components/ha-tip";
 import "../../../components/ha-tooltip";
@@ -326,20 +326,24 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
                       repairsIssues.length
                         ? html`
                             <ha-card outlined class="dashboard-alert-card">
-                              <div
-                                class="dashboard-alert-title"
-                                role="heading"
-                                aria-level="2"
-                              >
-                                <a href="/config/repairs?historyBack=1">
+                              <div class="dashboard-alert-header">
+                                <div
+                                  class="dashboard-alert-title"
+                                  role="heading"
+                                  aria-level="2"
+                                >
                                   ${this.hass.localize(
                                     "ui.panel.config.repairs.title",
-                                    {
-                                      count: totalRepairIssues,
-                                    }
+                                    { count: totalRepairIssues }
                                   )}
-                                  <ha-icon-next></ha-icon-next>
-                                </a>
+                                </div>
+                                <ha-icon-button-next
+                                  href="/config/repairs?historyBack=1"
+                                  .label=${this.hass.localize(
+                                    "ui.panel.config.repairs.title",
+                                    { count: totalRepairIssues }
+                                  )}
+                                ></ha-icon-button-next>
                               </div>
                               <ha-config-repairs
                                 .hass=${this.hass}
@@ -354,20 +358,24 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
                       canInstallUpdates.length
                         ? html`
                             <ha-card outlined class="dashboard-alert-card">
-                              <div
-                                class="dashboard-alert-title"
-                                role="heading"
-                                aria-level="2"
-                              >
-                                <a href="/config/updates?historyBack=1">
+                              <div class="dashboard-alert-header">
+                                <div
+                                  class="dashboard-alert-title"
+                                  role="heading"
+                                  aria-level="2"
+                                >
                                   ${this.hass.localize(
                                     "ui.panel.config.updates.title",
-                                    {
-                                      count: totalUpdates,
-                                    }
+                                    { count: totalUpdates }
                                   )}
-                                  <ha-icon-next></ha-icon-next>
-                                </a>
+                                </div>
+                                <ha-icon-button-next
+                                  href="/config/updates?historyBack=1"
+                                  .label=${this.hass.localize(
+                                    "ui.panel.config.updates.title",
+                                    { count: totalUpdates }
+                                  )}
+                                ></ha-icon-button-next>
                               </div>
                               <ha-config-updates
                                 .narrow=${this.narrow}
@@ -489,21 +497,22 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
           gap: var(--ha-space-4);
         }
 
-        .dashboard-alert-title {
-          padding: var(--ha-space-4) var(--ha-space-4) var(--ha-space-2);
-          font-size: var(--ha-font-size-l);
-        }
-
-        .dashboard-alert-title a {
-          display: inline-flex;
+        .dashboard-alert-header {
+          display: flex;
           align-items: center;
           gap: var(--ha-space-2);
+          padding: var(--ha-space-2) var(--ha-space-2) 0 var(--ha-space-4);
+          font-size: var(--ha-font-size-l);
         }
-
-        .dashboard-alert-title ha-icon-next {
+        .dashboard-alert-header ha-icon-button-next {
           color: var(--secondary-text-color);
-          width: 20px;
-          height: 20px;
+        }
+        .dashboard-alert-title {
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         @media all and (max-width: 600px) {

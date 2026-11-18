@@ -49,6 +49,8 @@ export interface AlertBadgeConfig extends LovelaceBadgeConfig {
 
 export interface ShortcutBadgeConfig extends LovelaceBadgeConfig {
   text?: string;
+  /** Sized like the home page's summary badges, beside which it sits. */
+  summary_size?: boolean;
   icon?: string;
   color?: string;
   tap_action?: ActionConfig;

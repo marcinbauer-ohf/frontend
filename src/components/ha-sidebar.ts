@@ -868,12 +868,12 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           font-size: var(--ha-font-size-xl);
           align-items: center;
           overflow: hidden;
-          width: calc(56px + var(--safe-area-inset-left, 0px));
+          width: calc(64px + var(--safe-area-inset-left, 0px));
           padding-left: calc(
-            var(--ha-space-1) + var(--safe-area-inset-left, 0px)
+            var(--ha-space-2) + var(--safe-area-inset-left, 0px)
           );
           padding-inline-start: calc(
-            var(--ha-space-1) + var(--safe-area-inset-left, 0px)
+            var(--ha-space-2) + var(--safe-area-inset-left, 0px)
           );
           padding-inline-end: initial;
           padding-top: var(--safe-area-inset-top, 0px);
@@ -962,7 +962,7 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
 
         ha-list-item-button {
           flex-shrink: 0;
-          margin: 0 var(--ha-space-1) var(--ha-space-2);
+          margin: 0 var(--ha-space-2) var(--ha-space-2);
           border-radius: var(--ha-border-radius-sm);
           --ha-row-item-min-height: var(--ha-space-10);
           --ha-row-item-padding-block: 0;
@@ -975,7 +975,7 @@ class HaSidebar extends SubscribeMixin(ScrollableFadeMixin(LitElement)) {
           color: var(--sidebar-text-color);
         }
         :host([expanded]) ha-list-item-button {
-          width: var(--ha-sidebar-expanded-item-width, 248px);
+          width: var(--ha-sidebar-expanded-item-width, 240px);
         }
         :host([narrow][expanded]) ha-list-item-button {
           width: calc(240px - var(--safe-area-inset-left, 0px));

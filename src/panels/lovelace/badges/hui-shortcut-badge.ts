@@ -99,6 +99,7 @@ export class HuiShortcutBadge extends LitElement implements LovelaceBadge {
 
     return html`
       <ha-badge
+        class=${this._config.summary_size ? "summary-size" : ""}
         .type=${this._hasAction ? "button" : "badge"}
         .iconOnly=${!text}
         .accessibleLabel=${
@@ -125,6 +126,12 @@ export class HuiShortcutBadge extends LitElement implements LovelaceBadge {
   static styles = css`
     ha-badge {
       --badge-color: var(--primary-color);
+    }
+    /* The size of hui-home-summary-badge */
+    ha-badge.summary-size {
+      --ha-badge-size: 48px;
+      --ha-badge-icon-size: 24px;
+      --ha-badge-font-size: var(--ha-font-size-m);
     }
   `;
 }

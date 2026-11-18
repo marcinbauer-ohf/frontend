@@ -2,13 +2,12 @@ import type { ContextType } from "@lit/context";
 import { mdiMagnify } from "@mdi/js";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, state } from "lit/decorators";
+import { ifDefined } from "lit/directives/if-defined";
 import { consume } from "../common/decorators/consume";
 import { consumeLocalize } from "../common/decorators/consume-context-entry";
-import { ctrlOrCmdLabel } from "../common/keyboard/ctrl-or-cmd";
 import type { LocalizeFunc } from "../common/translations/localize";
 import { narrowViewportContext, uiContext } from "../data/context";
 import { showQuickBar } from "../dialogs/quick-bar/show-dialog-quick-bar";
-import { isMobileClient } from "../util/is_mobile";
 import "./ha-svg-icon";
 
 /** The search pill every desktop toolbar centers; hidden when narrow. */
@@ -29,17 +28,18 @@ export class HaTopSearch extends LitElement {
     if (this._narrow || !this._ui || this._ui.kioskMode) {
       return nothing;
     }
-    const hint =
-      this._ui.enableShortcuts && !isMobileClient
-        ? `${ctrlOrCmdLabel(this._localize)} + K`
-        : undefined;
+    // Ctrl/Cmd + K still opens it; only assistive technology announces it
     return html`
-      <button @click=${this._showQuickBar}>
+      <button
+        aria-keyshortcuts=${ifDefined(
+          this._ui.enableShortcuts ? "Control+K Meta+K" : undefined
+        )}
+        @click=${this._showQuickBar}
+      >
         <ha-svg-icon .path=${mdiMagnify}></ha-svg-icon>
         <span class="label"
-          >${this._localize("ui.panel.lovelace.menu.search_home_assistant")}</span
+          >${this._localize("ui.components.top_search.placeholder")}</span
         >
-        ${hint ? html`<span class="hint">${hint}</span>` : nothing}
       </button>
     `;
   }
@@ -52,14 +52,19 @@ export class HaTopSearch extends LitElement {
     :host {
       display: contents;
     }
+    /* The icon keeps to the start and the text sits in the middle of the
+       whole pill */
     button {
+      position: relative;
       display: flex;
       flex-shrink: 0;
       align-items: center;
+      justify-content: center;
       gap: var(--ha-space-2);
       width: min(480px, 40vw);
       height: 40px;
-      padding: 0 var(--ha-space-3);
+      /* Room for the icon on both sides, so the text stays centred */
+      padding: 0 var(--ha-space-12);
       border: none;
       border-radius: var(--ha-border-radius-pill);
       background: var(--ha-color-fill-neutral-quiet-resting);
@@ -68,19 +73,20 @@ export class HaTopSearch extends LitElement {
       font-size: var(--ha-font-size-m);
       cursor: pointer;
     }
+    ha-svg-icon {
+      position: absolute;
+      inset-inline-start: var(--ha-space-3);
+    }
     button:hover {
       background: var(--ha-color-fill-neutral-quiet-hover);
     }
     .label {
-      flex: 1;
-      text-align: start;
+      color: var(--ha-color-text-disabled);
+      flex: 0 1 auto;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-    .hint {
-      font-size: var(--ha-font-size-s);
-      opacity: 0.7;
     }
   `;
 }

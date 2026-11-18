@@ -7,6 +7,7 @@ import { deepEqual } from "../../common/util/deep-equal";
 import type { LovelaceStrategyViewConfig } from "../../data/lovelace/config/view";
 import "../../components/ha-add-menu";
 import "../../components/ha-icon-button";
+import "../../components/ha-prototype-settings";
 import "../../components/ha-summary-editor-pane";
 import { ChildPanelReady } from "../../layouts/panel-ready";
 import { haStyle } from "../../resources/styles";
@@ -123,12 +124,15 @@ class PanelClimate extends LitElement {
               >`
         }
         ${
-          // Nothing to configure yet; the pane is where it will go
           this._editing
             ? html`<ha-summary-editor-pane
                 slot="side-pane"
                 .heading=${this.hass.localize("ui.panel.climate.edit")}
                 .narrow=${this.narrow}
+                ><ha-prototype-settings
+                  .hass=${this.hass}
+                  settings-id="climate"
+                ></ha-prototype-settings
               ></ha-summary-editor-pane>`
             : nothing
         }

@@ -1,6 +1,7 @@
 import { STATE_NOT_RUNNING } from "home-assistant-js-websocket";
 import { ReactiveElement } from "lit";
 import { customElement } from "lit/decorators";
+import type { LovelaceCardConfig } from "../../../../data/lovelace/config/card";
 import type { SecurityAlertEntityConfig } from "../../../../data/frontend";
 import type { ShortcutItem } from "../../../../data/home_shortcuts";
 import type { LovelaceConfig } from "../../../../data/lovelace/config/types";
@@ -32,6 +33,8 @@ export interface HomeDashboardStrategyConfig {
   shortcuts?: ShortcutItem[];
   /** Area views show one device card per device instead of entity tiles. */
   device_cards?: boolean;
+  /** Device cards edited on the dashboard, by device id. */
+  device_card_configs?: Record<string, LovelaceCardConfig>;
   weather_entity?: string;
 }
 
@@ -81,6 +84,7 @@ export class HomeDashboardStrategy extends ReactiveElement {
           area: area.area_id,
           home_panel: config.home_panel,
           device_cards: config.device_cards,
+          device_card_configs: config.device_card_configs,
         } satisfies HomeAreaViewStrategyConfig,
       };
     });
@@ -122,6 +126,7 @@ export class HomeDashboardStrategy extends ReactiveElement {
       strategy: {
         type: "home-other-devices",
         home_panel: config.home_panel,
+        device_card_configs: config.device_card_configs,
       } satisfies HomeOtherDevicesViewStrategyConfig,
       icon: "mdi:devices",
     } satisfies LovelaceViewRawConfig;

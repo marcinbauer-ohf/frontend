@@ -252,7 +252,6 @@ export class HomeEditorPane extends LitElement {
     const localize = this.hass.localize;
     const hierarchy = this._hierarchy(this.hass.floors, this.hass.areas);
     return html`
-      <p class="intro">${localize("ui.panel.home.editor.intro")}</p>
       <ha-grouped-list
         .header=${localize("ui.panel.home.editor.overview_page_header")}
       >

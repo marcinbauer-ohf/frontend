@@ -586,6 +586,68 @@
       "last": "Last"
     },
     "components": {
+      "prototype_settings": {
+        "notice": "Prototype: these settings are kept in this browser and don't change anything yet.",
+        "options": {
+          "floors": "Floors",
+          "areas": "Areas",
+          "none": "Nothing",
+          "single": "Single",
+          "restart": "Restart",
+          "queued": "Queued",
+          "parallel": "Parallel",
+          "silent": "Silently skip",
+          "info": "Note it in the log",
+          "warning": "Warn in the log",
+          "1h": "Last hour",
+          "24h": "Last 24 hours",
+          "7d": "Last 7 days"
+        },
+        "climate": {
+          "group_by": "Group by",
+          "show_empty_areas": "Show areas without climate devices",
+          "comfort_min": "Comfortable from",
+          "comfort_max": "Comfortable up to"
+        },
+        "light": {
+          "group_by": "Group by",
+          "show_off": "Show lights that are off",
+          "include_switches": "Include switches used as lights",
+          "include_switches_helper": "Switches whose device class or name says they control a light."
+        },
+        "maintenance": {
+          "battery_threshold": "Low battery level",
+          "battery_threshold_helper": "Batteries at or below this level are listed as needing attention.",
+          "show_updates": "Show available updates",
+          "show_unavailable": "Show unavailable devices"
+        },
+        "media_players": {
+          "default_player": "Default player",
+          "show_idle": "Show players that are idle",
+          "group_speakers": "Show grouped speakers as one"
+        },
+        "other_devices": {
+          "hide_without_controls": "Hide devices without controls",
+          "show_hidden": "Show hidden entities"
+        },
+        "automations_view": {
+          "show_disabled": "Show disabled automations",
+          "recent_window": "Recently triggered means"
+        },
+        "automations": {
+          "default_mode": "Mode for new automations",
+          "default_mode_helper": "What a new automation does when it is triggered while still running.",
+          "max_runs": "Runs at once",
+          "max_runs_helper": "How many runs a queued or parallel automation keeps going at the same time.",
+          "stored_traces": "Traces kept per automation",
+          "stored_traces_helper": "More traces help with debugging but use more storage.",
+          "max_exceeded": "When there are more runs than allowed",
+          "max_exceeded_helper": "What Home Assistant does with a run that has to wait or be skipped."
+        }
+      },
+      "top_search": {
+        "placeholder": "Search your home"
+      },
       "summary_editor_pane": {
         "empty": "Nothing to set up yet",
         "empty_description": "Options for this page will show up here."
@@ -1001,6 +1063,9 @@
         "sort_by": "Sort by {sortColumn}",
         "group_by": "Group by {groupColumn}",
         "dont_group_by": "Don't group",
+        "sort_label": "Sort by",
+        "group_label": "Group by",
+        "none": "None",
         "collapse_all_groups": "Collapse all",
         "expand_all_groups": "Expand all",
         "select": "Select",
@@ -3068,12 +3133,11 @@
           "logins_count": "{count} {count, plural,\n  one {login}\n  other {logins}\n}",
           "logins_without_person_description": "Accounts that can log in but aren't linked to anyone in your home",
           "no_logins_without_person": "Every login belongs to a person",
-          "overview_page_header": "On this page",
+          "overview_page_header": "On your home page",
           "home_setup_header": "Your home",
           "favorites_and_suggested": "Favorite and suggested devices",
           "role_user": "User",
           "location_and_region": "Location and region",
-          "intro": "Choose what your home page shows, and tell Home Assistant who lives here and where your home is.",
           "no_favorites": "No favorites yet",
           "floors_and_areas": "Floors and areas",
           "floors_and_areas_count": "{floors} {floors, plural,\n  one {floor}\n  other {floors}\n}, {areas} {areas, plural,\n  one {area}\n  other {areas}\n}",
@@ -5982,6 +6046,7 @@
             "add_automation": "Create automation",
             "show_cards": "[%key:ui::panel::config::devices::picker::show_cards%]",
             "show_table": "[%key:ui::panel::config::devices::picker::show_table%]",
+            "missing_references": "Uses {count} {count, plural,\n  one {entity, device or area}\n  other {entities, devices or areas}\n} that no longer exist",
             "state_filter": {
               "enabled": "[%key:ui::panel::config::automation::editor::info_pane::enabled%]",
               "disabled": "[%key:ui::panel::config::automation::picker::disabled%]"
@@ -12248,6 +12313,7 @@
               "show_area": "Show area",
               "show_graph": "Show history graph",
               "show_graph_unavailable": "The featured entity has no measurement to graph",
+              "secondary_as_tiles": "Show other entities as tiles",
               "suggestions": {
                 "featured_only": "Featured entity only",
                 "all_entities": "All entities"
@@ -12264,6 +12330,11 @@
                 "disabled": "Disabled",
                 "disabled_helper": "Turned off everywhere in Home Assistant, not just on this card. Applied when you save.",
                 "move_to": "Move to {section}",
+                "section_menu": "{section} options",
+                "sort_by_name": "Sort by name",
+                "hide_all": "Hide all",
+                "show_all": "Show all",
+                "enable_all": "Enable all",
                 "cannot_disable": "This entity can't be turned off from here because no integration manages it",
                 "disable_confirm_title": "Turn off in Home Assistant?",
                 "disable_confirm_text": "{name} stops updating and recording history everywhere, not just on this card. You can turn it back on here.",
@@ -12272,7 +12343,7 @@
                 "disable_failed": "Home Assistant rejected the change for {entities}. Nothing was changed for them.",
                 "hero_feature": "Featured control",
                 "reset": "Reset to defaults",
-                "drag_hint": "Drag entities between these groups to choose what the card shows, and drag them within a group to reorder."
+                "drag_hint": "Drag entities between these groups to choose what the card shows, or select one to move it. Drag them within a group to reorder."
               }
             },
             "tile": {

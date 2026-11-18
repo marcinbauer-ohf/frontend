@@ -1530,7 +1530,7 @@ class HUIRoot extends KeyboardShortcutMixin(LitElement) {
           padding-top: var(--safe-area-inset-top);
           z-index: 4;
         }
-        :host([scrolled]) .header {
+        :host([scrolled]) .narrow .header {
           box-shadow: var(
             --bar-box-shadow,
             0px 2px 4px -1px rgba(0, 0, 0, 0.2),
@@ -1538,13 +1538,32 @@ class HUIRoot extends KeyboardShortcutMixin(LitElement) {
             0px 1px 10px 0px rgba(0, 0, 0, 0.12)
           );
         }
+        /* On a desktop the scroll shadow falls inside the rounded canvas
+           below the bar, as on the settings pages, instead of across the
+           whole bar and over the canvas corners. While editing, the frame
+           casts it instead. */
+        .header::after {
+          content: "";
+          position: absolute;
+          top: 100%;
+          inset-inline-start: 0;
+          inset-inline-end: var(--ha-panel-frame-gutter, 0px);
+          height: var(--ha-border-radius-xl);
+          border-radius: var(--ha-border-radius-xl) var(--ha-border-radius-xl) 0
+            0;
+          pointer-events: none;
+          transition: box-shadow var(--ha-animation-duration-normal) ease;
+        }
+        :host([scrolled]) div:not(.narrow):not(.framed) > .header::after {
+          box-shadow: var(--ha-top-app-bar-canvas-shadow, none);
+        }
         .toolbar {
           border-bottom: var(--app-header-border-bottom, none);
           height: var(--header-height);
           display: flex;
           align-items: center;
           font-size: var(--ha-font-size-xl);
-          padding: 0px 12px;
+          padding: 0 var(--ha-space-4);
           padding-right: calc(
             var(--ha-space-4) + var(--safe-area-inset-right, 0px)
           );

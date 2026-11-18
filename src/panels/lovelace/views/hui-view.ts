@@ -13,6 +13,7 @@ import type { LovelaceViewElement } from "../../../data/lovelace";
 import type { LovelaceBadgeConfig } from "../../../data/lovelace/config/badge";
 import type { LovelaceCardConfig } from "../../../data/lovelace/config/card";
 import type { LovelaceSectionConfig } from "../../../data/lovelace/config/section";
+import type { LovelaceConfig } from "../../../data/lovelace/config/types";
 import type {
   LovelaceViewConfig,
   LovelaceViewRawConfig,
@@ -176,18 +177,31 @@ export class HUIView extends ReactiveElement {
       "ll-edit-card",
       (ev: HASSDomEvent<HASSDomEvents["ll-edit-card"]>) => {
         const path = normalizeCardPath(ev.detail.path);
-        const cardConfig = this._getCardConfig(path);
-        if (!cardConfig) {
+        // A generated card lives only in the generated view. The dashboard
+        // that generated it may still edit it in its own pane, but there is
+        // no config here to save it to.
+        const generated = isStrategyView(
+          this.lovelace.config.views[this.index]
+        );
+        const config = generated
+          ? this._withGeneratedView()
+          : this.lovelace.config;
+        const cardConfig = config
+          ? generated
+            ? getAtPath<LovelaceCardConfig>(config, path)
+            : this._getCardConfig(path)
+          : undefined;
+        if (!config || !cardConfig) {
           return;
         }
-        const sectionConfig = getCardSectionConfig(this.lovelace.config, path);
+        const sectionConfig = getCardSectionConfig(config, path);
         const offer = fireEvent(
           this,
           "ll-edit-card-in-pane",
           { path, cardConfig, sectionConfig },
           { cancelable: true }
         );
-        if (offer.defaultPrevented) {
+        if (offer.defaultPrevented || generated) {
           return;
         }
         showEditCardDialog(this, {
@@ -379,6 +393,19 @@ export class HUIView extends ReactiveElement {
       setClipboard: (clipboard) => {
         this._badgeClipboard = clipboard;
       },
+    };
+  }
+
+  /** The dashboard config with this view as its strategy generated it. */
+  private _withGeneratedView(): LovelaceConfig | undefined {
+    if (!this._config) {
+      return undefined;
+    }
+    return {
+      ...this.lovelace.config,
+      views: this.lovelace.config.views.map((view, index) =>
+        index === this.index ? this._config! : view
+      ),
     };
   }
 

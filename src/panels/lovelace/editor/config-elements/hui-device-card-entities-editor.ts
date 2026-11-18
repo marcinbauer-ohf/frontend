@@ -1,10 +1,4 @@
-import {
-  mdiCancel,
-  mdiDragHorizontalVariant,
-  mdiEye,
-  mdiEyeOff,
-  mdiPin,
-} from "@mdi/js";
+import { mdiCancel, mdiDotsVertical, mdiEye, mdiEyeOff, mdiPin } from "@mdi/js";
 import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -12,6 +6,7 @@ import { keyed } from "lit/directives/keyed";
 import { repeat } from "lit/directives/repeat";
 import memoizeOne from "memoize-one";
 import { storage } from "../../../../common/decorators/storage";
+import { caseInsensitiveStringCompare } from "../../../../common/string/compare";
 import { computeDomain } from "../../../../common/entity/compute_domain";
 import {
   computeEntityEntryName,
@@ -23,13 +18,15 @@ import { SubscribeMixin } from "../../../../mixins/subscribe-mixin";
 import "../../../../components/ha-alert";
 import "../../../../components/ha-button";
 import "../../../../components/ha-domain-icon";
-import "../../../../components/ha-icon-button";
 import "../../../../components/ha-sortable";
 import "../../../../components/ha-state-icon";
 import "../../../../components/ha-svg-icon";
+import "../../../../components/ha-icon-button";
 import "../../../../components/ha-tooltip";
-import "../../../../components/item/ha-list-item-base";
-import "../../../../components/list/ha-list-base";
+import "../../../../components/chips/ha-assist-chip";
+import "../../../../components/ha-dropdown";
+import type { HaDropdownSelectEvent } from "../../../../components/ha-dropdown";
+import "../../../../components/ha-dropdown-item";
 import type { EntityRegistryEntry } from "../../../../data/entity/entity_registry";
 import {
   subscribeEntityRegistry,
@@ -52,6 +49,7 @@ import type {
 } from "./device-card-sections";
 import {
   DEVICE_CARD_SECTIONS as SECTIONS,
+  moveAll,
   placeEntity,
   reorderSection,
 } from "./device-card-sections";
@@ -451,6 +449,7 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
           <ha-tooltip for=${`about-${section}`} placement="top">
             ${helper}
           </ha-tooltip>
+          ${rows.length ? this._renderSectionMenu(section) : nothing}
         </div>
         ${section === "hero" ? this._renderFeaturePicker(rows[0]) : nothing}
         ${keyed(
@@ -459,20 +458,19 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
             <ha-sortable
               .group=${SORTABLE_GROUP}
               draggable-selector=".draggable"
-              handle-selector=".handle"
               data-section=${section}
               @item-added=${this._itemAdded}
               @item-moved=${this._itemMoved}
               @item-removed=${this._itemRemoved}
             >
-              <ha-list-base class=${section}>
+              <div class="field ${section}">
                 ${repeat(
                   rows,
                   (row) => row.entityId,
-                  (row) => this._renderRow(section, row)
+                  (row) => this._renderChip(section, row)
                 )}
                 ${rows.length ? nothing : html`<p class="empty">${helper}</p>`}
-              </ha-list-base>
+              </div>
             </ha-sortable>
           `
         )}
@@ -480,67 +478,147 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
     `;
   }
 
-  private _renderRow(section: Section, row: Row) {
+  /**
+   * What can be done with a whole section at once. Nothing bulk-moves into
+   * the hero, which holds one entity, or into disabled, which is system-wide;
+   * enabling lands in hidden so the card does not suddenly fill up.
+   */
+  private _renderSectionMenu(section: Section) {
+    const localize = this.hass!.localize;
+    const items: [value: string, label: string][] =
+      section === "hero"
+        ? (["visible", "hidden"] as const).map((target) => [
+            `to:${target}`,
+            localize("ui.panel.lovelace.editor.card.device.sections.move_to", {
+              section: this._sectionLabel(target),
+            }),
+          ])
+        : section === "visible"
+          ? [
+              [
+                "sort",
+                localize(
+                  "ui.panel.lovelace.editor.card.device.sections.sort_by_name"
+                ),
+              ],
+              [
+                "to:hidden",
+                localize(
+                  "ui.panel.lovelace.editor.card.device.sections.hide_all"
+                ),
+              ],
+            ]
+          : section === "hidden"
+            ? [
+                [
+                  "to:visible",
+                  localize(
+                    "ui.panel.lovelace.editor.card.device.sections.show_all"
+                  ),
+                ],
+              ]
+            : [
+                [
+                  "to:hidden",
+                  localize(
+                    "ui.panel.lovelace.editor.card.device.sections.enable_all"
+                  ),
+                ],
+              ];
     return html`
-      <ha-list-item-base class="draggable" .sortableData=${row.entityId}>
-        <div slot="start" class="leading">
-          <ha-svg-icon
-            class="handle"
-            .path=${mdiDragHorizontalVariant}
-          ></ha-svg-icon>
+      <ha-dropdown
+        class="section-menu"
+        placement="bottom-end"
+        data-section=${section}
+        @wa-select=${this._sectionMenuSelected}
+      >
+        <ha-icon-button
+          slot="trigger"
+          .path=${mdiDotsVertical}
+          .label=${localize(
+            "ui.panel.lovelace.editor.card.device.sections.section_menu",
+            { section: this._sectionLabel(section) }
+          )}
+        ></ha-icon-button>
+        ${items.map(
+          ([value, label]) =>
+            html`<ha-dropdown-item .value=${value}>${label}</ha-dropdown-item>`
+        )}
+      </ha-dropdown>
+    `;
+  }
+
+  private _sectionMenuSelected(ev: HaDropdownSelectEvent) {
+    const section = (ev.currentTarget as HTMLElement).dataset
+      .section as Section;
+    const action = ev.detail.item.value;
+    const sections = this._currentSections();
+    if (action === "sort") {
+      const language = this.hass!.locale.language;
+      this._commitSections({
+        ...sections,
+        visible: [...sections.visible].sort((a, b) =>
+          caseInsensitiveStringCompare(
+            this._nameOf(a),
+            this._nameOf(b),
+            language
+          )
+        ),
+      });
+      return;
+    }
+    const target = action.replace("to:", "") as "visible" | "hidden";
+    this._commitSections(moveAll(sections, section, target));
+  }
+
+  /**
+   * One chip per entity, dragged between the fields or moved with its menu:
+   * the same move a drag makes, for anyone on a keyboard or a phone.
+   */
+  private _renderChip(section: Section, row: Row) {
+    const stateObj = this.hass!.states[row.entityId];
+    return html`
+      <ha-dropdown
+        class="draggable"
+        .sortableData=${row.entityId}
+        data-entity=${row.entityId}
+        @wa-select=${this._chipMenuSelected}
+      >
+        <ha-assist-chip slot="trigger" .label=${row.name}>
           ${
-            // A disabled entity has no state to read an icon from, so it falls
-            // back to its domain's — the group it sits in already says it is
-            // off, and swapping in a "cancelled" icon would make the rows
-            // harder to tell apart.
-            this.hass!.states[row.entityId]
+            // A disabled entity has no state to read an icon from, so it
+            // falls back to its domain's: the field it sits in already says
+            // it is off.
+            stateObj
               ? html`<ha-state-icon
-                  .stateObj=${this.hass!.states[row.entityId]}
+                  slot="icon"
+                  .stateObj=${stateObj}
                 ></ha-state-icon>`
               : html`<ha-domain-icon
+                  slot="icon"
                   .hass=${this.hass}
                   .domain=${computeDomain(row.entityId)}
                 ></ha-domain-icon>`
           }
-        </div>
-        <span slot="headline">${row.name}</span>
-        <div slot="end" class="actions">
-          ${
-            // One button per other section: the same move a drag makes, for
-            // anyone on a keyboard or a phone. Each waits behind a dot of its
-            // own, so the row shows how many options it has.
-            SECTIONS.filter((target) => target !== section).map((target) => {
-              const blocked =
-                target === "disabled" && !this._canDisable(row.entityId);
-              return html`<span class="action">
-                ${
-                  // No dot for an option this row does not have.
-                  blocked
-                    ? nothing
-                    : html`<span class="dot" aria-hidden="true"></span>`
-                }
-                <ha-icon-button
-                  .path=${SECTION_ICON[target]}
-                  .label=${
-                    blocked
-                      ? this.hass!.localize(
-                          "ui.panel.lovelace.editor.card.device.sections.cannot_disable"
-                        )
-                      : this.hass!.localize(
-                          "ui.panel.lovelace.editor.card.device.sections.move_to",
-                          { section: this._sectionLabel(target) }
-                        )
-                  }
-                  .disabled=${blocked}
-                  data-entity=${row.entityId}
-                  data-target=${target}
-                  @click=${this._quickMove}
-                ></ha-icon-button>
-              </span>`;
-            })
-          }
-        </div>
-      </ha-list-item-base>
+        </ha-assist-chip>
+        ${SECTIONS.filter((target) => target !== section).map(
+          (target) => html`
+            <ha-dropdown-item
+              .value=${target}
+              .disabled=${target === "disabled" && !this._canDisable(row.entityId)}
+            >
+              <ha-svg-icon
+                slot="icon"
+                .path=${SECTION_ICON[target]}
+              ></ha-svg-icon>
+              ${this.hass!.localize(
+                "ui.panel.lovelace.editor.card.device.sections.move_to",
+                { section: this._sectionLabel(target) }
+              )}
+            </ha-dropdown-item>
+          `
+        )}
+      </ha-dropdown>
     `;
   }
 
@@ -577,9 +655,9 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
     this._move(data as string, this._sectionOf(ev), index);
   }
 
-  private _quickMove(ev: Event) {
-    const button = ev.currentTarget as HTMLElement;
-    this._move(button.dataset.entity!, button.dataset.target as Section);
+  private _chipMenuSelected(ev: HaDropdownSelectEvent) {
+    const chip = ev.currentTarget as HTMLElement;
+    this._move(chip.dataset.entity!, ev.detail.item.value as Section);
   }
 
   /**
@@ -717,92 +795,53 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
       outline: 2px solid var(--primary-color);
       outline-offset: 2px;
     }
-    ha-list-base {
-      display: block;
-      padding: 0;
+    /* Each section is one field holding its entities as chips, wrapping
+       onto more lines as it fills */
+    .field {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--ha-space-2);
+      box-sizing: border-box;
       min-height: 48px;
-      border: 1px dashed var(--divider-color);
+      padding: var(--ha-space-2);
+      border: 1px solid var(--ha-color-border-neutral-quiet);
       border-radius: var(--ha-border-radius-md);
-      background: none;
     }
-    ha-list-item-base {
-      min-height: 48px;
+    .field ha-dropdown {
+      /* The dropdown is display: contents, which leaves the sortable no box
+         to pick up and drag */
+      display: inline-flex;
+      cursor: grab;
     }
-    ha-list-base.disabled ha-list-item-base {
-      color: var(--disabled-text-color);
+    .field.disabled ha-assist-chip {
+      --ha-assist-chip-label-text-color: var(--disabled-text-color);
+      opacity: 0.7;
+    }
+    .sortable-ghost {
+      opacity: 0.4;
     }
     .empty {
+      flex: 1;
       margin: 0;
-      padding: var(--ha-space-4) var(--ha-space-3);
+      padding: 0 var(--ha-space-1);
       font-size: var(--ha-font-size-s);
       color: var(--secondary-text-color);
-      text-align: center;
     }
-    .leading {
-      display: flex;
-      align-items: center;
-      gap: var(--ha-space-3);
+    /* The section's menu keeps to the end of its heading */
+    .section-menu {
+      /* The dropdown is display: contents, which ignores margins */
+      display: block;
+      margin-inline-start: auto;
     }
-    .handle {
-      cursor: move;
-      color: var(--disabled-text-color);
+    .header ha-icon-button {
+      --ha-icon-button-size: 32px;
+      --mdc-icon-size: 20px;
+      color: var(--secondary-text-color);
     }
     .section-icon {
       --mdc-icon-size: 20px;
       color: var(--secondary-text-color);
-    }
-    .actions {
-      position: relative;
-      display: flex;
-      align-items: center;
-      gap: var(--ha-space-1);
-    }
-    .actions ha-icon-button {
-      --mdc-icon-button-size: 44px;
-      --mdc-icon-size: 20px;
-      color: var(--primary-color);
-    }
-    .action {
-      position: relative;
-      display: flex;
-    }
-    .dot {
-      display: none;
-    }
-    /**
-     * A coloured button per option on every row is a lot of chrome for
-     * something used one row at a time, so with a pointer each waits behind a
-     * dot in its own place — the count of dots is the affordance. The buttons
-     * keep their space either way, so the row does not shift. Without hover —
-     * a phone — they are the only way to move a row without dragging, so they
-     * always show.
-     */
-    @media (hover: hover) {
-      .actions ha-icon-button {
-        visibility: hidden;
-      }
-      .dot {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .dot::before {
-        content: "";
-        width: 6px;
-        height: 6px;
-        border-radius: var(--ha-border-radius-circle);
-        background-color: var(--disabled-color);
-      }
-      ha-list-item-base:hover .actions ha-icon-button,
-      ha-list-item-base:focus-within .actions ha-icon-button {
-        visibility: visible;
-      }
-      ha-list-item-base:hover .dot,
-      ha-list-item-base:focus-within .dot {
-        display: none;
-      }
     }
     /* Under the row it is about, inset to the same edge as the rows. */
     .feature {

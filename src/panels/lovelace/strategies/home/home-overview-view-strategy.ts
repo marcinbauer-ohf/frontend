@@ -402,7 +402,10 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
               summary: "persons",
               tap_action: {
                 action: "navigate",
-                navigation_path: "/map?historyBack=1",
+                // The map dashboard is optional; the people subview always exists
+                navigation_path: hass.panels.map
+                  ? "/map?historyBack=1"
+                  : "people",
               },
             } satisfies HomeSummaryCard)
           : undefined,
@@ -541,7 +544,7 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
       ...(alertsBadge ? [alertsBadge] : []),
       ...summaryCards.map((card) =>
         card.type === "shortcut"
-          ? { ...card, text: card.label, label: undefined }
+          ? { ...card, text: card.label, label: undefined, summary_size: true }
           : card
       ),
     ];

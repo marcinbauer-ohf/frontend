@@ -3,7 +3,6 @@ import { mdiChatProcessingOutline } from "@mdi/js";
 import type { PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
-import { formatDateWeekdayDay } from "../common/datetime/format_date";
 import { formatTime } from "../common/datetime/format_time";
 import type { HASSDomEvent } from "../common/dom/fire_event";
 import { fireEvent } from "../common/dom/fire_event";
@@ -121,13 +120,6 @@ export class HomeAssistantMain extends LitElement {
                 <div class="clock">
                   <span class="time"
                     >${formatTime(this._now, this.hass.locale, this.hass.config)}</span
-                  >
-                  <span class="date"
-                    >${formatDateWeekdayDay(
-                      this._now,
-                      this.hass.locale,
-                      this.hass.config
-                    )}</span
                   >
                 </div>
               </div>
@@ -249,7 +241,7 @@ export class HomeAssistantMain extends LitElement {
          accessibility tree with an empty panel subtree while the page paints
          normally, which breaks UI automation such as the companion app E2E. */
       isolation: isolate;
-      --ha-sidebar-width: calc(56px + var(--safe-area-inset-left, 0px));
+      --ha-sidebar-width: calc(64px + var(--safe-area-inset-left, 0px));
       --ha-top-app-bar-width: calc(100% - var(--ha-sidebar-width));
       --safe-area-content-inset-left: 0px;
       --safe-area-content-inset-right: var(--safe-area-inset-right);
@@ -280,9 +272,9 @@ export class HomeAssistantMain extends LitElement {
       background: var(--ha-panel-background, var(--primary-background-color));
       background-attachment: scroll !important;
     }
-    /* Desktop chrome gets a little more air than the phone's 56px bars. */
+    /* Desktop chrome gets more air than the phone's 56px bars. */
     :host(:not([modal])) {
-      --header-height: 64px;
+      --header-height: 72px;
     }
     /* The framed look: the panel is a rounded canvas set in from the top bar
        and the sidebar, and the chrome colour wraps around its right and
@@ -291,7 +283,7 @@ export class HomeAssistantMain extends LitElement {
        scrolls under it, and the content steps in so nothing ends up beneath
        the gutters. A phone has no chrome to match, so it stays edge to edge. */
     :host(:not([modal])) partial-panel-resolver {
-      --ha-panel-frame-gutter: var(--ha-space-2);
+      --ha-panel-frame-gutter: var(--ha-space-3);
       --ha-panel-frame-bottom: 64px;
       --safe-area-inset-right: calc(
         var(--app-safe-area-inset-right, env(safe-area-inset-right, 0px)) +
@@ -369,10 +361,6 @@ export class HomeAssistantMain extends LitElement {
     .time {
       font-size: var(--ha-font-size-l);
       font-weight: var(--ha-font-weight-medium);
-    }
-    .date {
-      font-size: var(--ha-font-size-s);
-      color: var(--secondary-text-color);
     }
     .assist {
       display: flex;

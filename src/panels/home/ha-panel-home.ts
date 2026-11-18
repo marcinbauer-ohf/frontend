@@ -41,6 +41,10 @@ import type {
 import { showToast } from "../../util/toast";
 import { showDeviceRegistryDetailDialog } from "../config/devices/device-registry-detail/show-dialog-device-registry-detail";
 import { showAddIntegrationDialog } from "../config/integrations/show-add-integration-dialog";
+import type { HASSDomEvent } from "../../common/dom/fire_event";
+import type { LovelaceCardConfig } from "../../data/lovelace/config/card";
+import "../lovelace/editor/card-editor/hui-card-editor-pane";
+import type { CardPaneEditorParams } from "../lovelace/editor/card-editor/hui-card-editor-pane";
 import "../lovelace/hui-root";
 import type { EditAction } from "../lovelace/hui-root";
 import {
@@ -55,6 +59,8 @@ import {
 } from "./components/home-editor-pane";
 import { showNewOverviewDialog } from "./dialogs/show-dialog-new-overview";
 import { hasLegacyOverviewPanel } from "../../data/panel";
+import "../../components/ha-prototype-settings";
+import type { PrototypeSettingsId } from "../../components/ha-prototype-settings";
 
 const SUBVIEW_EDIT_KEYS = {
   "media-players": "ui.panel.home.edit_view.media_players",
@@ -65,6 +71,16 @@ const SUBVIEW_EDIT_KEYS = {
 } as const satisfies Record<string, LocalizeKeys>;
 
 type SubviewPath = keyof typeof SUBVIEW_EDIT_KEYS;
+
+/** The prototype settings of each sub-view with a summary pane. */
+const SUBVIEW_SETTINGS = {
+  "media-players": "media_players",
+  automations: "automations_view",
+  "other-devices": "other_devices",
+} as const satisfies Record<
+  Exclude<SubviewPath, "people" | "weather">,
+  PrototypeSettingsId
+>;
 
 const WEATHER_DOMAINS = ["weather"];
 
@@ -93,6 +109,9 @@ class PanelHome extends SubscribeMixin(LitElement) {
   @state() private _editingSubview?: Exclude<SubviewPath, "people">;
 
   @state() private _editView?: EditorView;
+
+  // A device card whose editor pane is open
+  @state() private _editingDeviceCard?: CardPaneEditorParams;
 
   @query(".banner") private _banner?: HTMLElement;
 
@@ -158,6 +177,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
       if (this.route?.path !== changedProps.get("route")?.path) {
         this._editingArea = undefined;
         this._editingSubview = undefined;
+        this._editingDeviceCard = undefined;
       }
       this._applyEditLink();
     }
@@ -374,7 +394,35 @@ class PanelHome extends SubscribeMixin(LitElement) {
     this._editView = undefined;
     this._editingArea = undefined;
     this._editingSubview = undefined;
+    this._editingDeviceCard = undefined;
   };
+
+  // The view offers a generated card's editor; a device card's is ours to
+  // show, saved with the home settings so the strategy builds it as edited
+  private _editDeviceCard = (
+    ev: HASSDomEvent<HASSDomEvents["ll-edit-card-in-pane"]>
+  ) => {
+    const { cardConfig } = ev.detail;
+    if (
+      cardConfig.type !== "device" ||
+      typeof cardConfig.device !== "string" ||
+      !this.hass.user?.is_admin
+    ) {
+      return;
+    }
+    ev.preventDefault();
+    this._stopEditing();
+    this._editingDeviceCard = ev.detail;
+  };
+
+  private _saveDeviceCard = (config: LovelaceCardConfig) =>
+    this._saveConfig({
+      ...this._config,
+      device_card_configs: {
+        ...this._config?.device_card_configs,
+        [this._editingDeviceCard!.cardConfig.device]: config,
+      },
+    });
 
   private _editorChanged(ev: ValueChangedEvent<HomeFrontendSystemData>) {
     this._saveConfig(ev.detail.value);
@@ -436,54 +484,72 @@ class PanelHome extends SubscribeMixin(LitElement) {
         .route=${this.route}
         .panel=${this.panel}
         .editing=${
-          this._editing || !!this._editingArea || !!this._editingSubview
+          this._editing ||
+          !!this._editingArea ||
+          !!this._editingSubview ||
+          !!this._editingDeviceCard
         }
         .editAction=${this._editAction()}
         @ll-custom=${this._handleLLCustomEvent}
+        @ll-edit-card-in-pane=${this._editDeviceCard}
         @side-pane-closed=${this._stopEditing}
         style=${huiRootStyle}
       >
         ${
-          this._editing
-            ? html`<home-editor-pane
+          this._editingDeviceCard
+            ? html`<hui-card-editor-pane
                 slot="side-pane"
                 .hass=${this.hass}
-                .config=${this._config ?? {}}
-                .view=${this._editView}
+                .lovelaceConfig=${this._lovelace.config}
+                .cardConfig=${this._editingDeviceCard.cardConfig}
+                .sectionConfig=${this._editingDeviceCard.sectionConfig}
+                .saveCardConfig=${this._saveDeviceCard}
                 .narrow=${this.narrow}
-                @value-changed=${this._editorChanged}
-              ></home-editor-pane>`
-            : this._editingArea
-              ? html`<home-area-editor-pane
+              ></hui-card-editor-pane>`
+            : this._editing
+              ? html`<home-editor-pane
                   slot="side-pane"
                   .hass=${this.hass}
-                  .areaId=${this._editingArea}
+                  .config=${this._config ?? {}}
+                  .view=${this._editView}
                   .narrow=${this.narrow}
-                ></home-area-editor-pane>`
-              : this._editingSubview === "weather"
-                ? html`<ha-summary-editor-pane
+                  @value-changed=${this._editorChanged}
+                ></home-editor-pane>`
+              : this._editingArea
+                ? html`<home-area-editor-pane
                     slot="side-pane"
-                    .heading=${this.hass.localize(SUBVIEW_EDIT_KEYS.weather)}
+                    .hass=${this.hass}
+                    .areaId=${this._editingArea}
                     .narrow=${this.narrow}
-                    ><ha-entity-picker
-                      .hass=${this.hass}
-                      .label=${this.hass.localize(
-                        "ui.panel.home.editor.weather_entity"
-                      )}
-                      .value=${this._config?.weather_entity}
-                      .includeDomains=${WEATHER_DOMAINS}
-                      @value-changed=${this._weatherEntityChanged}
-                    ></ha-entity-picker
-                  ></ha-summary-editor-pane>`
-                : this._editingSubview
+                  ></home-area-editor-pane>`
+                : this._editingSubview === "weather"
                   ? html`<ha-summary-editor-pane
                       slot="side-pane"
-                      .heading=${this.hass.localize(
-                        SUBVIEW_EDIT_KEYS[this._editingSubview]
-                      )}
+                      .heading=${this.hass.localize(SUBVIEW_EDIT_KEYS.weather)}
                       .narrow=${this.narrow}
+                      ><ha-entity-picker
+                        .hass=${this.hass}
+                        .label=${this.hass.localize(
+                          "ui.panel.home.editor.weather_entity"
+                        )}
+                        .value=${this._config?.weather_entity}
+                        .includeDomains=${WEATHER_DOMAINS}
+                        @value-changed=${this._weatherEntityChanged}
+                      ></ha-entity-picker
                     ></ha-summary-editor-pane>`
-                  : nothing
+                  : this._editingSubview
+                    ? html`<ha-summary-editor-pane
+                        slot="side-pane"
+                        .heading=${this.hass.localize(
+                          SUBVIEW_EDIT_KEYS[this._editingSubview]
+                        )}
+                        .narrow=${this.narrow}
+                        ><ha-prototype-settings
+                          .hass=${this.hass}
+                          .settingsId=${SUBVIEW_SETTINGS[this._editingSubview]}
+                        ></ha-prototype-settings
+                      ></ha-summary-editor-pane>`
+                    : nothing
         }
       </hui-root>
     `;
@@ -543,10 +609,12 @@ class PanelHome extends SubscribeMixin(LitElement) {
         alert_entities: this._securityConfig.alert_entities,
         favorite_entities: this._config?.favorite_entities,
         home_panel: true,
+        device_cards: true,
         hide_welcome_message: this._config?.hide_welcome_message,
         hide_suggested_entities: this._config?.hide_suggested_entities,
         shortcuts: this._config?.shortcuts,
         weather_entity: this._config?.weather_entity,
+        device_card_configs: this._config?.device_card_configs,
       },
     };
   }

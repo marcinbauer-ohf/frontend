@@ -47,6 +47,7 @@ import {
   supportsSparkline,
 } from "./device/device-card-entities";
 import "./device/hui-device-card-sparkline";
+import "./hui-card";
 import "../card-features/hui-card-features";
 import {
   supportsFeatureType,
@@ -451,17 +452,33 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
           visible.length
             ? html`<div
                 class="secondary ${classMap({
+                  tiles: this._config.secondary_layout === "tiles",
                   // An unknown hero says nothing about the other entities.
                   dimmed: unavailable || problem === "disconnected",
                 })}"
               >
-                ${visible.map((entityId) => this._renderRow(entityId))}
+                ${
+                  this._config.secondary_layout === "tiles"
+                    ? this._tileConfigs(visible).map(
+                        (config) =>
+                          html`<hui-card
+                            .hass=${this.hass}
+                            .config=${config}
+                          ></hui-card>`
+                      )
+                    : visible.map((entityId) => this._renderRow(entityId))
+                }
               </div>`
             : nothing
         }
       </ha-card>
     `;
   }
+
+  /** Stable configs, so a nested tile is not rebuilt on every state change. */
+  private _tileConfigs = memoizeOne((entities: string[]) =>
+    entities.map((entity) => ({ type: "tile", entity }))
+  );
 
   private _renderRow(entityId: string) {
     const stateObj = this.hass!.states[entityId];
@@ -1000,6 +1017,14 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     /* Secondary rows */
     .secondary.dimmed {
       opacity: 0.4;
+    }
+    .secondary.tiles {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: var(--ha-space-2);
+      padding: var(--ha-space-2) var(--ha-space-3) var(--ha-space-3);
+      /* Nested tiles sit a step below the card they are in */
+      --ha-card-background: var(--ha-color-surface-low);
     }
     .row {
       display: flex;

@@ -49,6 +49,11 @@ export class HaPersonStack extends LitElement {
       height: var(--ha-person-stack-size, 28px);
       flex-shrink: 0;
       border-radius: var(--ha-border-radius-circle);
+      /* Fills see-through pictures, so the avatar underneath doesn't show */
+      background-color: var(
+        --ha-person-stack-ring-color,
+        var(--card-background-color)
+      );
       box-shadow: 0 0 0 2px
         var(--ha-person-stack-ring-color, var(--card-background-color));
       --person-badge-font-size: var(--ha-font-size-xs);

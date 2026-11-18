@@ -91,24 +91,44 @@ class HaAlert extends LitElement {
 
   static styles = css`
     .issue-type {
+      --_color: var(--info-color);
       position: relative;
-      padding: var(--ha-alert-padding, 8px);
       display: flex;
+      align-items: flex-start;
+      gap: var(--ha-space-3);
+      padding: var(--ha-alert-padding, var(--ha-space-2));
+      padding-inline-end: var(--ha-alert-padding, var(--ha-space-3));
+      border-radius: var(--ha-border-radius-lg);
+      border: 1px solid color-mix(in srgb, var(--_color) 24%, transparent);
+      background-color: color-mix(in srgb, var(--_color) 8%, transparent);
+      color: var(--primary-text-color);
     }
+    .issue-type.warning {
+      --_color: var(--warning-color);
+    }
+    .issue-type.error {
+      --_color: var(--error-color);
+    }
+    .issue-type.success {
+      --_color: var(--success-color);
+    }
+    /* The icon sits in a tinted circle, like a tile's icon */
     .icon {
-      height: var(--ha-alert-icon-size, 24px);
-      width: var(--ha-alert-icon-size, 24px);
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      width: calc(var(--ha-alert-icon-size, 20px) + var(--ha-space-3));
+      height: calc(var(--ha-alert-icon-size, 20px) + var(--ha-space-3));
+      border-radius: var(--ha-border-radius-circle);
+      background-color: color-mix(in srgb, var(--_color) 18%, transparent);
+      color: var(--_color);
+      --mdc-icon-size: var(--ha-alert-icon-size, 20px);
     }
-    .issue-type::after {
-      position: absolute;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      left: 0;
-      opacity: 0.12;
-      pointer-events: none;
-      content: "";
-      border-radius: var(--ha-border-radius-sm);
+    .icon ha-svg-icon,
+    .icon ::slotted(*) {
+      --mdc-icon-size: var(--ha-alert-icon-size, 20px);
     }
     .icon.no-title {
       align-self: center;
@@ -117,61 +137,50 @@ class HaAlert extends LitElement {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      width: 100%;
+      gap: var(--ha-space-2);
+      flex: 1;
+      min-width: 0;
+      min-height: calc(var(--ha-alert-icon-size, 20px) + var(--ha-space-3));
       text-align: var(--float-start);
     }
     .content.narrow {
       flex-direction: column;
       align-items: flex-end;
     }
-    .action {
-      z-index: 1;
-      width: min-content;
-      --mdc-theme-primary: var(--primary-text-color);
-    }
     .main-content {
+      flex: 1;
+      align-self: center;
       overflow-wrap: anywhere;
       word-break: break-word;
-      line-height: normal;
-      margin-left: 8px;
-      margin-right: 0;
-      margin-inline-start: 8px;
-      margin-inline-end: 8px;
+      font-size: var(--ha-font-size-m);
+      line-height: var(--ha-line-height-normal);
+      color: var(--secondary-text-color);
+    }
+    .content.narrow .main-content {
+      align-self: stretch;
     }
     .title {
-      margin-top: 2px;
-      font-weight: var(--ha-font-weight-bold);
+      font-weight: var(--ha-font-weight-medium);
+      color: var(--primary-text-color);
+    }
+    /* Without a title, the message is what the alert says */
+    .main-content:not(:has(.title)) {
+      color: var(--primary-text-color);
+    }
+    .action {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: var(--ha-space-2);
+      z-index: 1;
+      --mdc-theme-primary: var(--primary-text-color);
     }
     .action ha-icon-button {
       --mdc-theme-primary: var(--primary-text-color);
-      --ha-icon-button-size: 36px;
-    }
-    .issue-type.info > .icon {
-      color: var(--info-color);
-    }
-    .issue-type.info::after {
-      background-color: var(--info-color);
-    }
-
-    .issue-type.warning > .icon {
-      color: var(--warning-color);
-    }
-    .issue-type.warning::after {
-      background-color: var(--warning-color);
-    }
-
-    .issue-type.error > .icon {
-      color: var(--error-color);
-    }
-    .issue-type.error::after {
-      background-color: var(--error-color);
-    }
-
-    .issue-type.success > .icon {
-      color: var(--success-color);
-    }
-    .issue-type.success::after {
-      background-color: var(--success-color);
+      --ha-icon-button-size: 32px;
+      --mdc-icon-size: 20px;
+      color: var(--secondary-text-color);
+      margin-inline-end: calc(var(--ha-space-1) * -1);
     }
     :host ::slotted(ul) {
       margin: 0;

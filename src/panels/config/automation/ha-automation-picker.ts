@@ -52,6 +52,7 @@ import {
   rejectedItems,
 } from "../../../common/util/promise-all-settled-results";
 import type {
+  DataTableBodySelection,
   DataTableColumnContainer,
   RowClickedEvent,
   SelectionChangedEvent,
@@ -75,6 +76,7 @@ import "../../../components/ha-filter-labels";
 import "../../../components/ha-filter-states";
 import "../../../components/ha-filter-voice-assistants";
 import "../../../components/ha-icon-button";
+import "../../../components/ha-prototype-settings";
 import "../../../components/ha-summary-editor-pane";
 import "../../../components/ha-svg-icon";
 import "../../../components/item/ha-row-item";
@@ -555,8 +557,6 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
             : nothing
         }
         ${
-          // Nothing to set for automations as a whole yet; the pane is
-          // where it will go
           this._editing
             ? html`<ha-summary-editor-pane
                 slot="side-pane"
@@ -565,6 +565,10 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
                 )}
                 .narrow=${this.narrow}
                 @side-pane-closed=${this._stopEditing}
+                ><ha-prototype-settings
+                  .hass=${this.hass}
+                  settings-id="automations"
+                ></ha-prototype-settings
               ></ha-summary-editor-pane>`
             : nothing
         }
@@ -1315,8 +1319,13 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
     });
   }
 
-  private _renderBody = (rows: DataTableRowData[], groupColumn?: string) =>
+  private _renderBody = (
+    rows: DataTableRowData[],
+    groupColumn?: string,
+    selection?: DataTableBodySelection
+  ) =>
     html`<ha-automation-dashboard-body
+      .selection=${selection}
       .hass=${this.hass}
       .rows=${rows}
       .groupColumn=${groupColumn}

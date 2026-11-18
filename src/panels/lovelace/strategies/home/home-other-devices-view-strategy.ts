@@ -1,5 +1,6 @@
 import { ReactiveElement } from "lit";
 import { customElement } from "lit/decorators";
+import type { LovelaceCardConfig } from "../../../../data/lovelace/config/card";
 import { getEntityContext } from "../../../../common/entity/context/get_entity_context";
 import {
   findEntities,
@@ -14,32 +15,49 @@ import type {
   HeadingCardConfig,
   DeviceCardConfig,
 } from "../../cards/types";
-import { deviceCardEntities } from "../../cards/device/device-card-entities";
+import {
+  deviceCardEntities,
+  resolveDeviceCardEntities,
+} from "../../cards/device/device-card-entities";
 import type { LovelaceStrategyDependency } from "../types";
 import { OTHER_DEVICES_FILTERS } from "./helpers/other-devices-filters";
 
 /**
  * One device, as the device card shows one: its entities under its name, the
- * card deciding which leads and how much of the rest it lists. The ones the
- * view shows elsewhere, or leaves off, are kept off the card.
+ * card deciding which leads. For now only that featured entity shows; the
+ * rest are kept off the card.
  */
 const computeDeviceCard = (
   hass: HomeAssistant,
   deviceId: string,
   entities: string[],
-  showArea: boolean
-): DeviceCardConfig => ({
-  type: "device",
-  device: deviceId,
-  show_area: showArea,
-  hidden_entities: deviceCardEntities(hass, deviceId).filter(
-    (entityId) => !entities.includes(entityId)
-  ),
-});
+  showArea: boolean,
+  saved?: LovelaceCardConfig
+): DeviceCardConfig => {
+  const all = deviceCardEntities(hass, deviceId);
+  const card: DeviceCardConfig = {
+    type: "device",
+    device: deviceId,
+    show_area: showArea,
+    hidden_entities: all.filter((entityId) => !entities.includes(entityId)),
+  };
+  // One edited on the dashboard keeps what was saved
+  if (saved) {
+    return { ...card, ...saved, type: "device", device: deviceId };
+  }
+  // ponytail: only the featured entity for now, drop this to list the rest
+  const { hero } = resolveDeviceCardEntities(hass, card);
+  return {
+    ...card,
+    hidden_entities: all.filter((entityId) => entityId !== hero),
+  };
+};
 
 export interface HomeOtherDevicesViewStrategyConfig {
   type: "home-other-devices";
   home_panel?: boolean;
+  /** Device cards edited on the dashboard, by device id. */
+  device_card_configs?: Record<string, LovelaceCardConfig>;
 }
 
 @customElement("home-other-devices-view-strategy")
@@ -155,7 +173,13 @@ export class HomeOtherDevicesViewStrategy extends ReactiveElement {
                 } satisfies HeadingCardConfig,
               ]
             : []),
-          computeDeviceCard(hass, deviceId, entities, true),
+          computeDeviceCard(
+            hass,
+            deviceId,
+            entities,
+            true,
+            config.device_card_configs?.[deviceId]
+          ),
         ],
       });
     }

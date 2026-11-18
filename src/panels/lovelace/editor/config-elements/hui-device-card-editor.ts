@@ -6,6 +6,7 @@ import {
   assert,
   assign,
   boolean,
+  enums,
   number,
   object,
   optional,
@@ -61,6 +62,7 @@ const cardConfigStruct = assign(
     feature: optional(string()),
     entities: optional(array(string())),
     hidden_entities: optional(array(string())),
+    secondary_layout: optional(enums(["list", "tiles"])),
     name: optional(string()),
     show_area: optional(boolean()),
     show_graph: optional(boolean()),
@@ -118,6 +120,18 @@ export class HuiDeviceCardEditor
       ></ha-form>
       <ha-grouped-list>
         ${OPTIONS.map((option) => this._renderOption(option))}
+        <ha-list-item-base>
+          <span slot="headline">
+            ${this.hass.localize(
+              "ui.panel.lovelace.editor.card.device.secondary_as_tiles"
+            )}
+          </span>
+          <ha-switch
+            slot="end"
+            .checked=${this._config.secondary_layout === "tiles"}
+            @change=${this._tilesToggled}
+          ></ha-switch>
+        </ha-list-item-base>
       </ha-grouped-list>
       ${
         this._config.device
@@ -188,6 +202,17 @@ export class HuiDeviceCardEditor
       delete config[option];
     } else {
       config[option] = false;
+    }
+    fireEvent(this, "config-changed", { config });
+  }
+
+  /** List is the default, so it is stored as the absence of the key. */
+  private _tilesToggled(ev: Event): void {
+    const config = { ...this._config! };
+    if ((ev.target as HaSwitch).checked) {
+      config.secondary_layout = "tiles";
+    } else {
+      delete config.secondary_layout;
     }
     fireEvent(this, "config-changed", { config });
   }

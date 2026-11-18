@@ -1,4 +1,5 @@
 import type { Connection } from "home-assistant-js-websocket";
+import type { LovelaceCardConfig } from "./lovelace/config/card";
 import type { ShortcutItem } from "./home_shortcuts";
 
 export interface SurveyInteraction {
@@ -39,6 +40,8 @@ export interface HomeFrontendSystemData {
   shortcuts?: ShortcutItem[];
   /** The weather entity the overview and weather view show. */
   weather_entity?: string;
+  /** Device cards edited on the home dashboard, by device id. */
+  device_card_configs?: Record<string, LovelaceCardConfig>;
 }
 
 export type SecurityAlertSeverity = "alert" | "warning";

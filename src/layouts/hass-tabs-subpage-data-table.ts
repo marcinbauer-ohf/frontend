@@ -410,16 +410,14 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
     const sortByMenu = Object.values(this.columns).find((col) => col.sortable)
       ? html`
           <ha-dropdown placement="bottom-end" @wa-select=${this._handleSortBy}>
-            <ha-icon-button
-              slot="trigger"
-              .path=${mdiSort}
-              .label=${localize("ui.components.subpage-data-table.sort_by", {
-                sortColumn:
-                  this._sortColumn && this.columns[this._sortColumn]
-                    ? ` ${this.columns[this._sortColumn].title || this.columns[this._sortColumn].label}`
-                    : "",
-              })}
-            ></ha-icon-button>
+            ${this._renderToolChip(
+              mdiSort,
+              localize("ui.components.subpage-data-table.sort_label"),
+              this._sortColumn && this.columns[this._sortColumn]
+                ? this.columns[this._sortColumn].title ||
+                    this.columns[this._sortColumn].label
+                : localize("ui.components.subpage-data-table.none")
+            )}
             ${Object.entries(this.columns).map(([id, column]) =>
               column.sortable
                 ? html`
@@ -453,16 +451,14 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
     const groupByMenu = Object.values(this.columns).find((col) => col.groupable)
       ? html`
           <ha-dropdown placement="bottom-end" @wa-select=${this._handleGroupBy}>
-            <ha-icon-button
-              slot="trigger"
-              .path=${mdiFormatListGroup}
-              .label=${localize("ui.components.subpage-data-table.group_by", {
-                groupColumn:
-                  this._groupColumn && this.columns[this._groupColumn]
-                    ? ` ${this.columns[this._groupColumn].title || this.columns[this._groupColumn].label}`
-                    : "",
-              })}
-            ></ha-icon-button>
+            ${this._renderToolChip(
+              mdiFormatListGroup,
+              localize("ui.components.subpage-data-table.group_label"),
+              this._groupColumn && this.columns[this._groupColumn]
+                ? this.columns[this._groupColumn].title ||
+                    this.columns[this._groupColumn].label
+                : localize("ui.components.subpage-data-table.none")
+            )}
             ${Object.entries(this.columns).map(([id, column]) =>
               column.groupable
                 ? html`
@@ -874,6 +870,27 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
     }
   }
 
+  // A menu's trigger showing what it is set to, like the home summary chips:
+  // a small label over the current value
+  private _renderToolChip(
+    path: string,
+    label: string,
+    value?: string | TemplateResult
+  ) {
+    return html`<ha-button
+      slot="trigger"
+      class="tool-chip"
+      appearance="plain"
+      variant="neutral"
+    >
+      <ha-svg-icon slot="start" .path=${path}></ha-svg-icon>
+      <span class="tool-text">
+        <span class="tool-label">${label}</span>
+        <span class="tool-value">${value}</span>
+      </span>
+    </ha-button>`;
+  }
+
   // A segment hides rows, so a selection made in another one is dropped
   // before a bulk action could reach rows that can't be seen
   private _segmentSelected(ev: CustomEvent<{ name: string }>) {
@@ -1089,6 +1106,33 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
     }
     .filters-button {
       flex-shrink: 0;
+    }
+    .tool-chip {
+      --ha-button-height: 40px;
+    }
+    .tool-chip ha-svg-icon {
+      color: var(--secondary-text-color);
+    }
+    .tool-text {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      text-align: start;
+      line-height: var(--ha-line-height-condensed);
+    }
+    .tool-label {
+      font-size: var(--ha-font-size-xs);
+      font-weight: var(--ha-font-weight-normal);
+      color: var(--secondary-text-color);
+    }
+    .tool-value {
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: var(--ha-font-size-s);
+      font-weight: var(--ha-font-weight-medium);
+      color: var(--primary-text-color);
     }
     .count {
       box-sizing: border-box;

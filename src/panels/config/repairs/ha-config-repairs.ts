@@ -220,7 +220,12 @@ class HaConfigRepairs extends LitElement {
     ha-list-item-button ha-icon-next[slot="end"] {
       color: var(--secondary-text-color);
     }
+    /* One line, cut short with an ellipsis rather than running out of the
+       card */
     ha-list-item-button span[slot="supporting-text"] {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
       white-space: nowrap;
     }
     .error {

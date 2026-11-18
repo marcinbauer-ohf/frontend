@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEVICE_CARD_SECTIONS,
+  moveAll,
   placeEntity,
   reorderSection,
 } from "../../../../src/panels/lovelace/editor/config-elements/device-card-sections";
@@ -76,5 +77,28 @@ describe("reorderSection", () => {
   it("moves one entry to the new index and keeps the rest in order", () => {
     expect(reorderSection(["a", "b", "c"], 0, 2)).toEqual(["b", "c", "a"]);
     expect(reorderSection(["a", "b", "c"], 2, 0)).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("moveAll", () => {
+  it("empties the section onto the end of the target, keeping every entity", () => {
+    const before = sections();
+    const after = moveAll(before, "visible", "hidden");
+
+    expect(after.visible).toEqual([]);
+    expect(after.hidden).toEqual([
+      "sensor.rssi",
+      "sensor.power",
+      "sensor.energy",
+    ]);
+    expect(Object.values(after).flat().sort()).toEqual(
+      Object.values(before).flat().sort()
+    );
+  });
+
+  it("leaves the sections alone when moving onto itself", () => {
+    const before = sections();
+
+    expect(moveAll(before, "hidden", "hidden")).toBe(before);
   });
 });

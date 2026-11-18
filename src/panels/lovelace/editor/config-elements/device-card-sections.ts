@@ -66,3 +66,20 @@ export const reorderSection = (
   order.splice(newIndex, 0, order.splice(oldIndex, 1)[0]);
   return order;
 };
+
+/**
+ * Empty `from` onto the end of `target`, as the section menus do. Never into
+ * the hero, which holds one entity: that move is one entity at a time.
+ */
+export const moveAll = (
+  sections: DeviceCardSectionMap,
+  from: DeviceCardSection,
+  target: Exclude<DeviceCardSection, "hero">
+): DeviceCardSectionMap =>
+  from === target
+    ? sections
+    : {
+        ...sections,
+        [from]: [],
+        [target]: [...sections[target], ...sections[from]],
+      };

@@ -207,6 +207,14 @@ class HaConfigUpdates extends LitElement {
         state-badge.updating {
           opacity: 0.2;
         }
+        /* One line, cut short with an ellipsis rather than running out of the
+           card */
+        ha-list-item-button span[slot="supporting-text"] {
+          display: block;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
       `,
     ];
   }

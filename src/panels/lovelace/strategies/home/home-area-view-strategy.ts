@@ -9,6 +9,7 @@ import { clamp } from "../../../../common/number/clamp";
 import { computeDomain } from "../../../../common/entity/compute_domain";
 import { findRelated, type RelatedResult } from "../../../../data/search";
 import type { LovelaceBadgeConfig } from "../../../../data/lovelace/config/badge";
+import type { LovelaceCardConfig } from "../../../../data/lovelace/config/card";
 import type { LovelaceSectionRawConfig } from "../../../../data/lovelace/config/section";
 import type { LovelaceViewConfig } from "../../../../data/lovelace/config/view";
 import type { HomeAssistant } from "../../../../types";
@@ -19,7 +20,10 @@ import type {
 } from "../../cards/types";
 import type { ButtonHeadingBadgeConfig } from "../../heading-badges/types";
 import { computeAreaTileCardConfig } from "../areas/helpers/areas-strategy-helper";
-import { deviceCardEntities } from "../../cards/device/device-card-entities";
+import {
+  deviceCardEntities,
+  resolveDeviceCardEntities,
+} from "../../cards/device/device-card-entities";
 import type { LovelaceStrategyDependency } from "../types";
 import {
   getSummaryLabel,
@@ -31,22 +35,42 @@ import {
 
 /**
  * One device, as the device card shows one: its entities under its name, the
- * card deciding which leads and how much of the rest it lists. The ones the
- * view shows elsewhere, or leaves off, are kept off the card.
+ * card deciding which leads. For now only that featured entity shows; the
+ * rest are kept off the card.
  */
 const computeDeviceCard = (
   hass: HomeAssistant,
   deviceId: string,
   entities: string[],
-  showArea: boolean
-): DeviceCardConfig => ({
-  type: "device",
-  device: deviceId,
-  show_area: showArea,
-  hidden_entities: deviceCardEntities(hass, deviceId).filter(
-    (entityId) => !entities.includes(entityId)
-  ),
-});
+  showArea: boolean,
+  saved?: LovelaceCardConfig
+): DeviceCardConfig => {
+  const all = deviceCardEntities(hass, deviceId);
+  const card: DeviceCardConfig = {
+    type: "device",
+    device: deviceId,
+    show_area: showArea,
+    hidden_entities: all.filter((entityId) => !entities.includes(entityId)),
+  };
+  // One edited on the dashboard keeps what was saved
+  if (saved) {
+    return { ...card, ...saved, type: "device", device: deviceId };
+  }
+  // ponytail: only the featured entity for now, drop this to list the rest
+  const { hero } = resolveDeviceCardEntities(hass, card);
+  return {
+    ...card,
+    hidden_entities: all.filter((entityId) => entityId !== hero),
+  };
+};
+
+const DEVICE_CATEGORIES = [
+  "light",
+  "climate",
+  "security",
+  "media_players",
+] as const satisfies readonly HomeSummary[];
+type DeviceCategory = (typeof DEVICE_CATEGORIES)[number];
 
 export interface HomeAreaViewStrategyConfig {
   type: "home-area";
@@ -54,6 +78,8 @@ export interface HomeAreaViewStrategyConfig {
   home_panel?: boolean;
   /** Every device as a device card, instead of its entities as tiles. */
   device_cards?: boolean;
+  /** Device cards edited on the dashboard, by device id. */
+  device_card_configs?: Record<string, LovelaceCardConfig>;
 }
 
 @customElement("home-area-view-strategy")
@@ -134,140 +160,116 @@ export class HomeAreaViewStrategy extends ReactiveElement {
       {} as Record<HomeSummary, string[]>
     );
 
-    const {
-      light,
-      climate,
-      security,
-      media_players: mediaPlayers,
-    } = entitiesBySummary;
+    const { light } = entitiesBySummary;
 
-    if (!config.device_cards && light.length > 0) {
-      const anyOnCondition = {
-        condition: "or" as const,
-        conditions: light.map((entityId) => ({
-          condition: "state" as const,
-          entity: entityId,
-          state: "on",
-        })),
-      };
+    // Each category leads with its heading; its tiles, or with device cards
+    // the devices that hold its entities, follow
+    const anyOnCondition = {
+      condition: "or" as const,
+      conditions: light.map((entityId) => ({
+        condition: "state" as const,
+        entity: entityId,
+        state: "on",
+      })),
+    };
 
-      sections.push({
-        type: "grid",
-        cards: [
-          {
-            type: "heading",
-            heading: getSummaryLabel(hass.localize, "light"),
-            icon: HOME_SUMMARIES_ICONS.light,
-            tap_action: hass.panels.light
-              ? {
-                  action: "navigate",
-                  navigation_path: "/light?historyBack=1",
-                }
-              : undefined,
-            badges: [
-              {
-                type: "button",
-                icon: "mdi:power",
-                text: hass.localize("ui.panel.lovelace.strategy.light.off"),
-                label: hass.localize(
-                  "ui.panel.lovelace.strategy.light.turn_on_area",
-                  { area: area.name }
-                ),
-                tap_action: {
-                  action: "perform-action",
-                  perform_action: "light.turn_on",
-                  target: {
-                    area_id: config.area,
-                  },
-                },
-                visibility: [
-                  {
-                    condition: "not",
-                    conditions: [anyOnCondition],
-                  },
-                ],
-              } satisfies ButtonHeadingBadgeConfig,
-              {
-                type: "button",
-                icon: "mdi:power",
-                color: "orange",
-                text: hass.localize("ui.panel.lovelace.strategy.light.on"),
-                label: hass.localize(
-                  "ui.panel.lovelace.strategy.light.turn_off_area",
-                  { area: area.name }
-                ),
-                tap_action: {
-                  action: "perform-action",
-                  perform_action: "light.turn_off",
-                  target: {
-                    area_id: config.area,
-                  },
-                },
-                visibility: [anyOnCondition],
-              } satisfies ButtonHeadingBadgeConfig,
-            ],
-          } satisfies HeadingCardConfig,
-          ...light.map(computeTileCard),
-        ],
-      });
-    }
-
-    if (!config.device_cards && climate.length > 0) {
-      sections.push({
-        type: "grid",
-        cards: [
-          {
-            type: "heading",
-            heading: getSummaryLabel(hass.localize, "climate"),
-            icon: HOME_SUMMARIES_ICONS.climate,
-            tap_action: hass.panels.climate
-              ? {
-                  action: "navigate",
-                  navigation_path: "/climate?historyBack=1",
-                }
-              : undefined,
-          } satisfies HeadingCardConfig,
-          ...climate.map(computeTileCard),
-        ],
-      });
-    }
-
-    if (!config.device_cards && security.length > 0) {
-      sections.push({
-        type: "grid",
-        cards: [
-          {
-            type: "heading",
-            heading: getSummaryLabel(hass.localize, "security"),
-            icon: HOME_SUMMARIES_ICONS.security,
-            tap_action: hass.panels.security
-              ? {
-                  action: "navigate",
-                  navigation_path: "/security?historyBack=1",
-                }
-              : undefined,
-          } satisfies HeadingCardConfig,
-          ...security.map(computeTileCard),
-        ],
-      });
-    }
-
-    if (!config.device_cards && mediaPlayers.length > 0) {
-      sections.push({
-        type: "grid",
-        cards: [
-          {
-            type: "heading",
-            heading: getSummaryLabel(hass.localize, "media_players"),
-            icon: HOME_SUMMARIES_ICONS.media_players,
-            tap_action: {
+    const categoryHeadings: Record<DeviceCategory, HeadingCardConfig> = {
+      light: {
+        type: "heading",
+        heading: getSummaryLabel(hass.localize, "light"),
+        icon: HOME_SUMMARIES_ICONS.light,
+        tap_action: hass.panels.light
+          ? {
               action: "navigate",
-              navigation_path: "media-players?historyBack=1",
+              navigation_path: "/light?historyBack=1",
+            }
+          : undefined,
+        badges: [
+          {
+            type: "button",
+            icon: "mdi:power",
+            text: hass.localize("ui.panel.lovelace.strategy.light.off"),
+            label: hass.localize(
+              "ui.panel.lovelace.strategy.light.turn_on_area",
+              { area: area.name }
+            ),
+            tap_action: {
+              action: "perform-action",
+              perform_action: "light.turn_on",
+              target: {
+                area_id: config.area,
+              },
             },
-          } satisfies HeadingCardConfig,
-          ...mediaPlayers.map(computeTileCard),
+            visibility: [
+              {
+                condition: "not",
+                conditions: [anyOnCondition],
+              },
+            ],
+          } satisfies ButtonHeadingBadgeConfig,
+          {
+            type: "button",
+            icon: "mdi:power",
+            color: "orange",
+            text: hass.localize("ui.panel.lovelace.strategy.light.on"),
+            label: hass.localize(
+              "ui.panel.lovelace.strategy.light.turn_off_area",
+              { area: area.name }
+            ),
+            tap_action: {
+              action: "perform-action",
+              perform_action: "light.turn_off",
+              target: {
+                area_id: config.area,
+              },
+            },
+            visibility: [anyOnCondition],
+          } satisfies ButtonHeadingBadgeConfig,
         ],
-      });
+      },
+      climate: {
+        type: "heading",
+        heading: getSummaryLabel(hass.localize, "climate"),
+        icon: HOME_SUMMARIES_ICONS.climate,
+        tap_action: hass.panels.climate
+          ? {
+              action: "navigate",
+              navigation_path: "/climate?historyBack=1",
+            }
+          : undefined,
+      },
+      security: {
+        type: "heading",
+        heading: getSummaryLabel(hass.localize, "security"),
+        icon: HOME_SUMMARIES_ICONS.security,
+        tap_action: hass.panels.security
+          ? {
+              action: "navigate",
+              navigation_path: "/security?historyBack=1",
+            }
+          : undefined,
+      },
+      media_players: {
+        type: "heading",
+        heading: getSummaryLabel(hass.localize, "media_players"),
+        icon: HOME_SUMMARIES_ICONS.media_players,
+        tap_action: {
+          action: "navigate",
+          navigation_path: "media-players?historyBack=1",
+        },
+      },
+    };
+    const categoryCards: Record<DeviceCategory, LovelaceCardConfig[]> = {
+      light: [],
+      climate: [],
+      security: [],
+      media_players: [],
+    };
+    if (!config.device_cards) {
+      for (const category of DEVICE_CATEGORIES) {
+        categoryCards[category] =
+          entitiesBySummary[category].map(computeTileCard);
+      }
     }
 
     const deviceSections: LovelaceSectionRawConfig[] = [];
@@ -385,9 +387,32 @@ export class HomeAreaViewStrategy extends ReactiveElement {
       // A device is a device card: its name, its battery and its entities are
       // the card's to show, and tapping it opens everything about it.
       if (device) {
+        const category = DEVICE_CATEGORIES.find((c) =>
+          entitiesBySummary[c].some((e) => entities.includes(e))
+        );
+        if (category) {
+          categoryCards[category].push(
+            computeDeviceCard(
+              hass,
+              deviceId,
+              entities,
+              false,
+              config.device_card_configs?.[deviceId]
+            )
+          );
+          continue;
+        }
         deviceSections.push({
           type: "grid",
-          cards: [computeDeviceCard(hass, deviceId, entities, false)],
+          cards: [
+            computeDeviceCard(
+              hass,
+              deviceId,
+              entities,
+              false,
+              config.device_card_configs?.[deviceId]
+            ),
+          ],
         });
         continue;
       }
@@ -418,6 +443,15 @@ export class HomeAreaViewStrategy extends ReactiveElement {
           })),
         ],
       });
+    }
+
+    for (const category of DEVICE_CATEGORIES) {
+      if (categoryCards[category].length) {
+        sections.push({
+          type: "grid",
+          cards: [categoryHeadings[category], ...categoryCards[category]],
+        });
+      }
     }
 
     if (deviceSections.length > 0) {

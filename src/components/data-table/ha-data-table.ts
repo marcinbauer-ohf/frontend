@@ -54,6 +54,12 @@ import "../ha-svg-icon";
 import "../input/ha-input-search";
 import { filterData, sortData } from "./sort-filter";
 
+/** The selection a custom body is handed in selection mode. */
+export interface DataTableBodySelection {
+  checked: string[];
+  toggle: (rowId: string) => void;
+}
+
 export interface RowClickedEvent {
   id: string;
 }
@@ -226,9 +232,15 @@ export class HaDataTable extends LitElement {
   /** Renders the custom body without rows too, when it shows other items. */
   @property({ attribute: false }) public alwaysRenderBody = false;
 
+  /**
+   * Draws the rows its own way. In selection mode it also gets the checked
+   * rows and a toggle, so it can offer the selection the table's checkboxes
+   * would.
+   */
   @property({ attribute: false }) public renderBody?: (
     rows: DataTableRowData[],
-    groupColumn?: string
+    groupColumn?: string,
+    selection?: DataTableBodySelection
   ) => TemplateResult | typeof nothing;
 
   @state() private _filterable = false;
@@ -826,7 +838,16 @@ export class HaDataTable extends LitElement {
                     tabindex="0"
                     @scroll=${this._saveScrollPos}
                   >
-                    ${this.renderBody(this._filteredData!, this.groupColumn)}
+                    ${this.renderBody(
+                      this._filteredData!,
+                      this.groupColumn,
+                      this.selectable
+                        ? {
+                            checked: this._checkedRows,
+                            toggle: this._toggleBodyRow,
+                          }
+                        : undefined
+                    )}
                   </div>`
                 : html`
                     ${
@@ -851,6 +872,7 @@ export class HaDataTable extends LitElement {
                                 this._collapsedGroups.includes(
                                   this._stickyGroup
                                 ),
+                                items[stickyGroupIndex]?.groupCount ?? 0,
                                 this._i18n?.localize,
                                 this.renderGroupActions,
                                 true
@@ -1296,9 +1318,11 @@ export class HaDataTable extends LitElement {
               append: true,
               selectable: false,
               groupHeader: groupName,
+              groupCount: rows.length,
               content: this._renderGroupHeader(
                 groupName,
                 collapsedGroups.includes(groupName),
+                rows.length,
                 localize,
                 renderGroupActions
               ),
@@ -1325,6 +1349,7 @@ export class HaDataTable extends LitElement {
   private _renderGroupHeader(
     groupName: string,
     collapsed: boolean,
+    count: number,
     localize: LocalizeFunc | undefined,
     renderGroupActions: DataTableGroupActions | undefined,
     sticky = false
@@ -1361,6 +1386,15 @@ export class HaDataTable extends LitElement {
             : groupName || ""
         }
       </span>
+      ${
+        collapsed
+          ? html`<span
+              class="group-count"
+              aria-hidden=${ifDefined(sticky ? "true" : undefined)}
+              >(${count})</span
+            >`
+          : nothing
+      }
       <div class="group-actions" @click=${this._stopGroupToggle}>
         ${renderGroupActions?.(groupName)}
       </div>
@@ -1539,6 +1573,14 @@ export class HaDataTable extends LitElement {
       ev.currentTarget.setAttribute("title", ev.currentTarget.innerText);
     }
   }
+
+  private _toggleBodyRow = (rowId: string) => {
+    this._checkedRows = this._checkedRows.includes(rowId)
+      ? this._checkedRows.filter((row) => row !== rowId)
+      : [...this._checkedRows, rowId];
+    this._lastSelectedRowId = rowId;
+    this._checkedRowsChanged();
+  };
 
   private _checkedRowsChanged() {
     // force scroller to update, change it's items
@@ -2169,6 +2211,13 @@ export class HaDataTable extends LitElement {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+
+        .group-count {
+          flex-shrink: 0;
+          margin-inline-start: var(--ha-space-1);
+          color: var(--secondary-text-color);
+          font-weight: var(--ha-font-weight-normal);
         }
 
         .group-header ha-icon-button {

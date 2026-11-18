@@ -765,6 +765,8 @@ export interface DeviceCardConfig extends LovelaceCardConfig {
   entities?: string[];
   /** Device entities kept off this card only. Still active in Home Assistant. */
   hidden_entities?: string[];
+  /** How the secondary entities render: compact rows, or nested tile cards. */
+  secondary_layout?: "list" | "tiles";
   name?: string;
   /** Show the device area as an eyebrow above the name. Default true. */
   show_area?: boolean;

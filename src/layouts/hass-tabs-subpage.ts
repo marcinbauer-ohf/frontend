@@ -425,7 +425,7 @@ export class HassTabsSubpage extends LitElement {
           padding-left: var(--safe-area-inset-left);
         }
         .toolbar-content {
-          padding: 8px 12px;
+          padding: var(--ha-space-2) var(--ha-space-4);
           display: flex;
           align-items: center;
           height: 100%;

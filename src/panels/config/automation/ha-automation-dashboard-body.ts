@@ -1,8 +1,10 @@
 import type { HassEntity } from "home-assistant-js-websocket";
-import { mdiArrowRight } from "@mdi/js";
+import { mdiAlertCircle, mdiArrowRight, mdiCloseCircle } from "@mdi/js";
 import { css, html, LitElement, nothing } from "lit";
+import { ifDefined } from "lit/directives/if-defined";
 import { customElement, property, state } from "lit/decorators";
 import { repeat } from "lit/directives/repeat";
+import { classMap } from "lit/directives/class-map";
 import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
 import { fireEvent } from "../../../common/dom/fire_event";
@@ -10,7 +12,11 @@ import { stateActive } from "../../../common/entity/state_active";
 import { stateColorCss } from "../../../common/entity/state_color";
 import { stringCompare } from "../../../common/string/compare";
 import type { LocalizeFunc } from "../../../common/translations/localize";
-import type { DataTableRowData } from "../../../components/data-table/ha-data-table";
+import type {
+  DataTableBodySelection,
+  DataTableRowData,
+} from "../../../components/data-table/ha-data-table";
+import "../../../components/ha-checkbox";
 import "../../../components/ha-card";
 import "../../../components/ha-condition-icon";
 import "../../../components/ha-state-icon";
@@ -35,12 +41,15 @@ import {
 } from "../../../data/automation";
 import { CONDITION_BUILDING_BLOCKS } from "../../../data/condition";
 import type { Action } from "../../../data/script";
+import { UNAVAILABLE } from "../../../data/entity/entity";
 import type { HomeAssistant } from "../../../types";
 import "../../lovelace/cards/hui-card";
 import { renderTileBadge } from "../../lovelace/cards/tile/badges/tile-badge";
 import { tileCardStyle } from "../../lovelace/cards/tile/tile-card-style";
 import type { HeadingCardConfig } from "../../lovelace/cards/types";
 import { renderRelativeTimeColumn } from "../common/data-table-columns";
+import type { KnownReferences } from "./missing-references";
+import { findMissingReferences } from "./missing-references";
 
 // Action types that hold their own sequence of actions or conditions
 const NESTING_ACTIONS = new Set<string>([
@@ -79,6 +88,9 @@ export class HaAutomationDashboardBody extends LitElement {
 
   /** Narrow layouts put the flow under the text instead of beside it. */
   @property({ type: Boolean }) public narrow = false;
+
+  /** Set in selection mode: each card leads with a checkbox. */
+  @property({ attribute: false }) public selection?: DataTableBodySelection;
 
   private _headingConfigs = new Map<string, HeadingCardConfig>();
 
@@ -174,12 +186,28 @@ export class HaAutomationDashboardBody extends LitElement {
   private _renderCard(row: DataTableRowData) {
     const stateObj = this.hass.states[row.entity_id] as HassEntity | undefined;
     const off = row.state === "off";
+    const unavailable = stateObj?.state === UNAVAILABLE;
+    const checked = this.selection?.checked.includes(row.entity_id);
     const color =
       stateObj && stateActive(stateObj)
         ? stateColorCss(stateObj)
         : "var(--state-inactive-color)";
     return html`
-      <ha-card style=${styleMap({ "--tile-color": color })}>
+      <ha-card
+        class=${classMap({ selecting: Boolean(this.selection), checked })}
+        style=${styleMap({ "--tile-color": color })}
+      >
+        ${
+          this.selection
+            ? html`<ha-checkbox
+                class="select"
+                .checked=${Boolean(checked)}
+                .rowId=${row.entity_id}
+                aria-label=${row.name}
+                @click=${this._checkboxClicked}
+              ></ha-checkbox>`
+            : nothing
+        }
         <ha-tile-container
           .interactive=${true}
           .featurePosition=${this.narrow ? "bottom" : "inline"}
@@ -192,7 +220,7 @@ export class HaAutomationDashboardBody extends LitElement {
               .hass=${this.hass}
               .stateObj=${stateObj}
             ></ha-state-icon>
-            ${stateObj ? renderTileBadge(stateObj, this.hass) : nothing}
+            ${this._renderStatusBadge(row.entity_id, stateObj, off, unavailable)}
           </ha-tile-icon>
           <ha-tile-info slot="info">
             <span slot="primary">${row.name}</span>
@@ -219,6 +247,82 @@ export class HaAutomationDashboardBody extends LitElement {
         </ha-tile-container>
       </ha-card>
     `;
+  }
+
+  /**
+   * A small badge on the icon, in the default slot so the icon's round
+   * container does not clip it, sized like the editor's live-test badge.
+   * Something the automation names that no longer exists matters most, as
+   * it is what will make the automation fail.
+   */
+  private _renderStatusBadge(
+    entityId: string,
+    stateObj: HassEntity | undefined,
+    off: boolean,
+    unavailable: boolean
+  ) {
+    const missing = this._missingReferences(entityId);
+    const [kind, path, label] = missing.length
+      ? [
+          "warning",
+          mdiAlertCircle,
+          this.hass.localize(
+            "ui.panel.config.automation.picker.missing_references",
+            { count: missing.length }
+          ),
+        ]
+      : unavailable
+        ? [
+            "error",
+            mdiAlertCircle,
+            this.hass.localize("state.default.unavailable"),
+          ]
+        : off
+          ? [
+              "disabled",
+              mdiCloseCircle,
+              this.hass.localize("ui.panel.config.automation.picker.disabled"),
+            ]
+          : [];
+    if (!kind) {
+      return stateObj ? renderTileBadge(stateObj, this.hass) : nothing;
+    }
+    return html`<span
+      class="status-badge ${kind}"
+      role="img"
+      aria-label=${ifDefined(label)}
+      title=${ifDefined(label)}
+      ><ha-svg-icon .path=${path}></ha-svg-icon
+    ></span>`;
+  }
+
+  private _known = memoizeOne(
+    (
+      states: HomeAssistant["states"],
+      entities: HomeAssistant["entities"],
+      devices: HomeAssistant["devices"],
+      areas: HomeAssistant["areas"]
+    ): KnownReferences => ({
+      entities: new Set([...Object.keys(states), ...Object.keys(entities)]),
+      devices: new Set(Object.keys(devices)),
+      areas: new Set(Object.keys(areas)),
+    })
+  );
+
+  private _missingReferences(entityId: string): string[] {
+    this._loadConfig(entityId);
+    const config = this._configs.get(entityId);
+    return config
+      ? findMissingReferences(
+          config,
+          this._known(
+            this.hass.states,
+            this.hass.entities,
+            this.hass.devices,
+            this.hass.areas
+          )
+        )
+      : [];
   }
 
   // Trigger, condition and action icons in a row, each step showing its
@@ -315,8 +419,20 @@ export class HaAutomationDashboardBody extends LitElement {
 
   private _automationClicked(ev: Event) {
     const id = (ev.currentTarget as HaTileContainer & { rowId: string }).rowId;
+    // In selection mode a tap picks the card, as the checkbox does
+    if (this.selection) {
+      this.selection.toggle(id);
+      return;
+    }
     // Not bubbling, like the table's own row clicks
     fireEvent(this, "row-click", { id }, { bubbles: false });
+  }
+
+  private _checkboxClicked(ev: Event) {
+    ev.stopPropagation();
+    this.selection?.toggle(
+      (ev.currentTarget as HTMLElement & { rowId: string }).rowId
+    );
   }
 
   // Spacing follows the sections view of a dashboard
@@ -345,6 +461,50 @@ export class HaAutomationDashboardBody extends LitElement {
         display: grid;
         grid-template-columns: 1fr;
         gap: var(--ha-space-2);
+      }
+      /* In selection mode the checkbox leads the card, and a picked card
+         is outlined like a selected table row is tinted */
+      ha-card.selecting {
+        display: flex;
+        align-items: center;
+        padding-inline-start: var(--ha-space-2);
+      }
+      ha-card.selecting ha-tile-container {
+        flex: 1;
+        min-width: 0;
+      }
+      ha-card.checked {
+        border-color: var(--primary-color);
+        background-color: var(--ha-color-fill-primary-quiet-resting);
+      }
+      .select {
+        flex-shrink: 0;
+      }
+      /* Like the automation editor's live-test badge: a 16px glyph on the
+         card's colour, over the icon's top corner */
+      ha-tile-icon {
+        position: relative;
+      }
+      .status-badge {
+        position: absolute;
+        top: -4px;
+        inset-inline-end: -4px;
+        display: grid;
+        place-items: center;
+        width: 16px;
+        height: 16px;
+        border-radius: var(--ha-border-radius-circle);
+        background-color: var(--card-background-color);
+        --mdc-icon-size: 16px;
+      }
+      .status-badge.warning {
+        color: var(--ha-color-orange-60);
+      }
+      .status-badge.error {
+        color: var(--ha-color-red-60);
+      }
+      .status-badge.disabled {
+        color: var(--ha-color-neutral-60);
       }
       /* Same badge placement as the tile card */
       ha-tile-badge {

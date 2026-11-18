@@ -55,11 +55,15 @@ export class HaSummaryEditorPane extends LitElement {
             )}
           ></ha-empty-state>
         </slot>
-        <slot name="footer" slot="footer">
-          <ha-button appearance="filled" @click=${this._done}>
-            ${localize?.("ui.common.done")}
-          </ha-button>
-        </slot>
+        <!-- A real box, as the side pane's footer styles need one to lay
+             the button out like every other pane's -->
+        <div slot="footer">
+          <slot name="footer">
+            <ha-button appearance="filled" @click=${this._done}>
+              ${localize?.("ui.common.done")}
+            </ha-button>
+          </slot>
+        </div>
       </ha-side-pane>
     `;
   }
