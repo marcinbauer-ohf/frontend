@@ -123,7 +123,6 @@ export class HomeShortcutsEditor extends LitElement {
         </ha-grouped-list>
       </ha-sortable>
       <ha-navigation-picker
-        .hass=${this.hass}
         .addButtonLabel=${this.hass.localize(
           "ui.panel.home.editor.add_custom_shortcut"
         )}

@@ -1,4 +1,5 @@
 import { ResizeController } from "@lit-labs/observers/resize-controller";
+import type { HassEntities } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
@@ -9,10 +10,20 @@ import type {
 } from "echarts/types/dist/shared";
 import { formatDateTimeWithSeconds } from "../../common/datetime/format_date_time";
 import millisecondsToDuration from "../../common/datetime/milliseconds_to_duration";
+import { consume } from "../../common/decorators/consume";
 import { computeRTL } from "../../common/util/compute_rtl";
+import {
+  configContext,
+  internationalizationContext,
+  statesContext,
+} from "../../data/context";
 import type { TimelineEntity } from "../../data/history";
-import type { HomeAssistant } from "../../types";
+import type {
+  HomeAssistantConfig,
+  HomeAssistantInternationalization,
+} from "../../types";
 import { DEFAULT_CHART_WIDTH, MIN_TIME_BETWEEN_UPDATES } from "./ha-chart-base";
+import type { ZoomSliderMode } from "./ha-chart-base";
 import { itemTooltipPosition } from "./chart-tooltip-position";
 import "./ha-chart-tooltip-marker";
 import { computeCssValue } from "../../resources/css-variables";
@@ -43,8 +54,6 @@ const FILLED_ROW = 0.8;
 
 @customElement("state-history-chart-timeline")
 export class StateHistoryChartTimeline extends LitElement {
-  @property({ attribute: false }) public hass!: HomeAssistant;
-
   @property({ attribute: false }) public data: TimelineEntity[] = [];
 
   @property({ type: Boolean }) public narrow = false;
@@ -76,8 +85,8 @@ export class StateHistoryChartTimeline extends LitElement {
 
   @property({ attribute: false }) public chartIndex?;
 
-  @property({ attribute: "hide-zoom-controls", type: Boolean })
-  public hideZoomControls = false;
+  @property({ attribute: "zoom-slider" })
+  public zoomSlider: ZoomSliderMode = "auto";
 
   /**
    * Height of one row in px. A host that gives the row a block of its own means
@@ -114,6 +123,16 @@ export class StateHistoryChartTimeline extends LitElement {
 
   private _chartTime: Date = new Date();
 
+  @state()
+  @consume({ context: internationalizationContext, subscribe: true })
+  private _i18n!: HomeAssistantInternationalization;
+
+  @consume({ context: configContext, subscribe: true })
+  private _hassConfig!: HomeAssistantConfig;
+
+  @consume({ context: statesContext, subscribe: true })
+  private _states?: HassEntities;
+
   protected render() {
     return html`
       <ha-chart-base
@@ -133,7 +152,7 @@ export class StateHistoryChartTimeline extends LitElement {
         @chart-mouseover=${this._handleChartHover}
         @chart-mouseout=${this._handleChartOut}
         @chart-zoom=${this._handleDataZoom}
-        .hideZoomControls=${this.hideZoomControls}
+        .zoomSlider=${this.zoomSlider}
       ></ha-chart-base>
     `;
   }
@@ -233,13 +252,13 @@ export class StateHistoryChartTimeline extends LitElement {
     // An aggregated rectangle is drawn across its whole column but stands for
     // only the part of it its state held.
     const durationInMs = (value![8] as number) ?? value![2] - value![1];
-    const formattedDuration = `${this.hass.localize(
+    const formattedDuration = `${this._i18n.localize(
       "ui.components.history_charts.duration"
     )}: ${millisecondsToDuration(durationInMs)}`;
 
     const rtl = computeRTL(
-      this.hass.language,
-      this.hass.translationMetadata.translations
+      this._i18n.language,
+      this._i18n.translationMetadata.translations
     );
     // Rows are read against each other, so a band answers for every row at the
     // moment it covers, not only for the one under the pointer. Taken at the
@@ -278,12 +297,12 @@ export class StateHistoryChartTimeline extends LitElement {
         (other) => row(other.name, other.segment.color, other.segment.state)
       )}${formatDateTimeWithSeconds(
         new Date(value![1]),
-        this.hass.locale,
-        this.hass.config
+        this._i18n.locale,
+        this._hassConfig.config
       )}<br />${formatDateTimeWithSeconds(
         new Date(value![2]),
-        this.hass.locale,
-        this.hass.config
+        this._i18n.locale,
+        this._hassConfig.config
       )}<br />${formattedDuration}`;
   };
 
@@ -319,7 +338,8 @@ export class StateHistoryChartTimeline extends LitElement {
       changedProps.has("showNames") ||
       changedProps.has("insideLabels") ||
       changedProps.has("paddingYAxis") ||
-      changedProps.has("_yWidth")
+      changedProps.has("_yWidth") ||
+      changedProps.has("_i18n")
     ) {
       this._createOptions();
     }
@@ -336,8 +356,8 @@ export class StateHistoryChartTimeline extends LitElement {
         : this.paddingYAxis;
     const labelMargin = 5;
     const rtl = computeRTL(
-      this.hass.language,
-      this.hass.translationMetadata.translations
+      this._i18n.language,
+      this._i18n.translationMetadata.translations
     );
     this._chartOptions = {
       xAxis: {
@@ -456,7 +476,7 @@ export class StateHistoryChartTimeline extends LitElement {
               Math.max(1, this.endTime.getTime() - this.startTime.getTime())) /
             Math.max(1, width),
           otherState: {
-            state: this.hass.localize(
+            state: this._i18n.localize(
               "ui.components.history_charts.other_states"
             ),
             color:
@@ -470,7 +490,7 @@ export class StateHistoryChartTimeline extends LitElement {
       : undefined;
     this._bands.clear();
     this._chartData = generateStateHistoryChartTimelineData({
-      states: this.hass.states,
+      states: this._states ?? {},
       data: this.data,
       startTime: this.startTime,
       endTime: this.endTime,

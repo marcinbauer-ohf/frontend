@@ -1,7 +1,8 @@
 import { mdiDelete, mdiPlus } from "@mdi/js";
 import type { CSSResultGroup, TemplateResult } from "lit";
-import { css, html, LitElement } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
+import "@home-assistant/components/card";
 import memoizeOne from "memoize-one";
 import { relativeTime } from "../../common/datetime/relative_time";
 import { fireEvent } from "../../common/dom/fire_event";
@@ -67,6 +68,22 @@ class HaLongLivedTokens extends LitElement {
                         }
                       )}
                     </span>
+                    ${
+                      this._hasBeenUsed(token)
+                        ? html`<span slot="supporting-text">
+                            ${this.hass.localize(
+                              "ui.panel.profile.long_lived_access_tokens.last_used",
+                              {
+                                date: relativeTime(
+                                  new Date(token.last_used_at),
+                                  this.hass.locale
+                                ),
+                                location: token.last_used_ip,
+                              }
+                            )}
+                          </span>`
+                        : nothing
+                    }
                     <ha-icon-button
                       slot="end"
                       .token=${token}
@@ -102,6 +119,13 @@ class HaLongLivedTokens extends LitElement {
         </a>
       </p>
     `;
+  }
+
+  // Creating a token sets last_used_at without an IP, so only a set IP means it was used
+  private _hasBeenUsed(
+    token: RefreshToken
+  ): token is RefreshToken & { last_used_at: string; last_used_ip: string } {
+    return Boolean(token.last_used_at && token.last_used_ip);
   }
 
   private _createToken(): void {

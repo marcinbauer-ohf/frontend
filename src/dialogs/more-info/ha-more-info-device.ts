@@ -438,7 +438,10 @@ export class HaMoreInfoDevice extends LitElement {
     this._entryFor = entityId;
     this._entry = undefined;
     try {
-      const entry = await getExtendedEntityRegistryEntry(this.hass, entityId);
+      const entry = await getExtendedEntityRegistryEntry(
+        this.hass.callWS,
+        entityId
+      );
       // Another entity was picked while this was in flight.
       if (this._entryFor === entityId) {
         this._entry = entry;
@@ -1645,7 +1648,9 @@ export class HaMoreInfoDevice extends LitElement {
   }
 
   private _enableDevice() {
-    updateDeviceRegistryEntry(this.hass, this.deviceId, { disabled_by: null });
+    updateDeviceRegistryEntry(this.hass.callWS, this.deviceId, {
+      disabled_by: null,
+    });
   }
 
   private _addTo() {
@@ -1843,10 +1848,7 @@ export class HaMoreInfoDevice extends LitElement {
         <ha-state-icon slot="icon" .stateObj=${stateObj}></ha-state-icon>
         ${this._entityName(stateObj)}
         <span slot="details" class="value">
-          <state-display
-            .hass=${this.hass}
-            .stateObj=${stateObj}
-          ></state-display>
+          <state-display .stateObj=${stateObj}></state-display>
         </span>
       </ha-dropdown-item>
     `;

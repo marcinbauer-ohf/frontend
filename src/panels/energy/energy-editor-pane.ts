@@ -32,7 +32,7 @@ import { getStatisticMetadata } from "../../data/recorder";
 import type { HomeAssistant, ValueChangedEvent } from "../../types";
 import "../config/energy/components/ha-energy-battery-settings";
 import "../config/energy/components/ha-energy-device-settings";
-import "../config/energy/components/ha-energy-device-settings-water";
+import "../config/energy/components/ha-energy-device-settings-water-gas";
 import "../config/energy/components/ha-energy-gas-settings";
 import "../config/energy/components/ha-energy-grid-settings";
 import "../config/energy/components/ha-energy-solar-settings";
@@ -149,14 +149,25 @@ export class EnergyEditorPane extends LitElement {
           ></ha-energy-device-settings>
         `;
       case "gas":
-        return html`<ha-energy-gas-settings
-          pane
-          .hass=${this.hass}
-          .preferences=${this._preferences!}
-          .statsMetadata=${this._statsMetadata}
-          .validationResult=${this._validationResult}
-          @value-changed=${this._prefsChanged}
-        ></ha-energy-gas-settings>`;
+        return html`
+          <ha-energy-gas-settings
+            pane
+            .hass=${this.hass}
+            .preferences=${this._preferences!}
+            .statsMetadata=${this._statsMetadata}
+            .validationResult=${this._validationResult}
+            @value-changed=${this._prefsChanged}
+          ></ha-energy-gas-settings>
+          <ha-energy-device-settings-water-gas
+            pane
+            .hass=${this.hass}
+            .resource=${"gas"}
+            .preferences=${this._preferences!}
+            .statsMetadata=${this._statsMetadata}
+            .validationResult=${this._validationResult}
+            @value-changed=${this._prefsChanged}
+          ></ha-energy-device-settings-water-gas>
+        `;
       case "water":
         return html`
           <ha-energy-water-settings
@@ -167,14 +178,15 @@ export class EnergyEditorPane extends LitElement {
             .validationResult=${this._validationResult}
             @value-changed=${this._prefsChanged}
           ></ha-energy-water-settings>
-          <ha-energy-device-settings-water
+          <ha-energy-device-settings-water-gas
             pane
             .hass=${this.hass}
+            .resource=${"water"}
             .preferences=${this._preferences!}
             .statsMetadata=${this._statsMetadata}
             .validationResult=${this._validationResult}
             @value-changed=${this._prefsChanged}
-          ></ha-energy-device-settings-water>
+          ></ha-energy-device-settings-water-gas>
         `;
       default:
         return this._renderRoot();
@@ -236,6 +248,7 @@ export class EnergyEditorPane extends LitElement {
         energy_sources: [],
         device_consumption: [],
         device_consumption_water: [],
+        device_consumption_gas: [],
       };
     }
     try {
@@ -295,7 +308,7 @@ export class EnergyEditorPane extends LitElement {
     ha-energy-gas-settings,
     ha-energy-water-settings,
     ha-energy-device-settings,
-    ha-energy-device-settings-water {
+    ha-energy-device-settings-water-gas {
       display: block;
       margin-bottom: var(--ha-space-3);
     }

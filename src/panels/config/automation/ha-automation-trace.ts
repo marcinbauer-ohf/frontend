@@ -809,7 +809,6 @@ export class HaAutomationTrace extends LitElement {
           min-height: 0;
           display: flex;
           overflow: hidden;
-          direction: ltr;
         }
 
         :host([narrow]) .main {
@@ -853,10 +852,6 @@ export class HaAutomationTrace extends LitElement {
           overflow: visible;
           flex: none;
         }
-        ha-trace-logbook {
-          direction: var(--direction);
-        }
-
         .graph-skeleton {
           align-items: center;
           justify-content: center;

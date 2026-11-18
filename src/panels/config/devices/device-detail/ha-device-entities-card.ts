@@ -1,27 +1,17 @@
-import { mdiDotsVertical, mdiPlus } from "@mdi/js";
 import type { TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import { repeat } from "lit/directives/repeat";
 import { until } from "lit/directives/until";
-import "../../../../components/ha-button";
 import "../../../../components/ha-icon";
-import "../../../../components/ha-svg-icon";
 import "../../../../components/item/ha-list-item-base";
 import "../../../../components/item/ha-list-item-button";
-import "../../../../components/ha-dropdown";
-import "../../../../components/ha-dropdown-item";
-import "../../../../components/ha-icon-button";
 import "../../../../components/list/ha-grouped-list";
+import { stopPropagation } from "../../../../common/dom/stop_propagation";
 import { computeEntityEntryName } from "../../../../common/entity/compute_entity_name_display";
 import { entryIcon } from "../../../../data/icons";
 import { showMoreInfoDialog } from "../../../../dialogs/more-info/show-ha-more-info-dialog";
 import type { HomeAssistant } from "../../../../types";
-import {
-  computeCards,
-  computeSection,
-} from "../../../lovelace/common/generate-lovelace-config";
-import { addEntitiesToLovelaceView } from "../../../lovelace/editor/add-entities-to-view";
 import type { EntityRegistryStateEntry } from "../ha-config-device-page";
 import { entityRowElement } from "../../../lovelace/entity-rows/entity-row-element-directive";
 
@@ -41,8 +31,7 @@ export class HaDeviceEntitiesCard extends LitElement {
 
   protected render(): TemplateResult {
     if (!this.entities.length) {
-      return html`<ha-grouped-list .header=${this.header}
-        >${this._renderMenu(false)}
+      return html`<ha-grouped-list .header=${this.header}>
         <ha-list-item-base
           .headline=${this.hass.localize("ui.panel.config.devices.entities.none")}
         ></ha-list-item-base>
@@ -70,8 +59,7 @@ export class HaDeviceEntitiesCard extends LitElement {
     );
 
     return html`
-      <ha-grouped-list .header=${this.header}
-        >${this._renderMenu(enabledEntities.length > 0)}
+      <ha-grouped-list .header=${this.header}>
         ${this._renderEntities(mainEntities)}
         ${this._renderEntities(additionalEntities)}
         ${
@@ -103,28 +91,6 @@ export class HaDeviceEntitiesCard extends LitElement {
     `;
   }
 
-  private _renderMenu(canAdd: boolean) {
-    return canAdd
-      ? html`<ha-dropdown
-          slot="header-action"
-          placement="bottom-end"
-          @wa-select=${this._addToLovelaceView}
-        >
-          <ha-icon-button
-            slot="trigger"
-            .label=${this.hass.localize("ui.common.menu")}
-            .path=${mdiDotsVertical}
-          ></ha-icon-button>
-          <ha-dropdown-item value="add_to_dashboard">
-            <ha-svg-icon slot="icon" .path=${mdiPlus}></ha-svg-icon>
-            ${this.hass.localize(
-              "ui.panel.config.devices.entities.add_entities_lovelace"
-            )}
-          </ha-dropdown-item>
-        </ha-dropdown>`
-      : nothing;
-  }
-
   private _toggleShowHidden() {
     this.showHidden = !this.showHidden;
   }
@@ -147,7 +113,7 @@ export class HaDeviceEntitiesCard extends LitElement {
         "ui.panel.config.devices.entities.hidden"
       )})`;
     }
-    return html`<div class="entity" role="listitem">
+    return html`<div class="entity" role="listitem" @keydown=${stopPropagation}>
       ${entityRowElement(entry.entity_id, name, this.hass)}
     </div>`;
   }
@@ -176,37 +142,12 @@ export class HaDeviceEntitiesCard extends LitElement {
     showMoreInfoDialog(this, { entityId: ev.currentTarget.entry.entity_id });
   }
 
-  private _addToLovelaceView(): void {
-    const entities = this.entities
-      .filter((entity) => !entity.disabled_by)
-      .map((entity) => entity.entity_id);
-
-    addEntitiesToLovelaceView(
-      this,
-      this.hass,
-      computeCards(
-        this.hass,
-        entities,
-        { title: this.deviceName },
-        { entityName: { type: "entity" } }
-      ),
-      computeSection(entities, {
-        title: this.deviceName,
-      }),
-      entities
-    );
-  }
-
   static styles = css`
     :host {
       display: block;
     }
     ha-grouped-list::part(base) {
       background-color: var(--card-background-color);
-    }
-    ha-icon-button {
-      --ha-icon-button-size: 32px;
-      --mdc-icon-size: 20px;
     }
     .entity {
       padding: var(--ha-space-2) var(--ha-space-3);

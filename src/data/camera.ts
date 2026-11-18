@@ -2,16 +2,20 @@ import type {
   HassEntityAttributeBase,
   HassEntityBase,
 } from "home-assistant-js-websocket";
+import { slugify } from "../common/string/slugify";
 import { timeCacheEntityPromiseFunc } from "../common/util/time-cache-entity-promise-func";
-import type { HomeAssistant } from "../types";
+import type { HomeAssistant, HomeAssistantApi } from "../types";
+import { fileDownload } from "../util/file_download";
 import { getSignedPath } from "./auth";
+import type { StreamType } from "./camera-streams";
 
 export const CAMERA_ORIENTATIONS = [1, 2, 3, 4, 6, 8];
 
-export const STREAM_TYPE_HLS = "hls";
-export const STREAM_TYPE_WEB_RTC = "web_rtc";
-
-export type StreamType = typeof STREAM_TYPE_HLS | typeof STREAM_TYPE_WEB_RTC;
+export {
+  STREAM_TYPE_HLS,
+  STREAM_TYPE_WEB_RTC,
+  type StreamType,
+} from "./camera-streams";
 
 export { CameraEntityFeature } from "./feature/camera_entity_feature";
 
@@ -105,6 +109,29 @@ export const fetchThumbnailUrl = async (
   return hass.hassUrl(path.path);
 };
 
+export const downloadCameraSnapshot = async (
+  api: HomeAssistantApi,
+  entityId: string
+) => {
+  const result: Response | undefined = await api.callApiRaw(
+    "GET",
+    `camera_proxy/${entityId}`
+  );
+
+  if (!result) {
+    throw new Error("No response from API");
+  }
+
+  const contentType = result.headers.get("content-type");
+  const ext = contentType === "image/png" ? "png" : "jpg";
+  const date = new Date().toLocaleString();
+  const filename = `snapshot_${slugify(entityId)}_${date}.${ext}`;
+
+  const blob = await result.blob();
+  const url = window.URL.createObjectURL(blob);
+  fileDownload(url, filename);
+};
+
 export const fetchStreamUrl = async (
   hass: Pick<HomeAssistant, "callWS" | "hassUrl">,
   entityId: string,
@@ -179,6 +206,7 @@ export const getEntityIdFromCameraMediaSource = (mediaContentId: string) =>
 
 export interface CameraCapabilities {
   frontend_stream_types: StreamType[];
+  two_way_audio: boolean;
 }
 
 export const fetchCameraCapabilities = async (

@@ -414,7 +414,7 @@ export class HomeAreaEditorPane extends DirtyStateProviderMixin<AreaFormState>()
     const form = this._state!;
     this._submitting = true;
     try {
-      await updateAreaRegistryEntry(this.hass, this.areaId, {
+      await updateAreaRegistryEntry(this.hass.callWS, this.areaId, {
         ...state,
         name: form.name.trim(),
       });

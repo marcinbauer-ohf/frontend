@@ -133,6 +133,9 @@ declare global {
     "insert-after": {
       value: Trigger | Condition | Action | Trigger[] | Condition[] | Action[];
     };
+    "replace-item": {
+      value: Trigger | Condition | Action;
+    };
     "save-automation": undefined;
     paste: {
       item: Trigger | Condition | Action;
@@ -199,6 +202,15 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
     commit: (config) => {
       this._manualEditor?.resetPastedConfig();
       this._updateConfig(config);
+    },
+    fetchBlueprintTriggers: async ({ path, input }) => {
+      const result = await substituteBlueprint(
+        this.hass,
+        "automation",
+        path,
+        input || {}
+      );
+      return normalizeAutomationConfig(result.substituted_config).triggers;
     },
   });
 
@@ -1513,7 +1525,7 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
         }
 
         if (entityId) {
-          await updateEntityRegistryEntry(this.hass, entityId, {
+          await updateEntityRegistryEntry(this.hass.callWS, entityId, {
             categories: {
               automation: this.entityRegistryUpdate.category || null,
             },
@@ -1556,6 +1568,28 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
       Z: () => this._redo(),
       y: () => this._redo(),
     };
+  }
+
+  protected supportedShortcutsInInput(): SupportedShortcuts {
+    if (this._manualEditor?.sidebarOpen) {
+      return this._manualEditor.canToggleSidebarYamlMode
+        ? { Y: () => this._manualEditor?.toggleSidebarYamlMode() }
+        : {};
+    }
+    return {
+      Y: () => this._toggleYamlMode(),
+    };
+  }
+
+  private async _toggleYamlMode() {
+    this._nodeView = false;
+    if (this.mode === "gui") {
+      this.switchYamlMode();
+      await this.updateComplete;
+      this._yamlEditor?.focus();
+    } else {
+      this.switchUiMode();
+    }
   }
 
   protected supportedSingleKeyShortcuts(): SupportedShortcuts {

@@ -5,6 +5,7 @@ import type { HassEntity } from "home-assistant-js-websocket";
 import { isComponentLoaded } from "../../../../common/config/is_component_loaded";
 import { computeStateDomain } from "../../../../common/entity/compute_state_domain";
 import { computeDeviceNameDisplay } from "../../../../common/entity/compute_device_name";
+import { stringCompare } from "../../../../common/string/compare";
 import { titleCase } from "../../../../common/string/title-case";
 import { createSearchParam } from "../../../../common/url/search-params";
 import "../../../../components/entity/ha-battery-icon";
@@ -13,7 +14,10 @@ import "../../../../components/ha-label";
 import "../../../../components/item/ha-list-item-value";
 import "../../../../components/list/ha-grouped-list";
 import type { DeviceRegistryEntry } from "../../../../data/device/device_registry";
+import { showMoreInfoDialog } from "../../../../dialogs/more-info/show-ha-more-info-dialog";
 import type { HomeAssistant } from "../../../../types";
+
+const ADDRESS_TYPES = ["mac", "bluetooth", "zigbee"];
 
 /**
  * The device's facts as label/value rows, for the device page's info pane.
@@ -81,7 +85,13 @@ export class HaDeviceCard extends LitElement {
             ? html`<ha-list-item-value
                 .label=${localize("ui.panel.config.devices.info_pane.battery")}
               >
-                <span class="battery">
+                <button
+                  class="battery"
+                  aria-label=${`${this.hass.formatEntityName(
+                    this.battery
+                  )} ${this.hass.formatEntityState(this.battery)}`}
+                  @click=${this._showBatteryMoreInfo}
+                >
                   ${
                     computeStateDomain(this.battery) === "sensor"
                       ? this.hass.formatEntityState(this.battery)
@@ -91,7 +101,7 @@ export class HaDeviceCard extends LitElement {
                     .batteryStateObj=${this.battery}
                     .batteryChargingStateObj=${this.batteryCharging}
                   ></ha-battery-icon>
-                </span>
+                </button>
               </ha-list-item-value>`
             : nothing
         }
@@ -105,6 +115,12 @@ export class HaDeviceCard extends LitElement {
       </ha-grouped-list>
       <slot></slot>
     `;
+  }
+
+  private _showBatteryMoreInfo() {
+    if (this.battery) {
+      showMoreInfoDialog(this, { entityId: this.battery.entity_id });
+    }
   }
 
   private _addressValue(type: string, value: string) {
@@ -135,9 +151,13 @@ export class HaDeviceCard extends LitElement {
   }
 
   protected _getAddresses() {
-    return this.device.connections.filter((conn) =>
-      ["mac", "bluetooth", "zigbee"].includes(conn[0])
-    );
+    return this.device.connections
+      .filter((conn) => ADDRESS_TYPES.includes(conn[0]))
+      .sort(
+        (a, b) =>
+          ADDRESS_TYPES.indexOf(a[0]) - ADDRESS_TYPES.indexOf(b[0]) ||
+          stringCompare(a[1], b[1])
+      );
   }
 
   private _computeDeviceNameDisplay(deviceId: string) {
@@ -160,6 +180,18 @@ export class HaDeviceCard extends LitElement {
       align-items: center;
       gap: var(--ha-space-1);
       white-space: nowrap;
+      background: none;
+      border: none;
+      padding: 0;
+      margin: 0;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+      border-radius: var(--ha-border-radius-sm);
+    }
+    .battery:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
     }
     a {
       color: var(--primary-color);

@@ -523,6 +523,7 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
           }
           ha-config-section {
             margin-top: -42px;
+            padding-inline: 0;
           }
         }
 

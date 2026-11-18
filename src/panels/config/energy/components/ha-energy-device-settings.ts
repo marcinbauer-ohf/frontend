@@ -8,6 +8,7 @@ import {
 import type { CSSResultGroup, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { repeat } from "lit/directives/repeat";
+import memoizeOne from "memoize-one";
 import { customElement, property } from "lit/decorators";
 import { fireEvent } from "../../../../common/dom/fire_event";
 import { stopPropagation } from "../../../../common/dom/stop_propagation";
@@ -28,7 +29,7 @@ import type {
   EnergyValidationIssue,
 } from "../../../../data/energy";
 import {
-  computeEnergyLabel,
+  computeEnergyDeviceLabels,
   saveEnergyPreferences,
 } from "../../../../data/energy";
 import type { StatisticsMetaData } from "../../../../data/recorder";
@@ -39,7 +40,10 @@ import {
 import { haStyle } from "../../../../resources/styles";
 import type { HomeAssistant } from "../../../../types";
 import { documentationUrl } from "../../../../util/documentation-url";
-import { showEnergySettingsDeviceDialog } from "../dialogs/show-dialogs-energy";
+import { showEnergySettingsDialog } from "../dialogs/show-dialogs-energy";
+import type { EnergyEditorConfig } from "../editors/energy-editor";
+import "../ha-energy-editor-page";
+import type { EnergyEditorPageConfig } from "../ha-energy-editor-page";
 import "./ha-energy-validation-result";
 import { energyCardStyles } from "./styles";
 
@@ -59,7 +63,24 @@ export class EnergyDeviceSettings extends LitElement {
   @property({ attribute: false })
   public validationResult?: EnergyPreferencesValidation;
 
+  /** Path of the list page, editors open on pages under it instead of dialogs */
+  @property({ attribute: false }) public listPath?: string;
+
+  /** Shows the editor page of the item with this key, or `new` to add one */
+  @property({ attribute: false }) public editKey?: string;
+
+  @property({ type: Boolean }) public narrow = false;
+
   protected render(): TemplateResult {
+    if (this.listPath && this.editKey !== undefined) {
+      return html`<ha-energy-editor-page
+        .hass=${this.hass}
+        .narrow=${this.narrow}
+        .backPath=${this.listPath}
+        .config=${this._editorPage(this.editKey)}
+      ></ha-energy-editor-page>`;
+    }
+
     return html`
       <ha-card>
         <h1 class="card-header">
@@ -115,14 +136,17 @@ export class EnergyDeviceSettings extends LitElement {
               }
             </ha-grouped-list>
           </ha-sortable>
-          <div class="row">
-            <ha-button @click=${this._addDevice} appearance="filled" size="s">
-              <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon
-              >${this.hass.localize(
-                "ui.panel.config.energy.device_consumption.add_device"
-              )}</ha-button
-            >
-          </div>
+          <ha-button
+            .href=${this._editorHref()}
+            @click=${this.listPath ? nothing : this._addDevice}
+            appearance="filled"
+            size="s"
+          >
+            <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
+            ${this.hass.localize(
+              "ui.panel.config.energy.device_consumption.add_device"
+            )}
+          </ha-button>
         </div>
       </ha-card>
     `;
@@ -132,13 +156,6 @@ export class EnergyDeviceSettings extends LitElement {
     device: DeviceConsumptionEnergyPreference,
     index: number
   ) {
-    const name = computeEnergyLabel(
-      this.hass.states,
-      this.hass.formatEntityName,
-      device.stat_consumption,
-      this.statsMetadata?.[device.stat_consumption],
-      device.name
-    );
     const areaId = getEntityAreaId(
       device.stat_consumption,
       this.hass.entities,
@@ -147,9 +164,10 @@ export class EnergyDeviceSettings extends LitElement {
     const area = areaId ? this.hass.areas[areaId] : undefined;
     return html`<ha-list-item-button
       .device=${device}
-      .headline=${name}
+      .headline=${this._deviceName(device)}
       .supportingText=${area ? computeAreaName(area) : undefined}
-      @click=${this._editDevice}
+      .href=${this._editorHref(device)}
+      @click=${this.listPath ? nothing : this._editDevice}
     >
       <ha-svg-icon
         slot="start"
@@ -164,11 +182,22 @@ export class EnergyDeviceSettings extends LitElement {
       <ha-icon-button
         slot="end"
         .label=${this.hass.localize("ui.common.delete")}
-        @click=${this._deleteDevice}
+        @click=${this._deleteDeviceClicked}
         .device=${device}
         .path=${mdiDelete}
       ></ha-icon-button>
     </ha-list-item-button>`;
+  }
+
+  private _deviceLabels = memoizeOne(computeEnergyDeviceLabels);
+
+  private _deviceName(device: DeviceConsumptionEnergyPreference) {
+    return this._deviceLabels(
+      this.hass.states,
+      this.hass.formatEntityName,
+      this.preferences.device_consumption,
+      this.statsMetadata
+    )[device.stat_consumption];
   }
 
   private _renderIssueIndicator(
@@ -212,40 +241,105 @@ export class EnergyDeviceSettings extends LitElement {
     this._savePreferences(newPrefs);
   }
 
+  private _addDevice() {
+    this._openEditor();
+  }
+
   private _editDevice(ev) {
-    const origDevice: DeviceConsumptionEnergyPreference =
-      ev.currentTarget.device;
-    showEnergySettingsDeviceDialog(this, {
-      statsMetadata: this.statsMetadata,
-      device: { ...origDevice },
-      device_consumptions: this.preferences
-        .device_consumption as DeviceConsumptionEnergyPreference[],
-      saveCallback: async (newDevice) => {
-        const newPrefs = {
-          ...this.preferences,
-          device_consumption: this.preferences.device_consumption.map((d) =>
-            d === origDevice ? newDevice : d
-          ),
-        };
-        this._sanitizeParents(newPrefs);
-        await this._savePreferences(newPrefs);
-      },
+    this._openEditor(ev.currentTarget.device);
+  }
+
+  private _openEditor(device?: DeviceConsumptionEnergyPreference) {
+    showEnergySettingsDialog(this, {
+      editor: this._editorConfig(this.preferences, device),
     });
   }
 
-  private _addDevice() {
-    showEnergySettingsDeviceDialog(this, {
-      statsMetadata: this.statsMetadata,
-      device_consumptions: this.preferences
-        .device_consumption as DeviceConsumptionEnergyPreference[],
-      saveCallback: async (device) => {
-        await this._savePreferences({
-          ...this.preferences,
-          device_consumption:
-            this.preferences.device_consumption.concat(device),
-        });
+  private _editorHref(device?: DeviceConsumptionEnergyPreference) {
+    return this.listPath
+      ? `${this.listPath}/device/${device ? encodeURIComponent(device.stat_consumption) : "new"}`
+      : undefined;
+  }
+
+  private _editorConfig(
+    preferences: EnergyPreferences,
+    device?: DeviceConsumptionEnergyPreference
+  ): EnergyEditorConfig {
+    return {
+      kind: "device",
+      params: {
+        statsMetadata: this.statsMetadata,
+        device: device ? { ...device } : undefined,
+        device_consumptions: preferences.device_consumption,
+        saveCallback: (newDevice) => this._saveDevice(newDevice, device),
       },
-    });
+    };
+  }
+
+  private _deviceIndex(device: DeviceConsumptionEnergyPreference) {
+    const devices = this.preferences.device_consumption;
+    const index = devices.indexOf(device);
+    if (index !== -1) {
+      return index;
+    }
+    // Saving replaces the preferences, after which only the statistic matches
+    return devices.findIndex(
+      (d) => d.stat_consumption === device.stat_consumption
+    );
+  }
+
+  // Kept per item: a save replaces the preferences right before the page leaves
+  private _editorPage = memoizeOne(
+    (key: string): EnergyEditorPageConfig | undefined => {
+      if (key === "new") {
+        return this._pageConfig(this._editorConfig(this.preferences));
+      }
+      const device = this.preferences.device_consumption.find(
+        (item) => item.stat_consumption === key
+      );
+      return (
+        device &&
+        this._pageConfig(this._editorConfig(this.preferences, device), device)
+      );
+    }
+  );
+
+  private _pageConfig(
+    editor: EnergyEditorConfig,
+    device?: DeviceConsumptionEnergyPreference
+  ): EnergyEditorPageConfig {
+    if (!device) {
+      return {
+        editor,
+        title: this.hass.localize(
+          "ui.panel.config.energy.device_consumption.add_device"
+        ),
+      };
+    }
+    return {
+      editor,
+      title: this._deviceName(device),
+      delete: {
+        label: this.hass.localize("ui.common.delete"),
+        action: () => this._deleteDevice(device),
+      },
+    };
+  }
+
+  private async _saveDevice(
+    device: DeviceConsumptionEnergyPreference,
+    original?: DeviceConsumptionEnergyPreference
+  ) {
+    const devices = [...this.preferences.device_consumption];
+    const index = original ? this._deviceIndex(original) : -1;
+    if (index === -1) {
+      devices.push(device);
+    } else {
+      devices[index] = device;
+    }
+    const newPrefs = { ...this.preferences, device_consumption: devices };
+    this._sanitizeParents(newPrefs);
+    await this._savePreferences(newPrefs);
   }
 
   private _sanitizeParents(prefs: EnergyPreferences) {
@@ -257,36 +351,50 @@ export class EnergyDeviceSettings extends LitElement {
     });
   }
 
-  private async _deleteDevice(ev) {
+  private _deleteDeviceClicked(ev) {
     ev.stopPropagation();
-    const deviceToDelete: DeviceConsumptionEnergyPreference =
-      ev.currentTarget.device;
+    this._deleteDevice(ev.currentTarget.device);
+  }
 
+  private async _deleteDevice(
+    device: DeviceConsumptionEnergyPreference
+  ): Promise<boolean> {
     if (
       !(await showConfirmationDialog(this, {
         title: this.hass.localize("ui.panel.config.energy.delete_source"),
       }))
     ) {
-      return;
+      return false;
     }
 
+    const index = this._deviceIndex(device);
+    if (index === -1) {
+      return false;
+    }
     try {
       const newPrefs = {
         ...this.preferences,
         device_consumption: this.preferences.device_consumption.filter(
-          (device) => device !== deviceToDelete
+          (_device, idx) => idx !== index
         ),
       };
       this._sanitizeParents(newPrefs);
       await this._savePreferences(newPrefs);
     } catch (err: any) {
-      showAlertDialog(this, { title: `Failed to save config: ${err.message}` });
+      showAlertDialog(this, {
+        title: this.hass.localize("ui.panel.config.energy.save_config_failed", {
+          error: err.message,
+        }),
+      });
+      return false;
     }
+    return true;
   }
 
   private async _savePreferences(preferences: EnergyPreferences) {
     const result = await saveEnergyPreferences(this.hass, preferences);
     fireEvent(this, "value-changed", { value: result });
+    return result;
   }
 
   static get styles(): CSSResultGroup {
@@ -294,10 +402,6 @@ export class EnergyDeviceSettings extends LitElement {
       haStyle,
       energyCardStyles,
       css`
-        .handle {
-          cursor: move; /* fallback if grab cursor is unsupported */
-          cursor: grab;
-        }
         .issue-icon {
           color: var(--warning-color);
         }

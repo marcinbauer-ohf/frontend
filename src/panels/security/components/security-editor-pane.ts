@@ -1,5 +1,5 @@
 import type { ContextType } from "@lit/context";
-import { css, html, LitElement, nothing, type PropertyValues } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { consume } from "../../../common/decorators/consume";
 import { fireEvent } from "../../../common/dom/fire_event";
@@ -18,10 +18,7 @@ import { DirtyStateProviderMixin } from "../../../mixins/dirty-state-provider-mi
 import type { ValueChangedEvent } from "../../../types";
 import "../../../components/entity/ha-favorites-editor";
 import "./security-alerts-editor";
-import {
-  createSecurityEntityFilter,
-  type SecurityEntityContext,
-} from "../security-entity-filter";
+import { createSecurityEntityFilter } from "../security-entity-filter";
 
 type EditorView = "main" | "favorites" | "alerts";
 
@@ -60,18 +57,6 @@ export class SecurityEditorPane extends DirtyStateProviderMixin<SecurityFrontend
   @state()
   @consume({ context: registriesContext, subscribe: true })
   private _registries!: ContextType<typeof registriesContext>;
-
-  private _entityContext?: SecurityEntityContext;
-
-  protected willUpdate(changedProps: PropertyValues): void {
-    super.willUpdate(changedProps);
-    if (changedProps.has("_states") || changedProps.has("_registries")) {
-      this._entityContext = {
-        states: this._states,
-        ...this._registries,
-      };
-    }
-  }
 
   public connectedCallback(): void {
     super.connectedCallback();
@@ -210,7 +195,10 @@ export class SecurityEditorPane extends DirtyStateProviderMixin<SecurityFrontend
     this._updateDirtyState(this._state);
   }
 
-  private _entityFilter = createSecurityEntityFilter(() => this._entityContext);
+  private _entityFilter = createSecurityEntityFilter(
+    () => this._states,
+    () => this._registries
+  );
 
   private async _save(): Promise<void> {
     if (!this._state) return;

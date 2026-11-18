@@ -2,6 +2,7 @@ import type { HassEntity } from "home-assistant-js-websocket";
 import type { TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
+import { classMap } from "lit/directives/class-map";
 import { styleMap } from "lit/directives/style-map";
 import { consume } from "../../../common/decorators/consume";
 import "../../../components/ha-absolute-time";
@@ -33,6 +34,10 @@ export class HaMoreInfoStateHeader extends LitElement {
    * than how long ago it started.
    */
   @property({ attribute: false }) public detailOverride?: string[];
+
+  @property({ attribute: false }) public changedTextOverride?: string;
+
+  @property({ attribute: false }) public stateAccent = false;
 
   @state() private _absoluteTime = false;
 
@@ -70,7 +75,7 @@ export class HaMoreInfoStateHeader extends LitElement {
     const changed = this.changedOverride ?? this.stateObj.last_changed;
 
     return html`
-      <p class="state">
+      <p class=${classMap({ state: true, accent: this.stateAccent })}>
         ${
           this.dotColor
             ? html`<span
@@ -81,28 +86,39 @@ export class HaMoreInfoStateHeader extends LitElement {
         }${stateDisplay}
       </p>
       <div class="time-row">
-        <p
-          class="last-changed ${this.detailOverride ? "static" : ""}"
-          @click=${this._toggleAbsolute}
-        >
-          ${
-            // A span of its own has nothing to switch between: absolute is all
-            // it is.
-            this.detailOverride?.map(
-              (line) => html`<span class="detail-line">${line}</span>`
-            ) ??
-            (this._absoluteTime
-              ? html`<ha-absolute-time .datetime=${changed}></ha-absolute-time>`
-              : html`
-                  <ha-relative-time
-                    .datetime=${changed}
-                    capitalize
-                  ></ha-relative-time>
-                `)
-          }
-        </p>
+        ${
+          this.changedTextOverride
+            ? html`<p class="last-changed secondary" aria-hidden="true">
+                ${this.changedTextOverride}
+              </p>`
+            : html`<p
+                class="last-changed ${this.detailOverride ? "static" : ""}"
+                @click=${this._toggleAbsolute}
+              >
+                ${
+                  // A span of its own has nothing to switch between: absolute
+                  // is all it is.
+                  this.detailOverride?.map(
+                    (line) => html`<span class="detail-line">${line}</span>`
+                  ) ??
+                  (this._absoluteTime
+                    ? html`<ha-absolute-time
+                        .datetime=${changed}
+                      ></ha-absolute-time>`
+                    : html`
+                        <ha-relative-time
+                          .datetime=${changed}
+                          capitalize
+                        ></ha-relative-time>
+                      `)
+                }
+              </p>`
+        }
         <slot name="after-time"></slot>
       </div>
+      <span class="visually-hidden" aria-live="polite"
+        >${this.changedTextOverride ?? ""}</span
+      >
     `;
   }
 
@@ -171,6 +187,22 @@ export class HaMoreInfoStateHeader extends LitElement {
       cursor: pointer;
       user-select: none;
       -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+    }
+    .visually-hidden {
+      position: absolute;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      height: 1px;
+      width: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+    }
+    .state.accent {
+      color: var(--primary-color);
+    }
+    .last-changed.secondary {
+      cursor: default;
     }
   `;
 }

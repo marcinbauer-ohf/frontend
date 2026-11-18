@@ -225,7 +225,6 @@ class HaMoreInfoRelated extends LitElement {
           ${this._renderEntries(contextEntries)}
         </ha-grouped-list>
         <ha-related-items
-          .hass=${this.hass}
           .itemId=${this.params.entityId}
           .itemType=${itemType}
           .exclude=${itemType === "entity" ? CONTEXT_SECTIONS : undefined}

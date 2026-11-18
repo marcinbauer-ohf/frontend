@@ -1,4 +1,4 @@
-import { mdiCogOutline, mdiHistory } from "@mdi/js";
+import { mdiCogOutline, mdiDirections, mdiHistory } from "@mdi/js";
 import type {
   HassConfig,
   HassEntities,
@@ -36,6 +36,7 @@ import {
   HOME_ZONE_ENTITY_ID,
   zoneColor,
 } from "../../../../common/map/entity-map-colors";
+import { navigationUrl } from "../../../../common/map/navigation-url";
 import "../../../../components/ha-button";
 import "../../../../components/ha-icon-button";
 import "../../../../components/ha-icon-button-prev";
@@ -650,6 +651,18 @@ export class HuiMapOverview extends LitElement {
           </span>
         </ha-list-item-base>
         ${
+          getEntityLocation(stateObj, this._states)
+            ? html`<ha-list-item-button @click=${this._handleDirections}>
+                <ha-svg-icon slot="start" .path=${mdiDirections}></ha-svg-icon>
+                <span slot="headline">
+                  ${this._i18n.localize(
+                    "ui.panel.lovelace.cards.map.overview.directions"
+                  )}
+                </span>
+              </ha-list-item-button>`
+            : nothing
+        }
+        ${
           !__DEMO__ && this._user?.is_admin
             ? html`<ha-list-item-button @click=${this._handleSettings}>
                 <ha-svg-icon slot="start" .path=${mdiCogOutline}></ha-svg-icon>
@@ -855,6 +868,19 @@ export class HuiMapOverview extends LitElement {
     if (this.selected) {
       showMoreInfoDialog(this, { entityId: this.selected, view: "settings" });
     }
+  }
+
+  private _handleDirections() {
+    const stateObj = this.selected ? this._states[this.selected] : undefined;
+    const location = stateObj && getEntityLocation(stateObj, this._states);
+    if (!location) {
+      return;
+    }
+    window.open(
+      navigationUrl(location.latitude, location.longitude),
+      "_blank",
+      "noreferrer"
+    );
   }
 
   static styles = css`

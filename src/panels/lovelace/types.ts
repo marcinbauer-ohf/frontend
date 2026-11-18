@@ -3,7 +3,7 @@ import type { LocalizeFunc } from "../../common/translations/localize";
 import type { HaFormSchema } from "../../components/ha-form/types";
 import type { LovelaceBadgeConfig } from "../../data/lovelace/config/badge";
 import type { LovelaceCardConfig } from "../../data/lovelace/config/card";
-import type { LovelacePath } from "./editor/lovelace-path";
+import type { ConfigPath } from "../../common/util/config-path";
 import type {
   LovelaceConfig,
   LovelaceRawConfig,
@@ -44,6 +44,11 @@ export interface Lovelace {
   saveConfig: (newConfig: LovelaceRawConfig) => Promise<void>;
   deleteConfig: () => Promise<void>;
   showToast: (params: ShowToastParams) => void;
+  /**
+   * Shown inside another page, such as the demo embed, which owns the
+   * window's history and scroll position.
+   */
+  embedded?: boolean;
 }
 
 export interface LovelaceBadge extends HTMLElement {
@@ -79,7 +84,7 @@ export interface LovelaceCard extends HTMLElement {
    * Where the card sits in the dashboard config, when the layout around it
    * knows. A card needs it to ask for its own editor.
    */
-  path?: LovelacePath;
+  path?: ConfigPath;
   connectedWhileHidden?: boolean;
   getCardSize(): number | Promise<number>;
   /** @deprecated Use `getGridOptions` instead */

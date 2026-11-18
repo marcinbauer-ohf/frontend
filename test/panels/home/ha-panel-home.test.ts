@@ -11,11 +11,6 @@ type HomePanel = HTMLElement & {
   [key: string]: unknown;
 };
 
-for (const tag of ["ha-button", "ha-svg-icon"]) {
-  if (!customElements.get(tag)) {
-    customElements.define(tag, class extends HTMLElement {});
-  }
-}
 vi.stubGlobal(
   "ResizeObserver",
   class {
@@ -26,8 +21,6 @@ vi.stubGlobal(
     disconnect = vi.fn();
   }
 );
-vi.mock("../../../src/components/ha-button", () => ({}));
-vi.mock("../../../src/components/ha-svg-icon", () => ({}));
 vi.mock("../../../src/panels/lovelace/hui-root", () => ({}));
 vi.mock("../../../src/data/frontend", async (importOriginal) => {
   const actual = await importOriginal<object>();

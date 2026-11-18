@@ -11,7 +11,7 @@ import { computeCardSize } from "../common/compute-card-size";
 import { getConfigEntityId } from "../common/get-config-entity-id";
 import { tryCreateCardElement } from "../create-element/create-card-element";
 import { createErrorCardElement } from "../create-element/create-element-base";
-import type { LovelacePath } from "../editor/lovelace-path";
+import type { ConfigPath } from "../../../common/util/config-path";
 import type { LovelaceCard, LovelaceGridOptions } from "../types";
 
 declare global {
@@ -32,7 +32,7 @@ export class HuiCard extends ConditionalListenerMixin<LovelaceCardConfig>(
   @property({ attribute: false }) public layout?: string;
 
   /** Where this card sits in the dashboard config, when the layout knows. */
-  @property({ attribute: false }) public path?: LovelacePath;
+  @property({ attribute: false }) public path?: ConfigPath;
   private _hass?: HomeAssistant;
 
   public get hass(): HomeAssistant | undefined {

@@ -20,13 +20,13 @@ import { showToast } from "../../../../util/toast";
 import { stripDefaults } from "../../../../common/util/strip-defaults";
 import { getCardDefaultConfig } from "../get-card-default-config";
 import type { ConfigChangedEvent } from "../hui-element-editor";
-import type { LovelacePath } from "../lovelace-path";
+import type { ConfigPath } from "../../../../common/util/config-path";
 import type { GUIModeChangedEvent } from "../types";
 import { cardEditorHeading } from "./card-editor-heading";
 import type { HuiCardElementEditor } from "./hui-card-element-editor";
 
 export interface CardPaneEditorParams {
-  path: LovelacePath;
+  path: ConfigPath;
   cardConfig: LovelaceCardConfig;
   sectionConfig?: LovelaceSectionConfig;
 }

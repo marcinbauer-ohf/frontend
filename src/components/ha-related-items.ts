@@ -4,13 +4,17 @@ import {
   mdiTextureBox,
   mdiTransitConnectionVariant,
 } from "@mdi/js";
-import type { HassEntity } from "home-assistant-js-websocket";
+import type { ContextType } from "@lit/context";
+import type { HassEntities, HassEntity } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
+import { consume } from "../common/decorators/consume";
+import { preserveUnchangedEntityStatesRecord } from "../common/decorators/consume-context-entry";
+import { transform } from "../common/decorators/transform";
 import { fireEvent } from "../common/dom/fire_event";
 import type { HASSDomCurrentTargetEvent } from "../common/dom/fire_event";
 import { computeStateDomain } from "../common/entity/compute_state_domain";
@@ -20,9 +24,24 @@ import { UNAVAILABLE } from "../data/entity/entity";
 import { fetchBlueprints } from "../data/blueprint";
 import type { ConfigEntry } from "../data/config_entries";
 import { getConfigEntries } from "../data/config_entries";
+import {
+  apiContext,
+  areasContext,
+  brandsAccessTokenContext,
+  configContext,
+  devicesContext,
+  formattersContext,
+  internationalizationContext,
+  statesContext,
+  uiContext,
+} from "../data/context";
 import type { ItemType, RelatedResult } from "../data/search";
 import { findRelated } from "../data/search";
-import type { HomeAssistant } from "../types";
+import type {
+  HomeAssistantConfig,
+  HomeAssistantFormatters,
+  HomeAssistantUI,
+} from "../types";
 import { brandsUrl } from "../util/brands-url";
 import { renderAutomationStateIcon } from "./automation/render-automation-state-icon";
 import "./ha-icon";
@@ -33,10 +52,16 @@ import "./item/ha-list-item-button";
 import type { HaListItemButton } from "./item/ha-list-item-button";
 import "./list/ha-grouped-list";
 
+const ENTITY_SECTIONS = [
+  "entity",
+  "automation",
+  "script",
+  "group",
+  "scene",
+] as const satisfies (keyof RelatedResult)[];
+
 @customElement("ha-related-items")
 export class HaRelatedItems extends LitElement {
-  @property({ attribute: false }) public hass!: HomeAssistant;
-
   @property({ attribute: false }) public itemType!: ItemType;
 
   @property({ attribute: false }) public itemId!: string;
@@ -51,12 +76,74 @@ export class HaRelatedItems extends LitElement {
 
   @state() private _related?: RelatedResult;
 
+  @state()
+  @consume({ context: statesContext, subscribe: true })
+  @transform<HassEntities, HassEntities>({
+    transformer: function (this: HaRelatedItems, states) {
+      const related: HassEntities = {};
+      ENTITY_SECTIONS.forEach((section) => {
+        this._related?.[section]?.forEach((entityId) => {
+          if (states?.[entityId]) {
+            related[entityId] = states[entityId];
+          }
+        });
+      });
+      return preserveUnchangedEntityStatesRecord(this._states, related);
+    },
+    watch: ["_related"],
+  })
+  private _states: HassEntities = {};
+
+  @state()
+  @consume({ context: devicesContext, subscribe: true })
+  private _devices!: ContextType<typeof devicesContext>;
+
+  @state()
+  @consume({ context: areasContext, subscribe: true })
+  private _areas!: ContextType<typeof areasContext>;
+
+  @state()
+  @consume({ context: internationalizationContext, subscribe: true })
+  private _i18n!: ContextType<typeof internationalizationContext>;
+
+  @state()
+  @consume({ context: formattersContext, subscribe: true })
+  @transform<
+    HomeAssistantFormatters,
+    HomeAssistantFormatters["formatEntityName"]
+  >({
+    transformer: ({ formatEntityName }) => formatEntityName,
+  })
+  private _formatEntityName!: HomeAssistantFormatters["formatEntityName"];
+
+  @state()
+  @consume({ context: uiContext, subscribe: true })
+  @transform<HomeAssistantUI, boolean | undefined>({
+    transformer: ({ themes }) => themes?.darkMode,
+  })
+  private _darkMode?: boolean;
+
+  @state()
+  @consume({ context: configContext, subscribe: true })
+  @transform<HomeAssistantConfig, string>({
+    transformer: ({ auth }) => auth.data.hassUrl,
+  })
+  private _hassUrl!: string;
+
+  @state()
+  @consume({ context: brandsAccessTokenContext, subscribe: true })
+  // @ts-ignore re-render trigger only, its value is never read
+  private _brandsAccessToken?: string;
+
+  @consume({ context: apiContext, subscribe: true })
+  private _api!: ContextType<typeof apiContext>;
+
   private async _fetchConfigEntries() {
     if (this._entries) {
       return;
     }
-    this.hass.loadBackendTranslation("title");
-    this._entries = await getConfigEntries(this.hass);
+    this._i18n.loadBackendTranslation("title");
+    this._entries = await getConfigEntries(this._api);
   }
 
   private async _fetchBlueprints() {
@@ -64,8 +151,8 @@ export class HaRelatedItems extends LitElement {
       return;
     }
     const [automation, script] = await Promise.all([
-      fetchBlueprints(this.hass, "automation"),
-      fetchBlueprints(this.hass, "script"),
+      fetchBlueprints(this._api.callWS, "automation"),
+      fetchBlueprints(this._api.callWS, "script"),
     ]);
     this._blueprints = { automation, script };
   }
@@ -75,7 +162,9 @@ export class HaRelatedItems extends LitElement {
     if (
       changedProps.has("_related") ||
       changedProps.has("exclude") ||
-      changedProps.has("hass") ||
+      changedProps.has("_states") ||
+      changedProps.has("_devices") ||
+      changedProps.has("_areas") ||
       changedProps.has("_entries")
     ) {
       this.empty =
@@ -97,37 +186,33 @@ export class HaRelatedItems extends LitElement {
     }
   }
 
-  private _relatedEntities = memoizeOne((entityIds: string[]) =>
-    this._toEntities(entityIds)
+  private _relatedEntities = memoizeOne(
+    (
+      related: RelatedResult,
+      states: HassEntities,
+      formatEntityName: HomeAssistantFormatters["formatEntityName"],
+      language: string
+    ) => {
+      const toEntities = (entityIds: string[] = []) =>
+        entityIds
+          .map((entityId) => states[entityId])
+          .filter((entity): entity is HassEntity => entity !== undefined)
+          .sort((a, b) =>
+            caseInsensitiveStringCompare(
+              formatEntityName(a),
+              formatEntityName(b),
+              language
+            )
+          );
+      return {
+        entity: toEntities(related.entity),
+        automation: toEntities(related.automation),
+        script: toEntities(related.script),
+        group: toEntities(related.group),
+        scene: toEntities(related.scene),
+      };
+    }
   );
-
-  private _relatedAutomations = memoizeOne((automationEntityIds: string[]) =>
-    this._toEntities(automationEntityIds)
-  );
-
-  private _relatedScripts = memoizeOne((scriptEntityIds: string[]) =>
-    this._toEntities(scriptEntityIds)
-  );
-
-  private _relatedGroups = memoizeOne((groupEntityIds: string[]) =>
-    this._toEntities(groupEntityIds)
-  );
-
-  private _relatedScenes = memoizeOne((sceneEntityIds: string[]) =>
-    this._toEntities(sceneEntityIds)
-  );
-
-  private _toEntities = (entityIds: string[]) =>
-    entityIds
-      .map((entityId) => this.hass.states[entityId])
-      .filter((entity) => entity)
-      .sort((a, b) =>
-        caseInsensitiveStringCompare(
-          this.hass.formatEntityName(a),
-          this.hass.formatEntityName(b),
-          this.hass.language
-        )
-      );
 
   private _getConfigEntries = memoizeOne(
     (
@@ -167,14 +252,18 @@ export class HaRelatedItems extends LitElement {
     const section = <T>(key: keyof RelatedResult, items: T[] | undefined) =>
       !this._isExcluded(key) && items?.length ? items : undefined;
 
+    const entities = this._relatedEntities(
+      related,
+      this._states,
+      this._formatEntityName,
+      this._i18n.language
+    );
+
     return {
-      entity: section(
-        "entity",
-        related.entity && this._relatedEntities(related.entity)
-      ),
+      entity: section("entity", entities.entity),
       device: section(
         "device",
-        related.device?.filter((deviceId) => this.hass.devices[deviceId])
+        related.device?.filter((deviceId) => this._devices[deviceId])
       ),
       configEntries: section(
         "integration",
@@ -188,29 +277,17 @@ export class HaRelatedItems extends LitElement {
       ),
       area: section(
         "area",
-        related.area?.filter((areaId) => this.hass.areas[areaId])
+        related.area?.filter((areaId) => this._areas[areaId])
       ),
-      group: section(
-        "group",
-        related.group && this._relatedGroups(related.group)
-      ),
-      scene: section(
-        "scene",
-        related.scene && this._relatedScenes(related.scene)
-      ),
+      group: section("group", entities.group),
+      scene: section("scene", entities.scene),
       automationBlueprint: section(
         "automation_blueprint",
         related.automation_blueprint
       ),
-      automation: section(
-        "automation",
-        related.automation && this._relatedAutomations(related.automation)
-      ),
+      automation: section("automation", entities.automation),
       scriptBlueprint: section("script_blueprint", related.script_blueprint),
-      script: section(
-        "script",
-        related.script && this._relatedScripts(related.script)
-      ),
+      script: section("script", entities.script),
     };
   }
 
@@ -232,7 +309,7 @@ export class HaRelatedItems extends LitElement {
         sections.entity
           ? html`
               <ha-grouped-list
-                .header=${this.hass.localize(
+                .header=${this._i18n.localize(
                   referencedByRelations
                     ? "ui.components.related-items.related_entities"
                     : "ui.components.related-items.entity"
@@ -249,12 +326,12 @@ export class HaRelatedItems extends LitElement {
         sections.device
           ? html`
               <ha-grouped-list
-                .header=${this.hass.localize(
+                .header=${this._i18n.localize(
                   "ui.components.related-items.devices"
                 )}
               >
                 ${sections.device.map((relatedDeviceId) => {
-                  const device = this.hass.devices[relatedDeviceId];
+                  const device = this._devices[relatedDeviceId];
                   return html`
                     <ha-list-item-button
                       .href=${`/config/devices/device/${relatedDeviceId}`}
@@ -280,7 +357,7 @@ export class HaRelatedItems extends LitElement {
         sections.configEntries || sections.integrations
           ? html`
               <ha-grouped-list
-                .header=${this.hass.localize(
+                .header=${this._i18n.localize(
                   "ui.components.related-items.integrations"
                 )}
               >
@@ -288,7 +365,7 @@ export class HaRelatedItems extends LitElement {
                   (entry) => html`
                     <ha-list-item-button
                       .href=${`/config/integrations/integration/${entry.domain}#config_entry=${entry.entry_id}`}
-                      .headline=${`${this.hass.localize(
+                      .headline=${`${this._i18n.localize(
                         `component.${entry.domain}.title`
                       )}: ${entry.title}`}
                     >
@@ -301,7 +378,7 @@ export class HaRelatedItems extends LitElement {
                   (integration) => html`
                     <ha-list-item-button
                       .href=${`/config/integrations/integration/${integration}`}
-                      .headline=${this.hass.localize(
+                      .headline=${this._i18n.localize(
                         `component.${integration}.title`
                       )}
                     >
@@ -318,12 +395,12 @@ export class HaRelatedItems extends LitElement {
         sections.area
           ? html`
               <ha-grouped-list
-                .header=${this.hass.localize(
+                .header=${this._i18n.localize(
                   "ui.components.related-items.areas"
                 )}
               >
                 ${sections.area.map((relatedAreaId) => {
-                  const area = this.hass.areas[relatedAreaId];
+                  const area = this._areas[relatedAreaId];
                   return html`
                     <ha-list-item-button
                       .href=${`/config/areas/area/${relatedAreaId}`}
@@ -366,7 +443,7 @@ export class HaRelatedItems extends LitElement {
         sections.group
           ? html`
               <ha-grouped-list
-                .header=${this.hass.localize(
+                .header=${this._i18n.localize(
                   referencedByRelations
                     ? "ui.components.related-items.part_of_groups"
                     : "ui.components.related-items.group"
@@ -381,7 +458,7 @@ export class HaRelatedItems extends LitElement {
         sections.scene
           ? html`
               <ha-grouped-list
-                .header=${this.hass.localize(
+                .header=${this._i18n.localize(
                   referencedByRelations
                     ? "ui.components.related-items.used_in_scenes"
                     : "ui.components.related-items.scene"
@@ -396,7 +473,7 @@ export class HaRelatedItems extends LitElement {
         sections.automationBlueprint
           ? html`
               <ha-grouped-list
-                .header=${this.hass.localize(
+                .header=${this._i18n.localize(
                   "ui.components.related-items.based_on_blueprint"
                 )}
               >
@@ -411,7 +488,7 @@ export class HaRelatedItems extends LitElement {
         sections.automation
           ? html`
               <ha-grouped-list
-                .header=${this.hass.localize(
+                .header=${this._i18n.localize(
                   referencedByRelations
                     ? "ui.components.related-items.used_in_automations"
                     : "ui.components.related-items.automation"
@@ -428,7 +505,7 @@ export class HaRelatedItems extends LitElement {
         sections.scriptBlueprint
           ? html`
               <ha-grouped-list
-                .header=${this.hass.localize(
+                .header=${this._i18n.localize(
                   "ui.components.related-items.based_on_blueprint"
                 )}
               >
@@ -443,7 +520,7 @@ export class HaRelatedItems extends LitElement {
         sections.script
           ? html`
               <ha-grouped-list
-                .header=${this.hass.localize(
+                .header=${this._i18n.localize(
                   referencedByRelations
                     ? "ui.components.related-items.used_in_scripts"
                     : "ui.components.related-items.script"
@@ -468,12 +545,14 @@ export class HaRelatedItems extends LitElement {
     return html`
       <ha-list-item-button
         class=${classMap({ inactive: unavailable || disabled })}
-        .headline=${this.hass.formatEntityName(entity)}
+        .headline=${this._formatEntityName(entity)}
         .supportingText=${
           unavailable
-            ? this.hass.localize("state.default.unavailable")
+            ? this._i18n.localize("state.default.unavailable")
             : disabled
-              ? this.hass.localize("ui.panel.config.automation.picker.disabled")
+              ? this._i18n.localize(
+                  "ui.panel.config.automation.picker.disabled"
+                )
               : undefined
         }
         data-entity-id=${entity.entity_id}
@@ -508,9 +587,9 @@ export class HaRelatedItems extends LitElement {
           {
             domain,
             type: "icon",
-            darkOptimized: this.hass.themes?.darkMode,
+            darkOptimized: this._darkMode,
           },
-          this.hass.auth.data.hassUrl
+          this._hassUrl
         )}
       />
     `;
@@ -536,7 +615,7 @@ export class HaRelatedItems extends LitElement {
   }
 
   private async _findRelated() {
-    this._related = await findRelated(this.hass, this.itemType, this.itemId);
+    this._related = await findRelated(this._api, this.itemType, this.itemId);
     if (this._related.config_entry && !this._isExcluded("integration")) {
       this._fetchConfigEntries();
     }

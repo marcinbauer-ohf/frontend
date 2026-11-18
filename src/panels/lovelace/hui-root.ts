@@ -22,6 +22,7 @@ import { mainWindow } from "../../common/dom/get_main_window";
 import { ctrlOrCmdLabel } from "../../common/keyboard/ctrl-or-cmd";
 import { isSwipeLocked } from "../../common/dom/is-swipe-locked";
 import { computeRTLDirection } from "../../common/util/compute_rtl";
+import type { NavigateOptions } from "../../common/navigate";
 import { goBack, navigate, replaceCurrentUrl } from "../../common/navigate";
 import type { LocalizeKeys } from "../../common/translations/localize";
 import { constructUrlCurrentPath } from "../../common/url/construct-url";
@@ -74,6 +75,7 @@ import { showVoiceCommandDialog } from "../../dialogs/voice-command-dialog/show-
 import { haStyle } from "../../resources/styles";
 import { handleBackClick } from "../../layouts/back-navigation";
 import { ChildPanelReady } from "../../layouts/panel-ready";
+import { KeyboardShortcutMixin } from "../../mixins/keyboard-shortcut-mixin";
 import type { HomeAssistant, PanelInfo, ValueChangedEvent } from "../../types";
 import { documentationUrl } from "../../util/documentation-url";
 import { isMobileClient } from "../../util/is_mobile";
@@ -124,7 +126,7 @@ export interface EditAction {
 }
 
 @customElement("hui-root")
-class HUIRoot extends LitElement {
+class HUIRoot extends KeyboardShortcutMixin(LitElement) {
   @property({ attribute: false }) public panel?: PanelInfo;
 
   @property({ attribute: false }) public hass!: HomeAssistant;
@@ -161,6 +163,13 @@ class HUIRoot extends LitElement {
    * like the energy dashboard's date selector.
    */
   @property({ attribute: false }) public viewTabsEnd?: TemplateResult;
+
+  /**
+   * Inside another page, such as the demo embed. Views change through
+   * `view-navigate` instead of the page's URL, the page's scroll position and
+   * history stay untouched, and only the tabs and titles show in the toolbar.
+   */
+  @property({ type: Boolean, reflect: true }) public embedded = false;
 
   @state() private _curView?: number | "hass-unused-entities";
 
@@ -404,23 +413,26 @@ class HUIRoot extends LitElement {
           "map-editing": this._mapEditing,
           narrow: this.narrow,
           "has-tabs": showTabs || Boolean(tabsEnd),
+          embedded: this.embedded,
         })}
       >
         <div class="header">
           <slot name="toolbar">
             <div class="toolbar">
               ${
-                isSubview || this.backButton
-                  ? html`
-                      <ha-icon-button-arrow-prev
-                        slot="navigationIcon"
-                        .href=${this._backPath}
-                        @click=${this._handleBackClick}
-                      ></ha-icon-button-arrow-prev>
-                    `
-                  : html`
-                      <ha-menu-button slot="navigationIcon"></ha-menu-button>
-                    `
+                this.embedded && !isSubview
+                  ? nothing
+                  : isSubview || this.backButton
+                    ? html`
+                        <ha-icon-button-arrow-prev
+                          slot="navigationIcon"
+                          .href=${this.embedded ? undefined : this._backPath}
+                          @click=${this._handleBackClick}
+                        ></ha-icon-button-arrow-prev>
+                      `
+                    : html`
+                        <ha-menu-button slot="navigationIcon"></ha-menu-button>
+                      `
               }
               <div class="main-title">
                 ${
@@ -431,8 +443,18 @@ class HUIRoot extends LitElement {
                       : (views[0]?.title ?? dashboardTitle)
                 }
               </div>
-              ${this.narrow ? nothing : html`<ha-top-search></ha-top-search>`}
-              <div class="action-items">${this._renderActionItems()}</div>
+              ${
+                this.narrow || this.embedded
+                  ? nothing
+                  : html`<ha-top-search></ha-top-search>`
+              }
+              ${
+                this.embedded
+                  ? nothing
+                  : html`<div class="action-items">
+                      ${this._renderActionItems()}
+                    </div>`
+              }
             </div>
           </slot>
         </div>
@@ -554,6 +576,13 @@ class HUIRoot extends LitElement {
 
   private _handlePopState = () => {
     this._restoreScroll = true;
+    // Edit mode is not part of history. An entry left while editing keeps
+    // ?edit=1, so going back to it after leaving edit mode must not enter it
+    // again: sync the URL to the current mode instead.
+    if (!this.lovelace?.editMode && extractSearchParamsObject().edit === "1") {
+      this._clearParam("edit");
+      return;
+    }
     this._handleUrlChanged();
   };
 
@@ -572,17 +601,30 @@ class HUIRoot extends LitElement {
 
   protected firstUpdated(changedProps: PropertyValues<this>) {
     super.firstUpdated(changedProps);
+
+    // The page's URL and scroll position belong to the page around it, and
+    // the action items that need the resource mode aren't shown
+    if (this.embedded) {
+      return;
+    }
+
+    fetchLovelaceInfo(this.hass).then((info) => {
+      this._resourceMode = info.resource_mode;
+    });
+
     window.addEventListener("scroll", this._handleWindowScroll, {
       passive: true,
     });
     this._handleUrlChanged();
-    fetchLovelaceInfo(this.hass).then((info) => {
-      this._resourceMode = info.resource_mode;
-    });
   }
 
   public connectedCallback(): void {
     super.connectedCallback();
+
+    if (this.embedded) {
+      return;
+    }
+
     window.addEventListener("scroll", this._handleWindowScroll, {
       passive: true,
     });
@@ -594,6 +636,11 @@ class HUIRoot extends LitElement {
 
   public disconnectedCallback(): void {
     super.disconnectedCallback();
+
+    if (this.embedded) {
+      return;
+    }
+
     window.removeEventListener("scroll", this._handleWindowScroll);
     window.removeEventListener("popstate", this._handlePopState);
     window.removeEventListener("location-changed", this._locationChanged);
@@ -665,7 +712,12 @@ class HUIRoot extends LitElement {
 
       if (!viewPath && views.length) {
         newSelectView = views.findIndex(this._isVisible);
-        this._navigateToView(views[newSelectView].path || newSelectView, true);
+        // Filling in the default view keeps the entry as is: a dialog restored
+        // from the URL, like a more-info deep link, can already be open.
+        this._navigateToView(views[newSelectView].path || newSelectView, {
+          replace: true,
+          keepDialogs: true,
+        });
       } else if (viewPath === "hass-unused-entities") {
         newSelectView = "hass-unused-entities";
       } else if (viewPath) {
@@ -705,14 +757,15 @@ class HUIRoot extends LitElement {
           viewPath === "hass-unused-entities"
         ) {
           newSelectView = views.findIndex(this._isVisible);
-          this._navigateToView(
-            views[newSelectView].path || newSelectView,
-            true
-          );
+          this._navigateToView(views[newSelectView].path || newSelectView, {
+            replace: true,
+          });
         }
       }
 
-      if (huiView) {
+      // A view the new configuration no longer has keeps its old one until
+      // another view is selected, instead of failing to find its config
+      if (huiView && !(huiView.index >= this.config.views.length)) {
         huiView.lovelace = this.lovelace!;
       }
     }
@@ -720,7 +773,7 @@ class HUIRoot extends LitElement {
     if (newSelectView !== undefined) {
       // Will allow for ripples to start rendering
       afterNextRender(() => {
-        if (changedProperties.has("route")) {
+        if (changedProperties.has("route") && !this.embedded) {
           const position =
             (this._restoreScroll && this._viewScrollPositions[newSelectView]) ||
             0;
@@ -787,6 +840,23 @@ class HUIRoot extends LitElement {
   }
 
   private _handleBackClick(ev: MouseEvent): void {
+    if (this.embedded) {
+      // The view the subview goes back to, without the page's history
+      const views = this.lovelace?.config.views ?? [];
+
+      const curViewConfig =
+        this._curView === "hass-unused-entities" || this._curView === undefined
+          ? undefined
+          : views[this._curView];
+
+      fireEvent(this, "view-navigate", {
+        path: curViewConfig?.back_path ?? "",
+        back: true,
+      });
+
+      return;
+    }
+
     handleBackClick(ev, this._backPath, () => this._goBack());
   }
 
@@ -813,6 +883,10 @@ class HUIRoot extends LitElement {
   private _handleRawEditor = () => {
     this.lovelace!.enableFullEditMode();
   };
+
+  protected supportedShortcutsInInput(): SupportedShortcuts {
+    return this.lovelace?.editMode ? { Y: this._handleRawEditor } : {};
+  }
 
   private _handleManageDashboards = () => {
     navigate("/config/lovelace/dashboards");
@@ -1121,12 +1195,18 @@ class HUIRoot extends LitElement {
     }
   }
 
-  private _navigateToView(path: string | number, replace?: boolean) {
+  private _navigateToView(path: string | number, options?: NavigateOptions) {
+    if (this.embedded) {
+      fireEvent(this, "view-navigate", { path: String(path) });
+
+      return;
+    }
+
     const url = this._viewUrl(path);
 
     const currentUrl = `${location.pathname}${location.search}`;
     if (currentUrl !== url) {
-      navigate(url, { replace });
+      navigate(url, options);
     }
   }
 
@@ -1139,6 +1219,7 @@ class HUIRoot extends LitElement {
   private _handleViewTabNewTabClick(ev: MouseEvent): void {
     if (
       this._editMode ||
+      this.embedded ||
       (ev.button !== 1 && !ev.metaKey && !ev.ctrlKey && !ev.shiftKey)
     ) {
       return;
@@ -1206,7 +1287,7 @@ class HUIRoot extends LitElement {
         : undefined;
     const curIndex = current ? views.indexOf(current) : -1;
     if (current && !current.path) {
-      this._navigateToView(curIndex, true);
+      this._navigateToView(curIndex, { replace: true });
     }
     lovelace.saveConfig({ ...lovelace.config, views });
     if (current) {
@@ -1336,7 +1417,7 @@ class HUIRoot extends LitElement {
     this._closeCardEditor();
 
     // Save scroll position of current view
-    if (this._curView != null) {
+    if (this._curView != null && !this.embedded) {
       this._viewScrollPositions[this._curView] = window.scrollY;
     }
 
@@ -1639,6 +1720,19 @@ class HUIRoot extends LitElement {
               var(--view-container-padding-bottom, 0px)
           );
         }
+        /* At least as high as the element it is embedded in, rather than the
+           window, so that panel views fill it */
+        :host([embedded]),
+        .embedded {
+          display: block;
+          height: 100%;
+        }
+        /* The view background sits below the view, above the opaque
+           background of the element it is embedded in */
+        :host([embedded]) hui-view-container {
+          min-height: 100%;
+          isolation: isolate;
+        }
         .narrow hui-view-container {
           --view-container-inset-left: var(--safe-area-inset-left);
           padding-left: var(--view-container-inset-left);
@@ -1844,5 +1938,15 @@ class HUIRoot extends LitElement {
 declare global {
   interface HTMLElementTagNameMap {
     "hui-root": HUIRoot;
+  }
+
+  interface HASSDomEvents {
+    // A view to show, fired instead of navigating when embedded. `back` is
+    // set for the back button of a subview.
+    "view-navigate": { path: string; back?: boolean };
+  }
+
+  interface HTMLElementEventMap {
+    "view-navigate": HASSDomEvent<HASSDomEvents["view-navigate"]>;
   }
 }

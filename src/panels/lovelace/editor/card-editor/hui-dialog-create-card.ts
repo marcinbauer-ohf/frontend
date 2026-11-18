@@ -1,14 +1,14 @@
-import { mdiClose, mdiContentPaste } from "@mdi/js";
+import { mdiClose } from "@mdi/js";
 import type { CSSResultGroup } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { cache } from "lit/directives/cache";
+import type { ConfigPath } from "../../../../common/util/config-path";
 import { storage } from "../../../../common/decorators/storage";
 import { fireEvent } from "../../../../common/dom/fire_event";
-import "../../../../components/ha-button";
 import "../../../../components/ha-dialog";
 import "../../../../components/ha-dialog-header";
-import "../../../../components/ha-svg-icon";
+import "../../../../components/ha-paste-bar";
 import "../../../../components/ha-tab-group";
 import "../../../../components/ha-tab-group-tab";
 import type { LovelaceCardConfig } from "../../../../data/lovelace/config/card";
@@ -24,7 +24,6 @@ import type { HassDialog } from "../../../../dialogs/make-dialog-manager";
 import { haStyleDialog } from "../../../../resources/styles";
 import type { HomeAssistant } from "../../../../types";
 import { addCardAtPath, getCardSectionConfig } from "../config-util";
-import type { LovelacePath } from "../lovelace-path";
 import { getAtPath, getParentPath, getPathTarget } from "../lovelace-path";
 import "./hui-card-picker";
 import "./hui-suggestion-picker";
@@ -86,7 +85,7 @@ export class HuiCreateDialogCard
     return true;
   }
 
-  private _containerPath(path: LovelacePath): LovelacePath {
+  private _containerPath(path: ConfigPath): ConfigPath {
     const parentPath = getParentPath(path);
     return getPathTarget(path) === "slot"
       ? getParentPath(parentPath)
@@ -187,12 +186,12 @@ export class HuiCreateDialogCard
       return nothing;
     }
 
-    return html`<div class="paste-bar">
-      <ha-button appearance="filled" size="s" @click=${this._paste}>
-        <ha-svg-icon slot="start" .path=${mdiContentPaste}></ha-svg-icon>
-        ${this.hass.localize("ui.panel.lovelace.editor.cardpicker.paste_card")}
-      </ha-button>
-    </div>`;
+    return html`<ha-paste-bar
+      .label=${this.hass.localize(
+        "ui.panel.lovelace.editor.cardpicker.paste_card"
+      )}
+      @paste-element=${this._paste}
+    ></ha-paste-bar>`;
   }
 
   private _ignoreKeydown(ev: KeyboardEvent) {
@@ -222,24 +221,17 @@ export class HuiCreateDialogCard
         ha-dialog::part(body) {
           overflow: hidden;
         }
-        .paste-bar {
-          display: flex;
-          align-items: center;
-          padding: var(--ha-space-3);
-          border-top: var(--ha-border-width-sm) solid var(--divider-color);
-        }
-
         @media all and (max-width: 450px), all and (max-height: 500px) {
           ha-dialog {
             --safe-area-inset-bottom: 0px;
           }
-          .paste-bar {
+          ha-paste-bar {
             padding-bottom: max(
               var(--dialog-safe-area-inset-bottom),
               var(--ha-space-3)
             );
           }
-          hui-card-picker:not(:has(> .paste-bar)) {
+          hui-card-picker:not(:has(> ha-paste-bar)) {
             --ha-card-picker-content-padding-bottom: var(
               --dialog-safe-area-inset-bottom
             );
@@ -249,7 +241,7 @@ export class HuiCreateDialogCard
               --dialog-safe-area-inset-bottom
             );
           }
-          hui-suggestion-picker:not(:has(> .paste-bar)) {
+          hui-suggestion-picker:not(:has(> ha-paste-bar)) {
             --ha-suggestion-picker-tree-padding-bottom: var(
               --dialog-safe-area-inset-bottom
             );

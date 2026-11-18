@@ -190,7 +190,7 @@ class PartialPanelResolver extends HassRouterPage {
           const { pathname, search, hash } = mainWindow.location;
           navigate(
             `${pathname.replace(/^\/hacs/, "/marketplace")}${search}${hash}`,
-            { replace: true }
+            { replace: true, keepDialogs: true }
           );
           return undefined;
         }

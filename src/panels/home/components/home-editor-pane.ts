@@ -707,7 +707,7 @@ export class HomeEditorPane extends LitElement {
   }
 
   private _loadUsers() {
-    this._usersLoad = fetchUsers(this.hass);
+    this._usersLoad = fetchUsers(this.hass.callWS);
     this._usersLoad.then((users) => {
       this._users = users;
     });
@@ -899,9 +899,9 @@ export class HomeEditorPane extends LitElement {
     showFloorRegistryDetailDialog(this, {
       entry,
       createEntry: async (values, addedAreas) => {
-        const floor = await createFloorRegistryEntry(this.hass, values);
+        const floor = await createFloorRegistryEntry(this.hass.callWS, values);
         addedAreas.forEach((areaId) =>
-          updateAreaRegistryEntry(this.hass, areaId, {
+          updateAreaRegistryEntry(this.hass.callWS, areaId, {
             floor_id: floor.floor_id,
           })
         );
@@ -913,12 +913,12 @@ export class HomeEditorPane extends LitElement {
           values
         );
         addedAreas.forEach((areaId) =>
-          updateAreaRegistryEntry(this.hass, areaId, {
+          updateAreaRegistryEntry(this.hass.callWS, areaId, {
             floor_id: floor.floor_id,
           })
         );
         removedAreas.forEach((areaId) =>
-          updateAreaRegistryEntry(this.hass, areaId, { floor_id: null })
+          updateAreaRegistryEntry(this.hass.callWS, areaId, { floor_id: null })
         );
       },
     });
@@ -956,7 +956,7 @@ export class HomeEditorPane extends LitElement {
     showAreaRegistryDetailDialog(this, {
       entry: area,
       updateEntry: (values) =>
-        updateAreaRegistryEntry(this.hass, area.area_id, values),
+        updateAreaRegistryEntry(this.hass.callWS, area.area_id, values),
     });
   }
 
@@ -1025,7 +1025,9 @@ export class HomeEditorPane extends LitElement {
     });
     try {
       if ((this.hass.areas[areaId]?.floor_id ?? null) !== floorId) {
-        await updateAreaRegistryEntry(this.hass, areaId, { floor_id: floorId });
+        await updateAreaRegistryEntry(this.hass.callWS, areaId, {
+          floor_id: floorId,
+        });
       }
       await reorderAreaRegistryEntries(this.hass, order);
     } catch (err: any) {

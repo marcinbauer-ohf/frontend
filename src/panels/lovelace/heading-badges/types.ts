@@ -35,6 +35,7 @@ export interface AutomationCountHeadingBadgeConfig extends LovelaceHeadingBadgeC
 export interface ButtonHeadingBadgeConfig extends LovelaceHeadingBadgeConfig {
   type: "button";
   text?: string;
+  label?: string;
   icon?: string;
   color?: string;
   tap_action?: ActionConfig;

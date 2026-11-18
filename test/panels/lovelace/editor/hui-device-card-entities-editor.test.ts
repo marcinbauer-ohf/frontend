@@ -39,6 +39,7 @@ const fakeHass = (): HomeAssistant =>
         attributes: { friendly_name: "Desk lamp Light" },
       },
     },
+    callWS: vi.fn(),
     localize: (key: string, values?: Record<string, string>) =>
       values ? `${key}:${Object.values(values).join(",")}` : key,
     connection: {},

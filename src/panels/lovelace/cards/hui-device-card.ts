@@ -35,7 +35,7 @@ import { handleAction } from "../common/handle-action";
 import { hasAction } from "../common/has-action";
 import { showMoreInfoDialog } from "../../../dialogs/more-info/show-ha-more-info-dialog";
 import { createEntityNotFoundWarning } from "../components/hui-warning";
-import type { LovelacePath } from "../editor/lovelace-path";
+import type { ConfigPath } from "../../../common/util/config-path";
 import type { LovelaceCard, LovelaceCardEditor } from "../types";
 import { getEntityDefaultTileIconAction } from "./tile/tile-card-helpers";
 import {
@@ -158,7 +158,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
    * Where this card sits in the dashboard config, handed over by the layout.
    * Without it the card cannot point anyone at its own editor.
    */
-  @property({ attribute: false }) public path?: LovelacePath;
+  @property({ attribute: false }) public path?: ConfigPath;
 
   @state() private _config?: DeviceCardConfig;
 
@@ -507,10 +507,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
                   toggleable
                     ? nothing
                     : html`<span class="row-value">
-                        <state-display
-                          .hass=${this.hass}
-                          .stateObj=${stateObj}
-                        ></state-display>
+                        <state-display .stateObj=${stateObj}></state-display>
                       </span>`
                 }
                 ${this._renderControl(stateObj)}
@@ -564,10 +561,7 @@ export class HuiDeviceCard extends LitElement implements LovelaceCard {
     if (!problem || problem === "unknown") {
       return html`
         <p class="state" aria-live="polite">
-          <state-display
-            .hass=${this.hass}
-            .stateObj=${stateObj}
-          ></state-display>
+          <state-display .stateObj=${stateObj}></state-display>
         </p>
       `;
     }

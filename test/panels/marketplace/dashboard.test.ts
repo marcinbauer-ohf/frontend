@@ -1,4 +1,4 @@
-import { render } from "lit";
+import { render, type TemplateResult } from "lit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { MockHomeAssistant } from "../../../src/fake_data/provide_hass";
 import { provideHass } from "../../../src/fake_data/provide_hass";
@@ -99,23 +99,24 @@ const openDashboard = async (
 
 afterEach(() => document.body.replaceChildren());
 
-it("shows its tabs from the translations of the Marketplace itself", async () => {
+it("shows its tabs as segments, from the translations of the Marketplace itself", async () => {
   const dashboard = await openDashboard();
   const table = dashboard.shadowRoot!.querySelector(
     "hass-tabs-subpage-data-table"
-  ) as HTMLElement & { tabs: { translationKey: string; path: string }[] };
+  ) as HTMLElement & {
+    segments: { label: string; value: string }[];
+    activeSegment: string;
+  };
 
   // A direct visit loads the Marketplace translations, not those of Settings
-  expect(table.tabs.map((tab) => [tab.translationKey, tab.path])).toEqual([
+  expect(
+    table.segments.map((segment) => [segment.label, segment.value])
+  ).toEqual([
     ["ui.panel.marketplace.tabs.discover", "/marketplace/discover"],
     ["ui.panel.marketplace.tabs.browse", "/marketplace/browse"],
     ["ui.panel.marketplace.tabs.installed", "/marketplace/installed"],
   ]);
-  expect(
-    (table.tabs as unknown as { iconPath?: string }[]).every(
-      (tab) => tab.iconPath
-    )
-  ).toBe(true);
+  expect(table.activeSegment).toBe("/marketplace/browse");
 });
 
 it("counts what the search looks through, on the tab it is on", async () => {
@@ -239,13 +240,9 @@ it("lists only what is installed on the installed tab", async () => {
 });
 
 it.each([
-  {
-    name: "counts the updates",
-    updates: 2,
-    badge: "ui.panel.marketplace.tabs.updates",
-  },
-  { name: "shows nothing without updates", updates: 0, badge: undefined },
-])("$name on the installed tab", async ({ updates, badge }) => {
+  { name: "counts the updates", updates: 2 },
+  { name: "shows nothing without updates", updates: 0 },
+])("$name on the installed tab", async ({ updates }) => {
   const repositories = Array.from({ length: 3 }, (_, index) => ({
     id: String(index),
     name: `Repository ${index}`,
@@ -256,22 +253,24 @@ it.each([
   const dashboard = await openDashboard(repositories);
   const table = dashboard.shadowRoot!.querySelector(
     "hass-tabs-subpage-data-table"
-  ) as HTMLElement & { tabs: { badge?: string }[] };
+  ) as HTMLElement & { segments: { count?: number }[] };
 
-  expect(table.tabs[2].badge).toBe(badge);
+  // The toolbar shows a count only when there is one
+  expect(table.segments[2].count).toBe(updates);
 });
 
 it("shows what to discover on the discover tab, not the table", async () => {
   const dashboard = await openDashboard([], "discover");
+  const table = dashboard.shadowRoot!.querySelector(
+    "hass-tabs-subpage-data-table"
+  ) as unknown as HTMLElement & { renderBody: () => unknown };
 
-  expect(
-    dashboard.shadowRoot!.querySelector("hass-tabs-subpage-data-table")
-  ).toBeNull();
-  expect(
-    dashboard.shadowRoot!.querySelector(
-      "hass-tabs-subpage ha-marketplace-discover"
-    )
-  ).not.toBeNull();
+  // The same layout, with its sections as the body and nothing to search
+  expect(table.hasAttribute("no-tools")).toBe(true);
+  expect(table.hasAttribute("no-search")).toBe(true);
+  const body = document.createElement("div");
+  render(table.renderBody() as TemplateResult, body);
+  expect(body.querySelector("ha-marketplace-discover")).not.toBeNull();
 });
 
 it("browses the way the link says", async () => {

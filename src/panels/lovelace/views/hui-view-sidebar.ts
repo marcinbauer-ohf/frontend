@@ -2,12 +2,16 @@ import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators";
 import { repeat } from "lit/directives/repeat";
+import type { ConfigPath } from "../../../common/util/config-path";
 import { fireEvent } from "../../../common/dom/fire_event";
 import type { LovelaceViewSidebarConfig } from "../../../data/lovelace/config/view";
 import { ConditionalListenerMixin } from "../../../mixins/conditional-listener-mixin";
 import type { HomeAssistant } from "../../../types";
 import "../sections/hui-section";
-import type { LovelacePath } from "../editor/lovelace-path";
+import {
+  renderSectionContainer,
+  sectionContainerStyles,
+} from "../sections/section-container";
 import type { Lovelace } from "../types";
 import type { LovelaceSectionConfig } from "../../../data/lovelace/config/section";
 
@@ -23,7 +27,7 @@ export class HuiViewSidebar extends ConditionalListenerMixin<LovelaceViewSidebar
 
   @property({ attribute: false }) public config?: LovelaceViewSidebarConfig;
 
-  @property({ attribute: false }) public path!: LovelacePath;
+  @property({ attribute: false }) public path!: ConfigPath;
 
   private _visible = true;
 
@@ -64,27 +68,34 @@ export class HuiViewSidebar extends ConditionalListenerMixin<LovelaceViewSidebar
         ${repeat(
           this.config?.sections ?? [],
           (section) => this._getSectionKey(section),
-          (section, idx) => html`
-            <hui-section
-              .config=${section}
-              .hass=${this.hass}
-              .preview=${this.lovelace.editMode}
-              .path=${[...this.path, "sidebar", "sections", idx]}
-            ></hui-section>
-          `
+          (section, idx) => {
+            const sectionPath = [...this.path, "sidebar", "sections", idx];
+            const sectionElement = html`
+              <hui-section
+                .config=${section}
+                .hass=${this.hass}
+                .preview=${this.lovelace.editMode}
+                .path=${sectionPath}
+              ></hui-section>
+            `;
+            return renderSectionContainer(this.hass, section, sectionElement);
+          }
         )}
       </div>
     `;
   }
 
-  static styles = css`
-    .container {
-      display: flex;
-      flex-direction: column;
-      gap: var(--row-gap, 8px);
-      width: 100%;
-    }
-  `;
+  static styles = [
+    sectionContainerStyles,
+    css`
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: var(--row-gap, 8px);
+        width: 100%;
+      }
+    `,
+  ];
 }
 
 declare global {

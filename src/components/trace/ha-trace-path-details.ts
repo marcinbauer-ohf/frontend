@@ -1,5 +1,4 @@
 import { ContextProvider } from "@lit/context";
-import type { HassServiceTarget } from "home-assistant-js-websocket";
 import { mdiCheckCircle, mdiCloseCircle, mdiMinusCircle } from "@mdi/js";
 import { dump } from "js-yaml";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
@@ -38,8 +37,6 @@ import {
 } from "../../data/trace";
 import { getTraceTriggers } from "../../data/trace-tree";
 import type { TriggerDescriptions } from "../../data/trigger";
-import { getDeviceTarget } from "../../panels/config/automation/target/get_device_target";
-import { getEntityTarget } from "../../panels/config/automation/target/get_entity_target";
 import "../../panels/config/automation/target/ha-automation-row-targets";
 import {
   automationTriggerContext,
@@ -57,6 +54,7 @@ import "../ha-expansion-panel";
 import "../ha-svg-icon";
 import "../item/ha-list-item-value";
 import "../list/ha-grouped-list";
+import { getTraceNodeTarget } from "./get_trace_node_target";
 import "./hat-logbook-note";
 import { childTraceLinkStyles, renderChildTraceLink } from "./trace-child-link";
 import type { NodeInfo } from "./hat-script-graph";
@@ -151,7 +149,7 @@ export class HaTracePathDetails extends LitElement {
     initialValue: {
       options: [],
       showIndices: false,
-      select: () => undefined,
+      select: () => true,
       fixDuplicateIds: async () => undefined,
       updateTriggerId: () => false,
     },
@@ -489,16 +487,21 @@ export class HaTracePathDetails extends LitElement {
     type: NodeInfo["type"],
     size: "s" | "m" = "m"
   ) {
-    const target = this._getTarget(config, type);
+    const target = getTraceNodeTarget(config, type);
     if (!target) {
       return nothing;
     }
     const targetSpec = this._getTargetSelector(config, type);
+    // Triggers and conditions, including a condition action, don't expand
+    // the groups their targets name.
+    const expandGroup =
+      type !== "trigger" && type !== "condition" && !("condition" in config);
     return html`<div class="targets">
       <ha-automation-row-targets
         .target=${target}
         .selector=${targetSpec ? { target: targetSpec } : undefined}
         .size=${size}
+        .expandGroup=${expandGroup}
         interactive
       ></ha-automation-row-targets>
     </div>`;
@@ -517,31 +520,6 @@ export class HaTracePathDetails extends LitElement {
     if (type === "action" && typeof config.action === "string") {
       const [domain, service] = config.action.split(".", 2);
       return this.hass.services?.[domain]?.[service]?.target;
-    }
-    return undefined;
-  }
-
-  private _getTarget(
-    config: any,
-    type: NodeInfo["type"]
-  ): HassServiceTarget | undefined {
-    if (config.target) {
-      return config.target;
-    }
-    if (type === "trigger" || type === "condition") {
-      const element = type === "trigger" ? config.trigger : config.condition;
-      if (element === "state" || element === "numeric_state") {
-        return getEntityTarget(config.entity_id);
-      }
-      if (element === "device") {
-        return getDeviceTarget(config.device_id);
-      }
-      return undefined;
-    }
-    if (type === "action") {
-      return config.entity_id
-        ? getEntityTarget(config.entity_id)
-        : getDeviceTarget(config.device_id);
     }
     return undefined;
   }

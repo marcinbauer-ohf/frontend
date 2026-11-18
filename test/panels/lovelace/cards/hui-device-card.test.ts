@@ -1,9 +1,18 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { ContextProvider } from "@lit/context";
+import {
+  formattersContext,
+  internationalizationContext,
+} from "../../../../src/data/context";
 import "../../../../src/panels/lovelace/cards/hui-device-card";
 import "../../../../src/panels/lovelace/cards/hui-card";
 import type { HuiDeviceCard } from "../../../../src/panels/lovelace/cards/hui-device-card";
 import type { DeviceCardConfig } from "../../../../src/panels/lovelace/cards/types";
-import type { HomeAssistant } from "../../../../src/types";
+import type {
+  HomeAssistant,
+  HomeAssistantFormatters,
+  HomeAssistantInternationalization,
+} from "../../../../src/types";
 
 // Hoisted above the imports at runtime: bundler-defined globals the card's
 // import graph reads at eval (setup.ts already provides __DEMO__/__DEV__).
@@ -72,7 +81,21 @@ const renderCard = async (hass: FakeHass) => {
   const card = document.createElement("hui-device-card") as HuiDeviceCard;
   card.setConfig({ type: "device", device: DEVICE } as DeviceCardConfig);
   card.hass = hass;
-  document.body.append(card);
+  // The state line reads its formatters from context, as in the app
+  const host = document.createElement("div");
+  new ContextProvider(host, {
+    context: formattersContext,
+    initialValue: hass as unknown as HomeAssistantFormatters,
+  });
+  new ContextProvider(host, {
+    context: internationalizationContext,
+    initialValue: {
+      locale: { language: "en" },
+      localize: (key: string) => key,
+    } as unknown as HomeAssistantInternationalization,
+  });
+  host.append(card);
+  document.body.append(host);
   await card.updateComplete;
   // The state line is rendered by a nested element with its own update cycle.
   await (

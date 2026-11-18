@@ -155,7 +155,7 @@ export class HaAddMenu extends LitElement {
         action: () =>
           showLabelDetailDialog(this, {
             createEntry: (values) =>
-              createLabelRegistryEntry(this.hass, values),
+              createLabelRegistryEntry(this.hass.callWS, values),
           }),
       },
       {
@@ -318,9 +318,9 @@ export class HaAddMenu extends LitElement {
   private _createFloor = () => {
     showFloorRegistryDetailDialog(this, {
       createEntry: async (values, addedAreas) => {
-        const floor = await createFloorRegistryEntry(this.hass, values);
+        const floor = await createFloorRegistryEntry(this.hass.callWS, values);
         addedAreas.forEach((areaId) =>
-          updateAreaRegistryEntry(this.hass, areaId, {
+          updateAreaRegistryEntry(this.hass.callWS, areaId, {
             floor_id: floor.floor_id,
           })
         );

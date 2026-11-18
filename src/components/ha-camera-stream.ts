@@ -1,24 +1,30 @@
 import type { ContextType } from "@lit/context";
+import { STATE_RUNNING } from "home-assistant-js-websocket";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
-import { customElement, property, state } from "lit/decorators";
+import { customElement, property, query, state } from "lit/decorators";
 import { repeat } from "lit/directives/repeat";
 import { styleMap } from "lit/directives/style-map";
-import { STATE_RUNNING } from "home-assistant-js-websocket";
 import memoizeOne from "memoize-one";
 import { consume } from "../common/decorators/consume";
-import { fireEvent } from "../common/dom/fire_event";
+import { fireEvent, type HASSDomEvent } from "../common/dom/fire_event";
 import { supportsFeature } from "../common/entity/supports-feature";
 import {
   CameraEntityFeature,
-  type CameraCapabilities,
-  type CameraEntity,
   computeMJPEGStreamUrl,
   fetchCameraCapabilities,
   fetchThumbnailUrlWithCache,
   STREAM_TYPE_HLS,
   STREAM_TYPE_WEB_RTC,
-  type StreamType,
+  type CameraCapabilities,
+  type CameraEntity,
 } from "../data/camera";
+import {
+  MJPEG_STREAM,
+  selectCameraStreams,
+  type CameraStream,
+  type CameraStreamTracks,
+  type CameraStreamType,
+} from "../data/camera-streams";
 import {
   apiContext,
   configContext,
@@ -27,13 +33,9 @@ import {
 } from "../data/context";
 import "./ha-hls-player";
 import "./ha-web-rtc-player";
+import type { HaWebRtcPlayer } from "./ha-web-rtc-player";
 
-const MJPEG_STREAM = "mjpeg";
-
-interface Stream {
-  type: StreamType | typeof MJPEG_STREAM;
-  visible: boolean;
-}
+export type { CameraStreamType } from "../data/camera-streams";
 
 @customElement("ha-camera-stream")
 export class HaCameraStream extends LitElement {
@@ -75,9 +77,15 @@ export class HaCameraStream extends LitElement {
 
   @state() private _capabilities?: CameraCapabilities;
 
-  @state() private _hlsStreams?: { hasAudio: boolean; hasVideo: boolean };
+  @state() private _hlsStreams?: CameraStreamTracks;
 
-  @state() private _webRtcStreams?: { hasAudio: boolean; hasVideo: boolean };
+  @state() private _webRtcStreams?: CameraStreamTracks;
+
+  @query("ha-web-rtc-player") private _webRtcPlayer?: HaWebRtcPlayer;
+
+  private _visibleStreamType?: CameraStreamType;
+
+  private _capabilitiesRequest = 0;
 
   private _thumbnailApi = memoizeOne(
     (
@@ -112,9 +120,23 @@ export class HaCameraStream extends LitElement {
     }
   }
 
+  /** The microphone track sent to the camera, only on WebRTC streams. */
+  public get microphoneTrack(): MediaStreamTrack | undefined {
+    return this._webRtcPlayer?.microphoneTrack;
+  }
+
+  /** Toggles sending the microphone to the camera, only on WebRTC streams. */
+  public async toggleMicrophone() {
+    await this._webRtcPlayer?.toggleMicrophone();
+  }
+
   public connectedCallback() {
     super.connectedCallback();
     this._connected = true;
+    if (this.hasUpdated) {
+      // The players start again when reattached, so their results do as well
+      this._resetStreams();
+    }
   }
 
   public disconnectedCallback() {
@@ -122,16 +144,26 @@ export class HaCameraStream extends LitElement {
     this._connected = false;
   }
 
+  protected updated(changedProps: PropertyValues<this>): void {
+    super.updated(changedProps);
+    if ((changedProps as PropertyValues).has("_capabilities")) {
+      fireEvent(this, "camera-capabilities-changed", {
+        capabilities: this._capabilities,
+      });
+    }
+    const streams = this._currentStreams();
+    const visibleStreamType = streams.find((stream) => stream.visible)?.type;
+    if (visibleStreamType !== this._visibleStreamType) {
+      this._visibleStreamType = visibleStreamType;
+      fireEvent(this, "stream-type-changed", { type: visibleStreamType });
+    }
+  }
+
   protected render() {
     if (!this.stateObj) {
       return nothing;
     }
-    const streams = this._streams(
-      this._capabilities?.frontend_stream_types,
-      this._hlsStreams,
-      this._webRtcStreams,
-      this.muted
-    );
+    const streams = this._currentStreams();
     return html`${repeat(
       streams,
       (stream) => stream.type + this.stateObj!.entity_id,
@@ -139,7 +171,7 @@ export class HaCameraStream extends LitElement {
     )}`;
   }
 
-  private _renderStream(stream: Stream) {
+  private _renderStream(stream: CameraStream) {
     if (!this.stateObj) {
       return nothing;
     }
@@ -197,18 +229,38 @@ export class HaCameraStream extends LitElement {
     return nothing;
   }
 
+  private _currentStreams() {
+    return this._streams(
+      this._capabilities?.frontend_stream_types,
+      this._hlsStreams,
+      this._webRtcStreams
+    );
+  }
+
   private async _getCapabilities() {
     this._capabilities = undefined;
-    this._hlsStreams = undefined;
-    this._webRtcStreams = undefined;
+    this._resetStreams();
+    const request = ++this._capabilitiesRequest;
     if (!supportsFeature(this.stateObj!, CameraEntityFeature.STREAM)) {
-      this._capabilities = { frontend_stream_types: [] };
+      this._capabilities = {
+        frontend_stream_types: [],
+        two_way_audio: false,
+      };
       return;
     }
-    this._capabilities = await fetchCameraCapabilities(
+    const capabilities = await fetchCameraCapabilities(
       this._api,
       this.stateObj!.entity_id
     );
+    if (request !== this._capabilitiesRequest) {
+      return;
+    }
+    this._capabilities = capabilities;
+  }
+
+  private _resetStreams() {
+    this._hlsStreams = undefined;
+    this._webRtcStreams = undefined;
   }
 
   private async _getPosterUrl(): Promise<void> {
@@ -229,89 +281,38 @@ export class HaCameraStream extends LitElement {
     fireEvent(this, "load");
   }
 
-  private _handleHlsStreams(ev: CustomEvent) {
+  private _handleHlsStreams(ev: HASSDomEvent<HASSDomEvents["streams"]>) {
     this._hlsStreams = ev.detail;
   }
 
-  private _handleWebRtcStreams(ev: CustomEvent) {
+  private _handleWebRtcStreams(ev: HASSDomEvent<HASSDomEvents["streams"]>) {
+    if (
+      !ev.detail.hasVideo &&
+      !ev.detail.hasAudio &&
+      this._capabilities?.frontend_stream_types.length === 1 &&
+      typeof RTCPeerConnection !== "undefined"
+    ) {
+      // Without another stream type, keep the player to show why it failed.
+      // Only a browser without WebRTC falls back to MJPEG.
+      return;
+    }
     this._webRtcStreams = ev.detail;
   }
 
   private _streams = memoizeOne(
     (
-      supportedTypes?: StreamType[],
-      hlsStreams?: { hasAudio: boolean; hasVideo: boolean },
-      webRtcStreams?: { hasAudio: boolean; hasVideo: boolean },
-      muted?: boolean
-    ): Stream[] => {
+      supportedTypes?: CameraCapabilities["frontend_stream_types"],
+      hlsStreams?: CameraStreamTracks,
+      webRtcStreams?: CameraStreamTracks
+    ): CameraStream[] => {
       if (__DEMO__) {
         return [{ type: MJPEG_STREAM, visible: true }];
       }
-      if (!supportedTypes) {
-        return [];
-      }
-      if (supportedTypes.length === 0) {
-        // doesn't support any stream type, fallback to mjpeg
-        return [{ type: MJPEG_STREAM, visible: true }];
-      }
-      if (supportedTypes.length === 1) {
-        // only 1 stream type, no need to choose
-        if (
-          (supportedTypes[0] === STREAM_TYPE_HLS &&
-            hlsStreams?.hasVideo === false) ||
-          (supportedTypes[0] === STREAM_TYPE_WEB_RTC &&
-            webRtcStreams?.hasVideo === false)
-        ) {
-          // stream failed to load, fallback to mjpeg
-          return [{ type: MJPEG_STREAM, visible: true }];
-        }
-        return [{ type: supportedTypes[0], visible: true }];
-      }
-      if (hlsStreams && webRtcStreams) {
-        // fully loaded
-        if (
-          hlsStreams.hasVideo &&
-          hlsStreams.hasAudio &&
-          !webRtcStreams.hasAudio &&
-          !muted
-        ) {
-          // webRTC stream is missing audio and audio is not muted, use HLS
-          return [{ type: STREAM_TYPE_HLS, visible: true }];
-        }
-        if (webRtcStreams.hasVideo) {
-          return [{ type: STREAM_TYPE_WEB_RTC, visible: true }];
-        }
-        // both streams failed to load, fallback to mjpeg
-        return [{ type: MJPEG_STREAM, visible: true }];
-      }
-
-      if (hlsStreams?.hasVideo !== webRtcStreams?.hasVideo) {
-        // one of the two streams is loaded, or errored
-        // choose the one that has video or is still loading
-        if (hlsStreams?.hasVideo) {
-          return [
-            { type: STREAM_TYPE_HLS, visible: true },
-            { type: STREAM_TYPE_WEB_RTC, visible: false },
-          ];
-        }
-        if (hlsStreams?.hasVideo === false) {
-          return [{ type: STREAM_TYPE_WEB_RTC, visible: true }];
-        }
-        if (webRtcStreams?.hasVideo) {
-          return [
-            { type: STREAM_TYPE_WEB_RTC, visible: true },
-            { type: STREAM_TYPE_HLS, visible: false },
-          ];
-        }
-        if (webRtcStreams?.hasVideo === false) {
-          return [{ type: STREAM_TYPE_HLS, visible: true }];
-        }
-      }
-
-      return [
-        { type: STREAM_TYPE_HLS, visible: true },
-        { type: STREAM_TYPE_WEB_RTC, visible: false },
-      ];
+      return selectCameraStreams({
+        supportedTypes,
+        hlsStreams,
+        webRtcStreams,
+      });
     }
   );
 
@@ -347,6 +348,8 @@ declare global {
   }
   interface HASSDomEvents {
     load: undefined;
+    "stream-type-changed": { type?: CameraStreamType };
+    "camera-capabilities-changed": { capabilities?: CameraCapabilities };
     streams: {
       hasAudio: boolean;
       hasVideo: boolean;

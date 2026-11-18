@@ -18,11 +18,14 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import memoizeOne from "memoize-one";
+import { DataTableSettingsController } from "../../../common/controllers/data-table-settings-controller";
+import { QueryParamsController } from "../../../common/controllers/query-params-controller";
 import { consume } from "../../../common/decorators/consume";
 import { storage } from "../../../common/decorators/storage";
 import type { HASSDomEvent } from "../../../common/dom/fire_event";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { withViewTransition } from "../../../common/util/view-transition";
+import { computeAreaName } from "../../../common/entity/compute_area_name";
 import { computeDeviceNameDisplay } from "../../../common/entity/compute_device_name";
 import { computeEntityEntryName } from "../../../common/entity/compute_entity_name_display";
 import { computeFloorName } from "../../../common/entity/compute_floor_name";
@@ -33,12 +36,15 @@ import {
   PROTOCOL_INTEGRATIONS,
   protocolIntegrationPicked,
 } from "../../../common/integrations/protocolIntegrationPicked";
-import {
-  getHistoryState,
-  navigate,
-  updateHistoryState,
-} from "../../../common/navigate";
+import { navigate } from "../../../common/navigate";
 import type { LocalizeFunc } from "../../../common/translations/localize";
+import {
+  devicesFilterQueryParamConfig,
+  devicesFilterQueryParams,
+  devicesFilterQueryString,
+  devicesLinkFromUrl,
+} from "../../../common/url/devices-query-params";
+import { deepEqual } from "../../../common/util/deep-equal";
 import {
   hasRejectedItems,
   rejectedItems,
@@ -48,13 +54,10 @@ import type {
   DataTableColumnContainer,
   RowClickedEvent,
   SelectionChangedEvent,
-  SortingChangedEvent,
 } from "../../../components/data-table/ha-data-table";
 import "../../../components/data-table/ha-data-table-labels";
 import "../../../components/entity/ha-battery-icon";
 import "../../../components/ha-alert";
-import "../../../components/skeleton/ha-skeleton-icon";
-import "../../../components/skeleton/ha-skeleton-text";
 import "../../../components/ha-button";
 import "../../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
@@ -66,6 +69,8 @@ import "../../../components/ha-filter-states";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-state-icon";
 import "../../../components/item/ha-row-item";
+import "../../../components/skeleton/ha-skeleton-icon";
+import "../../../components/skeleton/ha-skeleton-text";
 import { createAreaRegistryEntry } from "../../../data/area/area_registry";
 import type { ConfigEntry, SubEntry } from "../../../data/config_entries";
 import { getSubEntries, sortConfigEntries } from "../../../data/config_entries";
@@ -75,7 +80,6 @@ import {
   deserializeFilters,
   serializeFilters,
 } from "../../../data/data_table_filters";
-import { computeDeviceAreaLabel } from "../../../data/device/device_picker";
 import type {
   DeviceEntityLookup,
   DeviceRegistryEntry,
@@ -194,8 +198,6 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
 
   @property({ attribute: false }) public route!: Route;
 
-  @state() private _searchParms = new URLSearchParams(window.location.search);
-
   @state() private _selected: string[] = [];
 
   private _selectedCanDelete: string[] = [];
@@ -203,14 +205,11 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
   @query("hass-tabs-subpage-data-table", true)
   private _dataTable!: HaTabsSubpageDataTable;
 
-  @state()
-  @storage({
-    storage: "sessionStorage",
-    key: "devices-table-search",
-    state: true,
-    subscribe: false,
-  })
-  private _filter: string = getHistoryState()?.filter || "";
+  private _tableSettings = new DataTableSettingsController(this, {
+    search: "devices-table-search",
+    sorting: "devices-table-sort",
+    grouping: "devices-table-grouping",
+  });
 
   @state()
   private _filters: DataTableFilters = {};
@@ -276,12 +275,6 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
     ];
   }
 
-  @storage({ key: "devices-table-sort", state: false, subscribe: false })
-  private _activeSorting?: SortingChangedEvent;
-
-  @storage({ key: "devices-table-grouping", state: false, subscribe: false })
-  private _activeGrouping?: string;
-
   @storage({ key: "devices-table-collapsed", state: false, subscribe: false })
   private _activeCollapsed?: string;
 
@@ -303,39 +296,16 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
     callback: (entries) => entries[0]?.contentRect.width,
   });
 
-  private _ignoreLocationChange = false;
-
-  private _fromUrl = false;
-
-  public connectedCallback() {
-    super.connectedCallback();
-    window.addEventListener("location-changed", this._locationChanged);
-    window.addEventListener("popstate", this._popState);
-  }
-
-  disconnectedCallback(): void {
-    super.disconnectedCallback();
-    window.removeEventListener("location-changed", this._locationChanged);
-    window.removeEventListener("popstate", this._popState);
-  }
-
-  private _locationChanged = () => {
-    if (this._ignoreLocationChange) {
-      this._ignoreLocationChange = false;
-      return;
+  // The filters are kept in the URL by the page, the search, sorting and
+  // grouping by the table
+  private _filterParams = new QueryParamsController(
+    this,
+    devicesFilterQueryParamConfig,
+    {
+      enabled: () => true,
+      navigated: () => this._applyLink(),
     }
-    if (window.location.search.substring(1) !== this._searchParms.toString()) {
-      this._searchParms = new URLSearchParams(window.location.search);
-      this._setFiltersFromUrl();
-    }
-  };
-
-  private _popState = () => {
-    if (window.location.search.substring(1) !== this._searchParms.toString()) {
-      this._searchParms = new URLSearchParams(window.location.search);
-      this._setFiltersFromUrl();
-    }
-  };
+  );
 
   private _states = memoizeOne((localize: LocalizeFunc) => [
     {
@@ -348,7 +318,7 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
     super.willUpdate(changedProps);
     if (!this.hasUpdated) {
       this._filters = this._storageFilters;
-      this._setFiltersFromUrl();
+      this._applyLink();
     }
     if (changedProps.has("_selected") || changedProps.has("entries")) {
       this._selectedCanDelete = this._selected.filter((d) => {
@@ -363,60 +333,45 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
     }
   }
 
-  private _setFiltersFromUrl() {
-    const area = this._searchParms.get("area");
-    const domain = this._searchParms.get("domain");
-    const configEntry = this._searchParms.get("config_entry");
-    const subEntry = this._searchParms.get("sub_entry");
-    const label = this._searchParms.has("label");
+  // Links, like the ones on an integration page, say in the URL what to show.
+  // The router keeps the page open, so a link can land on it.
+  private _applyLink() {
+    const searchParams = this._filterParams.searchParams();
+    const link = searchParams ? devicesLinkFromUrl(searchParams) : undefined;
 
-    if (!area && !domain && !configEntry && !label) {
+    // Shown, but not stored as the user's choice
+    if (link) {
+      this._tableSettings.showSearch(link.search);
+      this._filters = this._keepItems(link.filters);
+    } else if (searchParams?.toString() === "") {
+      // Opened again without params, like from the sidebar. Written once the
+      // table has seen the URL without params, so it restores what it stored
+      this._filters = this._keepItems(this._storageFilters);
+      queueMicrotask(() => this._writeFilters());
+
       return;
     }
 
-    this._fromUrl = true;
-    this._filter = getHistoryState()?.filter || "";
-
-    this._filters = {
-      "ha-filter-states": {
-        value: [
-          ...((this._filters["ha-filter-states"]?.value as string[]) || []),
-          "disabled",
-        ],
-        items: undefined,
-      },
-      "ha-filter-floor-areas": {
-        value: area ? { areas: [area] } : undefined,
-        items: undefined,
-      },
-      "ha-filter-integrations": {
-        value: domain ? [domain] : [],
-        items: undefined,
-      },
-      config_entry: {
-        value: configEntry ? [configEntry] : [],
-        items: undefined,
-      },
-      sub_entry: {
-        value: subEntry ? [subEntry] : [],
-        items: undefined,
-      },
-    };
-    this._filterLabel();
+    this._writeFilters();
   }
 
-  private _filterLabel() {
-    const label = this._searchParms.get("label");
-    if (!label) {
-      return;
-    }
-    this._filters = {
-      ...this._filters,
-      "ha-filter-labels": {
-        value: [label],
-        items: undefined,
-      },
-    };
+  // The filters only work out their items again when their value changes, so
+  // keep the items of the ones that stay as they are
+  private _keepItems(filters: DataTableFilters): DataTableFilters {
+    return Object.fromEntries(
+      Object.entries(filters).map(([key, filter]) => {
+        const current = this._filters[key];
+
+        return [
+          key,
+          current && deepEqual(filter.value, current.value) ? current : filter,
+        ];
+      })
+    );
+  }
+
+  private _writeFilters() {
+    this._filterParams.write(devicesFilterQueryParams(this._filters));
   }
 
   private _reloadConfigEntries() {
@@ -425,9 +380,8 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
 
   private _clearFilter() {
     this._filters = {};
-    if (!this._fromUrl) {
-      this._storageFilters = {};
-    }
+    this._storageFilters = {};
+    this._writeFilters();
   }
 
   private _devicesAndFilterDomains = memoizeOne(
@@ -506,24 +460,29 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
           Array.isArray(filter.value) &&
           filter.value.length
         ) {
-          if (!(
-            Array.isArray(this._filters.config_entry?.value) &&
-            this._filters.config_entry.value.length === 1
-          )) {
+          const configEntryIds = this._filters.config_entry?.value;
+          const subEntryIds = filter.value;
+
+          if (
+            !Array.isArray(configEntryIds) ||
+            !configEntryIds.length ||
+            !Array.isArray(subEntryIds)
+          ) {
             return;
           }
-          const configEntryId = this._filters.config_entry.value[0];
-          outputDevices = outputDevices.filter(
-            (device) =>
-              device.config_entries_subentries[configEntryId] &&
-              (filter.value as string[]).some((subEntryId) =>
-                device.config_entries_subentries[configEntryId].includes(
-                  subEntryId
-                )
+
+          outputDevices = outputDevices.filter((device) =>
+            configEntryIds.some((configEntryId) =>
+              device.config_entries_subentries[configEntryId]?.some(
+                (subEntryId) =>
+                  subEntryId !== null && subEntryIds.includes(subEntryId)
               )
+            )
           );
-          if (!this._subEntries) {
-            this._loadSubEntries(configEntryId);
+
+          // The titles shown in the filter chip need a single config entry
+          if (configEntryIds.length === 1 && !this._subEntries) {
+            this._loadSubEntries(configEntryIds[0]);
           }
         } else if (
           key === "ha-filter-integrations" &&
@@ -599,31 +558,19 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
         const parentDevice = device.parent_device_id
           ? this.hass.devices[device.parent_device_id]
           : undefined;
+        const viaDevice = device.via_device_id
+          ? this.hass.devices[device.via_device_id]
+          : undefined;
         // The device that identifies this device's family: its parent for a
         // child device, itself for a device that has children.
         const familyParentDevice =
           parentDevice ??
           (deviceIdsWithChildren.has(device.id) ? device : undefined);
 
-        const { areaName } = computeDeviceAreaLabel(
-          device,
-          this.hass.areas,
-          this.hass.devices,
-          this.hass.localize,
-          this.hass.language,
-          this.hass.translationMetadata
-        );
+        const area = getDeviceArea(device, areas, this.hass.devices);
+        const areaName = area ? computeAreaName(area) : undefined;
 
-        const floorArea =
-          getDeviceArea(device, areas, this.hass.devices) ??
-          (device.via_device_id && this.hass.devices[device.via_device_id]
-            ? getDeviceArea(
-                this.hass.devices[device.via_device_id],
-                areas,
-                this.hass.devices
-              )
-            : undefined);
-        const floorId = floorArea?.floor_id;
+        const floorId = area?.floor_id;
         const floorName =
           floorId && this.hass.floors?.[floorId]
             ? computeFloorName(this.hass.floors[floorId])
@@ -645,6 +592,7 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
           name: computeDeviceNameDisplay(device, this.hass.localize),
           model:
             device.model ||
+            device.model_id ||
             `<${localize("ui.panel.config.devices.data_table.unknown")}>`,
           manufacturer:
             device.manufacturer ||
@@ -670,6 +618,9 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
           parent_device_name: parentDevice
             ? computeDeviceNameDisplay(parentDevice, this.hass.localize)
             : "",
+          via_device_name: viaDevice
+            ? computeDeviceNameDisplay(viaDevice, this.hass.localize)
+            : undefined,
           // Grouping key that keeps a device with its family: children group
           // under their parent's name, a parent groups under its own name, and
           // standalone devices stay ungrouped. The name is always computed from
@@ -915,6 +866,7 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
         sortable: true,
         filterable: true,
         groupable: true,
+        urlName: "integration",
         minWidth: "120px",
         template: (device) =>
           device.isChild
@@ -932,15 +884,26 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
         sortable: true,
         filterable: true,
         groupable: true,
+        urlName: "parent",
         defaultHidden: true,
         minWidth: "120px",
         template: (device) => device.parent_device_name || "",
+      },
+      via_device_name: {
+        title: localize("ui.panel.config.devices.data_table.connected_via"),
+        sortable: true,
+        filterable: true,
+        groupable: true,
+        urlName: "via",
+        defaultHidden: true,
+        minWidth: "120px",
       },
       manufacturer: {
         title: localize("ui.panel.config.devices.data_table.manufacturer"),
         sortable: true,
         filterable: true,
         groupable: true,
+        urlName: "manufacturer",
         minWidth: "120px",
       },
       model: {
@@ -1142,7 +1105,7 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
         .selectable=${this._view === "table"}
         .selected=${this._selected.length}
         @selection-changed=${this._handleSelectionChanged}
-        .filter=${this._filter}
+        .filter=${this._tableSettings.search}
         has-filters
         .filters=${
           Object.values(this._filters).filter((filter) =>
@@ -1154,19 +1117,20 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
                 )
           ).length
         }
-        .initialGroupColumn=${this._activeGrouping}
+        .initialGroupColumn=${this._tableSettings.grouping}
         .initialCollapsedGroups=${this._activeCollapsed}
-        .initialSorting=${this._activeSorting}
+        .initialSorting=${this._tableSettings.sorting}
         .columnOrder=${this._activeColumnOrder}
         .hiddenColumns=${this._activeHiddenColumns}
         @columns-changed=${this._handleColumnsChanged}
         @clear-filter=${this._clearFilter}
-        @search-changed=${this._handleSearchChange}
-        @sorting-changed=${this._handleSortingChanged}
-        @grouping-changed=${this._handleGroupingChanged}
+        @search-changed=${this._tableSettings.searchChanged}
+        @sorting-changed=${this._tableSettings.sortingChanged}
+        @grouping-changed=${this._tableSettings.groupingChanged}
         @collapsed-changed=${this._handleCollapseChanged}
         @row-click=${this._handleRowClicked}
         clickable
+        sync-url
         has-fab
         .segments=${(["devices", "discovered", "ignored"] as const).map(
           (value) => ({
@@ -1408,7 +1372,7 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
   }
 
   private async _loadSubEntries(entryId: string) {
-    this._subEntries = await getSubEntries(this.hass, entryId);
+    this._subEntries = await getSubEntries(this.hass.callWS, entryId);
   }
 
   private _filterExpanded(ev) {
@@ -1421,10 +1385,27 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
 
   private _filterChanged(ev) {
     const type = ev.target.localName;
-    this._filters = { ...this._filters, [type]: ev.detail };
-    if (!this._fromUrl) {
-      this._storageFilters = this._filters;
+    const filters = { ...this._filters, [type]: ev.detail };
+
+    // A filter can still finish looking up its items after the page is left.
+    // Keep them for when the page comes back, but leave the URL alone.
+    if (!this.isConnected) {
+      this._filters = filters;
+
+      return;
     }
+
+    // A filter also sends the value it was given, once it has found its items.
+    // Only a change to what the URL holds is the user's, so a link isn't stored.
+    if (
+      devicesFilterQueryString(filters) !==
+      devicesFilterQueryString(this._filters)
+    ) {
+      this._storageFilters = { ...this._storageFilters, [type]: ev.detail };
+    }
+
+    this._filters = filters;
+    this._writeFilters();
   }
 
   private _batteryEntity(
@@ -1461,7 +1442,6 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
       return;
     }
     if (id.startsWith("config_entry:")) {
-      this._ignoreLocationChange = true;
       const entryId = id.substring("config_entry:".length);
       const domain = this.entries?.find(
         (entry) => entry.entry_id === entryId
@@ -1507,17 +1487,12 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
       .groupColumn=${groupColumn}
       .entries=${this.entries}
       .segment=${this._segment}
-      .filter=${this._filter}
+      .filter=${this._tableSettings.search}
       .discovered=${this._discovered}
     ></ha-devices-dashboard-body>`;
 
   private _segmentChanged(ev: CustomEvent<{ value: string }>) {
     this._segment = ev.detail.value as DevicesSegment;
-  }
-
-  private _handleSearchChange(ev: CustomEvent) {
-    this._filter = ev.detail.value;
-    updateHistoryState({ filter: this._filter });
   }
 
   private _handleAdd(ev: HaDropdownSelectEvent) {
@@ -1553,9 +1528,12 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
       });
       return;
     }
-    const domain = this._searchParms.get("domain");
-    if (domain) {
-      showAddIntegrationDialog(this, { domain, navigateToResult: true });
+    const integrations = this._filters["ha-filter-integrations"]?.value;
+    if (Array.isArray(integrations) && integrations.length === 1) {
+      showAddIntegrationDialog(this, {
+        domain: integrations[0],
+        navigateToResult: true,
+      });
       return;
     }
     navigate("/config/integrations/browse");
@@ -1586,7 +1564,7 @@ export class HaConfigDeviceDashboard extends SubscribeMixin(LitElement) {
     const promises: Promise<DeviceRegistryEntry>[] = [];
     this._selected.forEach((deviceId) => {
       promises.push(
-        updateDeviceRegistryEntry(this.hass, deviceId, {
+        updateDeviceRegistryEntry(this.hass.callWS, deviceId, {
           area_id: area,
         })
       );
@@ -1638,7 +1616,7 @@ ${rejected
     const promises: Promise<DeviceRegistryEntry>[] = [];
     this._selected.forEach((deviceId) => {
       promises.push(
-        updateDeviceRegistryEntry(this.hass, deviceId, {
+        updateDeviceRegistryEntry(this.hass.callWS, deviceId, {
           labels:
             action === "add"
               ? this.hass.devices[deviceId].labels.concat(label)
@@ -1666,7 +1644,7 @@ ${rejected
   private _bulkCreateLabel = () => {
     showLabelDetailDialog(this, {
       createEntry: async (values) => {
-        const label = await createLabelRegistryEntry(this.hass, values);
+        const label = await createLabelRegistryEntry(this.hass.callWS, values);
         this._bulkLabel(label.label_id, "add");
       },
     });
@@ -1715,14 +1693,6 @@ ${rejected
 
   private _clearSelection() {
     this._dataTable.clearSelection();
-  }
-
-  private _handleSortingChanged(ev: CustomEvent) {
-    this._activeSorting = ev.detail;
-  }
-
-  private _handleGroupingChanged(ev: CustomEvent) {
-    this._activeGrouping = ev.detail.value;
   }
 
   private _handleCollapseChanged(ev: CustomEvent) {

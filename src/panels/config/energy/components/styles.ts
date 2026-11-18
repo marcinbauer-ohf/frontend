@@ -60,6 +60,7 @@ export const energyCardStyles = css`
     --mdc-icon-size: 20px;
   }
   ha-grouped-list .handle {
+    padding: 0;
     color: var(--secondary-text-color);
   }
   :host([pane]) ha-grouped-list {
@@ -73,6 +74,43 @@ export const energyCardStyles = css`
     display: flex;
     flex-direction: column;
     gap: var(--ha-space-2);
+  }
+  .items {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ha-space-2);
+    margin-bottom: var(--ha-space-3);
+  }
+  ha-automation-row img[slot="leading-icon"] {
+    display: block;
+    height: 24px;
+  }
+  .row-header {
+    /* Two lines fit the row's 48px, which keeps its icons centered */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 48px;
+    padding: var(--ha-space-1) 0;
+  }
+  .row-header .label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .row-header .secondary {
+    color: var(--secondary-text-color);
+    font-size: var(--ha-font-size-s);
+    line-height: var(--ha-line-height-condensed);
+  }
+  .handle {
+    display: flex;
+    padding: var(--ha-space-3);
+    cursor: move; /* fallback if grab cursor is unsupported */
+    cursor: grab;
+    color: var(--secondary-text-color);
   }
 
   /* In the editor pane each section reads as a grouped list: a quiet header
@@ -103,32 +141,16 @@ export const energyCardStyles = css`
   :host([pane]) .card-content {
     padding: 0;
   }
-  :host([pane]) .items-container {
-    padding: 0;
+  :host([pane]) .items {
     gap: 0;
-    border-color: var(--divider-color);
-    margin-bottom: var(--ha-space-3);
+    border: var(--ha-border-width-sm) solid var(--divider-color);
+    border-radius: var(--ha-border-radius-lg);
+    overflow: hidden;
   }
-  :host([pane]) .items-container .row {
-    padding-inline-start: var(--ha-space-3);
+  :host([pane]) .items ha-card {
+    --ha-card-border-radius: 0;
   }
-  :host([pane]) .items-container .row + .row {
+  :host([pane]) .items ha-card + ha-card {
     border-top: var(--ha-border-width-sm) solid var(--divider-color);
-  }
-  :host([pane]) .row ha-svg-icon,
-  :host([pane]) .row ha-icon,
-  :host([pane]) .row img {
-    margin-inline-end: var(--ha-space-3);
-    color: var(--secondary-text-color);
-  }
-  /* The add buttons sit in a .row too; keep their icon in the button's own
-     color and spacing rather than the row icons' ones. */
-  .row ha-button ha-svg-icon,
-  :host([pane]) .row ha-button ha-svg-icon {
-    margin: 0;
-    color: inherit;
-  }
-  :host([pane]) .row:not(.items-container .row) {
-    height: auto;
   }
 `;

@@ -30,6 +30,7 @@ import {
 import "../components/data-table/ha-data-table";
 import type {
   DataTableColumnContainer,
+  DataTableGroupActions,
   DataTableRowData,
   HaDataTable,
   SortingDirection,
@@ -240,6 +241,9 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
   @property({ attribute: false }) public initialGroupColumn?: string;
 
   @property({ attribute: false }) public groupOrder?: string[];
+
+  @property({ attribute: false })
+  public renderGroupActions?: DataTableGroupActions;
 
   @property({ attribute: false }) public columnOrder?: string[];
 
@@ -661,6 +665,7 @@ export class HaTabsSubpageDataTable extends KeyboardShortcutMixin(LitElement) {
                       .sortDirection=${this._sortDirection}
                       .groupColumn=${this._groupColumn}
                       .groupOrder=${this.groupOrder}
+                      .renderGroupActions=${this.renderGroupActions}
                       .initialCollapsedGroups=${this.initialCollapsedGroups}
                       .columnOrder=${this.columnOrder}
                       .hiddenColumns=${this.hiddenColumns}

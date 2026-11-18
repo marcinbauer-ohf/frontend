@@ -123,6 +123,8 @@ import "./device-detail/ha-device-linked-devices-card";
 import "./device-detail/ha-device-overview";
 import "./device-detail/ha-device-via-devices-card";
 import { showDeviceAddToDialog } from "./device-detail/show-dialog-device-add-to";
+import { addEntitiesToLovelaceView } from "../../lovelace/editor/add-entities-to-view";
+import { showAddDeviceCardDialog } from "../../lovelace/editor/card-editor/show-add-device-card-dialog";
 
 // What the related card lists; the rest of the page and the info pane show
 // the device's entities, area, integrations and connected devices
@@ -427,11 +429,6 @@ export class HaConfigDevicePage extends LitElement {
       this._entityReg,
       this.hass.devices
     );
-    const sceneEntityIds = filterAddToSceneEntityIds(
-      this._entityIds(entities),
-      this._entityReg,
-      this.hass.states
-    );
     const entitiesByCategory = this._entitiesByCategory(entities);
     const quickLinkCounts = this._getQuickLinkCounts(entities, this._related);
     const batteryEntity = this._batteryEntity(entities);
@@ -481,70 +478,56 @@ export class HaConfigDevicePage extends LitElement {
       ? this.hass.localize("ui.panel.config.devices.add_prompt_disabled")
       : this.hass.localize("ui.panel.config.devices.add_prompt_enabled");
 
-    const hasSceneSupport =
-      isComponentLoaded(this.hass.config, "scene") && sceneEntityIds.length;
-
-    const relatedCard =
-      isComponentLoaded(this.hass.config, "automation") ||
-      isComponentLoaded(this.hass.config, "script") ||
-      hasSceneSupport
-        ? html`
-            <ha-card outlined class="related-card">
-              <h1 class="card-header">
-                ${this.hass.localize(
-                  "ui.panel.config.devices.automation.related_heading"
-                )}
-                <ha-button
-                  appearance="filled"
-                  variant="brand"
-                  size="s"
-                  @click=${this._showAddToDialog}
-                  .disabled=${device.disabled_by}
-                >
-                  <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
-                  ${this.hass.localize(
-                    "ui.dialogs.more_info_control.add_to.item"
-                  )}
-                </ha-button>
-              </h1>
-              ${
-                !this._related
-                  ? html`
-                      <div class="card-content loading">
-                        <ha-spinner></ha-spinner>
-                      </div>
-                    `
-                  : RELATED_SECTIONS.some(
-                        (section) => this._related![section]?.length
-                      )
-                    ? html`<ha-related-items
-                        .hass=${this.hass}
-                        .itemType=${"device"}
-                        .itemId=${this.deviceId}
-                        .exclude=${RELATED_EXCLUDE}
-                      ></ha-related-items>`
-                    : html`
-                        <div class="card-content">
-                          ${this.hass.localize(
-                            "ui.panel.config.devices.add_prompt",
-                            {
-                              name: this.hass.localize(
-                                "ui.panel.config.devices.automation.automations_scripts_or_scenes"
-                              ),
-                              type: this.hass.localize(
-                                `ui.panel.config.devices.type.${
-                                  device.entry_type || "device"
-                                }`
-                              ),
-                            }
-                          )}
-                          ${add_prompt}
-                        </div>
-                      `
-              }
-            </ha-card>
-          `
-        : "";
+    const relatedCard = html`
+      <ha-card outlined class="related-card">
+        <h1 class="card-header">
+          ${this.hass.localize(
+            "ui.panel.config.devices.automation.related_heading"
+          )}
+          <ha-button
+            appearance="filled"
+            variant="brand"
+            size="s"
+            @click=${this._showAddToDialog}
+            .disabled=${device.disabled_by}
+          >
+            <ha-svg-icon slot="start" .path=${mdiPlus}></ha-svg-icon>
+            ${this.hass.localize("ui.dialogs.more_info_control.add_to.item")}
+          </ha-button>
+        </h1>
+        ${
+          !this._related
+            ? html`
+                <div class="card-content loading">
+                  <ha-spinner></ha-spinner>
+                </div>
+              `
+            : RELATED_SECTIONS.some(
+                  (section) => this._related![section]?.length
+                )
+              ? html`<ha-related-items
+                  .itemType=${"device"}
+                  .itemId=${this.deviceId}
+                  .exclude=${RELATED_EXCLUDE}
+                ></ha-related-items>`
+              : html`
+                  <div class="card-content">
+                    ${this.hass.localize("ui.panel.config.devices.add_prompt", {
+                      name: this.hass.localize(
+                        "ui.panel.config.devices.automation.automations_scripts_or_scenes"
+                      ),
+                      type: this.hass.localize(
+                        `ui.panel.config.devices.type.${
+                          device.entry_type || "device"
+                        }`
+                      ),
+                    })}
+                    ${add_prompt}
+                  </div>
+                `
+        }
+      </ha-card>
+    `;
 
     const entitiesCard = html`<div class="entities">
       ${(
@@ -1019,8 +1002,10 @@ export class HaConfigDevicePage extends LitElement {
       if (request !== this._esphomeSetupRequest || this.deviceId !== deviceId) {
         return;
       }
-      this._esphomeSetup ??= new esphomeSetup.ESPHomeSetupController(this, () =>
-        this._entities(this.deviceId, this._entityReg, this.hass.devices)
+      // The wizard may list entities of child devices
+      this._esphomeSetup ??= new esphomeSetup.ESPHomeSetupController(
+        this,
+        () => this._entityReg
       );
     }
     this._esphomeSetup.refresh(deviceId);
@@ -1111,6 +1096,9 @@ export class HaConfigDevicePage extends LitElement {
         buttons.push({
           action: async () => {
             const confirmed = await showConfirmationDialog(this, {
+              title: this.hass.localize(
+                "ui.panel.config.devices.confirm_delete_title"
+              ),
               text:
                 this._integrations(device, this.entries, this.manifests)
                   .length > 1
@@ -1126,7 +1114,7 @@ export class HaConfigDevicePage extends LitElement {
                   : this.hass.localize(
                       `ui.panel.config.devices.confirm_delete`
                     ),
-              confirmText: this.hass.localize("ui.common.delete"),
+              confirmText: this.hass.localize("ui.common.remove"),
               dismissText: this.hass.localize("ui.common.cancel"),
               destructive: true,
             });
@@ -1374,6 +1362,16 @@ export class HaConfigDevicePage extends LitElement {
       canCreateScene:
         isComponentLoaded(this.hass.config, "scene") &&
         sceneEntityIds.length > 0,
+      addToDashboard: () => this._addToDashboard(),
+    });
+  }
+
+  private _addToDashboard() {
+    const deviceId = this.deviceId;
+    addEntitiesToLovelaceView(this, this.hass, {
+      sectionStrategy: { type: "device", device_id: deviceId },
+      showCardDialog: (params) =>
+        showAddDeviceCardDialog(this, { ...params, deviceId }),
     });
   }
 
@@ -1518,7 +1516,7 @@ export class HaConfigDevicePage extends LitElement {
       delete updates.disabled_by;
     }
     try {
-      await updateDeviceRegistryEntry(this.hass, this.deviceId, updates);
+      await updateDeviceRegistryEntry(this.hass.callWS, this.deviceId, updates);
     } catch (err: unknown) {
       showAlertDialog(this, {
         title: this.hass.localize(
@@ -1532,7 +1530,7 @@ export class HaConfigDevicePage extends LitElement {
   }
 
   private async _enableDevice(): Promise<void> {
-    await updateDeviceRegistryEntry(this.hass, this.deviceId, {
+    await updateDeviceRegistryEntry(this.hass.callWS, this.deviceId, {
       disabled_by: null,
     });
   }

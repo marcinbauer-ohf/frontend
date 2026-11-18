@@ -35,12 +35,16 @@ import type {
   ShortcutCardConfig,
   TileCardConfig,
 } from "../../cards/types";
-import { computeFavoriteCardConfig } from "../helpers/favorite-cards";
+import {
+  computeFavoriteCardConfig,
+  computeFavoriteCardsSize,
+} from "../helpers/favorite-cards";
 import {
   computeDefaultSecurityAlertVisibility,
   filterSecurityAlertEntities,
   resolveSecurityAlertSeverity,
 } from "../../../security/strategies/security-alerts";
+import { findSecurityEntities } from "../../../security/strategies/security-view-strategy";
 import { LARGE_SCREEN_CONDITION } from "../helpers/view-columns-conditions";
 import type { LovelaceStrategyDependency } from "../types";
 import type { CommonControlsSectionStrategyConfig } from "../usage_prediction/common-controls-section-strategy";
@@ -285,7 +289,10 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
     const favoriteEntities = (config.favorite_entities || []).filter(
       (entityId) => hass.states[entityId] !== undefined
     );
-    const maxCommonControls = Math.max(8, favoriteEntities.length);
+    const maxCommonControls = Math.max(
+      8,
+      computeFavoriteCardsSize(favoriteEntities)
+    );
 
     const favoritesHeadingCard: HeadingCardConfig = {
       type: "heading",
@@ -352,17 +359,6 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
       )
     );
 
-    const securityFilters = HOME_SUMMARIES_FILTERS.security.map((filter) =>
-      generateEntityFilter(
-        hass.states,
-        hass.entities,
-        hass.devices,
-        hass.areas,
-        hass.floors,
-        filter
-      )
-    );
-
     const hasLights =
       hass.panels.light && findEntities(allEntities, lightsFilters).length > 0;
     const hasPersons = allEntities.some((id) => id.startsWith("person."));
@@ -370,8 +366,7 @@ export class HomeOverviewViewStrategy extends ReactiveElement {
       findEntities(allEntities, mediaPlayerFilter).length > 0;
     const hasClimate = hass.panels.climate && hasClimateEntities(hass);
     const hasSecurity =
-      hass.panels.security &&
-      findEntities(allEntities, securityFilters).length > 0;
+      hass.panels.security && findSecurityEntities(hass).length > 0;
 
     const alertEntities = config.alert_entities ?? [];
     const alertSeverityEntities = filterSecurityAlertEntities(

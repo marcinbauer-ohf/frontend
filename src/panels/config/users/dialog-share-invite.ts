@@ -59,7 +59,7 @@ class DialogShareInvite extends LitElement {
     }
     if (isComponentLoaded(this.hass.config, "cloud")) {
       try {
-        const status = await fetchCloudStatus(this.hass);
+        const status = await fetchCloudStatus(this.hass.callWS);
         if (
           status.logged_in &&
           status.prefs.remote_enabled &&

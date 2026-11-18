@@ -19,13 +19,30 @@ export interface ESPHomeZWaveProxyCapabilities {
 export interface ESPHomeSerialProxy {
   name: string;
   port_type: ESPHomeSerialPortType | null;
-  url: string;
+  // `null` when no device is present (e.g. unpopulated USB port)
+  url: string | null;
 }
 
 export interface ESPHomeDeviceCapabilities {
   bluetooth_proxy: ESPHomeBluetoothProxyCapabilities;
   zwave_proxy: ESPHomeZWaveProxyCapabilities;
   serial_proxies: ESPHomeSerialProxy[];
+}
+
+export interface ESPHomeWizardEntity {
+  /** Null when Home Assistant has no entity for it. */
+  entity_id: string | null;
+  description: string;
+}
+
+export interface ESPHomeWizardPage {
+  title: string;
+  description: string;
+  entities: ESPHomeWizardEntity[];
+}
+
+export interface ESPHomeDeviceWizard {
+  pages: ESPHomeWizardPage[];
 }
 
 export const fetchESPHomeEncryptionKey = (
@@ -43,5 +60,14 @@ export const fetchESPHomeDeviceCapabilities = (
 ): Promise<ESPHomeDeviceCapabilities> =>
   hass.callWS({
     type: "esphome/get_device_capabilities",
+    device_id: deviceId,
+  });
+
+export const fetchESPHomeDeviceWizard = (
+  hass: { callWS: CallWS },
+  deviceId: string
+): Promise<ESPHomeDeviceWizard> =>
+  hass.callWS({
+    type: "esphome/get_device_wizard",
     device_id: deviceId,
   });

@@ -73,7 +73,7 @@ export const getPanelNameTranslationKey = (panel: PanelInfo) => {
 };
 
 export const getPanelTitle = (
-  hass: HomeAssistant,
+  hass: Pick<HomeAssistant, "localize">,
   panel: PanelInfo
 ): string | undefined => {
   const translationKey = getPanelNameTranslationKey(panel);
@@ -82,7 +82,7 @@ export const getPanelTitle = (
 };
 
 export const getPanelTitleFromUrlPath = (
-  hass: HomeAssistant,
+  hass: Pick<HomeAssistant, "localize" | "panels">,
   urlPath: string
 ): string | undefined => {
   if (!hass.panels) {

@@ -48,7 +48,8 @@ export class MoreInfoInfo extends LitElement {
       !DOMAINS_WITH_MORE_INFO.includes(domain) &&
       !DOMAINS_NO_INFO.includes(domain) &&
       !("custom_ui_state_card" in stateObj.attributes) &&
-      stateCardType(this.hass, stateObj) === "display";
+      stateCardType(this.hass.states, this.hass.services, stateObj) ===
+        "display";
 
     return html`
       <div class="container" data-domain=${domain}>
@@ -96,7 +97,6 @@ export class MoreInfoInfo extends LitElement {
                     <state-card-content
                       in-dialog
                       .stateObj=${stateObj}
-                      .hass=${this.hass}
                     ></state-card-content>
                   `
           }

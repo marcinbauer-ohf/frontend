@@ -523,7 +523,7 @@ class DialogPersonDetail
   // With invite, the new account's form starts with the invite switched on,
   // and linking an existing account shares the invite right after
   private async _allowLogin(invite = false): Promise<void> {
-    const users = await fetchUsers(this.hass);
+    const users = await fetchUsers(this.hass.callWS);
     const currentLinkedUsers = new Set(
       Object.values(this.hass.states)
         .filter(

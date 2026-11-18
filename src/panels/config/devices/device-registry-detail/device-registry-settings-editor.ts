@@ -90,7 +90,7 @@ export class DeviceRegistrySettingsEditor extends LitElement {
     };
     await (this.updateEntry
       ? this.updateEntry(updates)
-      : updateDeviceRegistryEntry(this.hass, this.device.id, updates));
+      : updateDeviceRegistryEntry(this.hass.callWS, this.device.id, updates));
     this._dirtyState?.markClean();
   }
 

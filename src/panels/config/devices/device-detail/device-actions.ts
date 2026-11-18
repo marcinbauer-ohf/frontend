@@ -49,6 +49,8 @@ import type { HomeAssistant } from "../../../../types";
 import { fileDownload } from "../../../../util/file_download";
 import { getWsErrorMessage, isWsErrorCode } from "../../../../util/ws-error";
 import { showDeviceAddToDialog } from "./show-dialog-device-add-to";
+import { addEntitiesToLovelaceView } from "../../../lovelace/editor/add-entities-to-view";
+import { showAddDeviceCardDialog } from "../../../lovelace/editor/card-editor/show-add-device-card-dialog";
 
 /**
  * What a device can be asked to do, independent of where it is shown: the
@@ -289,7 +291,7 @@ export const fetchDeviceAlerts = async (
   return zwave.getZwaveDeviceAlerts(hass, device);
 };
 
-/** Opens the "add to automation, script or scene" dialog for the device. */
+/** Opens the "add to dashboard, automation, script or scene" dialog. */
 export const showDeviceAddTo = (
   host: HTMLElement,
   hass: HomeAssistant,
@@ -309,6 +311,12 @@ export const showDeviceAddTo = (
     entityIds: sceneEntityIds,
     canCreateScene:
       isComponentLoaded(hass.config, "scene") && sceneEntityIds.length > 0,
+    addToDashboard: () =>
+      addEntitiesToLovelaceView(host, hass, {
+        sectionStrategy: { type: "device", device_id: device.id },
+        showCardDialog: (params) =>
+          showAddDeviceCardDialog(host, { ...params, deviceId: device.id }),
+      }),
   });
 };
 
@@ -388,7 +396,7 @@ export const updateDeviceWithSideEffects = async (
     delete updates.disabled_by;
   }
 
-  await updateDeviceRegistryEntry(hass, device.id, updates);
+  await updateDeviceRegistryEntry(hass.callWS, device.id, updates);
 
   if (!oldDeviceName || !newDeviceName || oldDeviceName === newDeviceName) {
     return;
@@ -416,7 +424,7 @@ export const updateDeviceWithSideEffects = async (
         } else {
           return undefined;
         }
-        return updateEntityRegistryEntry(hass, entity.entity_id, {
+        return updateEntityRegistryEntry(hass.callWS, entity.entity_id, {
           name: newName,
         });
       })

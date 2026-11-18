@@ -24,12 +24,12 @@ import "../../../../components/ha-alert";
 import "../../../../components/ha-button";
 import "../../../../components/ha-domain-icon";
 import "../../../../components/ha-icon-button";
-import "../../../../components/ha-list";
-import "../../../../components/ha-list-item";
 import "../../../../components/ha-sortable";
 import "../../../../components/ha-state-icon";
 import "../../../../components/ha-svg-icon";
 import "../../../../components/ha-tooltip";
+import "../../../../components/item/ha-list-item-base";
+import "../../../../components/list/ha-list-base";
 import type { EntityRegistryEntry } from "../../../../data/entity/entity_registry";
 import {
   subscribeEntityRegistry,
@@ -149,7 +149,7 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
         (entityId) =>
           [
             entityId,
-            updateEntityRegistryEntry(this.hass!, entityId, {
+            updateEntityRegistryEntry(this.hass!.callWS, entityId, {
               disabled_by: "user",
             }),
           ] as const
@@ -158,7 +158,7 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
         (entityId) =>
           [
             entityId,
-            updateEntityRegistryEntry(this.hass!, entityId, {
+            updateEntityRegistryEntry(this.hass!.callWS, entityId, {
               disabled_by: null,
             }),
           ] as const
@@ -465,14 +465,14 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
               @item-moved=${this._itemMoved}
               @item-removed=${this._itemRemoved}
             >
-              <ha-list class=${section}>
+              <ha-list-base class=${section}>
                 ${repeat(
                   rows,
                   (row) => row.entityId,
                   (row) => this._renderRow(section, row)
                 )}
                 ${rows.length ? nothing : html`<p class="empty">${helper}</p>`}
-              </ha-list>
+              </ha-list-base>
             </ha-sortable>
           `
         )}
@@ -482,7 +482,7 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
 
   private _renderRow(section: Section, row: Row) {
     return html`
-      <ha-list-item class="draggable" .sortableData=${row.entityId}>
+      <ha-list-item-base class="draggable" .sortableData=${row.entityId}>
         <div slot="start" class="leading">
           <ha-svg-icon
             class="handle"
@@ -540,7 +540,7 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
             })
           }
         </div>
-      </ha-list-item>
+      </ha-list-item-base>
     `;
   }
 
@@ -717,20 +717,19 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
       outline: 2px solid var(--primary-color);
       outline-offset: 2px;
     }
-    ha-list {
+    ha-list-base {
+      display: block;
       padding: 0;
       min-height: 48px;
       border: 1px dashed var(--divider-color);
       border-radius: var(--ha-border-radius-md);
       background: none;
     }
-    ha-list-item {
-      --md-list-item-top-space: 0;
-      --md-list-item-bottom-space: 0;
-      --md-list-item-one-line-container-height: 48px;
+    ha-list-item-base {
+      min-height: 48px;
     }
-    ha-list.disabled ha-list-item {
-      --md-list-item-label-text-color: var(--disabled-text-color);
+    ha-list-base.disabled ha-list-item-base {
+      color: var(--disabled-text-color);
     }
     .empty {
       margin: 0;
@@ -796,12 +795,12 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
         border-radius: var(--ha-border-radius-circle);
         background-color: var(--disabled-color);
       }
-      ha-list-item:hover .actions ha-icon-button,
-      ha-list-item:focus-within .actions ha-icon-button {
+      ha-list-item-base:hover .actions ha-icon-button,
+      ha-list-item-base:focus-within .actions ha-icon-button {
         visibility: visible;
       }
-      ha-list-item:hover .dot,
-      ha-list-item:focus-within .dot {
+      ha-list-item-base:hover .dot,
+      ha-list-item-base:focus-within .dot {
         display: none;
       }
     }

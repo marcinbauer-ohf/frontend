@@ -36,7 +36,10 @@ export class HaMoreInfoViewEntitySettings extends LitElement {
     this._loadedFor = entityId;
     this._entry = undefined;
     try {
-      this._entry = await getExtendedEntityRegistryEntry(this.hass, entityId);
+      this._entry = await getExtendedEntityRegistryEntry(
+        this.hass.callWS,
+        entityId
+      );
     } catch (_err) {
       this._entry = null;
     }

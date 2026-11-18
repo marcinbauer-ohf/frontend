@@ -28,7 +28,7 @@ import type { ContextType } from "@lit/context";
 import type { HassConfig, UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators";
+import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import memoizeOne from "memoize-one";
 import {
@@ -44,6 +44,7 @@ import {
   formatDateMonth,
   formatDateMonthShort,
   formatDateVeryShort,
+  formatDateWeekdayVeryShortDate,
   formatDateYear,
 } from "../../../common/datetime/format_date";
 import { consume } from "../../../common/decorators/consume";
@@ -71,6 +72,7 @@ import {
   CompareMode,
   downloadEnergyData,
   getEnergyDefaultPeriodStorageKey,
+  hasCombinableEnergySources,
 } from "../../../data/energy";
 import { EnergyCollectionController } from "../../../data/energy-collection-controller";
 import type {
@@ -130,6 +132,9 @@ export class HuiEnergyPeriodSelector extends LitElement {
   @property({ type: Boolean, attribute: "allow-compare" }) public allowCompare =
     true;
 
+  @property({ type: Boolean, attribute: "show-combine-sources" })
+  public showCombineSources = false;
+
   @property({ attribute: "vertical-opening-direction" })
   public verticalOpeningDirection?: VerticalOpeningDirection;
 
@@ -160,9 +165,17 @@ export class HuiEnergyPeriodSelector extends LitElement {
 
   @state() private _compare = false;
 
+  @state() private _combineSources?: boolean;
+
+  @state() private _hasCombinableSources = false;
+
   @state() private _collapseButtons = false;
 
   @state() private _loading = false;
+
+  @state() private _loadingLeaving = false;
+
+  @query(".loading-indicator") private _loadingIndicator?: HTMLElement;
 
   private _loadingTimer?: ReturnType<typeof setTimeout>;
 
@@ -224,6 +237,10 @@ export class HuiEnergyPeriodSelector extends LitElement {
     }
     if (!this.hasUpdated) {
       this._measure();
+    }
+
+    if (changedProps.has("showCombineSources")) {
+      this._applyDefaultCombineSources();
     }
 
     if (changedProps.has("_i18n") || changedProps.has("_hassConfig")) {
@@ -307,6 +324,17 @@ export class HuiEnergyPeriodSelector extends LitElement {
         action: () => this._toggleCompare(),
       },
       {
+        path: this._combineSources
+          ? mdiCheckboxOutline
+          : mdiCheckboxBlankOutline,
+        alwaysCollapse: true,
+        hidden: !this._showCombineSources(),
+        label: this._i18n.localize(
+          "ui.panel.lovelace.components.energy_period_selector.combine_sources"
+        ),
+        action: () => this._toggleCombineSources(),
+      },
+      {
         path: mdiDownload,
         alwaysCollapse: true,
         hidden: !!this.source,
@@ -347,13 +375,19 @@ export class HuiEnergyPeriodSelector extends LitElement {
                 this.openingDirection
               )}
             ></ha-date-range-picker>
-            <ha-spinner
-              class=${classMap({
-                "loading-indicator": true,
-                "is-loading": this._loading,
-              })}
-              size="small"
-            ></ha-spinner>
+            ${
+              this._loading || this._loadingLeaving
+                ? html`<ha-spinner
+                    class=${classMap({
+                      "loading-indicator": true,
+                      leaving: this._loadingLeaving,
+                    })}
+                    size="small"
+                    @transitionend=${this._loadingTransitionDone}
+                    @transitioncancel=${this._loadingTransitionDone}
+                  ></ha-spinner>`
+                : nothing
+            }
           </section>
           <section class="date-actions">
             <div class="overflow">
@@ -517,7 +551,7 @@ export class HuiEnergyPeriodSelector extends LitElement {
           : simpleRange === "month"
             ? formatDateMonth(start, locale, config)
             : simpleRange === "day"
-              ? formatDateVeryShort(start, locale, config)
+              ? formatDateWeekdayVeryShortDate(start, locale, config)
               : `${formatDateVeryShort(start, locale, config)}–${formatDateVeryShort(end, locale, config)}`;
     if (!showYear) {
       return range;
@@ -731,8 +765,15 @@ export class HuiEnergyPeriodSelector extends LitElement {
 
   private _updateDates(energyData: EnergyData): void {
     clearTimeout(this._loadingTimer);
+    if (this._loading) {
+      this._loadingLeaving = true;
+      this._removeLoadingIndicatorWithoutTransition();
+    }
     this._loading = false;
     this._compare = energyData.startCompare !== undefined;
+    this._combineSources = energyData.combineSources;
+    this._hasCombinableSources = hasCombinableEnergySources(energyData.prefs);
+    this._applyDefaultCombineSources();
     this._startDate = energyData.start;
     this._endDate = energyData.end || endOfToday();
   }
@@ -752,6 +793,21 @@ export class HuiEnergyPeriodSelector extends LitElement {
     this._scheduleLoadingIndicator();
   }
 
+  private _showCombineSources() {
+    return this.showCombineSources && this._hasCombinableSources;
+  }
+
+  private _applyDefaultCombineSources() {
+    if (this._showCombineSources() && this._combineSources === undefined) {
+      this._energyCollection.collection?.setDefaultCombineSources(false);
+    }
+  }
+
+  private _toggleCombineSources() {
+    const collection = this._energyCollection.collection;
+    collection?.setCombineSources(!collection.combineSources);
+  }
+
   private _downloadData() {
     const energyCollection = this._energyCollection.collection;
     if (!energyCollection) return;
@@ -763,8 +819,28 @@ export class HuiEnergyPeriodSelector extends LitElement {
     // Basically to ensure there's no "flash loading" when data is loaded quickly
     clearTimeout(this._loadingTimer);
     this._loadingTimer = setTimeout(() => {
+      this._loadingLeaving = false;
       this._loading = true;
     }, 200);
+  }
+
+  private async _removeLoadingIndicatorWithoutTransition() {
+    await this.updateComplete;
+    // No transition starts when the spinner was still at opacity 0
+    this._removeIdleLoadingIndicator();
+  }
+
+  private _loadingTransitionDone(ev: TransitionEvent) {
+    if (ev.propertyName === "opacity") {
+      this._removeIdleLoadingIndicator();
+    }
+  }
+
+  private _removeIdleLoadingIndicator() {
+    // Reversing the fade-in cancels a transition while the fade-out runs
+    if (!this._loadingIndicator?.getAnimations().length) {
+      this._loadingLeaving = false;
+    }
   }
 
   private _getDatePickerPlacement = memoizeOne(
@@ -819,11 +895,15 @@ export class HuiEnergyPeriodSelector extends LitElement {
       position: absolute;
       right: var(--ha-space-2);
       align-items: center;
-      opacity: 0;
       transition: opacity var(--ha-animation-duration-normal) ease-in-out;
     }
-    .loading-indicator.is-loading {
-      opacity: 1;
+    @starting-style {
+      .loading-indicator {
+        opacity: 0;
+      }
+    }
+    .loading-indicator.leaving {
+      opacity: 0;
     }
     .date-actions .overflow {
       display: flex;

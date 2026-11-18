@@ -3,7 +3,6 @@ import type { HassEntity } from "home-assistant-js-websocket";
 import "../../src/components/ha-related-items";
 import type { HaRelatedItems } from "../../src/components/ha-related-items";
 import type { RelatedResult } from "../../src/data/search";
-import type { HomeAssistant } from "../../src/types";
 
 const entity = (entityId: string): HassEntity =>
   ({
@@ -12,30 +11,40 @@ const entity = (entityId: string): HassEntity =>
     attributes: { friendly_name: entityId },
   }) as HassEntity;
 
+// The element reads these from contexts; set them as a provider would
 const buildElement = (states: string[]) => {
   const el = document.createElement("ha-related-items") as HaRelatedItems;
-  el.hass = {
-    states: Object.fromEntries(states.map((id) => [id, entity(id)])),
-    devices: { known_device: { id: "known_device", name: "Known" } },
-    areas: { known_area: { area_id: "known_area", name: "Known" } },
-    language: "en",
-  } as unknown as HomeAssistant;
+  Object.assign(el as unknown as Record<string, unknown>, {
+    _devices: { known_device: { id: "known_device", name: "Known" } },
+    _areas: { known_area: { area_id: "known_area", name: "Known" } },
+    _i18n: { language: "en" },
+    _formatEntityName: (stateObj: HassEntity) => stateObj.entity_id,
+  });
   el.itemType = "entity";
   el.itemId = "light.test";
-  return el;
+  return {
+    el,
+    states: Object.fromEntries(states.map((id) => [id, entity(id)])),
+  };
 };
 
 /**
  * `_getSections` decides whether a section renders at all. It is private, so
- * reach it through an index signature rather than naming the member.
+ * reach it through an index signature rather than naming the member. The
+ * element keeps only the states of related entities, so the related result
+ * goes in before the states.
  */
-const sectionsOf = (el: HaRelatedItems, related: RelatedResult) =>
-  (
-    el as unknown as Record<
-      string,
-      (related: RelatedResult) => Record<string, unknown>
-    >
-  )._getSections(related);
+const sectionsOf = (
+  { el, states }: ReturnType<typeof buildElement>,
+  related: RelatedResult
+) => {
+  const fields = el as unknown as Record<string, unknown>;
+  fields._related = related;
+  fields._states = states;
+  return (
+    fields._getSections as (related: RelatedResult) => Record<string, unknown>
+  ).call(el, related);
+};
 
 describe("ha-related-items sections", () => {
   it("keeps a section whose items resolve", () => {
@@ -71,7 +80,7 @@ describe("ha-related-items sections", () => {
 
   it("drops an excluded section even when it has items", () => {
     const el = buildElement([]);
-    el.exclude = ["device", "area"];
+    el.el.exclude = ["device", "area"];
     const sections = sectionsOf(el, {
       device: ["known_device"],
       area: ["known_area"],
