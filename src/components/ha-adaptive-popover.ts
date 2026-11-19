@@ -11,11 +11,23 @@ import { HaAdaptiveDialog } from "./ha-adaptive-dialog";
  *
  * Uses an anchored desktop popover when an anchor is available and falls back
  * to `ha-adaptive-dialog` otherwise.
+ *
+ * @cssprop --ha-adaptive-popover-min-width - Minimum popover width. Defaults to its width preset; 0 fits it to its content, up to that width.
+ * @cssprop --ha-adaptive-popover-width - Width of a compact popover. Defaults to the medium dialog width.
  */
 @customElement("ha-adaptive-popover")
 export class HaAdaptivePopover extends ScrollLockMixin(HaAdaptiveDialog) {
   @property({ attribute: false })
   public dialogAnchor?: Element;
+
+  /** Tighter spacing in the popover, for short content such as confirmations */
+  @property({ type: Boolean, reflect: true }) public compact = false;
+
+  /**
+   * Names the popover when it has no header title to label it, such as when
+   * its title lives in another shadow root
+   */
+  @property({ attribute: false }) public accessibleLabel?: string;
 
   private _allowPopoverHide = false;
 
@@ -81,6 +93,7 @@ export class HaAdaptivePopover extends ScrollLockMixin(HaAdaptiveDialog) {
         role="dialog"
         aria-modal="true"
         aria-labelledby=${ifDefined(this._defaultAriaLabelledBy)}
+        aria-label=${ifDefined(this.accessibleLabel)}
         aria-describedby=${ifDefined(this.ariaDescribedBy)}
         @pointerdown=${this._handlePopoverPointerDown}
         @wa-show=${this._handlePopoverShow}
@@ -285,7 +298,11 @@ export class HaAdaptivePopover extends ScrollLockMixin(HaAdaptiveDialog) {
           padding: 0;
           border-color: transparent;
           box-shadow: var(--dialog-box-shadow, var(--wa-shadow-l));
-          min-width: var(--width, var(--full-width));
+          /* 0 fits the popover to its content, up to its width */
+          min-width: var(
+            --ha-adaptive-popover-min-width,
+            var(--width, var(--full-width))
+          );
           max-width: var(--width);
           max-height: var(
             --ha-dialog-max-height,
@@ -332,6 +349,36 @@ export class HaAdaptivePopover extends ScrollLockMixin(HaAdaptiveDialog) {
         slot[name="footer"] {
           display: block;
           padding: 0;
+        }
+
+        /* 20px around the edges, 12px below the title and 16px above the
+           footer. The header bar and its empty navigation icon slot already
+           give the title 16px on the side. */
+        :host([compact]) wa-popover {
+          --ha-dialog-header-content-padding: var(--ha-space-5)
+            var(--ha-space-1) var(--ha-space-3);
+          --ha-dialog-header-min-height: 0;
+          /* Content that sizes itself, such as a short message, can let the
+             popover grow wider so text only wraps when there is no room */
+          --width: var(
+            --ha-adaptive-popover-width,
+            min(var(--ha-dialog-width-md, 580px), var(--full-width))
+          );
+          --ha-dialog-header-white-space: normal;
+          --ha-dialog-header-title-height: auto;
+          --dialog-content-padding: 0 var(--ha-space-5);
+        }
+
+        /* 18px beside and below the buttons looks even with the 20px around
+           the text */
+        /* Without a header the content starts the popover, so it takes the
+           header's place at the top */
+        :host([compact][without-header]) wa-popover {
+          --dialog-content-padding: var(--ha-space-5) var(--ha-space-5) 0;
+        }
+
+        :host([compact]) ::slotted([slot="footer"]) {
+          padding: var(--ha-space-4) 18px 18px var(--ha-space-5);
         }
 
         ::slotted([slot="footer"]) {

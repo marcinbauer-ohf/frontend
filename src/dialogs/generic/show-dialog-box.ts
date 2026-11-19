@@ -1,9 +1,17 @@
 import type { TemplateResult } from "lit";
 import { fireEvent } from "../../common/dom/fire_event";
+import { clickAnchor } from "../click-anchor";
 
 interface BaseDialogBoxParams {
   /** Whether back closes the dialog. Off while a navigation is in flight. */
   addHistory?: boolean;
+  /**
+   * The element that opened the dialog, such as the button that was clicked.
+   * The dialog then opens as a popover next to it on larger screens, and as a
+   * bottom sheet on smaller ones.
+   * Defaults to what the user just clicked; `null` opens it centred.
+   */
+  anchor?: Element | null;
   confirmText?: string;
   /** Show the close button for confirmations and prompts, which hide it by default. */
   showCloseButton?: boolean;
@@ -66,6 +74,7 @@ const showDialogHelper = (
     fireEvent(element, "show-dialog", {
       dialogTag: "dialog-box",
       dialogImport: loadGenericDialog,
+      dialogAnchor: clickAnchor(dialogParams.anchor),
       addHistory: dialogParams.addHistory,
       dialogParams: {
         ...dialogParams,
