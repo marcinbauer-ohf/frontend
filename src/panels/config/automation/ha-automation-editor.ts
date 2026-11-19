@@ -22,9 +22,11 @@ import {
 import type { UnsubscribeFunc } from "home-assistant-js-websocket";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
-import { customElement, property, query } from "lit/decorators";
+import { customElement, property, query, state } from "lit/decorators";
+import memoizeOne from "memoize-one";
 import { classMap } from "lit/directives/class-map";
 import { UndoRedoController } from "../../../common/controllers/undo-redo-controller";
+import { consume } from "../../../common/decorators/consume";
 import { fireEvent } from "../../../common/dom/fire_event";
 import { isNavigationClick } from "../../../common/dom/is-navigation-click";
 import { goBack, navigate } from "../../../common/navigate";
@@ -57,6 +59,8 @@ import {
 } from "../../../data/automation";
 import { substituteBlueprint } from "../../../data/blueprint";
 import { validateConfig } from "../../../data/config";
+import { labelsContext } from "../../../data/context";
+import type { LabelRegistryEntry } from "../../../data/label/label_registry";
 import { UNAVAILABLE } from "../../../data/entity/entity";
 import {
   type EntityRegistryEntry,
@@ -71,7 +75,7 @@ import "../../../layouts/hass-subpage";
 import { KeyboardShortcutMixin } from "../../../mixins/keyboard-shortcut-mixin";
 import { PreventUnsavedMixin } from "../../../mixins/prevent-unsaved-mixin";
 import { haStyle } from "../../../resources/styles";
-import type { Entries, ValueChangedEvent } from "../../../types";
+import type { Entries, HomeAssistant, ValueChangedEvent } from "../../../types";
 import { isMac } from "../../../util/is_mac";
 import { showEditorToast } from "./editor-toast";
 import { showAssignCategoryDialog } from "../category/show-dialog-assign-category";
@@ -86,6 +90,7 @@ import {
   automationScriptEditorStyles,
 } from "./ha-automation-script-editor-mixin";
 import "./manual-automation-editor";
+import { hasMissingTarget } from "./target/has_missing_target";
 import type { HaManualAutomationEditor } from "./manual-automation-editor";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
 
@@ -131,6 +136,26 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
   private _manualEditor?: HaManualAutomationEditor;
 
   @query("ha-yaml-editor") private _yamlEditor?: HaYamlEditor;
+
+  @state()
+  @consume({ context: labelsContext, subscribe: true })
+  private _labels: LabelRegistryEntry[] = [];
+
+  private _hasMissingTarget = memoizeOne(
+    (
+      config: AutomationConfig,
+      states: HomeAssistant["states"],
+      devices: HomeAssistant["devices"],
+      areas: HomeAssistant["areas"],
+      floors: HomeAssistant["floors"],
+      labels: LabelRegistryEntry[]
+    ) =>
+      hasMissingTarget({ states, devices, areas, floors, labels }, [
+        config.triggers,
+        config.conditions,
+        config.actions,
+      ])
+  );
 
   private _configSubscriptions: Record<
     string,
@@ -627,6 +652,23 @@ export class HaAutomationEditor extends AutomationScriptEditorMixin<AutomationCo
                                           </ha-button>
                                         </ha-alert>
                                       `
+                                    : nothing
+                                }
+                                ${
+                                  stateObj?.state !== UNAVAILABLE &&
+                                  this._hasMissingTarget(
+                                    this.config,
+                                    this.hass.states,
+                                    this.hass.devices,
+                                    this.hass.areas,
+                                    this.hass.floors,
+                                    this._labels
+                                  )
+                                    ? html`<ha-alert alert-type="warning">
+                                        ${this.hass.localize(
+                                          "ui.panel.config.automation.editor.missing_targets"
+                                        )}
+                                      </ha-alert>`
                                     : nothing
                                 }
                               </div>

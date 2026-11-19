@@ -5884,6 +5884,7 @@
             "enable": "[%key:ui::common::enable%]",
             "disable": "[%key:ui::common::disable%]",
             "disabled": "Automation is disabled",
+            "missing_targets": "This automation uses entities, devices, areas, floors or labels that no longer exist. Look for the warning icons below to find them.",
             "read_only": "This automation cannot be edited from the UI, because it is not stored in the automations.yaml file, or doesn't have an ID.",
             "unavailable": "Automation is unavailable",
             "deprecated_migrated": {

@@ -1,7 +1,7 @@
 import "@home-assistant/webawesome/dist/components/divider/divider";
 import { ResizeController } from "@lit-labs/observers/resize-controller";
 import {
-  mdiCloseThick,
+  mdiAlert,
   mdiCog,
   mdiContentDuplicate,
   mdiDelete,
@@ -108,6 +108,8 @@ import type {
 } from "../../../data/entity/entity_registry";
 import { updateEntityRegistryEntry } from "../../../data/entity/entity_registry";
 import { getEntityVoiceAssistantsIds } from "../../../data/expose";
+import type { RepairsIssue } from "../../../data/repairs";
+import { subscribeRepairsIssueRegistry } from "../../../data/repairs";
 import type { LabelRegistryEntry } from "../../../data/label/label_registry";
 import { createLabelRegistryEntry } from "../../../data/label/label_registry";
 import {
@@ -172,6 +174,7 @@ type AutomationItem = AutomationEntity & {
   labels: string[]; // search only
   assistants: string[];
   assistants_sortable_key: string | undefined;
+  issues: RepairsIssue[];
 };
 
 @customElement("ha-automation-picker")
@@ -241,6 +244,8 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
 
   @state() private _overflowAutomation?: AutomationItem;
 
+  @state() private _repairIssues: RepairsIssue[] = [];
+
   @storage({
     key: "automation-table-collapsed",
     state: false,
@@ -282,10 +287,23 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
       formatEntityName: HomeAssistant["formatEntityName"],
       categoryReg?: CategoryRegistryEntry[],
       labelReg?: LabelRegistryEntry[],
-      filteredAutomations?: string[] | null
+      filteredAutomations?: string[] | null,
+      repairIssues: RepairsIssue[] = []
     ): AutomationItem[] => {
       if (filteredAutomations === null) {
         return [];
+      }
+      // Automation repair issues name the automation in their placeholders.
+      const issuesLookup = new Map<string, RepairsIssue[]>();
+      for (const issue of repairIssues) {
+        const entityId = issue.translation_placeholders?.entity_id;
+        if (issue.domain !== "automation" || issue.ignored || !entityId) {
+          continue;
+        }
+        issuesLookup.set(entityId, [
+          ...(issuesLookup.get(entityId) || []),
+          issue,
+        ]);
       }
       // Build lookups once instead of scanning the registries for every row.
       const entityRegLookup = new Map(
@@ -327,6 +345,7 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
           labels: label_entries.map((lbl) => lbl.name),
           assistants,
           assistants_sortable_key: getAssistantsSortableKey(assistants),
+          issues: issuesLookup.get(automation.entity_id) || [],
           selectable: entityRegEntry !== undefined,
         };
       });
@@ -354,30 +373,73 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
           template: (automation) => {
             const unavailable = automation.state === UNAVAILABLE;
             const disabled = automation.state === "off";
+            const warning = automation.issues.length > 0;
+            const iconId = `icon-${automation.entity_id}`;
             return html`<div
-              style="position: relative; display: inline-flex; width: 24px; height: 24px;"
-            >
-              <ha-state-icon
-                .stateObj=${automation}
-                .stateValue=${unavailable || disabled ? "on" : undefined}
-                style=${styleMap({
-                  display: "flex",
-                  margin: "0",
-                  color: unavailable
-                    ? "var(--error-color)"
-                    : disabled
-                      ? "var(--disabled-color)"
-                      : "unset",
-                })}
-              ></ha-state-icon>
+                id=${iconId}
+                style="position: relative; display: inline-flex; width: 24px; height: 24px;"
+              >
+                <ha-state-icon
+                  .stateObj=${automation}
+                  .stateValue=${unavailable || disabled ? "on" : undefined}
+                  style=${styleMap({
+                    display: "flex",
+                    margin: "0",
+                    color: unavailable
+                      ? "var(--error-color)"
+                      : disabled
+                        ? "var(--disabled-color)"
+                        : "unset",
+                  })}
+                ></ha-state-icon>
+                ${
+                  unavailable
+                    ? renderIconBadge(mdiExclamationThick, "var(--error-color)")
+                    : warning
+                      ? html`<ha-svg-icon
+                          .path=${mdiAlert}
+                          style=${styleMap({
+                            position: "absolute",
+                            top: "-6px",
+                            insetInlineEnd: "-8px",
+                            margin: "0",
+                            "--mdc-icon-size": "16px",
+                            color: "var(--ha-color-on-warning-quiet)",
+                          })}
+                        ></ha-svg-icon>`
+                      : nothing
+                }
+              </div>
               ${
-                unavailable
-                  ? renderIconBadge(mdiExclamationThick, "var(--error-color)")
-                  : disabled
-                    ? renderIconBadge(mdiCloseThick, "var(--disabled-color)")
-                    : nothing
-              }
-            </div>`;
+                unavailable || disabled || warning
+                  ? html`<ha-tooltip .for=${iconId} placement="top">
+                      ${
+                        unavailable || disabled
+                          ? html`<div>
+                              ${localize(
+                                unavailable
+                                  ? "ui.panel.config.automation.editor.unavailable"
+                                  : "ui.panel.config.automation.editor.disabled"
+                              )}
+                            </div>`
+                          : nothing
+                      }
+                      ${automation.issues.map(
+                        (issue) =>
+                          html`<div>
+                            ${
+                              localize(
+                                `component.automation.issues.${issue.translation_key || issue.issue_id}.title`,
+                                issue.translation_placeholders || {}
+                              ) ||
+                              issue.translation_key ||
+                              issue.issue_id
+                            }
+                          </div>`
+                      )}
+                    </ha-tooltip>`
+                  : nothing
+              }`;
           },
         },
         entity_id: getEntityIdHiddenTableColumn(),
@@ -480,7 +542,11 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
   };
 
   protected hassSubscribe(): (UnsubscribeFunc | Promise<UnsubscribeFunc>)[] {
+    this.hass.loadBackendTranslation("issues", ["automation"]);
     return [
+      subscribeRepairsIssueRegistry(this.hass.connection, (repairs) => {
+        this._repairIssues = repairs.issues;
+      }),
       subscribeCategoryRegistry(
         this.hass.connection,
         "automation",
@@ -507,7 +573,8 @@ class HaAutomationPicker extends SubscribeMixin(LitElement) {
       this.hass.formatEntityName,
       this._categories,
       this._labels,
-      this._filteredEntityIds
+      this._filteredEntityIds,
+      this._repairIssues
     );
     return html`
       <hass-tabs-subpage-data-table

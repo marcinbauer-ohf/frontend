@@ -66,6 +66,7 @@ import { showMoreInfoDialog } from "../../../../dialogs/more-info/show-ha-more-i
 import { isConfigObject } from "../ui-support";
 import { getTargetIcon } from "./get_target_icon";
 import { getTargetText } from "./get_target_text";
+import { checkTargetExists } from "./has_missing_target";
 
 @customElement("ha-automation-row-targets")
 export class HaAutomationRowTargets extends LitElement {
@@ -474,22 +475,17 @@ export class HaAutomationRowTargets extends LitElement {
     targetType: "floor" | "area" | "device" | "entity" | "label",
     targetId: string
   ): boolean {
-    if (targetType === "floor") {
-      return !!this._registries.floors[targetId];
-    }
-    if (targetType === "area") {
-      return !!this._registries.areas[targetId];
-    }
-    if (targetType === "device") {
-      return !!this._registries.devices[targetId];
-    }
-    if (targetType === "entity") {
-      return !!this._states[targetId];
-    }
-    if (targetType === "label") {
-      return !!this._getLabel(targetId);
-    }
-    return false;
+    return checkTargetExists(
+      {
+        states: this._states,
+        devices: this._registries.devices,
+        areas: this._registries.areas,
+        floors: this._registries.floors,
+        labels: this._labelRegistry || [],
+      },
+      targetType,
+      targetId
+    );
   }
 
   private _renderTargetBadge(
