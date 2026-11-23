@@ -245,10 +245,9 @@ export class HuiDeviceCardEditor
     schema: SchemaUnion<ReturnType<typeof this._schema>>
   ) => {
     switch (schema.name) {
+      // The picked device's name and area say enough on their own
       case "device":
-        return this.hass!.localize(
-          "ui.panel.lovelace.editor.card.generic.device"
-        );
+        return "";
       default:
         return (
           this.hass!.localize(

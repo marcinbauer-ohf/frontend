@@ -1,4 +1,4 @@
-import { mdiCodeBraces, mdiListBoxOutline } from "@mdi/js";
+import { mdiCodeBraces, mdiDotsVertical, mdiListBoxOutline } from "@mdi/js";
 import deepFreeze from "deep-freeze";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement, nothing } from "lit";
@@ -8,8 +8,11 @@ import {
   type HASSDomEvent,
 } from "../../../../common/dom/fire_event";
 import "../../../../components/ha-button";
+import "../../../../components/ha-dropdown";
+import "../../../../components/ha-dropdown-item";
 import "../../../../components/ha-icon-button";
 import "../../../../components/ha-side-pane";
+import "../../../../components/ha-svg-icon";
 import type { LovelaceCardConfig } from "../../../../data/lovelace/config/card";
 import type { LovelaceSectionConfig } from "../../../../data/lovelace/config/section";
 import type { LovelaceConfig } from "../../../../data/lovelace/config/types";
@@ -129,17 +132,25 @@ export class HuiCardEditorPane extends DirtyStateProviderMixin<LovelaceCardConfi
         back
         @side-pane-back=${this._back}
       >
-        <ha-icon-button
-          slot="actions"
-          .path=${this._guiMode ? mdiCodeBraces : mdiListBoxOutline}
-          .label=${localize(
-            this._guiMode
-              ? "ui.panel.lovelace.editor.edit_card.show_code_editor"
-              : "ui.panel.lovelace.editor.edit_card.show_visual_editor"
-          )}
-          .disabled=${!this._guiModeAvailable}
-          @click=${this._toggleMode}
-        ></ha-icon-button>
+        <ha-dropdown slot="actions" @wa-select=${this._toggleMode}>
+          <ha-icon-button
+            slot="trigger"
+            .path=${mdiDotsVertical}
+            .label=${localize("ui.panel.lovelace.editor.menu.open")}
+            hide-title
+          ></ha-icon-button>
+          <ha-dropdown-item .disabled=${!this._guiModeAvailable}>
+            <ha-svg-icon
+              slot="icon"
+              .path=${this._guiMode ? mdiCodeBraces : mdiListBoxOutline}
+            ></ha-svg-icon>
+            ${localize(
+              this._guiMode
+                ? "ui.panel.lovelace.editor.edit_card.show_code_editor"
+                : "ui.panel.lovelace.editor.edit_card.show_visual_editor"
+            )}
+          </ha-dropdown-item>
+        </ha-dropdown>
         ${
           this._editorLoaded
             ? html`<hui-card-element-editor
@@ -216,6 +227,9 @@ export class HuiCardEditorPane extends DirtyStateProviderMixin<LovelaceCardConfi
   static styles = css`
     :host {
       display: contents;
+    }
+    [slot="footer"] ha-button {
+      flex: 1;
     }
   `;
 }

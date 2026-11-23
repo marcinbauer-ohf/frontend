@@ -113,6 +113,10 @@ class PanelHome extends SubscribeMixin(LitElement) {
   // A device card whose editor pane is open
   @state() private _editingDeviceCard?: CardPaneEditorParams;
 
+  // Unsaved edits of the open device card, shown on the canvas. The views are
+  // strategies, so the preview goes in as strategy input, not a card path.
+  private _deviceCardPreview?: LovelaceCardConfig;
+
   @query(".banner") private _banner?: HTMLElement;
 
   private _loadConfigPromise?: Promise<void>;
@@ -394,8 +398,22 @@ class PanelHome extends SubscribeMixin(LitElement) {
     this._editView = undefined;
     this._editingArea = undefined;
     this._editingSubview = undefined;
+    this._previewDeviceCard.cancel();
     this._editingDeviceCard = undefined;
+    if (this._deviceCardPreview) {
+      this._deviceCardPreview = undefined;
+      this._setLovelace();
+    }
   };
+
+  // The pane's edits show on the canvas without saving, as in a dashboard
+  private _previewDeviceCard = debounce((config?: LovelaceCardConfig) => {
+    if (!this._editingDeviceCard) {
+      return;
+    }
+    this._deviceCardPreview = config ?? this._editingDeviceCard.cardConfig;
+    this._setLovelace();
+  }, 150);
 
   // The view offers a generated card's editor; a device card's is ours to
   // show, saved with the home settings so the strategy builds it as edited
@@ -423,6 +441,13 @@ class PanelHome extends SubscribeMixin(LitElement) {
         [this._editingDeviceCard!.cardConfig.device]: config,
       },
     });
+
+  private _onDeviceCardPreview = (
+    ev: HASSDomEvent<HASSDomEvents["card-editor-preview"]>
+  ) => {
+    ev.stopPropagation();
+    this._previewDeviceCard(ev.detail.config);
+  };
 
   private _editorChanged(ev: ValueChangedEvent<HomeFrontendSystemData>) {
     this._saveConfig(ev.detail.value);
@@ -491,6 +516,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
         }
         .editAction=${this._editAction()}
         @ll-custom=${this._handleLLCustomEvent}
+        .selectedCardPath=${this._editingDeviceCard?.path.join()}
         @ll-edit-card-in-pane=${this._editDeviceCard}
         @side-pane-closed=${this._stopEditing}
         style=${huiRootStyle}
@@ -504,6 +530,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
                 .cardConfig=${this._editingDeviceCard.cardConfig}
                 .sectionConfig=${this._editingDeviceCard.sectionConfig}
                 .saveCardConfig=${this._saveDeviceCard}
+                @card-editor-preview=${this._onDeviceCardPreview}
                 .narrow=${this.narrow}
               ></hui-card-editor-pane>`
             : this._editing
@@ -614,7 +641,14 @@ class PanelHome extends SubscribeMixin(LitElement) {
         hide_suggested_entities: this._config?.hide_suggested_entities,
         shortcuts: this._config?.shortcuts,
         weather_entity: this._config?.weather_entity,
-        device_card_configs: this._config?.device_card_configs,
+        device_card_configs:
+          this._editingDeviceCard && this._deviceCardPreview
+            ? {
+                ...this._config?.device_card_configs,
+                [this._editingDeviceCard.cardConfig.device]:
+                  this._deviceCardPreview,
+              }
+            : this._config?.device_card_configs,
       },
     };
   }

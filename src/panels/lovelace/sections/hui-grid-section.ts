@@ -5,6 +5,7 @@ import { customElement, property, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
 import { repeat } from "lit/directives/repeat";
 import { styleMap } from "lit/directives/style-map";
+import { consume } from "../../../common/decorators/consume";
 import type { ConfigPath } from "../../../common/util/config-path";
 import { fireEvent } from "../../../common/dom/fire_event";
 import "../../../components/ha-ripple";
@@ -17,6 +18,7 @@ import { haStyle } from "../../../resources/styles";
 import type { HomeAssistant } from "../../../types";
 import type { HuiCard } from "../cards/hui-card";
 import { computeCardGridSize } from "../common/compute-card-grid-size";
+import { selectedCardContext } from "../common/context";
 import "../components/hui-card-edit-mode";
 import { moveAtPath } from "../editor/lovelace-path";
 import type { Lovelace } from "../types";
@@ -56,6 +58,10 @@ export class GridSection extends LitElement implements LovelaceSectionElement {
   @state() _config?: LovelaceSectionConfig;
 
   @state() _dragging = false;
+
+  @state()
+  @consume({ context: selectedCardContext, subscribe: true })
+  private _selectedPath?: string;
 
   public setConfig(config: LovelaceSectionConfig): void {
     this._config = config;
@@ -128,6 +134,11 @@ export class GridSection extends LitElement implements LovelaceSectionElement {
                     "fit-rows": typeof rows === "number",
                     "full-width": columns === "full",
                     hidden: !editMode && card.hidden,
+                    // Edit mode outlines it in hui-card-edit-mode instead
+                    selected:
+                      !editMode &&
+                      !!cardPath &&
+                      this._selectedPath === cardPath.join(),
                   })}"
                   .sortableData=${cardPath}
                 >
@@ -258,6 +269,13 @@ export class GridSection extends LitElement implements LovelaceSectionElement {
           position: relative;
           grid-row: span var(--row-size, 1);
           grid-column: span min(var(--column-size, 1), var(--grid-column-count));
+          outline: 2px solid transparent;
+          transition: outline-color var(--ha-animation-duration-fast) ease-out;
+        }
+
+        /* The card whose editor is open, matching the edit mode outline */
+        .card.selected {
+          outline-color: var(--primary-color);
         }
 
         .container.edit-mode .card {

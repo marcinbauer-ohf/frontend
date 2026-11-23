@@ -63,8 +63,7 @@ const SORTABLE_GROUP = "device-card-entities";
 const NOT_A_CONTROL = new Set<UiFeatureType>(["trend-graph"]);
 
 /**
- * One icon per section, used both on the section heading and on the button that
- * sends a row there, so the control and its destination read as the same thing.
+ * One icon per section, on the menu item that sends a row there.
  */
 const SECTION_ICON: Record<Section, string> = {
   // A pin, the same mark the device view puts on the entity the card leads
@@ -439,10 +438,6 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
     return html`
       <div class="section">
         <div class="header">
-          <ha-svg-icon
-            class="section-icon"
-            .path=${SECTION_ICON[section]}
-          ></ha-svg-icon>
           <p class="title" id=${`about-${section}`} tabindex="0">
             ${this._sectionLabel(section)}
           </p>
@@ -814,6 +809,16 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
       display: inline-flex;
       cursor: grab;
     }
+    /* Only one entity can be featured, so its chip takes the whole field */
+    .field.hero ha-dropdown {
+      flex: 1;
+    }
+    .field.hero ha-assist-chip {
+      width: 100%;
+    }
+    .field.hero ha-assist-chip::part(base) {
+      justify-content: flex-start;
+    }
     .field.disabled ha-assist-chip {
       --ha-assist-chip-label-text-color: var(--disabled-text-color);
       opacity: 0.7;
@@ -836,10 +841,6 @@ export class HuiDeviceCardEntitiesEditor extends SubscribeMixin(LitElement) {
     }
     .header ha-icon-button {
       --ha-icon-button-size: 32px;
-      --mdc-icon-size: 20px;
-      color: var(--secondary-text-color);
-    }
-    .section-icon {
       --mdc-icon-size: 20px;
       color: var(--secondary-text-color);
     }

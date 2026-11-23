@@ -148,6 +148,9 @@ class HUIRoot extends KeyboardShortcutMixin(LitElement) {
    */
   @property({ type: Boolean, reflect: true }) public editing = false;
 
+  /** A card the host panel is editing in its own pane, highlighted. */
+  @property({ attribute: false }) public selectedCardPath?: string;
+
   /**
    * Replaces the edit button beside the plus, for panels that edit
    * something other than the Lovelace config. `null` hides it.
@@ -665,8 +668,13 @@ class HUIRoot extends KeyboardShortcutMixin(LitElement) {
   }
 
   protected willUpdate(changedProperties: PropertyValues<this>): void {
-    if ((changedProperties as PropertyValues).has("_cardEditor")) {
-      this._selectedCardProvider.setValue(this._cardEditor?.path.join());
+    if (
+      (changedProperties as PropertyValues).has("_cardEditor") ||
+      changedProperties.has("selectedCardPath")
+    ) {
+      this._selectedCardProvider.setValue(
+        this._cardEditor?.path.join() ?? this.selectedCardPath
+      );
     }
     if (changedProperties.has("lovelace")) {
       const oldLovelace = changedProperties.get("lovelace") as
