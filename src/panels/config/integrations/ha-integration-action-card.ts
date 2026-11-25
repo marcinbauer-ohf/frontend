@@ -7,6 +7,8 @@ import {
 } from "../../../data/integration";
 import type { HomeAssistant } from "../../../types";
 import "../../../components/ha-card";
+import "../../../components/ha-ripple";
+import "../../../components/tile/ha-tile-info";
 import { brandsUrl } from "../../../util/brands-url";
 import { haStyle } from "../../../resources/styles";
 
@@ -22,6 +24,9 @@ export class HaIntegrationActionCard extends LitElement {
 
   @property() public label!: string;
 
+  /* makes the whole card a link, the actions stay their own targets */
+  @property() public href?: string;
+
   @property({ attribute: false }) public manifest?: IntegrationManifest;
 
   protected render(): TemplateResult {
@@ -30,8 +35,15 @@ export class HaIntegrationActionCard extends LitElement {
         ? this.localizedDomainName
         : domainToName(this.hass.localize, this.domain, this.manifest);
     return html`
-      <ha-card outlined>
-        <div class="card-content">
+      <ha-card outlined class=${this.href ? "clickable" : ""}>
+        ${
+          this.href
+            ? html`<a class="link" href=${this.href} aria-label=${this.label}
+                ><ha-ripple></ha-ripple
+              ></a>`
+            : nothing
+        }
+        <div class="row">
           <img
             alt=""
             src=${brandsUrl(
@@ -47,16 +59,15 @@ export class HaIntegrationActionCard extends LitElement {
             @error=${this._onImageError}
             @load=${this._onImageLoad}
           />
-          <h3>${this.label}</h3>
-          ${
-            integrationName !== this.label
-              ? html`<p class="integration-name">${integrationName}</p>`
-              : nothing
-          }
+          <ha-tile-info
+            .primary=${this.label}
+            .secondary=${
+              integrationName !== this.label ? integrationName : undefined
+            }
+          ></ha-tile-info>
+          <div class="actions"><slot></slot></div>
+          <slot name="header-button"></slot>
         </div>
-        <div class="filler"></div>
-        <div class="card-actions"><slot></slot></div>
-        <div class="header-button"><slot name="header-button"></slot></div>
       </ha-card>
     `;
   }
@@ -73,68 +84,65 @@ export class HaIntegrationActionCard extends LitElement {
     haStyle,
     css`
       ha-card {
+        position: relative;
+        overflow: hidden;
         display: flex;
         flex-direction: column;
+        justify-content: center;
         height: 100%;
       }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px;
+        min-height: 56px;
+      }
       img {
-        width: 40px;
-        height: 40px;
+        width: 36px;
+        height: 36px;
+        flex-shrink: 0;
       }
-      h3 {
-        font-size: var(--ha-font-size-l);
-        font-weight: var(--ha-font-weight-normal);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        margin-top: 8px;
-        margin-bottom: 0;
-        max-width: 100%;
-      }
-      .integration-name {
-        font-size: var(--ha-font-size-m);
-        font-weight: var(--ha-font-weight-normal);
-        line-height: var(--ha-line-height-normal);
-        margin: 0;
-        max-width: 100%;
-        text-align: center;
-      }
-      .header-button {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        inset-inline-end: 8px;
-        inset-inline-start: initial;
-      }
-      .filler {
+      ha-tile-info {
         flex: 1;
       }
-      .attention {
-        --state-color: var(--error-color);
-        --text-on-state-color: var(--text-primary-color);
+      ::slotted([slot="header-button"]) {
+        flex-shrink: 0;
+        margin-inline-end: -6px;
+        color: var(--secondary-text-color);
       }
-      .card-content {
+      .link {
+        position: absolute;
+        inset: 0;
+        outline: none;
+        --ha-ripple-hover-color: transparent;
+      }
+      .clickable:hover {
+        background-color: var(
+          --ha-integration-action-card-hover-background,
+          var(--ha-color-fill-neutral-quiet-resting)
+        );
+      }
+      .clickable:has(.link:focus-visible) {
+        outline: var(--ha-border-width-md) solid var(--primary-color);
+        outline-offset: 2px;
+      }
+      .row {
+        position: relative;
+        pointer-events: none;
+      }
+      .actions,
+      ::slotted([slot="header-button"]) {
+        pointer-events: auto;
+      }
+      .actions {
         display: flex;
-        justify-content: center;
-        flex-direction: column;
+        flex-shrink: 0;
         align-items: center;
+        gap: var(--ha-space-1);
       }
-      .card-actions {
-        border-top: none;
-        padding-top: 0;
-        padding-bottom: 16px;
-        justify-content: center;
-        display: flex;
-      }
-      :host ::slotted(*) {
-        margin-right: 8px;
-        margin-inline-end: 8px;
-        margin-inline-start: initial;
-      }
-      :host ::slotted(:last-child) {
-        margin-right: 0;
-        margin-inline-end: 0;
-        margin-inline-start: initial;
+      ::slotted(ha-icon-button) {
+        color: var(--secondary-text-color);
       }
     `,
   ];

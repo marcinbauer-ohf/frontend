@@ -2,8 +2,10 @@ import type { ContextType } from "@lit/context";
 import {
   mdiAlertCircle,
   mdiBugOutline,
+  mdiDevices,
   mdiFileCodeOutline,
   mdiPackageVariant,
+  mdiShape,
   mdiWeb,
 } from "@mdi/js";
 import type { CSSResultGroup, TemplateResult } from "lit";
@@ -20,7 +22,7 @@ import "../../../components/ha-ripple";
 import "../../../components/ha-spinner";
 import "../../../components/ha-svg-icon";
 import "../../../components/ha-tooltip";
-import "../../../components/item/ha-row-item";
+import "../../../components/tile/ha-tile-info";
 import type { ConfigEntry } from "../../../data/config_entries";
 import { ERROR_STATES } from "../../../data/config_entries";
 import {
@@ -63,8 +65,13 @@ interface IntegrationCardIcon {
   className?: string;
 }
 
+export type IntegrationCardVariant = "tile" | "plate" | "backdrop" | "chips";
+
 @customElement("ha-integration-card")
 export class HaIntegrationCard extends LitElement {
+  // MOCK: design variants to compare, switched from the dashboard in dev builds
+  @property({ reflect: true }) public variant: IntegrationCardVariant = "tile";
+
   @property() public domain!: string;
 
   @property({ attribute: false }) public items!: ConfigEntryExtended[];
@@ -112,6 +119,7 @@ export class HaIntegrationCard extends LitElement {
   protected render(): TemplateResult {
     const entryState = computeIntegrationCardState(this.items);
     const isError = ERROR_STATES.includes(entryState);
+    const isNotLoaded = entryState === "not_loaded";
     const debugLoggingEnabled = this.logInfo?.level === LogSeverity.DEBUG;
 
     const status = this._computeStatus(entryState, debugLoggingEnabled);
@@ -125,12 +133,8 @@ export class HaIntegrationCard extends LitElement {
         outlined
         class=${classMap({
           "state-not-loaded": entryState === "not_loaded",
-          "all-not-loaded": this.items.every(
-            (entry) => entry.state === "not_loaded"
-          ),
-          "state-failed-unload": entryState === "failed_unload",
+          "state-warning": status?.level === "warning" && !isNotLoaded,
           "state-error": isError,
-          "debug-logging": debugLoggingEnabled,
         })}
       >
         <a
@@ -138,31 +142,170 @@ export class HaIntegrationCard extends LitElement {
           class="ripple-anchor"
         >
           <ha-ripple></ha-ripple>
-          <ha-row-item>
-            <img
-              slot="start"
-              alt=""
-              src=${brandsUrl(
-                {
-                  domain: this.domain,
-                  type: "icon",
-                  darkOptimized: this._darkMode,
-                },
-                this._hassUrl
-              )}
-              crossorigin="anonymous"
-              referrerpolicy="no-referrer"
-              @error=${this._onImageError}
-              @load=${this._onImageLoad}
-            />
-            <span slot="headline" class="name" role="heading" aria-level="3"
-              >${domainName}</span
-            >
-            ${this._renderSupportingText(status)}
-          </ha-row-item>
+          ${this._renderLayout(domainName, status)}
         </a>
       </ha-card>
     `;
+  }
+
+  private _renderLogo(status?: IntegrationCardStatus) {
+    return html`<div
+      class=${classMap({
+        "icon-wrapper": true,
+        plate: this.variant !== "tile",
+      })}
+    >
+      <img
+        alt=""
+        src=${brandsUrl(
+          { domain: this.domain, type: "icon", darkOptimized: this._darkMode },
+          this._hassUrl
+        )}
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"
+        @error=${this._onImageError}
+        @load=${this._onImageLoad}
+      />
+      ${
+        status
+          ? html`<span class="badge status-${status.level}">
+              ${
+                status.icon
+                  ? html`<ha-svg-icon
+                      .path=${status.icon}
+                      aria-hidden="true"
+                    ></ha-svg-icon>`
+                  : html`<ha-spinner
+                      size="tiny"
+                      aria-hidden="true"
+                    ></ha-spinner>`
+              }
+            </span>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  private _renderLayout(domainName: string, status?: IntegrationCardStatus) {
+    const devices = this._getDevices(this.items, this._devices);
+    const entityCount = this._getEntityCount(
+      this.items,
+      this.entityRegistryEntries,
+      this.domainEntities
+    );
+    const summary = computeIntegrationCardSummary(
+      this.items,
+      devices,
+      devices.length ? 0 : entityCount
+    );
+    const text = this._computeSupportingText(summary, status);
+    const needsAttention = Boolean(status || summary?.attention);
+    const name = html`<span slot="primary" role="heading" aria-level="3"
+      >${domainName}</span
+    >`;
+
+    if (this.variant === "plate") {
+      return html`<div class="row">
+        ${this._renderLogo(status)}
+        <ha-tile-info>
+          ${name}
+          ${
+            needsAttention
+              ? html`<span slot="secondary">${text}</span>`
+              : html`<span slot="secondary">${this._renderIcons()}</span>`
+          }
+        </ha-tile-info>
+        ${
+          summary && !needsAttention
+            ? html`<div class="count" aria-label=${text}>
+                <span class="number">${summary.count}</span>
+                <span class="unit"
+                  >${this._localize(
+                    `ui.panel.config.integrations.config_entry.count_unit.${summary.unit}`,
+                    { count: summary.count }
+                  )}</span
+                >
+              </div>`
+            : nothing
+        }
+      </div>`;
+    }
+
+    if (this.variant === "backdrop") {
+      return html`<div class="band" aria-hidden="true">
+          <img
+            alt=""
+            src=${brandsUrl(
+              {
+                domain: this.domain,
+                type: "icon",
+                darkOptimized: this._darkMode,
+              },
+              this._hassUrl
+            )}
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"
+            @error=${this._onImageError}
+            @load=${this._onImageLoad}
+          />
+        </div>
+        <div class="row">
+          ${this._renderLogo(status)}
+          <ha-tile-info>
+            ${name}
+            <span slot="secondary">${text}</span>
+          </ha-tile-info>
+          ${this._renderIcons()}
+        </div>`;
+    }
+
+    if (this.variant === "chips") {
+      return html`<div class="row">
+          ${this._renderLogo(status)}
+          <ha-tile-info>
+            ${name}
+            ${
+              needsAttention
+                ? html`<span slot="secondary">${text}</span>`
+                : nothing
+            }
+          </ha-tile-info>
+        </div>
+        <div class="chips">
+          ${
+            devices.length
+              ? html`<span class="chip"
+                  ><ha-svg-icon .path=${mdiDevices}></ha-svg-icon
+                  >${this._localize(
+                    "ui.panel.config.integrations.config_entry.devices",
+                    { count: devices.length }
+                  )}</span
+                >`
+              : nothing
+          }
+          ${
+            entityCount
+              ? html`<span class="chip"
+                  ><ha-svg-icon .path=${mdiShape}></ha-svg-icon
+                  >${this._localize(
+                    "ui.panel.config.integrations.config_entry.entities",
+                    { count: entityCount }
+                  )}</span
+                >`
+              : nothing
+          }
+          ${this._renderIcons()}
+        </div>`;
+    }
+
+    return html`<div class="row">
+      ${this._renderLogo(status)}
+      <ha-tile-info>
+        ${name}
+        <span slot="secondary">${text}</span>
+      </ha-tile-info>
+      ${this._renderIcons()}
+    </div>`;
   }
 
   private _computeStatus(
@@ -226,47 +369,6 @@ export class HaIntegrationCard extends LitElement {
         state: attentionState,
       }
     );
-  }
-
-  private _renderSupportingText(
-    status?: IntegrationCardStatus
-  ): TemplateResult {
-    const devices = this._getDevices(this.items, this._devices);
-    const summary = computeIntegrationCardSummary(
-      this.items,
-      devices,
-      devices.length
-        ? 0
-        : this._getEntityCount(
-            this.items,
-            this.entityRegistryEntries,
-            this.domainEntities
-          )
-    );
-
-    const text = this._computeSupportingText(summary, status);
-
-    return html`<span slot="supporting-text" class="supporting-text">
-      ${
-        status
-          ? html`<span class="status status-${status.level}">
-              ${
-                status.icon
-                  ? html`<ha-svg-icon
-                      .path=${status.icon}
-                      aria-hidden="true"
-                    ></ha-svg-icon>`
-                  : html`<ha-spinner
-                      size="tiny"
-                      aria-hidden="true"
-                    ></ha-spinner>`
-              }
-              <span class="text">${text}</span>
-            </span>`
-          : html`<span class="text">${text}</span>`
-      }
-      ${this._renderIcons()}
-    </span>`;
   }
 
   private _renderIcons(): TemplateResult | typeof nothing {
@@ -449,61 +551,132 @@ export class HaIntegrationCard extends LitElement {
           outline: var(--ha-border-width-md) solid var(--primary-color);
           outline-offset: 2px;
         }
-        ha-row-item {
-          --ha-row-item-padding-block: var(--ha-space-4);
-          --ha-row-item-padding-inline: var(--ha-space-4);
-          --ha-row-item-gap: var(--ha-space-4);
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 0 10px;
+          min-height: 56px;
         }
-        ha-row-item::part(headline) {
-          font-size: var(--ha-font-size-l);
-        }
-        ha-row-item::part(supporting-text) {
-          overflow: visible;
-        }
-        .name {
-          display: block;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+        .icon-wrapper {
+          position: relative;
+          display: flex;
+          flex-shrink: 0;
         }
         img {
-          width: 40px;
-          height: 40px;
+          width: 36px;
+          height: 36px;
         }
-        .supporting-text {
+        .badge {
+          position: absolute;
+          top: -4px;
+          inset-inline-end: -4px;
           display: flex;
-          align-items: center;
-          gap: var(--ha-space-1);
-          min-height: calc(
-            var(--ha-font-size-s) * var(--ha-line-height-normal)
-          );
-        }
-        .supporting-text .text,
-        .status .text {
-          min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .status {
-          display: flex;
-          align-items: center;
-          gap: var(--ha-space-1);
-          min-width: 0;
-          line-height: 16px;
-        }
-        .status ha-svg-icon,
-        .status ha-spinner {
-          flex-shrink: 0;
+          border-radius: var(--ha-border-radius-circle);
+          background-color: var(--card-background-color);
           --mdc-icon-size: 16px;
         }
-        .status ha-spinner {
+        .badge ha-spinner {
           --track-width: 2px;
         }
-        .status-error ha-svg-icon {
-          color: var(--error-color);
+        .status-error {
+          color: var(--ha-color-red-60);
         }
-        .status-warning ha-svg-icon {
-          color: var(--warning-color);
+        .status-warning {
+          color: var(--ha-color-orange-60);
+        }
+        ha-tile-info {
+          flex: 1;
+        }
+        /* MOCK variants: plate, backdrop and chips */
+        .plate {
+          width: 48px;
+          height: 48px;
+          align-items: center;
+          justify-content: center;
+          border-radius: var(--ha-border-radius-lg);
+          background-color: var(--ha-color-fill-neutral-quiet-resting);
+        }
+        .plate img {
+          width: 32px;
+          height: 32px;
+        }
+        :host([variant="plate"]) .row {
+          min-height: 80px;
+          padding: 0 var(--ha-space-4) 0 var(--ha-space-4);
+          gap: var(--ha-space-3);
+        }
+        :host([variant="plate"]) ha-tile-info,
+        :host([variant="backdrop"]) ha-tile-info {
+          --ha-tile-info-primary-font-size: var(--ha-font-size-l);
+        }
+        :host([variant="plate"]) .icons {
+          margin-inline-start: calc(var(--ha-space-1) * -1);
+        }
+        .count {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          flex-shrink: 0;
+        }
+        .count .number {
+          font-size: var(--ha-font-size-2xl);
+          font-weight: var(--ha-font-weight-medium);
+          line-height: var(--ha-line-height-condensed);
+        }
+        .count .unit {
+          font-size: var(--ha-font-size-xs);
+          color: var(--secondary-text-color);
+        }
+        .band {
+          position: relative;
+          height: 48px;
+          overflow: hidden;
+          background-color: var(--ha-color-fill-neutral-quiet-resting);
+        }
+        .band img {
+          /* the logo itself, blown up and blurred: brand color without needing a good image */
+          position: absolute;
+          inset: -100% -10%;
+          width: 120%;
+          height: 300%;
+          object-fit: cover;
+          filter: blur(24px) saturate(1.8);
+          opacity: 0.6;
+        }
+        :host([variant="backdrop"]) .row {
+          align-items: flex-start;
+          padding: 0 var(--ha-space-3) var(--ha-space-3);
+        }
+        :host([variant="backdrop"]) .plate {
+          margin-top: -24px;
+          background-color: var(--card-background-color);
+          border: 1px solid var(--divider-color);
+          box-sizing: border-box;
+        }
+        :host([variant="backdrop"]) ha-tile-info {
+          padding-top: var(--ha-space-1);
+        }
+        :host([variant="backdrop"]) .icons {
+          padding-top: var(--ha-space-2);
+        }
+        .chips {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 6px;
+          padding: 0 var(--ha-space-3) var(--ha-space-3);
+        }
+        .chip {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--ha-space-1);
+          padding: 2px var(--ha-space-2);
+          border-radius: var(--ha-border-radius-pill);
+          background-color: var(--ha-color-fill-neutral-quiet-resting);
+          font-size: var(--ha-font-size-s);
+          color: var(--primary-text-color);
+          --mdc-icon-size: 14px;
         }
         .icons {
           display: flex;
@@ -525,24 +698,23 @@ export class HaIntegrationCard extends LitElement {
         .icon.overwrites {
           color: var(--error-color);
         }
-        .debug-logging {
-          --state-color: var(--warning-color);
-          --ha-card-border-color: var(--state-color);
+        ha-card.state-not-loaded {
+          background-color: var(--ha-color-fill-neutral-quiet-resting);
         }
-        .state-error {
-          --state-color: var(--error-color);
-          --ha-card-border-color: var(--state-color);
+        ha-card.state-not-loaded:hover {
+          background-color: var(--ha-color-fill-neutral-quiet-hover);
         }
-        .state-failed-unload {
-          --state-color: var(--warning-color);
-          --ha-card-border-color: var(--state-color);
+        ha-card.state-warning {
+          background-color: var(--ha-color-fill-warning-quiet-resting);
         }
-        .state-not-loaded {
-          --state-color: var(--warning-color);
-          --ha-card-border-color: var(--state-color);
+        ha-card.state-warning:hover {
+          background-color: var(--ha-color-fill-warning-quiet-hover);
         }
-        .all-not-loaded {
-          opacity: 0.8;
+        ha-card.state-error {
+          background-color: var(--ha-color-fill-danger-quiet-resting);
+        }
+        ha-card.state-error:hover {
+          background-color: var(--ha-color-fill-danger-quiet-hover);
         }
         :host(.highlight) ha-card {
           --state-color: var(--primary-color);

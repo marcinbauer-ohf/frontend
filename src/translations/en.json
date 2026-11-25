@@ -3355,9 +3355,13 @@
             "search": "Search {number} {number, plural,\n  one {app}\n  other {apps}\n}",
             "no_apps": "You don't have any apps installed yet. Click here to browse available apps.",
             "add_app": "Install app",
-            "app_stopped": "App is stopped",
-            "app_update_available": "Update available",
-            "app_running": "App is running"
+            "filters": "[%key:ui::components::subpage-data-table::filters%]",
+            "icon": "Icon",
+            "sections": {
+              "attention": "[%key:ui::panel::config::integrations::attention%]",
+              "stopped": "[%key:ui::panel::config::apps::dashboard::capability::state::stopped%]",
+              "running": "[%key:ui::panel::config::apps::dashboard::capability::state::started%]"
+            }
           },
           "store": {
             "title": "App store",
@@ -8017,6 +8021,9 @@
           "new_flow": "Set up another instance of {integration}",
           "attention": "Attention required",
           "configured": "Configured",
+          "status": "Status",
+          "view_cards": "Show as cards",
+          "view_table": "Show as table",
           "new": "Select brand",
           "confirm_new": "Do you want to set up {integration}?",
           "add_integration": "Add integration",
@@ -8087,6 +8094,12 @@
             "open_config_panel": "{name} settings"
           },
           "config_entry": {
+            "count_unit": {
+              "devices": "{count, plural,\n  one {device}\n  other {devices}\n}",
+              "services": "{count, plural,\n  one {service}\n  other {services}\n}",
+              "entities": "{count, plural,\n  one {entity}\n  other {entities}\n}",
+              "entries": "{count, plural,\n  one {entry}\n  other {entries}\n}"
+            },
             "application_credentials": {
               "delete_title": "Application credentials",
               "delete_prompt": "Would you like to also delete application credentials for this integration?",

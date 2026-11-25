@@ -36,7 +36,11 @@ export class HaIgnoredConfigEntryCard extends LitElement {
             : this.entry.title
         }
       >
-        <ha-button appearance="plain" @click=${this._removeIgnoredIntegration}>
+        <ha-button
+          appearance="plain"
+          size="small"
+          @click=${this._removeIgnoredIntegration}
+        >
           ${this.hass.localize(
             "ui.panel.config.integrations.ignore.stop_ignore"
           )}

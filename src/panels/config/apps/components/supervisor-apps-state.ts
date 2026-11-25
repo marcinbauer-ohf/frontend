@@ -1,33 +1,52 @@
 import type { ContextType } from "@lit/context";
-import { mdiHelpCircle } from "@mdi/js";
+import {
+  mdiAlertCircle,
+  mdiCheckCircle,
+  mdiHelpCircle,
+  mdiPlayCircle,
+  mdiStopCircle,
+} from "@mdi/js";
 import type { TemplateResult } from "lit";
-import { css, html, LitElement } from "lit";
+import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { consume } from "../../../../common/decorators/consume";
 import "../../../../components/ha-svg-icon";
 import { internationalizationContext } from "../../../../data/context";
 import type { AddonState } from "../../../../data/hassio/addon";
 
+// Same icon language as the automation editor's live condition status
+const STATE_ICONS: Record<Exclude<AddonState, null>, string> = {
+  started: mdiCheckCircle,
+  startup: mdiPlayCircle,
+  stopped: mdiStopCircle,
+  error: mdiAlertCircle,
+  unknown: mdiHelpCircle,
+};
+
 @customElement("supervisor-apps-state")
 class SupervisorAppsState extends LitElement {
-  @property() public state: Exclude<AddonState, null> = "unknown";
+  @property({ reflect: true }) public state: Exclude<AddonState, null> =
+    "unknown";
+
+  /* render only the icon, as a badge, with the state as its accessible name */
+  @property({ type: Boolean, reflect: true, attribute: "icon-only" })
+  public iconOnly = false;
 
   @state()
   @consume({ context: internationalizationContext, subscribe: true })
   private _i18n!: ContextType<typeof internationalizationContext>;
 
   protected render(): TemplateResult {
+    const label = this._i18n.localize(
+      `ui.panel.config.apps.dashboard.capability.state.${this.state}`
+    );
     return html`
-      ${
-        this.state === "unknown"
-          ? html`<ha-svg-icon .path=${mdiHelpCircle}></ha-svg-icon>`
-          : html` <div class="dot state-${this.state}"></div> `
-      }
-      <span
-        >${this._i18n.localize(
-          `ui.panel.config.apps.dashboard.capability.state.${this.state}`
-        )}</span
-      >
+      <ha-svg-icon
+        .path=${STATE_ICONS[this.state] ?? mdiHelpCircle}
+        role=${this.iconOnly ? "img" : "presentation"}
+        aria-label=${this.iconOnly ? label : ""}
+      ></ha-svg-icon>
+      ${this.iconOnly ? nothing : html`<span>${label}</span>`}
     `;
   }
 
@@ -39,24 +58,25 @@ class SupervisorAppsState extends LitElement {
       color: var(--ha-color-text-secondary);
       font-size: var(--ha-font-size-m);
     }
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: var(--ha-border-radius-circle);
-      background-color: var(--ha-color-on-neutral-normal);
-      flex-shrink: 0;
-    }
-    .dot.state-started {
-      background-color: var(--ha-color-green-80);
-    }
-    .dot.state-startup {
-      background-color: var(--ha-color-on-warning-normal);
-    }
-    .dot.state-error {
-      background-color: var(--ha-color-on-danger-normal);
-    }
     ha-svg-icon {
-      --mdc-icon-size: 20px;
+      --mdc-icon-size: 16px;
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      color: var(--ha-color-neutral-60);
+    }
+    :host([icon-only]) ha-svg-icon {
+      border-radius: var(--ha-border-radius-circle);
+      background-color: var(--card-background-color);
+    }
+    :host([state="started"]) ha-svg-icon {
+      color: var(--ha-color-green-60);
+    }
+    :host([state="startup"]) ha-svg-icon {
+      color: var(--ha-color-orange-60);
+    }
+    :host([state="error"]) ha-svg-icon {
+      color: var(--ha-color-red-60);
     }
   `;
 }

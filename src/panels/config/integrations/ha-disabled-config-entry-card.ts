@@ -46,7 +46,11 @@ export class HaDisabledConfigEntryCard extends LitElement {
           href=${`/config/integrations/integration/${this.entry.domain}`}
           slot="header-button"
         ></ha-icon-button>
-        <ha-button @click=${this._handleEnable} appearance="filled">
+        <ha-button
+          @click=${this._handleEnable}
+          appearance="filled"
+          size="small"
+        >
           ${this.hass.localize("ui.common.enable")}
         </ha-button>
       </ha-integration-action-card>
