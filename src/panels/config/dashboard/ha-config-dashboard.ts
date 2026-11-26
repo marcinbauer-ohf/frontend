@@ -12,6 +12,8 @@ import { customElement, property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { isComponentLoaded } from "../../../common/config/is_component_loaded";
 import { ctrlOrCmdLabel } from "../../../common/keyboard/ctrl-or-cmd";
+import "../../../components/ha-alert";
+import "../../../components/ha-button";
 import "../../../components/ha-card";
 import "../../../components/ha-dropdown";
 import type { HaDropdownSelectEvent } from "../../../components/ha-dropdown";
@@ -23,11 +25,14 @@ import "../../../components/ha-tip";
 import "../../../components/ha-tooltip";
 import "../../../components/ha-top-app-bar-fixed";
 import type { CloudStatus } from "../../../data/cloud";
+import { domainToName } from "../../../data/integration";
 import type { RepairsIssue } from "../../../data/repairs";
 import {
   severitySort,
   subscribeRepairsIssueRegistry,
 } from "../../../data/repairs";
+import type { SystemState } from "../../../data/system_state";
+import { subscribeSystemState } from "../../../data/system_state";
 import type { UpdateEntity } from "../../../data/update";
 import {
   checkForEntityUpdates,
@@ -162,6 +167,8 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
     total: 0,
   };
 
+  @state() private _systemState?: SystemState;
+
   public constructor() {
     super();
     new ChildPanelReady(this);
@@ -219,6 +226,9 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
         }
         this.hass.loadBackendTranslation("issues", [...integrations]);
       }),
+      subscribeSystemState(this.hass.connection!, (systemState) => {
+        this._systemState = systemState;
+      }),
     ];
   }
 
@@ -240,6 +250,11 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
 
     const { issues: repairsIssues, total: totalRepairIssues } =
       this._repairsIssues;
+
+    const restartRequired = Boolean(
+      this._systemState?.host_reboot_required ||
+      this._systemState?.home_assistant_restart_required
+    );
 
     return html`
       <ha-top-app-bar-fixed .narrow=${this.narrow}>
@@ -282,8 +297,9 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
           full-width
         >
           ${
-            repairsIssues.length || canInstallUpdates.length
+            restartRequired || repairsIssues.length || canInstallUpdates.length
               ? html`<div class="dashboard-alerts">
+                  ${restartRequired ? this._renderRestartRequired() : nothing}
                   ${
                     repairsIssues.length
                       ? html`
@@ -401,6 +417,58 @@ class HaConfigDashboard extends SubscribeMixin(LitElement) {
 
   private _showQuickBar(): void {
     showQuickBar(this, { showHint: this.hass.enableShortcuts });
+  }
+
+  private _renderRestartRequired() {
+    // A reboot restarts Home Assistant as well, so it takes priority.
+    const reboot = this._systemState!.host_reboot_required;
+    const sources = reboot
+      ? []
+      : this._systemState!.home_assistant_restart_sources.map((domain) =>
+          domainToName(this.hass.localize, domain)
+        );
+
+    const message = this.hass.localize(
+      reboot
+        ? "ui.panel.config.dashboard.reboot_required"
+        : "ui.panel.config.dashboard.restart_required"
+    );
+
+    // Without sources the message is the body, so it is not a lone bold title.
+    return html`
+      <ha-alert
+        alert-type="warning"
+        .narrow=${this.narrow}
+        .title=${sources.length ? message : ""}
+      >
+        ${
+          sources.length
+            ? this.hass.localize("ui.panel.config.dashboard.restart_sources", {
+                integrations: sources.join(", "),
+              })
+            : message
+        }
+        <ha-button
+          appearance="filled"
+          size="s"
+          variant="warning"
+          slot="action"
+          @click=${this._confirmRestart}
+        >
+          ${this.hass.localize(
+            reboot
+              ? "ui.panel.config.dashboard.reboot"
+              : "ui.panel.config.dashboard.restart"
+          )}
+        </ha-button>
+      </ha-alert>
+    `;
+  }
+
+  private _confirmRestart() {
+    showRestartDialog(this, {
+      action: this._systemState?.host_reboot_required ? "reboot" : "restart",
+    });
   }
 
   private async _handleMenuAction(ev: HaDropdownSelectEvent) {

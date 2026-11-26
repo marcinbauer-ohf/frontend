@@ -90,6 +90,5 @@ export const mockFrontend = (hass: MockHomeAssistant) => {
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     return () => {};
   });
-  hass.mockWS("dismiss_system_state", () => null);
   hass.mockWS("frontend/get_themes", (_msg, currentHass) => currentHass.themes);
 };

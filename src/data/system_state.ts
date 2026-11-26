@@ -20,7 +20,7 @@ const subscribeSystemStateUpdates = (
   );
 
 // The subscription sends the current state right away, so there is
-// nothing to fetch first. Shared, so the sidebar and the restart bar use
+// nothing to fetch first. Shared, so the sidebar and the settings page use
 // one subscription.
 export const subscribeSystemState = (
   conn: Connection,
@@ -32,8 +32,3 @@ export const subscribeSystemState = (
     undefined,
     subscribeSystemStateUpdates
   ).subscribe(onChange);
-
-// Puts off what is pending right now, for every admin on every device,
-// until something new asks.
-export const dismissSystemState = (conn: Connection) =>
-  conn.sendMessagePromise<null>({ type: "dismiss_system_state" });

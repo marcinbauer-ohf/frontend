@@ -2,7 +2,6 @@ import { ContextProvider } from "@lit/context";
 import type { PropertyValues, TemplateResult } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
-import { styleMap } from "lit/directives/style-map";
 import type { HASSDomEvent } from "../common/dom/fire_event";
 import { fireEvent } from "../common/dom/fire_event";
 import { listenMediaQuery } from "../common/dom/media_query";
@@ -39,10 +38,6 @@ export class HomeAssistantMain extends LitElement {
   @state() private _externalSidebar = false;
 
   @state() private _drawerOpen = false;
-
-  @state() private _restartRequiredBarHeight = 0;
-
-  private _restartRequiredBarLoaded = false;
 
   @storage({
     key: DEBUG_SAFE_AREA_TOOL_STORAGE_KEY,
@@ -90,26 +85,10 @@ export class HomeAssistantMain extends LitElement {
                 .hass=${this.hass}
                 .route=${this.route}
                 slot="appContent"
-                style=${styleMap(
-                  // Every panel already keeps clear of the top safe area,
-                  // so growing it makes room for the bar.
-                  this._restartRequiredBarHeight
-                    ? {
-                        "--safe-area-inset-top": `${this._restartRequiredBarHeight}px`,
-                      }
-                    : {}
-                )}
               ></partial-panel-resolver>`
             : nothing
         }
       </ha-drawer>
-      ${
-        isPanelReady && this.hass.user?.is_admin
-          ? html`<ha-restart-required-bar
-              @restart-required-bar-resized=${this._restartRequiredBarResized}
-            ></ha-restart-required-bar>`
-          : nothing
-      }
       ${
         this._debugSafeAreaTool
           ? html`<ha-debug-safe-area-tool></ha-debug-safe-area-tool>`
@@ -167,12 +146,6 @@ export class HomeAssistantMain extends LitElement {
       this._narrowViewportProvider.setValue(this.narrow);
     }
 
-    // The user is not always known yet on the first render.
-    if (!this._restartRequiredBarLoaded && this.hass.user?.is_admin) {
-      this._restartRequiredBarLoaded = true;
-      import("./ha-restart-required-bar");
-    }
-
     if (changedProps.has("route") && this._sidebarNarrow) {
       this._drawerOpen = false;
     }
@@ -195,12 +168,6 @@ export class HomeAssistantMain extends LitElement {
 
   private get _sidebarNarrow() {
     return this.narrow || this.hass.dockedSidebar === "always_hidden";
-  }
-
-  private _restartRequiredBarResized(
-    ev: HASSDomEvent<HASSDomEvents["restart-required-bar-resized"]>
-  ) {
-    this._restartRequiredBarHeight = ev.detail.height;
   }
 
   private _drawerClosed() {

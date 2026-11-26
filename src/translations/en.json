@@ -2713,14 +2713,6 @@
         "action": "Take survey"
       }
     },
-    "restart_required": {
-      "restart_message": "Home Assistant needs to be restarted to apply installed updates or changed settings.",
-      "reboot_message": "The system needs to be rebooted to apply installed updates or changed settings.",
-      "sources": "Requested by: {integrations}",
-      "later": "Later",
-      "restart": "Restart",
-      "reboot": "Reboot"
-    },
     "sidebar": {
       "external_app_configuration": "App settings",
       "sidebar_toggle": "Sidebar toggle",
@@ -2833,6 +2825,11 @@
         },
         "header": "Configure Home Assistant",
         "dashboard": {
+          "restart_required": "Restart Home Assistant to apply changes",
+          "reboot_required": "Reboot your system to apply changes",
+          "restart_sources": "Requested by: {integrations}",
+          "restart": "Restart",
+          "reboot": "Reboot",
           "devices": {
             "main": "Devices & services",
             "secondary": "Integrations, devices, entities, and helpers"

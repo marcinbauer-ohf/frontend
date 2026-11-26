@@ -40,6 +40,7 @@ import {
   showAlertDialog,
   showConfirmationDialog,
 } from "../generic/show-dialog-box";
+import type { RestartAction, RestartDialogParams } from "./show-dialog-restart";
 import { showRestartWaitDialog } from "./show-dialog-restart";
 import "./automation-restart-status";
 
@@ -61,7 +62,14 @@ class DialogRestart extends LitElement {
   @state()
   private _dialogOpen = false;
 
-  public async showDialog(): Promise<void> {
+  public async showDialog(params?: RestartDialogParams): Promise<void> {
+    if (params?.action) {
+      // Nothing of this dialog is shown, only the confirmation.
+      await this._confirmAction(params.action);
+      this._dialogClosed();
+      return;
+    }
+
     const isHassioLoaded = isComponentLoaded(this.hass.config, "hassio");
 
     this._open = true;
@@ -342,18 +350,17 @@ class DialogRestart extends LitElement {
       }
     };
 
-  private async _handleAction(
-    ev: HASSDomCurrentTargetEvent<
-      HaListItemButton & {
-        action: "restart" | "reboot" | "shutdown" | "restart-safe-mode";
-      }
-    >
+  private _handleAction(
+    ev: HASSDomCurrentTargetEvent<HaListItemButton & { action: RestartAction }>
   ) {
+    this._confirmAction(ev.currentTarget.action);
+  }
+
+  private async _confirmAction(action: RestartAction) {
     if (this._loadingBackupInfo) {
       return;
     }
     this._loadingBackupInfo = true;
-    const action = ev.currentTarget.action;
 
     const backupState = await this._loadBackupState();
 
